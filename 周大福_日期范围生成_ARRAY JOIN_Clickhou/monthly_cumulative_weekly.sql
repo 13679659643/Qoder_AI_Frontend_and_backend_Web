@@ -1,7 +1,6 @@
 -- ClickHouse 日期范围生成器 - 周大福月累计运营周报（最新月份-上周最后一天日期范围）
--- 周大福_日期范围生成_monthly_cumulative_weekly
 WITH INPUT_PARAM_CTE AS (SELECT
--- CAST('2026-04-10' AS DATE) AS input_date
+-- CAST('2026-03-25' AS DATE) AS input_date
 today() AS input_date
 ), -- 可替换为任意日期
      DATE_PARAM_CTE AS (SELECT input_date,                                      -- 参数日期
@@ -14,11 +13,13 @@ today() AS input_date
                                     '周大福月累计运营周报（最新月份-上周最后一天日期范围）'   AS description,
                                     input_month_start                                       AS start_date_raw,      -- 本月1日
                                     if(toDayOfMonth(input_date) < 10,
-                                       input_date, -- <10号：end_date为input_date当天
+                                    subtractDays(input_week_start, 1),
+                                    --    input_date, -- <10号：end_date为input_date当天
                                        subtractDays(input_week_start, 1))                   AS end_date_raw,        -- >=10号：上周日
                                     subtractYears(input_month_start, 1)                     AS prev_start_date_raw, -- 去年同月1日
                                     if(toDayOfMonth(input_date) < 10,
-                                       subtractYears(input_date, 1), -- <10号：去年同期对应当天
+                                    subtractYears(subtractDays(input_week_start, 1), 1),
+                                    --    subtractYears(input_date, 1), -- <10号：去年同期对应当天
                                        subtractYears(subtractDays(input_week_start, 1), 1)) AS prev_end_date_raw    -- >=10号：去年同期对应日
                              FROM DATE_PARAM_CTE
          -- 注释掉了每月10号以后的限制
@@ -125,7 +126,7 @@ SELECT report_type,
        field_value_prev_month,
        date_range_string,
        prev_date_range_string,
-       input_date_display
+       input_date_display,start_week_date,end_week_date,prev_start_week_date,prev_end_week_date
 FROM DATE_RANGES_CTE ARRAY
          JOIN
    ['start_date'
@@ -136,8 +137,8 @@ FROM DATE_RANGES_CTE ARRAY
    , 'end_week'] AS field_name_week
    , [start_week
    , end_week] AS field_value_week
-   , [start_week_date
-   , end_week_date] AS field_value_week_date
+   , [if(start_week_date < end_week_date, start_week_date, formatDateTime(addYears(parseDateTimeBestEffort(start_week_date), 1), '%Y%m%d'))
+   , if(start_week_date < end_week_date, end_week_date, formatDateTime(addYears(parseDateTimeBestEffort(end_week_date), 1), '%Y%m%d'))] AS field_value_week_date
    , ['start_month'
    , 'end_month'] AS field_name_month
    , [start_month
