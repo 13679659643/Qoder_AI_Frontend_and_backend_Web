@@ -107,14 +107,27 @@ Revenue YTD =
 
 ### 注释
 - 复杂度量值（超过 5 行）必须添加头部注释
+头部注释放在度量值名称之下
 - 注释格式：
 ```dax
+
+Cell Display = 
 // ========================================
-// 度量值: Revenue YTD
-// 用途: 计算年初至今累计收入
-// 依赖: [Total Revenue], Date 表
-// 作者: xxx | 日期: YYYY-MM-DD
+// 度量值: Cell Display
+// 用途: 根据 KPI 格式类型，返回格式化后的文本
+// 依赖: [Cell Value], Dim_KPI[KPI_Format]
 // ========================================
+    VAR __Value = [Cell Value]
+    VAR __Format = SELECTEDVALUE(Dim_KPI[KPI_Format])
+    RETURN
+        SWITCH(
+            __Format,
+            "currency",   FORMAT(__Value, "$#,##0") & "k",                           // 货币：$250k
+            "percent",    FORMAT(__Value, "#,##0") & "%",                             // 百分比：40%
+            "delta_pct",  IF(__Value >= 0, "+", "") & FORMAT(__Value, "#,##0") & "%", // 增减：+14%
+            "number",     FORMAT(__Value, "#,##0") & "k",                             // 数值：114k
+            FORMAT(__Value, "#,##0")                                                  // 默认
+        )
 ```
 DAX本身也需要有必要的注释信息，如：
 ```dax
