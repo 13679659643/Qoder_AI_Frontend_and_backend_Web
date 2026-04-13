@@ -1,0 +1,554 @@
+# DAX 命名规范详解
+
+## 一、`Dim_xxx` 命名方式解析
+
+### 1.1 什么是 `Dim_xxx` 命名法？
+
+`Dim_xxx` 是一种**维度表命名约定**，其中：
+- **Dim** = Dimension（维度）
+- **xxx** = 维度名称（如 Date、Customer、Product 等）
+
+### 1.2 这种命名方式的起源
+
+这种命名约定起源于**数据仓库设计模式**，特别是 Kimball 维度建模方法论：
+
+```sql
+-- 传统数据仓库中的命名
+Dim_Date          -- 日期维度表
+Dim_Customer      -- 客户维度表
+Dim_Product       -- 产品维度表
+Fact_Sales        -- 销售事实表
+```
+
+### 1.3 在 Power BI/DAX 中的应用
+
+在 Power BI 数据模型中，这种命名方式被广泛采用：
+
+```dax
+// 维度表
+Dim_Date = CALENDAR(DATE(2023,1,1), DATE(2023,12,31))
+
+// 事实表
+Fact_Sales = 
+SELECTCOLUMNS(
+    Sales_Table,
+    "Sale_ID", [ID],
+    "Date_ID", [DateKey],
+    "Product_ID", [ProductCode],
+    "Amount", [SalesAmount]
+)
+```
+
+## 二、完整的 DAX 命名规范体系
+
+### 2.1 表命名规范
+
+| 前缀 | 含义 | 示例 | 说明 |
+|------|------|------|------|
+| **Dim_** | 维度表 | `Dim_Date`, `Dim_Customer` | 描述性数据，用于筛选和分组 |
+| **Fact_** | 事实表 | `Fact_Sales`, `Fact_Orders` | 度量数据，包含数值和度量值 |
+| **Bridge_** | 桥接表 | `Bridge_SalesTerritory` | 解决多对多关系 |
+| **Lookup_** | 查找表 | `Lookup_CountryCodes` | 小型维度表，代码映射 |
+| **Param_** | 参数表 | `Param_TimeFrame` | 用户选择参数，用于动态计算 |
+| **Temp_** | 临时表 | `Temp_Calculation` | 中间计算表，不用于最终模型 |
+| **Archive_** | 归档表 | `Archive_Sales_2022` | 历史数据归档 |
+
+### 2.2 列命名规范
+
+#### 2.2.1 主键和外键
+
+```dax
+// 维度表主键
+Dim_Customer[CustomerKey]      // 代理键（推荐）
+Dim_Customer[CustomerID]       // 业务键
+
+// 事实表外键
+Fact_Sales[CustomerKey]        // 关联到 Dim_Customer[CustomerKey]
+Fact_Sales[DateKey]            // 关联到 Dim_Date[DateKey]
+
+// 复合键（不推荐，但有时必要）
+Fact_Sales[CustomerDateKey] = [CustomerID] & "_" & [DateKey]
+```
+
+#### 2.2.2 属性列命名
+
+```dax
+// 基础属性
+Dim_Product[ProductName]       // 产品名称
+Dim_Product[ProductCategory]   // 产品类别
+Dim_Product[UnitPrice]         // 单价
+
+// 时间属性
+Dim_Date[Year]                 // 年
+Dim_Date[Quarter]              // 季度
+Dim_Date[MonthName]            // 月份名称
+Dim_Date[DayOfWeek]            // 星期几
+
+// 状态标识
+Dim_Order[IsActive]            // 是否激活（布尔）
+Dim_Order[Status]              // 状态（文本）
+```
+
+#### 2.2.3 计算列命名
+
+```dax
+// 计算列通常添加前缀或后缀
+Dim_Customer[FullName] = [FirstName] & " " & [LastName]
+Dim_Product[PriceWithTax] = [UnitPrice] * 1.1
+Dim_Date[IsWeekend] = [DayOfWeek] IN {"Saturday", "Sunday"}
+
+// 或者使用前缀
+Dim_Customer[Calc_FullName] = [FirstName] & " " & [LastName]
+Dim_Product[Calc_PriceWithTax] = [UnitPrice] * 1.1
+```
+
+### 2.3 度量值命名规范
+
+#### 2.3.1 基础度量值
+
+```dax
+// 简单聚合
+Total Sales = SUM(Fact_Sales[SalesAmount])
+Average Price = AVERAGE(Fact_Sales[UnitPrice])
+Order Count = COUNTROWS(Fact_Orders)
+
+// 带时间上下文
+Sales YTD = TOTALYTD([Total Sales], Dim_Date[Date])
+Sales MTD = TOTALMTD([Total Sales], Dim_Date[Date])
+```
+
+#### 2.3.2 复杂度量值
+
+```dax
+// 使用前缀标识类型
+KPI_SalesGrowth = 
+VAR PreviousSales = CALCULATE([Total Sales], DATEADD(Dim_Date[Date], -1, YEAR))
+RETURN
+DIVIDE([Total Sales] - PreviousSales, PreviousSales)
+
+CAL_SalesPerCustomer = 
+DIVIDE([Total Sales], DISTINCTCOUNT(Fact_Sales[CustomerKey]))
+
+RATIO_ProfitMargin = 
+DIVIDE([Total Profit], [Total Sales])
+```
+
+#### 2.3.3 度量值命名前缀建议
+
+| 前缀 | 用途 | 示例 |
+|------|------|------|
+| **无前缀** | 基础度量值 | `Total Sales`, `Order Count` |
+| **KPI_** | 关键绩效指标 | `KPI_SalesGrowth`, `KPI_ProfitMargin` |
+| **CAL_** | 计算指标 | `CAL_SalesPerCustomer`, `CAL_AOV` |
+| **RATIO_** | 比率指标 | `RATIO_ConversionRate`, `RATIO_Margin` |
+| **PY_** | 去年同期 | `PY_Sales`, `PY_Orders` |
+| **MTD_** | 本月至今 | `MTD_Sales`, `MTD_Profit` |
+| **YTD_** | 本年至今 | `YTD_Sales`, `YTD_Revenue` |
+| **VAR_** | 变量计算 | `VAR_SalesTarget`, `VAR_Budget` |
+
+### 2.4 变量命名规范
+
+```dax
+// 在度量值中使用变量
+Sales Analysis = 
+// 使用 var 前缀或驼峰命名
+VAR totalSales = SUM(Fact_Sales[SalesAmount])
+VAR previousSales = 
+    CALCULATE(
+        SUM(Fact_Sales[SalesAmount]),
+        SAMEPERIODLASTYEAR(Dim_Date[Date])
+    )
+VAR growthRate = DIVIDE(totalSales - previousSales, previousSales)
+RETURN
+growthRate
+
+// 或者使用下划线
+Sales_Analysis = 
+VAR _total_sales = SUM(Fact_Sales[SalesAmount])
+VAR _previous_sales = 
+    CALCULATE(
+        SUM(Fact_Sales[SalesAmount]),
+        SAMEPERIODLASTYEAR(Dim_Date[Date])
+    )
+VAR _growth_rate = DIVIDE(_total_sales - _previous_sales, _previous_sales)
+RETURN
+_growth_rate
+```
+
+## 三、Power BI 数据模型命名最佳实践
+
+### 3.1 完整的模型命名示例
+
+```dax
+// ==================== 维度表 ====================
+Dim_Date = 
+ADDCOLUMNS(
+    CALENDAR(DATE(2023,1,1), DATE(2023,12,31)),
+    "Year", YEAR([Date]),
+    "Quarter", "Q" & QUARTER([Date]),
+    "Month", FORMAT([Date], "MMM"),
+    "Weekday", FORMAT([Date], "ddd")
+)
+
+Dim_Customer = 
+SELECTCOLUMNS(
+    Customer_Table,
+    "CustomerKey", [CustomerID],
+    "CustomerName", [Name],
+    "CustomerSegment", [Segment],
+    "CustomerRegion", [Region]
+)
+
+Dim_Product = 
+SELECTCOLUMNS(
+    Product_Table,
+    "ProductKey", [ProductID],
+    "ProductName", [ProductName],
+    "ProductCategory", [Category],
+    "ProductSubcategory", [Subcategory]
+)
+
+// ==================== 事实表 ====================
+Fact_Sales = 
+SELECTCOLUMNS(
+    Sales_Table,
+    "SaleID", [TransactionID],
+    "DateKey", FORMAT([SaleDate], "YYYYMMDD"),
+    "CustomerKey", [CustomerID],
+    "ProductKey", [ProductID],
+    "SalesAmount", [Amount],
+    "Quantity", [Qty]
+)
+
+// ==================== 桥接表 ====================
+Bridge_SalesTerritory = 
+SELECTCOLUMNS(
+    SalesTerritory_Table,
+    "SalesPersonID", [EmployeeID],
+    "TerritoryID", [TerritoryCode]
+)
+
+// ==================== 参数表 ====================
+Param_TimeFrame = 
+DATATABLE(
+    "TimeFrameID", STRING,
+    "TimeFrameLabel", STRING,
+    "TimeFrameSort", INTEGER,
+    {
+        {"MTD", "本月至今", 1},
+        {"QTD", "本季至今", 2},
+        {"YTD", "本年至今", 3}
+    }
+)
+```
+
+### 3.2 关系命名规范
+
+```dax
+// 在模型中建立关系时，建议使用描述性名称
+Relationships = 
+{
+    // 事实表 -> 维度表（一对多）
+    ("Fact_Sales[DateKey]", "Dim_Date[DateKey]", "Sales to Date"),
+    
+    // 事实表 -> 维度表（一对多）
+    ("Fact_Sales[CustomerKey]", "Dim_Customer[CustomerKey]", "Sales to Customer"),
+    
+    // 事实表 -> 维度表（一对多）
+    ("Fact_Sales[ProductKey]", "Dim_Product[ProductKey]", "Sales to Product"),
+    
+    // 桥接表关系
+    ("Bridge_SalesTerritory[SalesPersonID]", "Dim_Employee[EmployeeID]", "Territory to Employee"),
+    ("Bridge_SalesTerritory[TerritoryID]", "Dim_Territory[TerritoryID]", "Employee to Territory")
+}
+```
+
+## 四、不同场景下的命名策略
+
+### 4.1 小型项目命名
+
+```dax
+// 简单直接，不加前缀
+Customers = ...
+Products = ...
+Sales = ...
+Date = ...
+
+// 度量值
+Total Revenue = SUM(Sales[Amount])
+Average Order Value = DIVIDE([Total Revenue], DISTINCTCOUNT(Sales[OrderID]))
+```
+
+### 4.2 中型项目命名
+
+```dax
+// 使用前缀区分
+Dim_Customers = ...
+Dim_Products = ...
+Fact_Sales = ...
+Dim_Date = ...
+
+// 度量值分组
+Sales[Total Revenue] = SUM(Sales[Amount])
+Sales[Average Order Value] = DIVIDE([Total Revenue], DISTINCTCOUNT(Sales[OrderID]))
+KPIs[Revenue Growth] = ...
+```
+
+### 4.3 大型企业级项目命名
+
+```dax
+// 完整的命名体系
+DW_Dim_Customer = ...          // 数据仓库层
+DW_Fact_Sales = ...
+STG_Customer = ...             // 临时层
+MART_Sales = ...               // 数据集市层
+
+// 度量值使用显示文件夹组织
+- Sales Metrics
+  - Revenue
+    - Total Revenue
+    - Revenue YTD
+    - Revenue Growth
+  - Volume
+    - Order Count
+    - Customer Count
+- Financial Metrics
+  - Profit
+  - Margin
+```
+
+## 五、常见命名错误与修正
+
+### 5.1 错误示例 vs 正确示例
+
+```dax
+// ❌ 错误：使用特殊字符和空格
+Table 1 = ...
+Column 1 = ...
+Sales Amount (USD) = ...
+
+// ✅ 正确：使用下划线或驼峰命名
+Table_1 = ...
+Column_1 = ...
+SalesAmount_USD = ...
+
+// ❌ 错误：模糊的命名
+Data = ...
+Info = ...
+Calc1 = ...
+
+// ✅ 正确：描述性命名
+Customer_Demographics = ...
+Product_Information = ...
+Revenue_Growth_Calculation = ...
+
+// ❌ 错误：不一致的大小写
+totalSales = ...
+Total_Sales = ...
+TOTAL_SALES = ...
+
+// ✅ 正确：统一的大小写风格
+total_sales = ...      // 全小写+下划线
+TotalSales = ...       // 驼峰命名
+TOTAL_SALES = ...      // 全大写（常量）
+```
+
+### 5.2 保留字冲突
+
+```dax
+// ❌ 错误：使用DAX保留字
+Date = ...        // Date是DAX函数
+Name = ...        // Name可能冲突
+Value = ...       // Value是DAX函数
+
+// ✅ 正确：添加前缀或使用不同名称
+Dim_Date = ...
+CustomerName = ...
+SalesValue = ...
+```
+
+## 六、实际项目中的命名约定示例
+
+### 6.1 电商数据分析项目
+
+```dax
+// ============ 表命名 ============
+Dim_Date
+Dim_Customer
+Dim_Product
+Dim_Store
+Dim_Promotion
+Fact_Sales
+Fact_Inventory
+Fact_WebLogs
+
+// ============ 列命名 ============
+// 主键
+Dim_Customer[CustomerKey]
+Dim_Product[ProductKey]
+Fact_Sales[SalesKey]
+
+// 业务键
+Dim_Customer[CustomerID]
+Dim_Product[ProductSKU]
+
+// 属性
+Dim_Customer[FirstName]
+Dim_Customer[LastName]
+Dim_Customer[Email]
+Dim_Customer[SignupDate]
+
+// 度量值
+Sales[Total Revenue] = SUM(Fact_Sales[SalesAmount])
+Sales[Total Quantity] = SUM(Fact_Sales[Quantity])
+Sales[Average Price] = AVERAGE(Fact_Sales[UnitPrice])
+
+// KPI度量值
+KPIs[Revenue Growth YoY] = 
+VAR CurrentRevenue = [Total Revenue]
+VAR PreviousRevenue = CALCULATE([Total Revenue], SAMEPERIODLASTYEAR(Dim_Date[Date]))
+RETURN
+DIVIDE(CurrentRevenue - PreviousRevenue, PreviousRevenue)
+
+KPIs[Customer Lifetime Value] = 
+DIVIDE([Total Revenue], DISTINCTCOUNT(Fact_Sales[CustomerKey]))
+```
+
+### 6.2 财务分析项目
+
+```dax
+// ============ 表命名 ============
+Dim_AccountingDate
+Dim_Account
+Dim_CostCenter
+Dim_Project
+Fact_GeneralLedger
+Fact_Budget
+Fact_Actuals
+
+// ============ 列命名 ============
+Dim_Account[AccountKey]
+Dim_Account[AccountCode]
+Dim_Account[AccountName]
+Dim_Account[AccountType]  // Asset, Liability, Equity, Revenue, Expense
+
+Fact_GeneralLedger[GLKey]
+Fact_GeneralLedger[PostingDate]
+Fact_GeneralLedger[AccountKey]
+Fact_GeneralLedger[DebitAmount]
+Fact_GeneralLedger[CreditAmount]
+
+// ============ 度量值 ============
+Finance[Total Debits] = SUM(Fact_GeneralLedger[DebitAmount])
+Finance[Total Credits] = SUM(Fact_GeneralLedger[CreditAmount])
+Finance[Net Amount] = [Total Debits] - [Total Credits]
+
+Finance[Budget Variance] = 
+[Actual Amount] - [Budget Amount]
+
+Finance[Variance Percentage] = 
+DIVIDE([Budget Variance], [Budget Amount])
+```
+
+## 七、命名规范检查清单
+
+### 7.1 表命名检查
+- [ ] 使用前缀标识表类型（Dim_、Fact_、Bridge_等）
+- [ ] 表名清晰描述内容
+- [ ] 避免使用空格和特殊字符
+- [ ] 使用单数名词（Dim_Customer 而不是 Dim_Customers）
+
+### 7.2 列命名检查
+- [ ] 主键使用"Key"或"ID"后缀
+- [ ] 外键与关联表主键同名
+- [ ] 列名清晰描述内容
+- [ ] 避免使用保留字
+- [ ] 计算列有明确标识
+
+### 7.3 度量值命名检查
+- [ ] 度量值名称反映计算内容
+- [ ] 复杂度量值使用前缀（KPI_、CAL_等）
+- [ ] 时间智能度量值标识时间范围（YTD、MTD等）
+- [ ] 避免与列名冲突
+
+### 7.4 整体一致性检查
+- [ ] 整个项目使用相同的命名风格
+- [ ] 团队所有成员遵循相同规范
+- [ ] 命名规范文档化并共享
+- [ ] 定期进行代码审查确保一致性
+
+## 八、针对您项目的建议
+
+基于您之前的代码，我建议采用以下命名规范：
+
+```dax
+// 当前您的命名
+Slicer_TimeFrame
+Slicer_Platform
+Slicer_StoreName
+
+// 建议调整为（更标准的维度表命名）
+Dim_TimeFrame        // 时间维度表
+Dim_Platform         // 平台维度表  
+Dim_Store            // 店铺维度表（Store比StoreName更简洁）
+
+// 事实表（如果存在）
+Fact_Sales           // 销售事实表
+Fact_Orders          // 订单事实表
+
+// 参数表（如果需要）
+Param_TimeSelection  // 时间选择参数表
+Param_PlatformFilter // 平台筛选参数表
+
+// 桥接表（如果需要）
+Bridge_PlatformStore // 平台-店铺桥接表
+```
+
+### 具体修改示例：
+
+```dax
+// 修改前
+Slicer_Platform = 
+DATATABLE(
+    "Platform_ID", STRING,
+    "Platform_Label", STRING,
+    ...
+)
+
+// 修改后
+Dim_Platform = 
+DATATABLE(
+    "PlatformKey", STRING,          // 改为Key后缀
+    "PlatformName", STRING,         // 改为Name后缀
+    "PlatformCode", STRING,         // 业务代码
+    "SortOrder", INTEGER,           // 更简洁
+    "IsActive", BOOLEAN,
+    "IsDefault", BOOLEAN,
+    "PlatformGroup", STRING,
+    "PlatformType", STRING,
+    "Icon", STRING,
+    {
+        {"TM", "天猫", "TM", 1, TRUE, TRUE, "B2C平台", "综合电商", "🐱"},
+        {"JD", "京东", "JD", 2, TRUE, FALSE, "B2C平台", "综合电商", "🐶"},
+        ...
+    }
+)
+```
+
+## 总结
+
+`Dim_xxx` 是一种源自数据仓库的维度表命名约定，在 Power BI/DAX 中被广泛采用。良好的命名规范可以：
+
+1. **提高可读性**：让其他人（或未来的你）更容易理解模型结构
+2. **便于维护**：快速定位和修改特定类型的对象
+3. **减少错误**：避免命名冲突和混淆
+4. **团队协作**：确保团队成员使用相同的语言
+
+对于您的项目，建议：
+- 维度表使用 `Dim_` 前缀
+- 事实表使用 `Fact_` 前缀  
+- 参数表使用 `Param_` 前缀
+- 保持命名一致性
+- 为列和度量值选择描述性名称
+
+这样可以让您的数据模型更加专业、可维护，并且符合行业最佳实践。

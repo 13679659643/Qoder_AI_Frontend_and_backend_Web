@@ -8,21 +8,72 @@ alwaysApply: true
 
 ### 度量值（Measures）
 - 使用清晰的业务语义命名，英文优先
-- 前缀规范：
-  - 基础度量值：无前缀（`Total Sales`, `Order Count`）
-  - 时间智能：以时间周期开头（`YTD Sales`, `MoM Growth %`）
-  - 比率/百分比：以 `%` 结尾（`Profit Margin %`, `YoY Growth %`）
-  - 排名：以 `Rank` 开头或结尾（`Sales Rank`）
-  - 辅助/内部度量值：以 `_` 前缀（`_Base Revenue`）
+- 前缀/后缀规范：
+
+| 前缀/后缀 | 用途 | 示例 |
+|-----------|------|------|
+| **无前缀** | 基础聚合度量值 | `Total Sales`, `Order Count`, `Average Price` |
+| **KPI_** | 关键绩效指标 | `KPI_SalesGrowth`, `KPI_ProfitMargin` |
+| **CAL_** | 复杂计算指标 | `CAL_SalesPerCustomer`, `CAL_AOV` |
+| **RATIO_** | 比率指标 | `RATIO_ConversionRate`, `RATIO_Margin` |
+| **YTD_** | 本年至今 | `YTD_Sales`, `YTD_Revenue` |
+| **MTD_** | 本月至今 | `MTD_Sales`, `MTD_Profit` |
+| **PY_** | 去年同期 | `PY_Sales`, `PY_Orders` |
+| **% 结尾** | 百分比/比率 | `Profit Margin %`, `YoY Growth %` |
+| **Rank 结尾** | 排名 | `Sales Rank`, `Customer Rank` |
+| **_ 前缀** | 辅助/内部度量值（隐藏） | `_Base Revenue`, `_Helper Count` |
+
 - 禁止使用拼音或中英混拼
+- 避免与列名冲突（度量值名称不应与模型中任何列名相同）
 
 ### 计算列（Calculated Columns）
 - 以 `CC_` 前缀标识（可选，团队约定）
 - 命名体现其业务含义
 
-### 计算表（Calculated Tables）
-- 以 `CT_` 前缀标识（可选，团队约定）
-- 如果是维度表以DIM开头，格式为：Dim_xxx   — 维度表（如 Dim_Date, Dim_Product）
+### 表命名规范（Table Naming）
+
+基于 Kimball 维度建模方法论，所有表使用前缀标识其类型：
+
+| 前缀 | 含义 | 示例 | 说明 |
+|------|------|------|------|
+| **Dim_** | 维度表 | `Dim_Date`, `Dim_Customer`, `Dim_Store` | 描述性数据，用于筛选和分组 |
+| **Fact_** | 事实表 | `Fact_Sales`, `Fact_Orders` | 度量数据，包含可聚合的数值 |
+| **Bridge_** | 桥接表 | `Bridge_SalesTerritory` | 解决多对多关系 |
+| **Param_** | 参数表 | `Param_TimeFrame`, `Param_TopN` | 用户选择参数，用于动态计算 |
+| **CT_** | 计算表 | `CT_DateRange`, `CT_Scaffold` | DAX DATATABLE/CROSSJOIN 生成的辅助表 |
+| **_** | 隐藏辅助表 | `_Measures`, `_Parameters` | 不直接面向用户的内部表 |
+
+表命名原则：
+- 使用单数名词（`Dim_Customer` 而非 `Dim_Customers`）
+- 禁止使用空格和特殊字符
+- 避免使用 DAX 保留字作为表名（如 `Date`、`Value`、`Name` 需加前缀 → `Dim_Date`）
+
+### 列命名规范（Column Naming）
+
+#### 主键与外键
+```dax
+// 维度表主键 — 使用 Key 或 ID 后缀
+Dim_Customer[CustomerKey]        // 代理键（推荐）
+Dim_Customer[CustomerID]         // 业务键
+
+// 事实表外键 — 与关联维度表主键同名
+Fact_Sales[CustomerKey]          // 关联到 Dim_Customer[CustomerKey]
+Fact_Sales[DateKey]              // 关联到 Dim_Date[DateKey]
+```
+
+#### 属性列
+```dax
+// 使用 PascalCase，见名知意
+Dim_Product[ProductName]         // 名称
+Dim_Product[ProductCategory]     // 类别
+Dim_Date[MonthName]              // 月份名称
+Dim_Date[IsWeekend]              // 布尔标识用 Is/Has 前缀
+Dim_Order[IsActive]              // 是否激活
+```
+
+#### 计算列
+- 可选添加 `Calc_` 前缀区分（团队约定）
+- 命名体现其业务含义
 
 ### 变量（VAR）
 - 使用 `__` 前缀（双下划线）或清晰的描述性命名
@@ -98,3 +149,51 @@ MaxValue < 0, FORMAT(BasePoints, "0") & "bp",  // 负数自带负号
 - ❌ 禁止使用 EARLIER（用 VAR 替代）
 - ❌ 禁止未经验证的 CALCULATE 嵌套
 - ❌ 禁止在计算列中引用度量值
+
+## 5. 命名检查清单
+
+### 表命名
+- [ ] 使用前缀标识表类型（Dim_、Fact_、Bridge_、Param_、CT_）
+- [ ] 表名清晰描述内容，使用单数名词
+- [ ] 避免使用空格、特殊字符和 DAX 保留字
+
+### 列命名
+- [ ] 主键使用 Key 或 ID 后缀
+- [ ] 外键与关联维度表主键同名
+- [ ] 布尔列使用 Is/Has 前缀（`IsActive`, `HasDiscount`）
+- [ ] 使用 PascalCase，列名见名知意
+
+### 度量值命名
+- [ ] 度量值名称准确反映计算内容
+- [ ] 复杂度量值使用类型前缀（KPI_、CAL_、RATIO_）
+- [ ] 时间智能度量值标识时间范围（YTD_、MTD_、PY_）
+- [ ] 避免与列名冲突
+
+### 整体一致性
+- [ ] 全项目使用相同的命名风格（PascalCase 或 snake_case，不混用）
+- [ ] 命名规范已文档化并团队共享
+
+## 6. 常见命名错误
+
+```dax
+// ❌ 错误：使用 DAX 保留字
+Date = ...         // Date 是 DAX 函数
+Value = ...        // Value 是 DAX 函数
+// ✅ 正确：添加前缀
+Dim_Date = ...
+SalesValue = ...
+
+// ❌ 错误：模糊命名
+Data = ...
+Calc1 = ...
+// ✅ 正确：描述性命名
+Customer_Demographics = ...
+Revenue_Growth = ...
+
+// ❌ 错误：大小写风格不一致
+totalSales = ...
+Total_Sales = ...
+TOTAL_SALES = ...
+// ✅ 正确：统一 PascalCase
+TotalSales = ...
+```
