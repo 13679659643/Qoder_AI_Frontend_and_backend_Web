@@ -1,0 +1,474 @@
+# Power BI 切片器表命名规范与最佳实践
+
+在 Power BI 中，为切片器创建专门的表是高级建模技巧。正确的命名不仅提高可维护性，还能让团队协作更高效。
+
+## 一、切片器表的分类与命名规则
+
+### 1.1 按功能分类的命名规范
+
+| 表类型 | 前缀 | 示例 | 适用场景 |
+|--------|------|------|----------|
+| **静态参数表** | `Param_` | `Param_Year` | 固定的筛选选项，如年份、季度 |
+| **动态参数表** | `Dynamic_` | `Dynamic_ProductFilter` | 根据数据动态生成的筛选器 |
+| **层级切片器** | `Hierarchy_` | `Hierarchy_Date` | 日期层级、地理层级等 |
+| **多选切片器** | `MultiSelect_` | `MultiSelect_Region` | 支持多选的筛选器 |
+| **What-If 参数** | `WhatIf_` | `WhatIf_DiscountRate` | 模拟分析参数 |
+| **度量值切换** | `MeasureSwitch_` | `MeasureSwitch_KPI` | 切换不同度量值的参数表 |
+
+### 1.2 按业务领域分类
+
+| 业务领域 | 命名模式 | 示例 |
+|----------|----------|------|
+| 时间维度 | `Slicer_Time_[粒度]` | `Slicer_Time_YearQuarter` |
+| 地理维度 | `Slicer_Geo_[层级]` | `Slicer_Geo_RegionCountry` |
+| 产品维度 | `Slicer_Product_[分类]` | `Slicer_Product_Category` |
+| 客户维度 | `Slicer_Customer_[分组]` | `Slicer_Customer_Segment` |
+| 财务维度 | `Slicer_Finance_[指标]` | `Slicer_Finance_MetricType` |
+
+## 二、具体命名示例
+
+### 2.1 基础切片器表
+
+```dax
+// 1. 年份切片器表
+Slicer_Year = 
+SELECTCOLUMNS(
+    GENERATESERIES(2020, YEAR(TODAY()), 1),
+    "Year", [Value],
+    "YearSort", [Value]
+)
+
+// 2. 季度切片器表
+Slicer_Quarter = 
+DATATABLE(
+    "Quarter", STRING,
+    "QuarterNumber", INTEGER,
+    {
+        {"Q1", 1},
+        {"Q2", 2},
+        {"Q3", 3},
+        {"Q4", 4}
+    }
+)
+
+// 3. 月份切片器表
+Slicer_Month = 
+ADDCOLUMNS(
+    SELECTCOLUMNS(
+        GENERATESERIES(1, 12, 1),
+        "MonthNumber", [Value]
+    ),
+    "MonthName", FORMAT(DATE(2023, [MonthNumber], 1), "MMMM"),
+    "MonthAbbr", FORMAT(DATE(2023, [MonthNumber], 1), "MMM")
+)
+```
+
+### 2.2 高级切片器表
+
+```dax
+// 1. 动态产品筛选器（基于现有产品表）
+Dynamic_ProductFilter = 
+DISTINCT(
+    SELECTCOLUMNS(
+        'Product',
+        "ProductID", 'Product'[ProductID],
+        "ProductName", 'Product'[ProductName],
+        "Category", 'Product'[Category],
+        "Subcategory", 'Product'[Subcategory]
+    )
+)
+
+// 2. 度量值切换表
+MeasureSwitch_KPI = 
+DATATABLE(
+    "KPI_ID", INTEGER,
+    "KPI_Name", STRING,
+    "KPI_Measure", STRING,
+    "SortOrder", INTEGER,
+    {
+        {1, "销售额", "Sales_Amount", 1},
+        {2, "利润", "Profit_Amount", 2},
+        {3, "订单数", "Order_Count", 3},
+        {4, "客户数", "Customer_Count", 4},
+        {5, "增长率", "Growth_Rate", 5}
+    }
+)
+
+// 3. 层级日期切片器
+Hierarchy_Date = 
+VAR MinDate = MIN('Sales'[OrderDate])
+VAR MaxDate = MAX('Sales'[OrderDate])
+RETURN
+ADDCOLUMNS(
+    CALENDAR(MinDate, MaxDate),
+    "Year", YEAR([Date]),
+    "YearQuarter", FORMAT([Date], "YYYY") & " Q" & FORMAT([Date], "Q"),
+    "YearMonth", FORMAT([Date], "YYYY-MM"),
+    "MonthName", FORMAT([Date], "MMMM"),
+    "WeekNumber", WEEKNUM([Date]),
+    "DayOfWeek", FORMAT([Date], "dddd")
+)
+```
+
+## 三、字段命名规范
+
+### 3.1 切片器表字段命名
+
+| 字段类型 | 命名规范 | 示例 |
+|----------|----------|------|
+| **显示值** | `[表名]_Label` | `Year_Label` |
+| **排序值** | `[表名]_Sort` | `Year_Sort` |
+| **ID/键值** | `[表名]_ID` | `Year_ID` |
+| **分组值** | `[表名]_Group` | `Product_Group` |
+| **是否选中** | `[表名]_Selected` | `Region_Selected` |
+
+### 3.2 实际应用示例
+
+```dax
+// 区域切片器表
+Slicer_Region = 
+ADDCOLUMNS(
+    DISTINCT('Geography'[Region]),
+    "Region_ID", [Region],
+    "Region_Label", [Region],
+    "Region_Sort", 
+        SWITCH(
+            [Region],
+            "North", 1,
+            "South", 2,
+            "East", 3,
+            "West", 4,
+            5
+        ),
+    "Region_Group",
+        SWITCH(
+            [Region],
+            "North", "North Group",
+            "South", "South Group",
+            "Other"
+        )
+)
+```
+
+## 四、关系命名规范
+
+### 4.1 切片器表关系命名
+
+当切片器表与其他表建立关系时，建议使用明确的命名：
+
+```dax
+// 在模型视图中，关系的命名建议：
+// 格式：[主表]→[相关表]_[用途]
+// 示例：
+// 1. 基础关系
+Slicer_Year[Year] → Sales[OrderYear] // 年份筛选
+
+// 2. 多对多桥接表关系
+Slicer_Product[ProductID] → Bridge_ProductSales[ProductID] // 产品筛选桥接
+
+// 3. 动态关系
+Dynamic_Filter[FilterValue] → Sales[Region] // 动态区域筛选
+```
+
+### 4.2 关系管理最佳实践
+
+```dax
+// 使用 DAX 创建动态关系表
+Dynamic_Relationship_Table = 
+SELECTCOLUMNS(
+    SUMMARIZE(
+        'Sales',
+        'Sales'[Region],
+        'Sales'[Year]
+    ),
+    "Region", 'Sales'[Region],
+    "Year", 'Sales'[Year],
+    "RelationshipKey", 'Sales'[Region] & "|" & 'Sales'[Year]
+)
+```
+
+## 五、文件夹与组织规范
+
+### 5.1 表文件夹结构
+
+```
+📁 Slicers
+├── 📁 Time
+│   ├── Slicer_Year
+│   ├── Slicer_Quarter
+│   └── Slicer_Month
+├── 📁 Geography
+│   ├── Slicer_Region
+│   ├── Slicer_Country
+│   └── Slicer_City
+├── 📁 Products
+│   ├── Slicer_ProductCategory
+│   ├── Slicer_ProductSubcategory
+│   └── Dynamic_ProductFilter
+├── 📁 Parameters
+│   ├── WhatIf_Discount
+│   ├── Param_Threshold
+│   └── MeasureSwitch_KPI
+└── 📁 System
+    ├── Slicer_UserRole
+    └── Slicer_ViewType
+```
+
+### 5.2 字段显示文件夹
+
+```dax
+// 在表中组织字段显示
+Slicer_Date = 
+ADDCOLUMNS(
+    CALENDAR(DATE(2020,1,1), TODAY()),
+    // 显示值文件夹
+    "📊 Display Values", FORMAT([Date], "YYYY-MM-DD"),
+    "📊 Display Values", FORMAT([Date], "MMMM"),
+    "📊 Display Values", FORMAT([Date], "QQ"),
+    
+    // 排序值文件夹
+    "🔢 Sort Values", YEAR([Date]),
+    "🔢 Sort Values", MONTH([Date]),
+    "🔢 Sort Values", DAY([Date]),
+    
+    // 计算值文件夹
+    "🧮 Calculations", 
+        IF(WEEKDAY([Date], 2) > 5, "Weekend", "Weekday"),
+    "🧮 Calculations",
+        IF(MONTH([Date]) IN {1,2,12}, "Winter",
+           IF(MONTH([Date]) IN {3,4,5}, "Spring",
+           IF(MONTH([Date]) IN {6,7,8}, "Summer", "Autumn")))
+)
+```
+
+## 六、高级模式：参数表模板
+
+### 6.1 通用参数表结构
+
+```dax
+// 通用参数表模板
+Template_ParameterTable = 
+VAR ParameterName = "Template"  // 修改为实际参数名
+RETURN
+DATATABLE(
+    // 基础字段
+    ParameterName & "_ID", INTEGER,
+    ParameterName & "_Label", STRING,
+    ParameterName & "_Sort", INTEGER,
+    ParameterName & "_Description", STRING,
+    
+    // 扩展字段
+    ParameterName & "_IsDefault", BOOLEAN,
+    ParameterName & "_IsActive", BOOLEAN,
+    ParameterName & "_Group", STRING,
+    
+    // 数据行
+    {
+        {1, "Option 1", 1, "First option", TRUE, TRUE, "Group A"},
+        {2, "Option 2", 2, "Second option", FALSE, TRUE, "Group A"},
+        {3, "Option 3", 3, "Third option", FALSE, TRUE, "Group B"}
+    }
+)
+```
+
+### 6.2 动态参数表生成器
+
+```dax
+// 动态生成参数表的函数
+GenerateParameterTable = 
+(
+    TableName as text,
+    Values as list,
+    Labels as list,
+    Optional SortOrder as list,
+    Optional Groups as list
+) =>
+let
+    // 构建基础表
+    BaseTable = Table.FromColumns(
+        {
+            List.Generate(
+                () => 0,
+                each _ < List.Count(Values),
+                each _ + 1,
+                each _ + 1
+            ),  // ID列
+            Values,  // 值列
+            Labels,  // 标签列
+            SortOrder ?? List.Generate(
+                () => 0,
+                each _ < List.Count(Values),
+                each _ + 1,
+                each _ + 1
+            ),  // 排序列（默认）
+            Groups ?? List.Repeat(
+                {"Default"},
+                List.Count(Values)
+            )  // 分组列（默认）
+        },
+        {
+            TableName & "_ID",
+            TableName & "_Value",
+            TableName & "_Label",
+            TableName & "_Sort",
+            TableName & "_Group"
+        }
+    ),
+    
+    // 添加元数据
+    MetaTable = Table.AddColumn(
+        BaseTable,
+        TableName & "_IsSelected",
+        each true,
+        type logical
+    )
+in
+    MetaTable
+```
+
+## 七、实际项目应用示例
+
+### 7.1 电商分析项目切片器表
+
+```dax
+// 项目：电商销售分析
+// 位置：📁 Slicers/
+
+// 1. 时间切片器
+Slicer_Time_Period = 
+DATATABLE(
+    "Period_ID", INTEGER,
+    "Period_Label", STRING,
+    "Period_Sort", INTEGER,
+    "Period_Type", STRING,  // Daily, Weekly, Monthly, Quarterly, Yearly
+    {
+        {1, "今日", 1, "Daily"},
+        {2, "本周", 2, "Weekly"},
+        {3, "本月", 3, "Monthly"},
+        {4, "本季度", 4, "Quarterly"},
+        {5, "本年", 5, "Yearly"},
+        {6, "自定义", 6, "Custom"}
+    }
+)
+
+// 2. 产品分类切片器
+Slicer_Product_Hierarchy = 
+ADDCOLUMNS(
+    SUMMARIZE(
+        'Product',
+        'Product'[Category],
+        'Product'[Subcategory],
+        'Product'[Brand]
+    ),
+    "Hierarchy_Level", 
+        SWITCH(
+            TRUE(),
+            NOT(ISBLANK([Brand])), "Brand",
+            NOT(ISBLANK([Subcategory])), "Subcategory",
+            NOT(ISBLANK([Category])), "Category",
+            "All"
+        ),
+    "Hierarchy_Path",
+        [Category] & " > " & 
+        IF(ISBLANK([Subcategory]), "", [Subcategory] & " > ") &
+        IF(ISBLANK([Brand]), "", [Brand])
+)
+
+// 3. 度量值选择器
+MeasureSwitch_SalesMetrics = 
+DATATABLE(
+    "Metric_ID", INTEGER,
+    "Metric_Name", STRING,
+    "Metric_DAX", STRING,
+    "Metric_Format", STRING,
+    "Metric_Category", STRING,
+    "Sort_Order", INTEGER,
+    {
+        {1, "销售额", "[Sales Amount]", "Currency", "Financial", 1},
+        {2, "订单数", "[Order Count]", "Whole Number", "Volume", 2},
+        {3, "平均订单价", "[Avg Order Value]", "Currency", "Financial", 3},
+        {4, "毛利率", "[Gross Margin %]", "Percentage", "Profitability", 4},
+        {5, "客户数", "[Customer Count]", "Whole Number", "Customer", 5},
+        {6, "转化率", "[Conversion Rate]", "Percentage", "Performance", 6}
+    }
+)
+```
+
+### 7.2 在报表中的使用示例
+
+```dax
+// 动态度量值计算
+Selected_Metric_Value = 
+VAR SelectedMetric = SELECTEDVALUE(MeasureSwitch_SalesMetrics[Metric_DAX])
+RETURN
+SWITCH(
+    TRUE(),
+    SelectedMetric = "[Sales Amount]", [Sales Amount],
+    SelectedMetric = "[Order Count]", [Order Count],
+    SelectedMetric = "[Avg Order Value]", [Avg Order Value],
+    SelectedMetric = "[Gross Margin %]", [Gross Margin %],
+    SelectedMetric = "[Customer Count]", [Customer Count],
+    SelectedMetric = "[Conversion Rate]", [Conversion Rate],
+    BLANK()
+)
+
+// 动态标题
+Dynamic_Chart_Title = 
+"销售分析 - " & 
+SELECTEDVALUE(MeasureSwitch_SalesMetrics[Metric_Name]) & 
+" (" & SELECTEDVALUE(Slicer_Time_Period[Period_Label]) & ")"
+```
+
+## 八、命名检查清单
+
+### 8.1 创建切片器表前的检查项
+
+- [ ] **表名是否清晰**：能一眼看出表的用途
+- [ ] **前缀是否合适**：使用正确的分类前缀（Slicer_、Param_、Dynamic_等）
+- [ ] **字段名是否规范**：包含必要的显示值、排序值、ID字段
+- [ ] **是否有排序字段**：确保切片器选项按正确顺序显示
+- [ ] **是否隐藏技术字段**：只显示用户需要的字段
+- [ ] **文件夹组织是否合理**：相关表放在同一文件夹
+- [ ] **是否有默认选择**：设置合理的默认选中项
+- [ ] **是否考虑性能**：避免创建过大的切片器表
+
+### 8.2 维护规范
+
+1. **版本控制**：在表名中包含版本信息（如 `Slicer_Region_v2`）
+2. **文档注释**：在表描述中说明用途和更新历史
+3. **依赖关系**：记录与其他表的关系
+4. **使用统计**：跟踪哪些报表使用该切片器表
+
+## 九、总结建议
+
+### 9.1 核心命名原则
+
+1. **一致性**：整个项目使用统一的命名规范
+2. **描述性**：名称能清晰表达表的用途
+3. **简洁性**：避免过长或过于复杂的名称
+4. **可扩展性**：考虑未来可能添加的字段或功能
+
+### 9.2 针对您项目的具体建议
+
+基于您之前提到的 ByteHouse 项目，建议：
+
+```dax
+// 针对 ByteHouse 数据仓库的切片器表命名
+Slicer_ByteHouse_TimeGranularity =  // 时间粒度选择
+Slicer_ByteHouse_DataLayer =        // 数据层级选择（ODS/DWD/DWS/ADS）
+Slicer_ByteHouse_BusinessUnit =     // 业务单元筛选
+Param_ByteHouse_RowLimit =          // 行数限制参数
+Dynamic_ByteHouse_TableFilter =     // 动态表筛选
+```
+
+### 9.3 最佳实践总结
+
+1. **使用前缀分类**：`Slicer_`、`Param_`、`Dynamic_` 等
+2. **包含业务领域**：如 `Slicer_Sales_Region`
+3. **添加排序字段**：确保正确的显示顺序
+4. **组织到文件夹**：按功能或业务领域分组
+5. **添加描述信息**：在表属性中说明用途
+6. **考虑多语言**：如果有多语言需求，添加语言字段
+7. **测试默认值**：确保切片器有合理的默认选择
+
+记住：好的命名规范是团队协作的基础，能显著提高项目的可维护性和开发效率。

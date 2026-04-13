@@ -1,0 +1,1290 @@
+================================================================================
+DCom Platform Performance - 中国式报表自定义矩阵案例解决方案
+================================================================================
+
+> status: done
+> created: 2026-03-12
+> updated: 2026-04-13
+> complexity: 🔴复杂
+> type: 度量值开发 + 可视化调整
+
+================================================================================
+# 1. 背景与目标
+================================================================================
+
+## 1.1 业务背景
+DCom 电商平台需要一份"中国式报表"风格的多维交叉矩阵报表，用于展示各平台
+（Total / TM / JD / DY / DY Family / DY W / RLE）在多个业务指标维度上的表现。
+
+报表要求：
+- 行维度：指标组（SLS DCOM / Demand Sales / Traffic / CVR / AUR / UPT / Cancel / Return）
+- 行子维度：指标类型（Act 实际值 / vs LY% 同比 / vs Target% 目标达成率）
+- 列维度：平台（Total / TM / JD / DY / DY Family / DY W / RLE）
+- 条件格式：增长指标根据正负值显示红绿色
+- DY 平台特殊逻辑：DY = DY_Family + DY_W 的汇总
+
+## 1.2 目标效果
+通过 Power BI Matrix 视觉对象实现中国式交叉报表：
+- 矩阵行标题 = 指标组 + 指标类型（两级嵌套）
+- 矩阵列标题 = 平台维度
+- 单元格 = 动态路由度量值（根据行列上下文自动返回对应指标）
+- 条件格式 = 动态颜色度量值（增长为绿，下降为红）
+
+
+================================================================================
+# 2. 现状分析（Research Findings）
+================================================================================
+
+## 2.1 相关数据源与数据流
+- 事实表：'D_Dcom-Platform Performance'（含 platform、store 等维度列和各指标值列）
+- 数据刷新方式：Import 模式
+
+## 2.2 现有模型结构
+
+### 事实表
+| 表名                              | 描述             | 关键列                    |
+|----------------------------------|------------------|--------------------------|
+| D_Dcom-Platform Performance       | 平台业绩事实表    | platform, store, 各指标列  |
+
+### 维度表（本方案新建的计算表）
+| 表名                                              | 描述           | 类型     |
+|--------------------------------------------------|----------------|----------|
+| D_Dcom-Platform Performance_Platform_Dim          | 平台维度表      | 计算表   |
+| D_Dcom-Platform Performance_Metrics_Dim           | 指标行标题维度表 | 计算表   |
+
+## 2.3 现有基础度量值（被路由调用）
+| 度量值名称           | 指标组        | 指标类型   | 格式            |
+|---------------------|-------------|-----------|-----------------|
+| [SLS DCOM Act]       | SLS DCOM    | Act       | #,##0           |
+| [SLS DCOM vs LY%]   | SLS DCOM    | vs LY%    | 0.00%           |
+| [SLS DCOM vs Target%]| SLS DCOM   | vs Target%| 0.00%           |
+| [Demand Sales Act]   | Demand Sales| Act       | #,##0           |
+| [Demand Sales vs LY%]| Demand Sales| vs LY%   | 0.00%           |
+| [Traffic Act]        | Traffic     | Act       | #,##0           |
+| [Traffic vs LY%]     | Traffic     | vs LY%    | 0.00%           |
+| [CVR% Act]           | CVR         | Act       | 0.00%           |
+| [CVR% vs LY%]        | CVR         | vs LY%    | 0.00%           |
+| [AUR Act]            | AUR         | Act       | #,##0           |
+| [AUR vs LY%]         | AUR         | vs LY%    | 0.00%           |
+| [UPT Act]            | UPT         | Act       | 0.00            |
+| [UPT vs LY%]         | UPT         | vs LY%    | 0.00%           |
+| [Cancel Act]         | Cancel      | Act       | 0.00%           |
+| [Cancel vs LY%]      | Cancel      | vs LY%    | 0.00%           |
+| [Return Act]         | Return      | Act       | 0.00%           |
+| [Return vs LY%]      | Return      | vs LY%    | 0.00%           |
+
+## 2.4 发现与风险
+- DY 平台由 DY_Family 和 DY_W 两个子平台组成，需要特殊汇总逻辑
+- SLS DCOM 指标组多一个 vs Target% 维度，其他指标组无此维度
+- Cancel 和 Return 的增长指标语义相反：负增长为好（颜色逻辑需反转）
+- 动态路由度量值层级较深（3层），需关注性能
+
+
+================================================================================
+# 3. 功能点
+================================================================================
+
+- [x] 功能 1：平台维度表 — 定义 7 个平台（含层级关系和排序）
+- [x] 功能 2：指标行标题维度表 — 定义矩阵行标题（8 个指标组 x 2~3 个指标类型）
+- [x] 功能 3：动态路由度量值 — 根据行列上下文自动路由到对应基础度量值
+- [x] 功能 4：DY 平台汇总路由 — 处理 DY = DY_Family + DY_W 的特殊逻辑
+- [x] 功能 5：动态格式化度量值 — 根据指标类型返回对应格式的文本
+- [x] 功能 6：动态颜色度量值 — 根据增长方向返回条件格式颜色
+
+
+================================================================================
+# 4. 业务规则
+================================================================================
+
+- 规则 1：DY Act 指标 = DY_Family Act + DY_W Act（求和汇总）
+- 规则 2：DY 增长指标 = (DY_Family vs LY% + DY_W vs LY%) / 2（平均增长率）
+- 规则 3：SLS DCOM 指标组包含 Act / vs LY% / vs Target% 三个子行
+- 规则 4：其他指标组仅包含 Act / vs LY% 两个子行
+- 规则 5：颜色规则 — 增长 > 0 为绿色 #1A9018，= 0 为黄色 #E1C233，< 0 为红色 #D64550
+- 规则 6：Cancel / Return 颜色语义反转 — 负增长为绿色（好），正增长为红色（坏）
+- 规则 7：百分比指标保留 2 位小数，大数值指标使用千分位格式
+
+
+================================================================================
+# 5. 模型变更
+================================================================================
+
+| 操作 | 表名                                              | 列/关系/度量值       | 说明                    |
+|------|--------------------------------------------------|---------------------|------------------------|
+| 新增 | D_Dcom-Platform Performance_Platform_Dim          | 计算表（6列）         | 平台维度，含层级和排序    |
+| 新增 | D_Dcom-Platform Performance_Metrics_Dim           | 计算表（6列）         | 指标行标题维度，含排序    |
+| 新增 | _Measures                                         | DDPP_* 系列度量值     | 动态路由/格式/颜色度量值  |
+
+
+================================================================================
+# 6. DAX 度量值设计 — 完整实现
+================================================================================
+
+## 6.1 计算表：平台维度表
+
+| Display Folder | Base Metrics / Dimensions |
+|----------------|--------------------------|
+
+```dax
+// ========================================
+// 计算表: D_Dcom-Platform Performance_Platform_Dim
+// 用途: 创建平台维度表，定义各电商平台及其层级关系
+// 依赖: 无（静态数据）
+// 作者: Gutao | 日期: 2026-03-12
+// ========================================
+D_Dcom-Platform Performance_Platform_Dim = 
+DATATABLE(
+    "Platform_Code", STRING,
+    "Platform_Name", STRING,
+    "Sort_Order", INTEGER,
+    "Parent_Platform", STRING,
+    "Is_Total", BOOLEAN,
+    "Platform_Level", INTEGER,
+    {
+        // Level 1 - 总计行
+        {"Total", "Total", 1, "", TRUE, 1},
+        
+        // Level 2 - 主要平台
+        {"TM", "TM", 2, "Total", FALSE, 2},
+        {"JD", "JD", 3, "Total", FALSE, 2},
+        
+        // Level 2 - DY 汇总平台
+        {"DY", "DY", 5, "Total", FALSE, 2},
+        
+        // Level 3 - DY 子平台
+        {"DY_Family", "DY Family", 6, "DY", FALSE, 3},
+        {"DY_W", "DY W", 7, "DY", FALSE, 3},
+        
+        // Level 2 - 其他平台
+        {"RLE", "RLE", 8, "Total", FALSE, 2}
+    }
+)
+```
+
+### 平台层级结构
+```
+Total (Level 1)
+├── TM        (Level 2)
+├── JD        (Level 2)
+├── DY        (Level 2, 汇总 = DY_Family + DY_W)
+│   ├── DY Family  (Level 3)
+│   └── DY W       (Level 3)
+└── RLE       (Level 2)
+```
+
+
+--------------------------------------------------------------------------------
+## 6.2 计算表：指标行标题维度表
+
+| Display Folder | Base Metrics / Dimensions |
+|----------------|--------------------------|
+
+```dax
+// ========================================
+// 计算表: D_Dcom-Platform Performance_Metrics_Dim
+// 用途: 创建矩阵行标题维度表，支持多层级指标显示
+// 依赖: 无（静态数据）
+// 作者: Gutao | 日期: 2026-03-12
+// 修改: 2026-03-12 — vs Target% 仅出现在 SLS DCOM 指标组
+// 注意:
+//   1. 此表用于 Matrix 视觉对象的行标题
+//   2. 通过 CROSSJOIN 生成指标组 x 指标类型的笛卡尔积
+//   3. SLS DCOM 和其他指标组分别生成组合后 UNION 合并
+//   4. Sort_Order 字段确保矩阵中的正确显示顺序
+// ========================================
+D_Dcom-Platform Performance_Metrics_Dim = 
+
+-- Step 1: 定义一级标题（指标组）
+VAR __R1Groups = 
+    DATATABLE(
+        "R1Name", STRING,
+        "R1NameOrder", INTEGER,
+        {
+            {"SLS DCOM", 1},
+            {"Demand Sales", 2},
+            {"Traffic", 3},
+            {"CVR", 4},
+            {"AUR", 5},
+            {"UPT", 6},
+            {"Cancel", 7},
+            {"Return", 8}
+        }
+    )
+
+-- Step 2: 定义总计行的特殊一级标题
+VAR __R1SpecTotal = 
+    DATATABLE(
+        "R1Name", STRING,
+        "R1NameOrder", INTEGER,
+        {
+            {"Total", 100}
+        }
+    )
+
+-- Step 3: 定义总计行的特殊二级标题
+VAR __R2SpecTotal = 
+    DATATABLE(
+        "R2Name", STRING,
+        "R2NameOrder", INTEGER,
+        {
+            {"Total", 100}
+        }
+    )
+
+-- Step 4: 定义三级标题（预留扩展）
+VAR __R3Default = 
+    DATATABLE(
+        "R3Name", STRING,
+        "R3NameOrder", INTEGER,
+        {
+            {"Value", 1}
+        }
+    )
+
+-- Step 5: SLS DCOM 的二级标题（含 vs Target%）
+VAR __R2_SLS_DCOM = 
+    DATATABLE(
+        "R2Name", STRING,
+        "R2NameOrder", INTEGER,
+        {
+            {"Act", 1},
+            {"vs LY%", 2},
+            {"vs Target%", 3}
+        }
+    )
+
+-- Step 6: 其他指标组的二级标题（不含 vs Target%）
+VAR __R2_Other = 
+    DATATABLE(
+        "R2Name", STRING,
+        "R2NameOrder", INTEGER,
+        {
+            {"Act", 1},
+            {"vs LY%", 2}
+        }
+    )
+
+-- Step 7: 生成 SLS DCOM 指标组的行组合
+VAR __CombSLS = 
+    SELECTCOLUMNS(
+        CROSSJOIN(
+            FILTER(__R1Groups, [R1Name] = "SLS DCOM"),
+            __R2_SLS_DCOM,
+            __R3Default
+        ),
+        "R1Name", [R1Name],
+        "R1NameOrder", [R1NameOrder],
+        "R2Name", [R2Name],
+        "R2NameOrder", [R2NameOrder],
+        "R3Name", [R3Name],
+        "R3NameOrder", [R3NameOrder]
+    )
+
+-- Step 8: 生成其他指标组的行组合
+VAR __CombOther = 
+    SELECTCOLUMNS(
+        CROSSJOIN(
+            FILTER(__R1Groups, [R1Name] <> "SLS DCOM"),
+            __R2_Other,
+            __R3Default
+        ),
+        "R1Name", [R1Name],
+        "R1NameOrder", [R1NameOrder],
+        "R2Name", [R2Name],
+        "R2NameOrder", [R2NameOrder],
+        "R3Name", [R3Name],
+        "R3NameOrder", [R3NameOrder]
+    )
+
+-- Step 9: 生成特殊行组合（总计行）
+VAR __CombSpecial = 
+    SELECTCOLUMNS(
+        CROSSJOIN(__R1SpecTotal, __R2SpecTotal, __R3Default),
+        "R1Name", [R1Name],
+        "R1NameOrder", [R1NameOrder],
+        "R2Name", [R2Name],
+        "R2NameOrder", [R2NameOrder],
+        "R3Name", [R3Name],
+        "R3NameOrder", [R3NameOrder]
+    )
+
+-- Step 10: 合并所有行组合
+RETURN
+    UNION(__CombSLS, __CombOther, __CombSpecial)
+```
+
+### 生成的指标行结构
+```
+R1Name (指标组)    R2Name (指标类型)    说明
+─────────────────────────────────────────────
+SLS DCOM           Act                  实际销售额
+SLS DCOM           vs LY%              同比增长率
+SLS DCOM           vs Target%           目标达成率（仅 SLS DCOM 有）
+Demand Sales       Act                  需求销售额
+Demand Sales       vs LY%              同比增长率
+Traffic            Act                  流量
+Traffic            vs LY%              同比增长率
+CVR                Act                  转化率
+CVR                vs LY%              同比增长率
+AUR                Act                  客单价
+AUR                vs LY%              同比增长率
+UPT                Act                  件单价
+UPT                vs LY%              同比增长率
+Cancel             Act                  取消率
+Cancel             vs LY%              同比增长率
+Return             Act                  退货率
+Return             vs LY%              同比增长率
+```
+
+
+--------------------------------------------------------------------------------
+## 6.3 度量值：动态路由主入口（DDPP_Dynamic_Metric_Value_Optimized）
+
+| Display Folder | Formatting / Dynamic Metrics |
+|----------------|------------------------------|
+
+```dax
+// ========================================
+// 度量值: DDPP_Dynamic_Metric_Value_Optimized
+// 用途: 动态度量值路由主入口，根据平台和指标上下文
+//       路由到对应的计算逻辑
+// 依赖: [DDPP_DY_Platform_Router], [DDPP_Measure_Router_NonDY]
+//       'D_Dcom-Platform Performance_Platform_Dim'[Platform_Code]
+//       'D_Dcom-Platform Performance_Metrics_Dim'[R1Name], [R2Name]
+// 作者: Gutao | 日期: 2026-03-12
+// ========================================
+DDPP_Dynamic_Metric_Value_Optimized = 
+    VAR __SelPlatform = 
+        SELECTEDVALUE(
+            'D_Dcom-Platform Performance_Platform_Dim'[Platform_Code]
+        )
+    RETURN
+        SWITCH(
+            TRUE(),
+            // DY 汇总平台 → 使用 DY 专用路由（汇总 DY_Family + DY_W）
+            __SelPlatform = "DY",
+                [DDPP_DY_Platform_Router],
+            // 所有其他平台（含 DY_Family、DY_W 子平台）→ 使用通用路由
+            [DDPP_Measure_Router_NonDY]
+        )
+```
+
+### 路由逻辑说明
+```
+Platform_Code 选择
+    ├── "DY"           → [DDPP_DY_Platform_Router]  (汇总 DY_Family + DY_W)
+    ├── "DY_Family"    → [DDPP_Measure_Router_NonDY] (platform="DY", store="DY_Family")
+    ├── "DY_W"         → [DDPP_Measure_Router_NonDY] (platform="DY", store="DY_W")
+    ├── "Total"        → [DDPP_Measure_Router_NonDY] (platform="Total")
+    ├── "TM"           → [DDPP_Measure_Router_NonDY] (platform="TM")
+    ├── "JD"           → [DDPP_Measure_Router_NonDY] (platform="JD")
+    └── "RLE"          → [DDPP_Measure_Router_NonDY] (platform="RLE")
+```
+
+
+--------------------------------------------------------------------------------
+## 6.4 度量值：非 DY 平台路由（DDPP_Measure_Router_NonDY）
+
+| Display Folder | _Internal / Routing |
+|----------------|---------------------|
+
+```dax
+// ========================================
+// 度量值: DDPP_Measure_Router_NonDY
+// 用途: 处理 Total / TM / JD / RLE / DY_Family / DY_W 平台的指标路由
+//       通过 CALCULATE 应用平台筛选，调用基础度量值
+// 依赖: 全部 17 个基础度量值（见 §2.3）
+//       'D_Dcom-Platform Performance'[platform], [store]
+//       'D_Dcom-Platform Performance_Platform_Dim'[Platform_Code]
+//       'D_Dcom-Platform Performance_Metrics_Dim'[R1Name], [R2Name]
+// 作者: Gutao | 日期: 2026-03-12
+// 性能: 🟡 中等 — 多层 SWITCH 嵌套，但每次仅执行一条路径
+// ========================================
+DDPP_Measure_Router_NonDY = 
+    VAR __SelPlatform = 
+        SELECTEDVALUE(
+            'D_Dcom-Platform Performance_Platform_Dim'[Platform_Code]
+        )
+    VAR __SelR1 = 
+        SELECTEDVALUE(
+            'D_Dcom-Platform Performance_Metrics_Dim'[R1Name]
+        )
+    VAR __SelR2 = 
+        SELECTEDVALUE(
+            'D_Dcom-Platform Performance_Metrics_Dim'[R2Name]
+        )
+
+    // 平台代码 → 事实表 platform 字段映射
+    // DY_Family / DY_W 对应 platform="DY"，需额外 store 筛选
+    VAR __PlatformFilter = 
+        SWITCH(
+            __SelPlatform,
+            "Total", "Total",
+            "TM", "TM",
+            "JD", "JD",
+            "RLE", "RLE",
+            "DY_Family", "DY",
+            "DY_W", "DY",
+            BLANK()
+        )
+
+    // DY_Family / DY_W 的 store 筛选条件
+    VAR __StoreFilter =
+        SWITCH(
+            __SelPlatform,
+            "DY_Family", "DY_Family",
+            "DY_W", "DY_W",
+            BLANK()
+        )
+
+    // 路由到基础度量值的通用函数
+    // 根据 R1Name（指标组）和 R2Name（指标类型）定位目标度量值
+    RETURN
+        IF(
+            ISBLANK(__PlatformFilter),
+            BLANK(),
+            SWITCH(
+                __SelR1,
+                "SLS DCOM",
+                    SWITCH(
+                        __SelR2,
+                        "Act",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([SLS DCOM Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([SLS DCOM Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        "vs LY%",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([SLS DCOM vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([SLS DCOM vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        "vs Target%",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([SLS DCOM vs Target%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([SLS DCOM vs Target%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        BLANK()
+                    ),
+                "Demand Sales",
+                    SWITCH(
+                        __SelR2,
+                        "Act",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([Demand Sales Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([Demand Sales Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        "vs LY%",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([Demand Sales vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([Demand Sales vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        BLANK()
+                    ),
+                "Traffic",
+                    SWITCH(
+                        __SelR2,
+                        "Act",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([Traffic Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([Traffic Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        "vs LY%",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([Traffic vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([Traffic vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        BLANK()
+                    ),
+                "CVR",
+                    SWITCH(
+                        __SelR2,
+                        "Act",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([CVR% Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([CVR% Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        "vs LY%",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([CVR% vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([CVR% vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        BLANK()
+                    ),
+                "AUR",
+                    SWITCH(
+                        __SelR2,
+                        "Act",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([AUR Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([AUR Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        "vs LY%",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([AUR vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([AUR vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        BLANK()
+                    ),
+                "UPT",
+                    SWITCH(
+                        __SelR2,
+                        "Act",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([UPT Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([UPT Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        "vs LY%",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([UPT vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([UPT vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        BLANK()
+                    ),
+                "Cancel",
+                    SWITCH(
+                        __SelR2,
+                        "Act",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([Cancel Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([Cancel Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        "vs LY%",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([Cancel vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([Cancel vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        BLANK()
+                    ),
+                "Return",
+                    SWITCH(
+                        __SelR2,
+                        "Act",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([Return Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([Return Act], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        "vs LY%",
+                            IF(
+                                ISBLANK(__StoreFilter),
+                                CALCULATE([Return vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter),
+                                CALCULATE([Return vs LY%], 'D_Dcom-Platform Performance'[platform] = __PlatformFilter,
+                                    'D_Dcom-Platform Performance'[store] = __StoreFilter)
+                            ),
+                        BLANK()
+                    ),
+                BLANK()
+            )
+        )
+```
+
+
+--------------------------------------------------------------------------------
+## 6.5 度量值：DY 平台路由（DDPP_DY_Platform_Router）
+
+| Display Folder | _Internal / Routing |
+|----------------|---------------------|
+
+```dax
+// ========================================
+// 度量值: DDPP_DY_Platform_Router
+// 用途: 处理 DY 汇总平台的指标路由
+//       DY = DY_Family + DY_W 的汇总
+// 依赖: 全部 17 个基础度量值（见 §2.3）
+//       'D_Dcom-Platform Performance'[platform], [store]
+//       'D_Dcom-Platform Performance_Metrics_Dim'[R1Name], [R2Name]
+// 作者: Gutao | 日期: 2026-03-12
+// 性能: 🟡 中等 — 每次计算需要两次 CALCULATE（Family + W）
+// 汇总规则:
+//   - Act 指标: DY_Family + DY_W（求和）
+//   - vs LY% / vs Target%: (DY_Family + DY_W) / 2（平均）
+//   - 如果其中一个子平台为 BLANK，仅取有值的那个
+// ========================================
+DDPP_DY_Platform_Router = 
+    VAR __SelR1 = 
+        SELECTEDVALUE(
+            'D_Dcom-Platform Performance_Metrics_Dim'[R1Name]
+        )
+    VAR __SelR2 = 
+        SELECTEDVALUE(
+            'D_Dcom-Platform Performance_Metrics_Dim'[R2Name]
+        )
+
+    // 平台筛选常量
+    VAR __PlatformDY = "DY"
+    VAR __StoreFamily = "DY_Family"
+    VAR __StoreW = "DY_W"
+
+    // ---- 计算 DY_Family 的值 ----
+    VAR __DYFamilyValue = 
+        SWITCH(
+            __SelR1,
+            "SLS DCOM",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([SLS DCOM Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    "vs LY%",
+                        CALCULATE([SLS DCOM vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    "vs Target%",
+                        CALCULATE([SLS DCOM vs Target%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    BLANK()
+                ),
+            "Demand Sales",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([Demand Sales Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    "vs LY%",
+                        CALCULATE([Demand Sales vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    BLANK()
+                ),
+            "Traffic",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([Traffic Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    "vs LY%",
+                        CALCULATE([Traffic vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    BLANK()
+                ),
+            "CVR",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([CVR% Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    "vs LY%",
+                        CALCULATE([CVR% vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    BLANK()
+                ),
+            "AUR",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([AUR Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    "vs LY%",
+                        CALCULATE([AUR vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    BLANK()
+                ),
+            "UPT",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([UPT Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    "vs LY%",
+                        CALCULATE([UPT vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    BLANK()
+                ),
+            "Cancel",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([Cancel Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    "vs LY%",
+                        CALCULATE([Cancel vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    BLANK()
+                ),
+            "Return",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([Return Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    "vs LY%",
+                        CALCULATE([Return vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreFamily),
+                    BLANK()
+                ),
+            BLANK()
+        )
+
+    // ---- 计算 DY_W 的值 ----
+    VAR __DYWValue = 
+        SWITCH(
+            __SelR1,
+            "SLS DCOM",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([SLS DCOM Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    "vs LY%",
+                        CALCULATE([SLS DCOM vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    "vs Target%",
+                        CALCULATE([SLS DCOM vs Target%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    BLANK()
+                ),
+            "Demand Sales",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([Demand Sales Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    "vs LY%",
+                        CALCULATE([Demand Sales vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    BLANK()
+                ),
+            "Traffic",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([Traffic Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    "vs LY%",
+                        CALCULATE([Traffic vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    BLANK()
+                ),
+            "CVR",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([CVR% Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    "vs LY%",
+                        CALCULATE([CVR% vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    BLANK()
+                ),
+            "AUR",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([AUR Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    "vs LY%",
+                        CALCULATE([AUR vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    BLANK()
+                ),
+            "UPT",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([UPT Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    "vs LY%",
+                        CALCULATE([UPT vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    BLANK()
+                ),
+            "Cancel",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([Cancel Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    "vs LY%",
+                        CALCULATE([Cancel vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    BLANK()
+                ),
+            "Return",
+                SWITCH(
+                    __SelR2,
+                    "Act",
+                        CALCULATE([Return Act],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    "vs LY%",
+                        CALCULATE([Return vs LY%],
+                            'D_Dcom-Platform Performance'[platform] = __PlatformDY,
+                            'D_Dcom-Platform Performance'[store] = __StoreW),
+                    BLANK()
+                ),
+            BLANK()
+        )
+
+    // ---- 根据指标类型决定汇总方式 ----
+    RETURN
+        SWITCH(
+            TRUE(),
+            // Act 指标：DY_Family + DY_W 求和
+            __SelR2 = "Act",
+                __DYFamilyValue + __DYWValue,
+
+            // 增长指标：DY_Family 和 DY_W 的平均值（处理 BLANK）
+            __SelR2 IN {"vs LY%", "vs Target%"},
+                IF(
+                    ISBLANK(__DYFamilyValue) && ISBLANK(__DYWValue),
+                    BLANK(),
+                    IF(
+                        ISBLANK(__DYFamilyValue),
+                        __DYWValue,
+                        IF(
+                            ISBLANK(__DYWValue),
+                            __DYFamilyValue,
+                            (__DYFamilyValue + __DYWValue) / 2
+                        )
+                    )
+                ),
+
+            // 默认
+            BLANK()
+        )
+```
+
+
+--------------------------------------------------------------------------------
+## 6.6 度量值：动态格式化（DDPP_Dynamic_Metric_Formatted）
+
+| Display Folder | Formatting / Dynamic Metrics |
+|----------------|------------------------------|
+
+```dax
+// ========================================
+// 度量值: DDPP_Dynamic_Metric_Formatted
+// 用途: 根据指标类型返回格式化后的文本，用于 Matrix 单元格显示
+// 依赖: [DDPP_Dynamic_Metric_Value_Optimized]
+//       'D_Dcom-Platform Performance_Metrics_Dim'[R1Name], [R2Name]
+// 作者: Gutao | 日期: 2026-03-12
+// 格式规则:
+//   - vs LY% / vs Target%  → "0.00%"
+//   - CVR / Cancel / Return Act → "0.00%"
+//   - UPT Act → "0.00"
+//   - SLS DCOM / Demand Sales / Traffic / AUR Act → "#,##0"
+//   - 默认 → "0.00"
+//   - BLANK → "--"
+// ========================================
+DDPP_Dynamic_Metric_Formatted = 
+    VAR __MetricValue = [DDPP_Dynamic_Metric_Value_Optimized]
+    VAR __SelR1 = 
+        SELECTEDVALUE(
+            'D_Dcom-Platform Performance_Metrics_Dim'[R1Name]
+        )
+    VAR __SelR2 = 
+        SELECTEDVALUE(
+            'D_Dcom-Platform Performance_Metrics_Dim'[R2Name]
+        )
+    RETURN
+        SWITCH(
+            TRUE(),
+            // BLANK 值显示占位符
+            ISBLANK(__MetricValue), "--",
+
+            // 增长指标（vs LY%, vs Target%）→ 百分比格式
+            __SelR2 IN {"vs LY%", "vs Target%"},
+                IF(
+                    __MetricValue = 0,
+                    "0%",
+                    FORMAT(__MetricValue, "0.00%")
+                ),
+
+            // 百分比实际值指标（CVR, Cancel, Return）
+            __SelR1 IN {"CVR", "Cancel", "Return"} && __SelR2 = "Act",
+                FORMAT(__MetricValue, "0.00%"),
+
+            // UPT 实际值 → 两位小数
+            __SelR1 = "UPT" && __SelR2 = "Act",
+                FORMAT(__MetricValue, "0.00"),
+
+            // 大数值实际值指标（SLS DCOM, Demand Sales, Traffic, AUR）→ 千分位
+            __SelR1 IN {"SLS DCOM", "Demand Sales", "Traffic", "AUR"} && __SelR2 = "Act",
+                FORMAT(__MetricValue, "#,##0"),
+
+            // 默认格式
+            FORMAT(__MetricValue, "0.00")
+        )
+```
+
+
+--------------------------------------------------------------------------------
+## 6.7 度量值：动态颜色（DDPP_Dynamic_Metric_Color）
+
+| Display Folder | Formatting / Conditional Format |
+|----------------|--------------------------------|
+
+```dax
+// ========================================
+// 度量值: DDPP_Dynamic_Metric_Color
+// 用途: 根据指标值和指标类型返回条件格式颜色代码
+// 依赖: [DDPP_Dynamic_Metric_Value_Optimized]
+//       'D_Dcom-Platform Performance_Metrics_Dim'[R1Name], [R2Name]
+// 作者: Gutao | 日期: 2026-03-12
+// 颜色方案:
+//   - 增长 > 0 : 绿色 #1A9018
+//   - 增长 = 0 : 黄色 #E1C233
+//   - 增长 < 0 : 红色 #D64550
+//   - Cancel / Return 语义反转（负增长为好 → 绿色）
+//   - 实际值指标 / BLANK: 黑色 #000000
+// ========================================
+DDPP_Dynamic_Metric_Color = 
+    VAR __MetricValue = [DDPP_Dynamic_Metric_Value_Optimized]
+    VAR __SelR1 = 
+        SELECTEDVALUE(
+            'D_Dcom-Platform Performance_Metrics_Dim'[R1Name]
+        )
+    VAR __SelR2 = 
+        SELECTEDVALUE(
+            'D_Dcom-Platform Performance_Metrics_Dim'[R2Name]
+        )
+
+    // 颜色常量
+    VAR __ColorGreen = "#1A9018"
+    VAR __ColorYellow = "#E1C233"
+    VAR __ColorRed = "#D64550"
+    VAR __ColorDefault = "#000000"
+
+    RETURN
+        SWITCH(
+            TRUE(),
+            // BLANK 值 → 黑色
+            ISBLANK(__MetricValue),
+                __ColorDefault,
+
+            // 增长指标（vs LY%, vs Target%）
+            __SelR2 IN {"vs LY%", "vs Target%"},
+                // Cancel / Return: 语义反转（负增长是好事）
+                IF(
+                    __SelR1 IN {"Cancel", "Return"},
+                    SWITCH(
+                        TRUE(),
+                        __MetricValue < 0, __ColorGreen,
+                        __MetricValue = 0, __ColorYellow,
+                        __ColorRed
+                    ),
+                    // 其他指标: 正增长是好事
+                    SWITCH(
+                        TRUE(),
+                        __MetricValue > 0, __ColorGreen,
+                        __MetricValue = 0, __ColorYellow,
+                        __ColorRed
+                    )
+                ),
+
+            // 实际值指标 → 黑色
+            __ColorDefault
+        )
+```
+
+
+================================================================================
+# 7. 可视化配置
+================================================================================
+
+## 7.1 Matrix 视觉对象配置
+
+| 配置项       | 值                                                  |
+|-------------|-----------------------------------------------------|
+| 行           | R1Name (指标组), R2Name (指标类型)                     |
+| 列           | Platform_Name (排序字段: Sort_Order)                  |
+| 值           | [DDPP_Dynamic_Metric_Formatted] (文本度量值)           |
+| 条件格式 - 字体颜色 | 基于字段值: [DDPP_Dynamic_Metric_Color]            |
+
+## 7.2 排序配置
+- Platform_Dim 按 Sort_Order 升序排列
+- Metrics_Dim 的 R1Name 按 R1NameOrder 升序排列
+- Metrics_Dim 的 R2Name 按 R2NameOrder 升序排列
+
+## 7.3 最终矩阵效果示意
+```
+                    |  Total  |   TM   |   JD   |   DY   | DY Family | DY W  |  RLE  |
+────────────────────┼─────────┼────────┼────────┼────────┼───────────┼───────┼───────┤
+SLS DCOM            |         |        |        |        |           |       |       |
+  Act               | 123,456 | 45,678 | 34,567 | 30,000 |  18,000   | 12,000| 13,211|
+  vs LY%            |  5.20%  |  3.10% |  7.80% |  4.50% |   5.00%   |  4.00%|  6.30%|
+  vs Target%        |  2.10%  |  1.50% |  3.20% |  2.80% |   3.00%   |  2.60%|  1.90%|
+────────────────────┼─────────┼────────┼────────┼────────┼───────────┼───────┼───────┤
+Demand Sales        |         |        |        |        |           |       |       |
+  Act               | 100,000 | 40,000 | 30,000 | 20,000 |  12,000   |  8,000| 10,000|
+  vs LY%            |  4.30%  |  2.80% |  6.50% |  3.90% |   4.20%   |  3.60%|  5.10%|
+────────────────────┼─────────┼────────┼────────┼────────┼───────────┼───────┼───────┤
+Traffic             |         |        |        |        |           |       |       |
+  Act               | 500,000 |200,000 |150,000 |100,000 |  60,000   | 40,000| 50,000|
+  vs LY%            |  2.10%  |  1.50% |  3.00% |  2.50% |   2.80%   |  2.20%|  1.80%|
+────────────────────┼─────────┼────────┼────────┼────────┼───────────┼───────┼───────┤
+CVR                 |         |        |        |        |           |       |       |
+  Act               |  3.50%  |  3.80% |  3.20% |  3.60% |   3.70%   |  3.50%|  3.40%|
+  vs LY%            |  0.50%  |  0.30% |  0.80% |  0.60% |   0.70%   |  0.50%|  0.40%|
+...                 |         |        |        |        |           |       |       |
+```
+
+
+================================================================================
+# 8. 验证策略
+================================================================================
+
+## 8.1 数据准确性验证
+- 在 Power BI 中单独创建一个 Table 视觉对象，直接展示基础度量值，
+  与 Matrix 中对应单元格逐项比对
+- DY 汇总验证：确认 DY Act = DY_Family Act + DY_W Act
+- DY 增长验证：确认 DY vs LY% = (DY_Family vs LY% + DY_W vs LY%) / 2
+
+## 8.2 格式验证
+- 检查所有 Act 数值格式（千分位 / 百分比 / 小数）
+- 检查增长指标的 "0%" 边界条件
+- 检查 BLANK 值显示 "--"
+
+## 8.3 颜色验证
+- 正增长 → 绿色 #1A9018
+- 零增长 → 黄色 #E1C233
+- 负增长 → 红色 #D64550
+- Cancel / Return 增长指标颜色反转验证
+
+## 8.4 性能验证
+- 使用 Performance Analyzer 检查 Matrix 渲染耗时
+- 关注 DDPP_Dynamic_Metric_Value_Optimized 的 DAX 查询时间
+- 如超过 3 秒，考虑减少显示的平台/指标维度数量
+
+
+================================================================================
+# 9. 性能考量
+================================================================================
+
+| 度量值                               | 性能等级 | 说明                                 |
+|--------------------------------------|---------|--------------------------------------|
+| DDPP_Dynamic_Metric_Value_Optimized  | 🟡 中等  | 3 层路由嵌套，但每次仅执行 1 条路径     |
+| DDPP_Measure_Router_NonDY            | 🟡 中等  | 多层 SWITCH + CALCULATE，短路评估      |
+| DDPP_DY_Platform_Router              | 🟡 中等  | 2 次 CALCULATE（Family + W）          |
+| DDPP_Dynamic_Metric_Formatted        | 🟢 良好  | 仅 FORMAT 函数，开销低                |
+| DDPP_Dynamic_Metric_Color            | 🟢 良好  | 纯逻辑判断，无数据访问                 |
+
+### 优化建议
+1. 使用 VAR 缓存 SELECTEDVALUE 结果，避免重复上下文查询（已实施）
+2. SWITCH(TRUE(), ...) 利用短路评估，匹配后不再计算后续分支
+3. 如果性能仍不理想，可考虑将 DY 汇总逻辑预计算到事实表中
+
+
+================================================================================
+# 10. 注意事项
+================================================================================
+
+1. 维度表与事实表之间无直接关系 — 本方案通过 CALCULATE 手动应用筛选
+   而非建立模型关系，适用于"中国式报表"的动态矩阵场景
+2. 新增基础度量值时，需同步更新 DDPP_Measure_Router_NonDY 和
+   DDPP_DY_Platform_Router 中的路由分支
+3. 新增平台时，需同步更新 Platform_Dim 计算表和 Router 中的映射逻辑
+4. Cancel / Return 的颜色语义与其他指标相反，修改颜色方案时注意此特殊逻辑
+
+
+================================================================================
+# 11. 度量值清单与 Display Folder
+================================================================================
+
+| 序号 | 对象名称                                         | 类型    | Display Folder                    |
+|------|------------------------------------------------|---------|-----------------------------------|
+| 1    | D_Dcom-Platform Performance_Platform_Dim        | 计算表  | Base Metrics / Dimensions          |
+| 2    | D_Dcom-Platform Performance_Metrics_Dim         | 计算表  | Base Metrics / Dimensions          |
+| 3    | DDPP_Dynamic_Metric_Value_Optimized             | 度量值  | Formatting / Dynamic Metrics       |
+| 4    | DDPP_Measure_Router_NonDY                       | 度量值  | _Internal / Routing                |
+| 5    | DDPP_DY_Platform_Router                         | 度量值  | _Internal / Routing                |
+| 6    | DDPP_Dynamic_Metric_Formatted                   | 度量值  | Formatting / Dynamic Metrics       |
+| 7    | DDPP_Dynamic_Metric_Color                       | 度量值  | Formatting / Conditional Format    |
+
+
+================================================================================
+# 12. 血缘关系图（Data Lineage Diagram）
+================================================================================
+
+## 12.1 度量值调用链（纵向依赖）
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Matrix 视觉对象                                      │
+│  行: R1Name, R2Name  |  列: Platform_Name  |  值: 格式化  |  颜色: 条件格式  │
+└───────────┬───────────────────────┬──────────────────────────┬──────────────┘
+            │                       │                          │
+            ▼                       ▼                          ▼
+┌───────────────────┐  ┌─────────────────────────────┐  ┌─────────────────────┐
+│ [DDPP_Dynamic_    │  │ [DDPP_Dynamic_Metric_       │  │ [DDPP_Dynamic_      │
+│  Metric_Formatted]│  │  Value_Optimized]           │  │  Metric_Color]      │
+│  (§6.6 格式化)     │  │  (§6.3 路由主入口)           │  │  (§6.7 颜色)        │
+└────────┬──────────┘  └──────────┬──────────────────┘  └──────────┬──────────┘
+         │                        │                               │
+         │  ┌─────────────────────┼───────────────────────────────┘
+         │  │                     │
+         ▼  ▼                     ▼
+    ┌─────────────────────────────────────────────────┐
+    │        [DDPP_Dynamic_Metric_Value_Optimized]     │
+    │                  (§6.3 路由主入口)                 │
+    └──────────────────────┬──────────────────────────┘
+                           │
+              ┌────────────┴────────────┐
+              ▼                         ▼
+┌──────────────────────────┐  ┌───────────────────────────────┐
+│ [DDPP_DY_Platform_Router]│  │ [DDPP_Measure_Router_NonDY]   │
+│ (§6.5 DY汇总路由)         │  │ (§6.4 非DY平台路由)            │
+│ 当 Platform = "DY" 时    │  │ 当 Platform != "DY" 时        │
+└────────────┬─────────────┘  └──────────────┬────────────────┘
+             │                               │
+             ▼                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    17 个基础度量值                            │
+│  [SLS DCOM Act] [SLS DCOM vs LY%] [SLS DCOM vs Target%]    │
+│  [Demand Sales Act] [Demand Sales vs LY%]                   │
+│  [Traffic Act] [Traffic vs LY%]                             │
+│  [CVR% Act] [CVR% vs LY%]                                  │
+│  [AUR Act] [AUR vs LY%]                                    │
+│  [UPT Act] [UPT vs LY%]                                    │
+│  [Cancel Act] [Cancel vs LY%]                               │
+│  [Return Act] [Return vs LY%]                               │
+└─────────────────────────────┬───────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              事实表: D_Dcom-Platform Performance              │
+│              (platform, store, 各指标值列)                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 12.2 维度表关系图
+
+```
+┌─────────────────────────────────────┐
+│  D_Dcom-Platform Performance        │
+│  (事实表)                            │
+│  ├── platform (STRING)              │
+│  ├── store (STRING)                 │
+│  └── 各指标值列...                   │
+└──────────────┬──────────────────────┘
+               │
+               │ (无直接模型关系，通过 CALCULATE 筛选连接)
+               │
+    ┌──────────┴──────────────────┐
+    │                             │
+    ▼                             ▼
+┌────────────────────┐  ┌──────────────────────────────────┐
+│ Platform_Dim       │  │ Metrics_Dim                       │
+│ (计算表 - 平台维度) │  │ (计算表 - 指标行标题维度)          │
+│                    │  │                                   │
+│ Platform_Code ─────│──│──> DDPP_Dynamic_Metric_Value_     │
+│ Platform_Name      │  │    Optimized 的筛选上下文          │
+│ Sort_Order         │  │                                   │
+│ Parent_Platform    │  │ R1Name (指标组) ──────────────> 路由│
+│ Is_Total           │  │ R1NameOrder                       │
+│ Platform_Level     │  │ R2Name (指标类型) ────────────> 路由│
+│                    │  │ R2NameOrder                       │
+│                    │  │ R3Name (预留)                     │
+│                    │  │ R3NameOrder                       │
+└────────────────────┘  └──────────────────────────────────┘
+```
+
+## 12.3 DY 平台汇总逻辑血缘
+
+```
+Platform_Code = "DY" 时的数据流:
+
+┌──────────────────────────────────────────────────────┐
+│              DDPP_DY_Platform_Router                   │
+│                                                       │
+│  ┌──────────────────────┐  ┌────────────────────────┐ │
+│  │ __DYFamilyValue      │  │ __DYWValue             │ │
+│  │                      │  │                        │ │
+│  │ CALCULATE(           │  │ CALCULATE(             │ │
+│  │   [基础度量值],       │  │   [基础度量值],         │ │
+│  │   platform = "DY",   │  │   platform = "DY",     │ │
+│  │   store = "DY_Family"│  │   store = "DY_W"       │ │
+│  │ )                    │  │ )                      │ │
+│  └──────────┬───────────┘  └──────────┬─────────────┘ │
+│             │                         │               │
+│             └──────────┬──────────────┘               │
+│                        │                              │
+│                        ▼                              │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │ 汇总规则:                                        │  │
+│  │   Act 指标     → __DYFamilyValue + __DYWValue   │  │
+│  │   vs LY%      → AVG(__DYFamilyValue, __DYWValue)│  │
+│  │   vs Target%  → AVG(__DYFamilyValue, __DYWValue)│  │
+│  │   BLANK 处理  → 仅取有值一方                     │  │
+│  └─────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────┘
+```
+
+## 12.4 完整血缘汇总表
+
+| 对象                                | 类型   | 上游依赖                                          | 下游消费者                          |
+|-------------------------------------|--------|--------------------------------------------------|-------------------------------------|
+| D_Dcom-Platform Performance          | 事实表 | 数据源                                            | 17 个基础度量值                      |
+| Platform_Dim                        | 计算表 | 无（静态）                                         | Matrix 列, 路由度量值筛选上下文       |
+| Metrics_Dim                         | 计算表 | 无（静态）                                         | Matrix 行, 路由度量值筛选上下文       |
+| 17 个基础度量值                      | 度量值 | 事实表                                            | DDPP_Measure_Router_NonDY, DDPP_DY_Platform_Router |
+| DDPP_Measure_Router_NonDY           | 度量值 | 基础度量值, Platform_Dim, Metrics_Dim              | DDPP_Dynamic_Metric_Value_Optimized |
+| DDPP_DY_Platform_Router             | 度量值 | 基础度量值, Metrics_Dim                            | DDPP_Dynamic_Metric_Value_Optimized |
+| DDPP_Dynamic_Metric_Value_Optimized | 度量值 | DDPP_Measure_Router_NonDY, DDPP_DY_Platform_Router | DDPP_Dynamic_Metric_Formatted, DDPP_Dynamic_Metric_Color |
+| DDPP_Dynamic_Metric_Formatted       | 度量值 | DDPP_Dynamic_Metric_Value_Optimized, Metrics_Dim  | Matrix 值字段                       |
+| DDPP_Dynamic_Metric_Color           | 度量值 | DDPP_Dynamic_Metric_Value_Optimized, Metrics_Dim  | Matrix 条件格式                     |
+
+================================================================================
+# END OF DOCUMENT
+================================================================================

@@ -1,0 +1,24 @@
+powerbi_code_copilot/
+├── agents/                          # AI 助手角色定义
+│   ├── copilot-prompt.md            # 主 Copilot 系统提示词（核心入口）
+│   ├── model-reviewer.md            # 数据模型合规审查 Agent
+│   ├── dax-reviewer.md              # DAX 代码质量审查 Agent
+│   └── performance-reviewer.md      # 性能诊断审查 Agent
+├── rules/                           # 项目约束与规范
+│   ├── project-context.md           # 项目上下文（数据源、模型结构、度量值分组）
+│   ├── dax-style.md                 # DAX 编码规范（命名、格式、原则）
+│   ├── modeling-standards.md        # 数据建模规范（星型模型、关系、列优化）
+│   ├── visualization-standards.md   # 可视化规范（布局、图表选型、交互设计）
+│   ├── security.md                  # 安全红线（RLS、数据隐私、发布安全）
+│   └── domain-rules.md              # 业务领域约束（KPI 定义、行业规则）
+├── knowledge/                       # 领域知识与模式库
+│   ├── index.md                     # 知识索引（轻量入口）
+│   ├── dax-patterns.md              # DAX 常用模式库（6大模式，可直接复用）
+│   ├── power-query-patterns.md      # Power Query 常用模式库（6大模式）
+│   └── performance-tips.md          # 性能优化知识库（4大层级优化策略）
+└── changes/                         # 变更管理
+    └── templates/
+        ├── spec.md                  # 变更提案模板（16个章节的完整 Spec）
+        ├── tasks.md                 # 任务拆分模板
+        ├── validation-spec.md       # 验证 Spec 模板（替代原 test-spec）
+        └── log.md                   # 变更日志模板

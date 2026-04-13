@@ -22,6 +22,7 @@ alwaysApply: true
 
 ### 计算表（Calculated Tables）
 - 以 `CT_` 前缀标识（可选，团队约定）
+- 如果是维度表以DIM开头，格式为：Dim_xxx   — 维度表（如 Dim_Date, Dim_Product）
 
 ### 变量（VAR）
 - 使用 `__` 前缀（双下划线）或清晰的描述性命名
@@ -63,6 +64,11 @@ Revenue YTD =
 // 依赖: [Total Revenue], Date 表
 // 作者: xxx | 日期: YYYY-MM-DD
 // ========================================
+```
+DAX本身也需要有必要的注释信息，如：
+```dax
+"Store_ID", STRING,           // 主键标识，用于唯一标识每个店铺选项
+MaxValue < 0, FORMAT(BasePoints, "0") & "bp",  // 负数自带负号
 ```
 
 ## 3. DAX 编写原则
