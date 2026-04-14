@@ -1,0 +1,42 @@
+Dim_ColMetric_KpiBreakdown = 
+// ========================================
+// 表: Dim_ColMetric_KpiBreakdown
+// 类型: 维度表（Dim_ 前缀），断开维度
+// 用途: 定义 2 级列层次结构（MetricGroup > MetricName）
+// 说明: 14 个指标列，跨 4 个分组
+//       MetricName 有重复值（Total/直通车/引力魔方/全站推），
+//       需保证同名值 MetricName_Sort 一致（Sort by Column 约束）
+// 排序: 起始值从 7 开始
+// 格式类型:
+//   delta_pt → 带正负号的点数 + SVG 图标（如 "🟢 +14pt"）
+//   percent  → 百分比，保留 1 位小数（如 "58.3%"）
+//   number   → 整数（如 "140"）
+// ======================================== 
+DATATABLE(
+    "ColMetric_ID",       INTEGER,     // 主键标识（全局唯一）
+    "MetricGroup",        STRING,      // Level 1: 指标分组（__SelR1）
+    "MetricName",         STRING,      // Level 2: 指标名称（__SelR2）
+    "MetricGroup_Sort",   INTEGER,     // Level 1 排序
+    "MetricName_Sort",    INTEGER,     // Level 2 排序（同名值必须一致）
+    "MetricFormat",       STRING,      // 格式类型标识
+    {
+        // ─── SLS 分组 ───
+        { 1,  "SLS",                "Cost% vs SLS%", 7,  7,  "delta_pt" },
+        { 2,  "SLS",                "SLS%",          7,  8,  "percent"  },
+        // ─── Cost MOB% 分组 ───
+        { 3,  "Cost MOB%",          "Total",         8,  9,  "percent"  },
+        { 4,  "Cost MOB%",          "直通车",         8,  10, "percent"  },
+        { 5,  "Cost MOB%",          "引力魔方",       8,  11, "percent"  },
+        { 6,  "Cost MOB%",          "全站推",         8,  12, "percent"  },
+        // ─── ROI 分组 ───
+        { 7,  "ROI",                "Total",         9,  9,  "integer"   },
+        { 8,  "ROI",                "直通车",         9,  10, "integer"   },
+        { 9,  "ROI",                "引力魔方",       9,  11, "integer"   },
+        { 10, "ROI",                "全站推",         9,  12, "integer"   },
+        // ─── New Customer Cost% 分组 ───
+        { 11, "New Customer Cost%", "Total",         10, 9,  "percent"  },
+        { 12, "New Customer Cost%", "直通车",         10, 10, "percent"  },
+        { 13, "New Customer Cost%", "引力魔方",       10, 11, "percent"  },
+        { 14, "New Customer Cost%", "全站推",         10, 12, "percent"  }
+    }
+)

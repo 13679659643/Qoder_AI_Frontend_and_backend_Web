@@ -1,0 +1,132 @@
+KPI Breakdown Cell Value = 
+// ========================================
+// 度量值: KPI Breakdown Cell Value
+// Display Folder: Base Metrics
+// 用途: 列头 SWITCH 分发器
+//       按 __SelR1（一级列头 MetricGroup）和 __SelR2（二级列头 MetricName）
+//       路由到对应指标的占位值，每个 SWITCH 分支可独立替换为真实度量值
+// 占位值: RowKPI_ID × ColMetric_ID（小计行用 SUM(RowKPI_ID) × ColMetric_ID）
+// 依赖: Dim_RowKPI_KpiBreakdown, Dim_ColMetric_KpiBreakdown
+// 模式: Disconnected Dimensions + Column-first SWITCH Dispatch
+// ========================================
+    // ── 行上下文（未来用于 CALCULATE 筛选事实表行字段）──
+    VAR __Brand     = SELECTEDVALUE(Dim_RowKPI_KpiBreakdown[Brand])
+    VAR __Framework = SELECTEDVALUE(Dim_RowKPI_KpiBreakdown[Framework])
+    VAR __Category  = SELECTEDVALUE(Dim_RowKPI_KpiBreakdown[Category])
+    VAR __RowID     = SELECTEDVALUE(Dim_RowKPI_KpiBreakdown[RowKPI_ID])
+    VAR __IsTotal   = (__Brand = "Total")
+        // Total: 事实表中无此字段值，未来替换时不加行筛选条件
+    // ── 列上下文（用于 SWITCH 路由到目标指标）──
+    VAR __ColID = SELECTEDVALUE(Dim_ColMetric_KpiBreakdown[ColMetric_ID])
+    VAR __SelR1 = SELECTEDVALUE(Dim_ColMetric_KpiBreakdown[MetricGroup])   // 一级列头
+    VAR __SelR2 = SELECTEDVALUE(Dim_ColMetric_KpiBreakdown[MetricName])    // 二级列头
+    // ── 占位值（RowID × ColID）──
+    // 叶节点: SELECTEDVALUE 返回具体 RowID
+    // 小计行: SELECTEDVALUE 返回 BLANK，改用 SUM 作为替代
+    VAR __EffRowID =
+        IF(
+            NOT ISBLANK(__RowID),
+            __RowID,                                                       // 叶节点
+            SUM(Dim_RowKPI_KpiBreakdown[RowKPI_ID])                        // 小计行
+        )
+    VAR __StaticValue = __EffRowID * __ColID
+    // ── 参差层级抑制（仅处理 Framework 级叶节点的冗余 Category 子行）──
+    // Total 不在此处隐藏，而是通过 IF(__IsTotal) 前置分支单独路由
+    VAR __Suppress =
+        ISINSCOPE(Dim_RowKPI_KpiBreakdown[Category])
+            && __Category = __Framework
+            // T-shirt=T-shirt、Complemen=Complemen、Total=Total → 抑制冗余 Category 子行
+    RETURN
+        IF(
+            ISBLANK(__ColID) || __Suppress,
+            BLANK(),
+            IF(
+                __IsTotal,
+                // ════════════════════════════════════════════════
+                // Total 分支（前置判断）
+                // 未来替换：直接调用基础度量值，不加事实表行筛选条件
+                // ════════════════════════════════════════════════
+                SWITCH(
+                    TRUE(),
+                // ─── SLS > Cost% vs SLS% ───
+                __Brand = "Total",
+                    __StaticValue,
+                BLANK()
+                ),
+
+                // ════════════════════════════════════════════════
+                // 非 Total 分支
+                // 未来替换：CALCULATE([度量值],
+                //           '事实表'[Brand] = __Brand,
+                //           '事实表'[Framework] = __Framework,
+                //           '事实表'[Category] = __Category)
+                // ════════════════════════════════════════════════
+                SWITCH(
+                    TRUE(),
+                    // ─── SLS > Cost% vs SLS% ───
+                    __SelR1 = "SLS" && __SelR2 = "Cost% vs SLS%",
+                        __StaticValue,
+                        // → 未来替换为:
+                        //   CALCULATE([CAL_CostVsSLSDelta],
+                        //       '事实表'[Brand] = __Brand,
+                        //       '事实表'[Framework] = __Framework,
+                        //       '事实表'[Category] = __Category
+                        //   )
+
+                    // ─── SLS > SLS% ───
+                    __SelR1 = "SLS" && __SelR2 = "SLS%",
+                        __StaticValue,
+                        // → 未来替换为: CALCULATE([RATIO_SalesShare], ...)
+
+                    // ─── Cost MOB% > Total ───
+                    __SelR1 = "Cost MOB%" && __SelR2 = "Total",
+                        __StaticValue,
+
+                    // ─── Cost MOB% > 直通车 ───
+                    __SelR1 = "Cost MOB%" && __SelR2 = "直通车",
+                        __StaticValue,
+
+                    // ─── Cost MOB% > 引力魔方 ───
+                    __SelR1 = "Cost MOB%" && __SelR2 = "引力魔方",
+                        __StaticValue,
+
+                    // ─── Cost MOB% > 全站推 ───
+                    __SelR1 = "Cost MOB%" && __SelR2 = "全站推",
+                        __StaticValue,
+
+                    // ─── ROI > Total ───
+                    __SelR1 = "ROI" && __SelR2 = "Total",
+                        __StaticValue,
+
+                    // ─── ROI > 直通车 ───
+                    __SelR1 = "ROI" && __SelR2 = "直通车",
+                        __StaticValue,
+
+                    // ─── ROI > 引力魔方 ───
+                    __SelR1 = "ROI" && __SelR2 = "引力魔方",
+                        __StaticValue,
+
+                    // ─── ROI > 全站推 ───
+                    __SelR1 = "ROI" && __SelR2 = "全站推",
+                        __StaticValue,
+
+                    // ─── New Customer Cost% > Total ───
+                    __SelR1 = "New Customer Cost%" && __SelR2 = "Total",
+                        __StaticValue,
+
+                    // ─── New Customer Cost% > 直通车 ───
+                    __SelR1 = "New Customer Cost%" && __SelR2 = "直通车",
+                        __StaticValue,
+
+                    // ─── New Customer Cost% > 引力魔方 ───
+                    __SelR1 = "New Customer Cost%" && __SelR2 = "引力魔方",
+                        __StaticValue,
+
+                    // ─── New Customer Cost% > 全站推 ───
+                    __SelR1 = "New Customer Cost%" && __SelR2 = "全站推",
+                        __StaticValue,
+
+                    BLANK()
+                )
+            )
+        )

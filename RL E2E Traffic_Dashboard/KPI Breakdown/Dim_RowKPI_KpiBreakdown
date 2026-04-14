@@ -1,0 +1,45 @@
+Dim_RowKPI_KpiBreakdown = 
+// ========================================
+// 表: Dim_RowKPI_KpiBreakdown
+// 类型: 维度表（Dim_ 前缀），断开维度
+// 用途: 定义 3 级行层次结构
+//   Level 1 (Brand):     M Polo, W Polo, Total
+//   Level 2 (Framework): Acceleration, Foundation, T-shirt, Complemen
+//   Level 3 (Category):  Outerwear, Sweatshirt, Polo shirt 等
+// 说明:
+//   - Total 作为 Brand 的一个值（排在 M Polo、W Polo 之后）
+//   - Total 行的 Framework/Category 为同名占位 "Total"，运行时抑制其子行
+//   - T-shirt、Complemen 为 Framework 级叶节点，Category = 同名占位
+// 排序: 所有排序列起始值从 7 开始（遵循 domain-rules.md）
+// ========================================
+DATATABLE(
+    "RowKPI_ID",       INTEGER,        // 主键标识
+    "Brand",           STRING,         // Level 1: 品牌（原 Category 字段）
+    "Framework",       STRING,         // Level 2: 框架
+    "Category",        STRING,         // Level 3: 品类（原 Scenario 字段）
+    "Brand_Sort",      INTEGER,        // Level 1 排序
+    "Framework_Sort",  INTEGER,        // Level 2 排序
+    "Category_Sort",   INTEGER,        // Level 3 排序
+    {
+        // ─── M Polo > Acceleration ───
+        { 1,  "M Polo", "Acceleration", "Outerwear",    7, 7,  7  },
+        { 2,  "M Polo", "Acceleration", "Sweatshirt",   7, 7,  8  },
+        // ─── M Polo > Foundation ───
+        { 3,  "M Polo", "Foundation",   "Polo shirt",   7, 8,  9  },
+        { 4,  "M Polo", "Foundation",   "Sport shirts", 7, 8,  10 },
+        { 5,  "M Polo", "Foundation",   "T-shirt",      7, 8,  11 },
+        { 6,  "M Polo", "Foundation",   "Sweaters",     7, 8,  12 },
+        // ─── M Polo > T-shirt（Framework 级叶节点，Category = 同名占位）───
+        { 7,  "M Polo", "T-shirt",      "T-shirt",      7, 9,  11 },
+        // ─── M Polo > Complemen（Framework 级叶节点，Category = 同名占位）───
+        { 8,  "M Polo", "Complemen",    "Complemen",    7, 10, 13 },
+        // ─── W Polo > Acceleration ───
+        { 9,  "W Polo", "Acceleration", "Dresses",      8, 7,  14 },
+        { 10, "W Polo", "Acceleration", "Pants",        8, 7,  15 },
+        { 11, "W Polo", "Acceleration", "Handbags",     8, 7,  16 },
+        // ─── W Polo > Foundation ───
+        { 12, "W Polo", "Foundation",   "Sweaters",     8, 8,  12 },
+        // ─── Total（Brand 级叶节点，Framework/Category = 同名占位，运行时抑制子行）───
+        { 13, "Total",  "Total ",        "Total",        9, 11, 17 }
+    }
+)

@@ -1,0 +1,18 @@
+KPI Breakdown Cell Font Color = 
+// ========================================
+// 度量值: KPI Breakdown Cell Font Color
+// Display Folder: Formatting
+// 用途: 根据列格式类型和值正负返回字体颜色
+// 依赖: [KPI Breakdown Cell Value], Dim_ColMetric_KpiBreakdown[MetricFormat]
+// 说明: 仅 delta_pt 类型启用正负颜色标记，其余默认黑色
+// ========================================
+    VAR __Value = [KPI Breakdown Cell Value]
+    VAR __Format = SELECTEDVALUE(Dim_ColMetric_KpiBreakdown[MetricFormat])
+    RETURN
+        SWITCH(
+            TRUE(),
+            __Format = "delta_pt" && __Value > 0,  "#1A9018",   // 正值 → 草绿色
+            __Format = "delta_pt" && __Value < 0,  "#D64550",   // 负值 → 玫瑰红
+            __Format = "delta_pt" && __Value = 0,  "#E1C233",   // 零值 → 亮黄色
+            "#212121"                                            // 默认 → 黑色
+        )

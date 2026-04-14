@@ -1,0 +1,346 @@
+// ================================================================
+// 文件: KPI Breakdown 页面筛选器维度表集合
+// 用途: 包含 KPI Breakdown 报表页面所需的全部筛选器维度表
+// 说明: 每个表均为断开维度表（Disconnected Dimension），
+//       不与事实表建立关系，通过 SELECTEDVALUE 在度量值中读取
+// 遵循: powerbi_code_copilot/rules/dax-style.md 规范
+// ================================================================
+
+
+// ─────────────────────────────────────
+// 1. Brand 品牌筛选器
+// ─────────────────────────────────────
+
+Slicer_Brand_Selection = 
+// 功能：创建品牌维度表，用于报表中的品牌筛选和分组
+// 用途：用户可通过此表选择不同品牌线进行 KPI 对比分析
+// 参数表名称：Brand
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "Brand_ID", STRING,           // 主键标识，用于唯一标识每个品牌选项
+    "Brand_Label", STRING,        // 显示标签，在报表界面中向用户展示的品牌名称
+    "Brand_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "Brand_Description", STRING,  // 详细描述，说明该品牌的具体定位和业务含义
+    
+    // 扩展字段 - 可选字段
+    "Brand_IsDefault", BOOLEAN,   // 是否默认选中，TRUE 表示用户打开报表时默认选择此品牌
+    "Brand_IsActive", BOOLEAN,    // 是否激活状态，控制该品牌选项是否可用
+    
+    // 数据行
+    {
+        // M polo - 男装 Polo 系列
+        {
+            "M_POLO",             // 品牌代码，男装 Polo 的标识
+            "M polo",             // 品牌显示名称
+            1,                    // 排序顺序，优先级最高
+            "男装 Polo 系列，涵盖男士 Polo 衫及相关产品线",  // 品牌描述
+            TRUE,                 // 默认选中
+            TRUE                  // 激活状态，当前可用
+        },
+        
+        // W polo - 女装 Polo 系列
+        {
+            "W_POLO",             // 品牌代码，女装 Polo 的标识
+            "W polo",             // 品牌显示名称
+            2,                    // 排序顺序
+            "女装 Polo 系列，涵盖女士 Polo 衫及相关产品线",  // 品牌描述
+            FALSE,                // 非默认选项
+            TRUE                  // 激活状态，当前可用
+        }
+    }
+)
+
+
+// ─────────────────────────────────────
+// 2. Gender 性别筛选器
+// ─────────────────────────────────────
+
+Slicer_Gender_Selection = 
+// 功能：创建性别维度表，用于报表中的性别筛选和分组
+// 用途：用户可通过此表按性别维度筛选 KPI 数据
+// 参数表名称：Gender
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "Gender_ID", STRING,           // 主键标识，用于唯一标识每个性别选项
+    "Gender_Label", STRING,        // 显示标签，在报表界面中向用户展示的性别名称
+    "Gender_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "Gender_Description", STRING,  // 详细描述，说明该性别分类的业务含义
+    
+    // 扩展字段 - 可选字段
+    "Gender_IsDefault", BOOLEAN,   // 是否默认选中
+    "Gender_IsActive", BOOLEAN,    // 是否激活状态
+    
+    // 数据行
+    {
+        // MN - 男性产品线
+        {
+            "MN",                  // 性别代码，Men 的缩写
+            "MN",                  // 性别显示名称
+            1,                     // 排序顺序
+            "Men's 男装产品线，涵盖所有男士品类",  // 性别描述
+            TRUE,                  // 默认选中
+            TRUE                   // 激活状态，当前可用
+        },
+        
+        // WM - 女性产品线
+        {
+            "WM",                  // 性别代码，Women 的缩写
+            "WM",                  // 性别显示名称
+            2,                     // 排序顺序
+            "Women's 女装产品线，涵盖所有女士品类",  // 性别描述
+            FALSE,                 // 非默认选项
+            TRUE                   // 激活状态，当前可用
+        }
+    }
+)
+
+
+// ─────────────────────────────────────
+// 3. Season 季节筛选器
+// ─────────────────────────────────────
+
+Slicer_Season_Selection = 
+// 功能：创建季节维度表，用于报表中的季节筛选和分组
+// 用途：用户可通过此表按季节维度筛选 KPI 数据
+// 参数表名称：Season
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "Season_ID", STRING,           // 主键标识，用于唯一标识每个季节选项
+    "Season_Label", STRING,        // 显示标签，在报表界面中向用户展示的季节名称
+    "Season_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "Season_Description", STRING,  // 详细描述，说明该季节的业务含义
+    
+    // 扩展字段 - 可选字段
+    "Season_IsDefault", BOOLEAN,   // 是否默认选中
+    "Season_IsActive", BOOLEAN,    // 是否激活状态
+    
+    // 数据行
+    {
+        // BSR - Best Seller Replenishment
+        {
+            "BSR",                 // 季节代码
+            "BSR",                 // 季节显示名称
+            1,                     // 排序顺序
+            "Best Seller Replenishment，畅销款补货系列",  // 季节描述
+            TRUE,                  // 默认选中
+            TRUE                   // 激活状态，当前可用
+        },
+        
+        // FA25 - Fall 2025
+        {
+            "FA25",                // 季节代码
+            "FA25",                // 季节显示名称
+            2,                     // 排序顺序
+            "Fall 2025，2025 秋季系列",  // 季节描述
+            FALSE,                 // 非默认选项
+            TRUE                   // 激活状态，当前可用
+        },
+        
+        // Carryover - 跨季延续款
+        {
+            "CARRYOVER",           // 季节代码
+            "Carryover",           // 季节显示名称
+            3,                     // 排序顺序
+            "Carryover 跨季延续款，上季延续至当季销售的产品",  // 季节描述
+            FALSE,                 // 非默认选项
+            TRUE                   // 激活状态，当前可用
+        }
+    }
+)
+
+
+// ─────────────────────────────────────
+// 4. Category 品类筛选器
+// ─────────────────────────────────────
+
+Slicer_Category_Selection = 
+// 功能：创建品类维度表，用于报表中的品类筛选和分组
+// 用途：用户可通过此表按产品品类维度筛选 KPI 数据
+// 参数表名称：Category
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "Category_ID", STRING,           // 主键标识，用于唯一标识每个品类选项
+    "Category_Label", STRING,        // 显示标签，在报表界面中向用户展示的品类名称
+    "Category_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "Category_Description", STRING,  // 详细描述，说明该品类的业务含义
+    
+    // 扩展字段 - 可选字段
+    "Category_IsDefault", BOOLEAN,   // 是否默认选中
+    "Category_IsActive", BOOLEAN,    // 是否激活状态
+    
+    // 数据行
+    {
+        // T-shirt - T恤品类
+        {
+            "TSHIRT",              // 品类代码
+            "T-shirt",             // 品类显示名称
+            1,                     // 排序顺序
+            "T恤品类，包含短袖 T 恤、长袖 T 恤等上装产品",  // 品类描述
+            TRUE,                  // 默认选中
+            TRUE                   // 激活状态，当前可用
+        },
+        
+        // Short - 短裤品类
+        {
+            "SHORT",               // 品类代码
+            "Short",               // 品类显示名称
+            2,                     // 排序顺序
+            "短裤品类，包含休闲短裤、运动短裤等下装产品",  // 品类描述
+            FALSE,                 // 非默认选项
+            TRUE                   // 激活状态，当前可用
+        }
+    }
+)
+
+
+// ─────────────────────────────────────
+// 5. Framework 策略框架筛选器
+// ─────────────────────────────────────
+
+Slicer_Framework_Selection = 
+// 功能：创建策略框架维度表，用于报表中的策略框架筛选和分组
+// 用途：用户可通过此表按流量策略框架维度筛选 KPI 数据
+// 参数表名称：Framework
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "Framework_ID", STRING,           // 主键标识，用于唯一标识每个策略框架选项
+    "Framework_Label", STRING,        // 显示标签，在报表界面中向用户展示的框架名称
+    "Framework_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "Framework_Description", STRING,  // 详细描述，说明该框架的业务含义
+    
+    // 扩展字段 - 可选字段
+    "Framework_IsDefault", BOOLEAN,   // 是否默认选中
+    "Framework_IsActive", BOOLEAN,    // 是否激活状态
+    
+    // 数据行
+    {
+        // Acceleration - 加速增长策略
+        {
+            "ACCELERATION",        // 框架代码
+            "Acceleration",        // 框架显示名称
+            1,                     // 排序顺序
+            "加速增长策略，聚焦高增长潜力品类的流量投放和转化提升",  // 框架描述
+            TRUE,                  // 默认选中
+            TRUE                   // 激活状态，当前可用
+        },
+        
+        // Foundation - 基础保障策略
+        {
+            "FOUNDATION",          // 框架代码
+            "Foundation",          // 框架显示名称
+            2,                     // 排序顺序
+            "基础保障策略，维护核心品类的稳定流量和基本转化",  // 框架描述
+            FALSE,                 // 非默认选项
+            TRUE                   // 激活状态，当前可用
+        }
+    }
+)
+
+
+// ─────────────────────────────────────
+// 6. Scenario 场景筛选器
+// ─────────────────────────────────────
+
+Slicer_Scenario_Selection = 
+// 功能：创建场景维度表，用于报表中的数据场景切换
+// 用途：用户可通过此表在不同业务场景之间切换查看 KPI 数据
+// 参数表名称：Scenario
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "Scenario_ID", STRING,           // 主键标识，用于唯一标识每个场景选项
+    "Scenario_Label", STRING,        // 显示标签，在报表界面中向用户展示的场景名称
+    "Scenario_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "Scenario_Description", STRING,  // 详细描述，说明该场景的业务含义
+    
+    // 扩展字段 - 可选字段
+    "Scenario_IsDefault", BOOLEAN,   // 是否默认选中
+    "Scenario_IsActive", BOOLEAN,    // 是否激活状态
+    
+    // 数据行
+    {
+        // Actual - 实际数据
+        {
+            "ACTUAL",              // 场景代码
+            "Actual",              // 场景显示名称
+            1,                     // 排序顺序
+            "实际数据场景，展示当前实际发生的业务数据",  // 场景描述
+            TRUE,                  // 默认选中
+            TRUE                   // 激活状态，当前可用
+        },
+        
+        // Target - 目标数据
+        {
+            "TARGET",              // 场景代码
+            "Target",              // 场景显示名称
+            2,                     // 排序顺序
+            "目标数据场景，展示计划或预算的目标值",  // 场景描述
+            FALSE,                 // 非默认选项
+            TRUE                   // 激活状态，当前可用
+        }
+    }
+)
+
+
+// ─────────────────────────────────────
+// 7. %/Absolute 数值格式筛选器
+// ─────────────────────────────────────
+
+Slicer_ValueFormat_Selection = 
+// 功能：创建数值格式维度表，用于报表中的数值展示格式切换
+// 用途：用户可通过此表切换 KPI 数值的展示格式（百分比/点数/基点）
+// 参数表名称：ValueFormat
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "ValueFormat_ID", STRING,           // 主键标识，用于唯一标识每个格式选项
+    "ValueFormat_Label", STRING,        // 显示标签，在报表界面中向用户展示的格式名称
+    "ValueFormat_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "ValueFormat_Description", STRING,  // 详细描述，说明该格式的具体含义和使用场景
+    
+    // 扩展字段 - 可选字段
+    "ValueFormat_IsDefault", BOOLEAN,   // 是否默认选中
+    "ValueFormat_IsActive", BOOLEAN,    // 是否激活状态
+    "ValueFormat_Suffix", STRING,       // 格式后缀，用于度量值 FORMAT 拼接
+    
+    // 数据行
+    {
+        // % - 百分比格式
+        {
+            "PCT",                 // 格式代码
+            "%",                   // 格式显示名称
+            1,                     // 排序顺序
+            "百分比格式，将数值乘以 100 后加 % 后缀显示（如 +14%）",  // 格式描述
+            TRUE,                  // 默认选中
+            TRUE,                  // 激活状态，当前可用
+            "%"                    // 格式后缀，用于 FORMAT 拼接
+        },
+        
+        // pts - 百分点格式
+        {
+            "PTS",                 // 格式代码
+            "pts",                 // 格式显示名称
+            2,                     // 排序顺序
+            "百分点格式，以点数形式展示差异值（如 +14pts）",  // 格式描述
+            FALSE,                 // 非默认选项
+            TRUE,                  // 激活状态，当前可用
+            "pts"                  // 格式后缀，用于 FORMAT 拼接
+        },
+        
+        // bp - 基点格式
+        {
+            "BP",                  // 格式代码
+            "bp",                  // 格式显示名称
+            3,                     // 排序顺序
+            "基点格式，以基点形式展示差异值，1bp = 0.01%（如 +14bp）",  // 格式描述
+            FALSE,                 // 非默认选项
+            TRUE,                  // 激活状态，当前可用
+            "bp"                   // 格式后缀，用于 FORMAT 拼接
+        }
+    }
+)

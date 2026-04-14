@@ -1,0 +1,45 @@
+﻿Channel,Currency,Platform,Section,Classification,Sub_Channel,Fee,Fee_Ratio,Is_SubTotal
+TM,RMB,"TM","付费","品销宝","Brand Zone",549134.47,0.0205,0
+TM,RMB,"","","","Brand Star",0,0,0
+TM,RMB,"","","品销宝 TTL","",549134.47,0.0205,1
+TM,RMB,"","","RTB","RTB",1766491.6,0.0659,0
+TM,RMB,"","","JCGP","Brand Display",1077500,0.0402,0
+TM,RMB,"","","","UD Brand",0,0,0
+TM,RMB,"","","","TOPSHOW",0,0,0
+TM,RMB,"","","","UD Performance",0,0,0
+TM,RMB,"","","","Brand Showmax",0,0.0402,0
+TM,RMB,"","","JCGP TTL","",1077500,0.0402,1
+TM,RMB,"","付费TTL","","",3393126.07,0.1265,1
+TM,RMB,"","短信","","",0,0,0
+TM,RMB,"","短视频拍摄","","",0,0,0
+TM,RMB,"","其它","","",0,0,0
+TM,RMB,"TM TTL","","","",3393126.07,0.1265,1
+TM,USD,"TM","付费","品销宝","Brand Zone",75742.69,0.0205,0
+TM,USD,"","","","Brand Star",0,0,0
+TM,USD,"","","品销宝 TTL","",75742.69,0.0205,1
+TM,USD,"","","RTB","RTB",243654.01,0.0659,0
+TM,USD,"","","JCGP","Brand Display",148620.69,0.0402,0
+TM,USD,"","","","UD Brand",0,0,0
+TM,USD,"","","","TOPSHOW",0,0,0
+TM,USD,"","","","UD Performance",0,0,0
+TM,USD,"","","","Brand Showmax",0,0.0402,0
+TM,USD,"","","JCGP TTL","",148620.69,0.0402,1
+TM,USD,"","付费TTL","","",468017.39,0.1265,1
+TM,USD,"","短信","","",0,0,0
+TM,USD,"","短视频拍摄","","",0,0,0
+TM,USD,"","其它","","",0,0,0
+TM,USD,"TM TTL","","","",468017.39,0.1265,1
+JD,RMB,"JD","付费","品牌专区","Search Brand",48686.7,0.0099,0
+JD,RMB,"","","RTB","RTB",479266.1,0.0977,0
+JD,RMB,"","","商务采买","",0,0,0
+JD,RMB,"","付费TTL","","",527952.8,0.1076,1
+JD,RMB,"","短信","","",0,0,0
+JD,RMB,"","其它","","",0,0,0
+JD,RMB,"JD TTL","","","",527952.8,0.1076,1
+JD,USD,"JD","付费","品牌专区","Search Brand",6715.41,0.0099,0
+JD,USD,"","","RTB","RTB",66105.67,0.0977,0
+JD,USD,"","","商务采买","",0,0,0
+JD,USD,"","付费TTL","","",72821.08,0.1076,1
+JD,USD,"","短信","","",0,0,0
+JD,USD,"","其它","","",0,0,0
+JD,USD,"JD TTL","","","",72821.08,0.1076,1

@@ -22,6 +22,7 @@ alwaysApply: true
 | **% 结尾** | 百分比/比率 | `Profit Margin %`, `YoY Growth %` |
 | **Rank 结尾** | 排名 | `Sales Rank`, `Customer Rank` |
 | **_ 前缀** | 辅助/内部度量值（隐藏） | `_Base Revenue`, `_Helper Count` |
+| **_ Cell Display | 构建中国式报表的时候，行列需要自定义的情况，值返回格式化后的度量，度量命名需要带有矩阵名称 | `KPI Breakdown Cell Display` |
 
 - 禁止使用拼音或中英混拼
 - 避免与列名冲突（度量值名称不应与模型中任何列名相同）
@@ -36,6 +37,7 @@ alwaysApply: true
 
 | 前缀 | 含义 | 示例 | 说明 |
 |------|------|------|------|
+| **Dim_**_** | 构建行列辅助表 | `Dim_RowKPI_KpiBreakdown`, `Dim_ColMetric_KpiBreakdown` | 构建中国式报表的时候，行列需要自定义的情况，表命名需要带有矩阵名称，不然无法和其他矩阵区分 |
 | **Dim_** | 维度表 | `Dim_Date`, `Dim_Customer`, `Dim_Store` | 描述性数据，用于筛选和分组 |
 | **Fact_** | 事实表 | `Fact_Sales`, `Fact_Orders` | 度量数据，包含可聚合的数值 |
 | **Bridge_** | 桥接表 | `Bridge_SalesTerritory` | 解决多对多关系 |
@@ -78,6 +80,9 @@ Dim_Order[IsActive]              // 是否激活
 ### 变量（VAR）
 - 使用 `__` 前缀（双下划线）或清晰的描述性命名
 - 示例：`__TotalSales`, `__FilteredTable`, `__CurrentDate`
+| 列上下文变量 | `__SelR1`, `__SelR2` | 一级/二级列头 |
+| 行上下文变量 | `__Brand`, `__Framework`, `__Category` | 行筛选用变量 |
+| 特殊标识变量 | `__IsTotal` | Total 行判断 |
 
 ## 2. 格式规范
 
@@ -107,7 +112,7 @@ Revenue YTD =
 
 ### 注释
 - 复杂度量值（超过 5 行）必须添加头部注释
-头部注释放在度量值名称之下
+特别重要：头部注释放在度量值名称之下
 - 注释格式：
 ```dax
 

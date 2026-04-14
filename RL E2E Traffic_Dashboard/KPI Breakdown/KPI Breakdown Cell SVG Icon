@@ -1,0 +1,31 @@
+KPI Breakdown Cell SVG Icon = 
+// ========================================
+// 度量值: KPI Breakdown Cell SVG Icon
+// Display Folder: Formatting
+// 用途: 为 delta_pt 类型列返回 SVG 圆形图标
+// 依赖: [KPI Breakdown Cell Value], Dim_ColMetric_KpiBreakdown[MetricFormat]
+// 说明: 需将此度量值的数据类别设为"图像 URL"
+// ========================================
+    VAR __Value = [KPI Breakdown Cell Value]
+    VAR __Format = SELECTEDVALUE(Dim_ColMetric_KpiBreakdown[MetricFormat])
+    VAR __NeedsIcon = __Format = "delta_pt"
+    VAR __GreenSVG =
+        "data:image/svg+xml;utf8," &
+        "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
+        "<circle cx='8' cy='8' r='7' fill='%234CAF50'/></svg>"
+    VAR __RedSVG =
+        "data:image/svg+xml;utf8," &
+        "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
+        "<circle cx='8' cy='8' r='7' fill='%23F44336'/></svg>"
+    VAR __YellowSVG =
+        "data:image/svg+xml;utf8," &
+        "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
+        "<circle cx='8' cy='8' r='7' fill='%23E1C233'/></svg>"
+    RETURN
+        SWITCH(
+            TRUE(),
+            __NeedsIcon && __Value > 0,  __GreenSVG,       // 正值 → 绿色圆
+            __NeedsIcon && __Value < 0,  __RedSVG,          // 负值 → 红色圆
+            __NeedsIcon && __Value = 0,  __YellowSVG,       // 零值 → 黄色圆
+            BLANK()
+        )

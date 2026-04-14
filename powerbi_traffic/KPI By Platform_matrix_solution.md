@@ -309,9 +309,9 @@ KPI By Platform Cell Font Color =
     RETURN
         SWITCH(
             TRUE(),
-            __NeedsColor && __Value > 0,   "#2E7D32",   // 正值 → 深绿
-            __NeedsColor && __Value < 0,   "#C62828",   // 负值 → 深红
-            __NeedsColor && __Value = 0,   "#757575",   // 零值 → 灰色
+            __NeedsColor && __Value > 0,   "#1A9018",   // 正值 → 草绿色
+            __NeedsColor && __Value < 0,   "#D64550",   // 负值 → 玫瑰红
+            __NeedsColor && __Value = 0,   "#E1C233",   // 零值 → 亮黄色
             // → 扩展: 追加 KPI_ID 到 __NeedsColor 的 IN 列表
             // → 或为特定 KPI 单独定义颜色规则:
             // __KPIID = 2 && __Value < 50, "#E65100",   // Cost Ach% 低值 → 橙色
@@ -525,6 +525,54 @@ DATATABLE(
         ...
     }
 )
+```
+### 8.4 根据 KPI 行号返回单元格背景色（交替行底色）
+```
+KPI By Platform Cell Background Color = 
+// ========================================
+// 度量值: KPI By Platform Cell Background Color
+// 用途: 根据 KPI 行号返回单元格背景色（交替行底色）
+// 依赖: Dim_KPI[KPI_Sort]
+// ========================================
+    VAR __Sort = SELECTEDVALUE(Dim_KPI[KPI_Sort])
+    RETURN
+        IF(
+            MOD(__Sort, 2) = 0,
+            "#F5F5F5",    // 偶数行：浅灰色
+            "#FFFFFF"     // 奇数行：白色
+        )
+```
+### 8.5 自定义函数图标的条件格式
+```
+KPI By Platform Cell SVG Icon = 
+// ========================================
+// 度量值: KPI By Platform Cell SVG Icon
+// 用途: 返回 SVG 图片的 HTML
+// 说明: 需要在 Power BI 中启用 HTML 内容或使用自定义视觉对象
+// ========================================
+    VAR __Value = [KPI By Platform Cell Value]
+    VAR __KPIID = SELECTEDVALUE(Dim_KPI[KPI_ID])
+    VAR __NeedsIcon = __KPIID IN { 5, 9, 16 }
+    
+    VAR __UpSVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20'><circle cx='10' cy='10' r='9' fill='%234CAF50' stroke='white' stroke-width='1'/><path d='M6,10 L10,6 L14,10' stroke='white' stroke-width='2' fill='none'/></svg>"
+    
+    VAR __DownSVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20'><circle cx='10' cy='10' r='9' fill='%23F44336' stroke='white' stroke-width='1'/><path d='M6,10 L10,14 L14,10' stroke='white' stroke-width='2' fill='none'/></svg>"
+    
+    VAR __NeutralSVG = "data:image/svg+xml;utf8," &
+                "<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'>" &
+                "<circle cx='10' cy='10' r='9' fill='%23E1C233' stroke='white' stroke-width='1'/>" &
+                "<path d='M6,10 L14,10' stroke='white' stroke-width='2' " &
+                "stroke-linecap='round'/>" &
+                "</svg>"
+    
+    RETURN
+        SWITCH(
+            TRUE(),
+            __NeedsIcon && __Value > 0,   __UpSVG,
+            __NeedsIcon && __Value < 0,   __DownSVG,
+            __NeedsIcon && __Value = 0,   __NeutralSVG,
+            BLANK()
+        )
 ```
 
 ---

@@ -1,0 +1,93 @@
+KPI Breakdown Cell Display = 
+// ========================================
+// 度量值: KPI Breakdown Cell Display
+// Display Folder: Formatting
+// 用途: 根据列的 MetricFormat 类型，返回格式化后的文本
+// 依赖: [KPI Breakdown Cell Value], Dim_ColMetric_KpiBreakdown[MetricFormat]
+// 格式类型:
+//   ─── 基础数值 ─────────────────────────────────────────────
+//   integer       → 整数千分位：1,000
+//   integer_k     → 整数千分位带k：1,000k
+//   decimal_2     → 两位小数千分位：1,000.00
+//   decimal_2k    → 两位小数千分位带k：1,000.00k
+//   ─── 百分比 ───────────────────────────────────────────────
+//   percent       → 百分比整数：40%
+//   percent_1dp   → 百分比1位小数：40.5%
+//   percent_2dp   → 百分比2位小数：40.52%
+//   ─── 货币 ─────────────────────────────────────────────────
+//   currency      → 货币整数带k：$250k
+//   currency_2dp  → 货币两位小数带k：$250.50k
+//   ─── 增减指标 ─────────────────────────────────────────────
+//   delta_pct     → 增减百分比整数：+14%
+//   delta_pct_1dp → 增减百分比1位小数：+14.5%
+//   delta_pct_2dp → 增减百分比2位小数：+14.52%
+//   delta_pt      → 增减点数整数：+14pts
+//   delta_pt_1dp  → 增减点数1位小数：+14.5pts
+//   delta_pt_2dp  → 增减点数2位小数：+14.52pts
+//   delta_bp      → 增减基点整数：+14bp
+//   delta_bp_1dp  → 增减基点1位小数：+14.5bp
+//   ─── 兼容旧格式（保持向后兼容）───────────────────────────
+//   number        → 同 integer_k：114k
+// ========================================
+    VAR __Value = [KPI Breakdown Cell Value]
+    VAR __Format = SELECTEDVALUE(Dim_ColMetric_KpiBreakdown[MetricFormat])
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            BLANK(),
+            SWITCH(
+                __Format,
+                // ─── 基础数值 ───────────────────────────────────────
+                "integer",
+                    FORMAT(__Value, "#,##0"),                                          // 整数千分位：1,000
+                "integer_k",
+                    FORMAT(__Value, "#,##0") & "k",                                    // 整数千分位带k：1,000k
+                "decimal_2",
+                    FORMAT(__Value, "#,##0.00"),                                       // 两位小数千分位：1,000.00
+                "decimal_2k",
+                    FORMAT(__Value, "#,##0.00") & "k",                                 // 两位小数千分位带k：1,000.00k
+
+                // ─── 百分比 ───────────────────────────────────────────
+                "percent",
+                    FORMAT(__Value, "#,##0") & "%",                                    // 百分比整数：40%
+                "percent_1dp",
+                    FORMAT(__Value, "#,##0.0") & "%",                                  // 百分比1位小数：40.5%
+                "percent_2dp",
+                    FORMAT(__Value, "#,##0.00") & "%",                                 // 百分比2位小数：40.52%
+
+                // ─── 货币 ─────────────────────────────────────────────
+                "currency",
+                    FORMAT(__Value, "$#,##0") & "k",                                   // 货币整数带k：$250k
+                "currency_2dp",
+                    FORMAT(__Value, "$#,##0.00") & "k",                                // 货币两位小数带k：$250.50k
+
+                // ─── 增减百分比 ───────────────────────────────────────
+                "delta_pct",
+                    IF(__Value >= 0, "+", "") & FORMAT(__Value * 100, "#,##0") & "%",  // 增减百分比整数：+14%
+                "delta_pct_1dp",
+                    IF(__Value >= 0, "+", "") & FORMAT(__Value * 100, "#,##0.0") & "%",// 增减百分比1位小数：+14.5%
+                "delta_pct_2dp",
+                    IF(__Value >= 0, "+", "") & FORMAT(__Value * 100, "#,##0.00") & "%",// 增减百分比2位小数：+14.52%
+
+                // ─── 增减点数 ─────────────────────────────────────────
+                "delta_pt",
+                    IF(__Value >= 0, "+", "") & FORMAT(__Value, "#,##0") & "pts",      // 增减点数整数：+14pts
+                "delta_pt_1dp",
+                    IF(__Value >= 0, "+", "") & FORMAT(__Value, "#,##0.0") & "pts",    // 增减点数1位小数：+14.5pts
+                "delta_pt_2dp",
+                    IF(__Value >= 0, "+", "") & FORMAT(__Value, "#,##0.00") & "pts",   // 增减点数2位小数：+14.52pts
+
+                // ─── 增减基点 ─────────────────────────────────────────
+                "delta_bp",
+                    IF(__Value >= 0, "+", "") & FORMAT(__Value, "#,##0") & "bp",       // 增减基点整数：+14bp
+                "delta_bp_1dp",
+                    IF(__Value >= 0, "+", "") & FORMAT(__Value, "#,##0.0") & "bp",     // 增减基点1位小数：+14.5bp
+
+                // ─── 兼容旧格式（向后兼容）────────────────────────────
+                "number",
+                    FORMAT(__Value, "#,##0") & "k",                                    // 同 integer_k：114k
+
+                // ─── 默认 ─────────────────────────────────────────────
+                FORMAT(__Value, "#,##0.00")                                            // 默认：两位小数千分位
+            )
+        )
