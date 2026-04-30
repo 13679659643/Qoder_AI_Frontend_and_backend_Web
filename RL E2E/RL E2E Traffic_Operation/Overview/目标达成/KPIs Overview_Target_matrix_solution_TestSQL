@@ -1,0 +1,991 @@
+-- ================================================================================
+-- KPIs Overview 目标达成 Matrix — 数据验证测试 SQL
+-- ================================================================================
+--
+-- 用途：在火山引擎 ByteHouse 中执行，验证数据库数据与 Power BI KPIs Overview 目标达成矩阵一致性
+-- 对标：KPIs Overview_Target_matrix_solution 中 Base Value / Cell Value 的 DAX 计算口径
+-- 数据库：indep_rl_ads
+-- 事实表：a05_e2e_paid_media_channel_data_d（渠道粒度）
+--         a05_e2e_paid_media_summary_d（汇总粒度）
+--         a05_e2e_paid_media_product_data_d（产品粒度）
+--
+-- 矩阵结构：
+--   行 = TM / JD / TTL（渠道维度，内嵌在行维度中，不受 Channel 切片器影响）
+--   列 = 10 个指标（5 实际值 + 5 目标值）
+--   无同期 / vs LP 行（目标达成矩阵不涉及同比逻辑）
+--
+-- 使用说明：
+--   1. 修改下方 ★参数区★ 中的日期范围、平台、数据口径
+--   2. 将参数值替换到各查询中对应的占位处
+--   3. 逐段执行，将结果与 Power BI 矩阵中对应单元格比对
+--   4. 本文件所有金额为 RMB 原始值（不含汇率转换）
+--      Power BI 选择 RMB 时应与此一致；选择 USD 时 = 此值 × 7
+--   5. TTL 行 = TM + JD 合并汇总（platform IN ('TM','JD')）
+--      比率类指标基于合并分子/分母重新计算（加权比率，非简单平均）
+--
+-- ★参数区★（修改这里的值来匹配 Power BI 切片器选择）：
+--   本期日期范围：'2026-04-01' ~ '2026-04-15'
+--   平台：         'TM'（TM/JD 单平台，或 IN ('TM','JD') 对应 TTL 行）
+--   数据口径：     'T+1'
+-- ================================================================================
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 0: 数据探查 — 确认表结构与数据可用性
+-- ████████████████████████████████████████████████████████████████████████████████
+
+-- 0.1 检查 channel_data 表可用的平台和数据口径
+SELECT
+    platform,
+    trans_cycle,
+    COUNT(*)                        AS row_cnt,
+    MIN(data_date)                  AS min_date,
+    MAX(data_date)                  AS max_date
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+GROUP BY platform, trans_cycle
+ORDER BY platform, trans_cycle;
+
+
+-- 0.2 检查 summary 表可用的平台、数据口径和 customer_type
+-- 说明：customer_type 用于 vs目标(新客花费占比) 和 vs目标(新客成本)
+SELECT
+    platform,
+    trans_cycle,
+    customer_type,
+    COUNT(*)                        AS row_cnt,
+    MIN(data_date)                  AS min_date,
+    MAX(data_date)                  AS max_date
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+GROUP BY platform, trans_cycle, customer_type
+ORDER BY platform, trans_cycle, customer_type;
+
+
+-- 0.3 检查 product_data 表可用的平台、数据口径和 framework
+-- 说明：framework = 'Acceleration' 用于 Acc 相关指标（ID 7~10）
+SELECT
+    platform,
+    trans_cycle,
+    framework,
+    COUNT(*)                        AS row_cnt,
+    MIN(data_date)                  AS min_date,
+    MAX(data_date)                  AS max_date
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+GROUP BY platform, trans_cycle, framework
+ORDER BY platform, trans_cycle, framework;
+
+
+-- 0.4 检查 summary 表的 fcst 相关字段是否有数据
+-- 说明：vs目标列依赖 fcst_ 前缀字段，需确认这些字段非空
+SELECT
+    platform,
+    trans_cycle,
+    COUNT(*)                            AS row_cnt,
+    SUM(CASE WHEN fcst_media_sales_amt IS NULL THEN 1 ELSE 0 END) AS null_fcst_media_sales,
+    SUM(CASE WHEN fcst_cost_amt IS NULL THEN 1 ELSE 0 END)        AS null_fcst_cost,
+    SUM(CASE WHEN fcst_user_cnt IS NULL THEN 1 ELSE 0 END)        AS null_fcst_user_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+GROUP BY platform, trans_cycle;
+
+
+-- 0.5 检查 product_data 表的 fcst 相关字段是否有数据
+SELECT
+    platform,
+    trans_cycle,
+    framework,
+    COUNT(*)                            AS row_cnt,
+    SUM(CASE WHEN fcst_promotion_cost_amt IS NULL THEN 1 ELSE 0 END)  AS null_fcst_promo_cost,
+    SUM(CASE WHEN fcst_promotion_sales_amt IS NULL THEN 1 ELSE 0 END) AS null_fcst_promo_sales
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+GROUP BY platform, trans_cycle, framework;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 1: 单平台（TM）— 10 个指标一次性输出
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 对应 Power BI: TM 行 × 10 列（RMB，汇率=1）
+-- 将 platform = 'TM' 替换为 'JD' 可验证 JD 行
+
+WITH
+-- ── summary 全量聚合（不分 customer_type）──
+sm_all AS (
+    SELECT
+        SUM(media_sales_amt)            AS media_sales,
+        SUM(adj_cost_amt)               AS adj_cost,
+        SUM(media_new_member_cnt)       AS new_member_cnt,
+        SUM(fcst_media_sales_amt)       AS fcst_media_sales,
+        SUM(fcst_cost_amt)              AS fcst_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+),
+-- ── summary customer_type = 'new' 聚合（用于 vs目标新客花费占比/新客成本）──
+sm_new AS (
+    SELECT
+        SUM(fcst_cost_amt)              AS fcst_cost_new,
+        SUM(fcst_user_cnt)              AS fcst_user_cnt_new
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND customer_type = 'new'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+),
+-- ── channel_data 聚合（新客花费占比）──
+ch AS (
+    SELECT
+        SUM(COALESCE(nc_cost_amt, 0))   AS nc_cost,
+        SUM(COALESCE(ec_cost_amt, 0))   AS ec_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+),
+-- ── product_data Acceleration 聚合（实际 + 目标）──
+pd_acc AS (
+    SELECT
+        SUM(promotion_cost_amt)         AS acc_cost,
+        SUM(promotion_sales_amt)        AS acc_sales,
+        SUM(fcst_promotion_cost_amt)    AS fcst_acc_cost,
+        SUM(fcst_promotion_sales_amt)   AS fcst_acc_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND framework   = 'Acceleration'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+),
+-- ── product_data 全部 framework 聚合（目标花费占比分母 + 实际销售占比分母）──
+pd_all AS (
+    SELECT
+        SUM(fcst_promotion_cost_amt)    AS fcst_total_promo_cost,
+        SUM(promotion_sales_amt)        AS total_promo_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+)
+-- ── 输出 10 个指标 ──
+SELECT
+    'TM' AS channel,
+
+    -- ID 1: ROI = media_sales_amt / adj_cost_amt
+    sm_all.media_sales / NULLIF(sm_all.adj_cost, 0)
+        AS `ID1_ROI`,
+
+    -- ID 2: vs目标(ROI) = fcst_media_sales_amt / fcst_cost_amt
+    sm_all.fcst_media_sales / NULLIF(sm_all.fcst_cost, 0)
+        AS `ID2_vs目标_ROI`,
+
+    -- ID 3: 新客花费占比 = nc_cost / (nc_cost + ec_cost)
+    ch.nc_cost / NULLIF(ch.nc_cost + ch.ec_cost, 0)
+        AS `ID3_新客花费占比`,
+
+    -- ID 4: vs目标(新客花费占比) = fcst_cost(new) / fcst_cost(all)
+    sm_new.fcst_cost_new / NULLIF(sm_all.fcst_cost, 0)
+        AS `ID4_vs目标_新客花费占比`,
+
+    -- ID 5: 新客成本 = adj_cost / media_new_member_cnt
+    sm_all.adj_cost / NULLIF(sm_all.new_member_cnt, 0)
+        AS `ID5_新客成本`,
+
+    -- ID 6: vs目标(新客成本) = fcst_cost(new) / fcst_user_cnt(new)
+    sm_new.fcst_cost_new / NULLIF(sm_new.fcst_user_cnt_new, 0)
+        AS `ID6_vs目标_新客成本`,
+
+    -- ID 7: Acc花费占比 = fcst_promotion_cost(Acc) / fcst_promotion_cost(All)
+    pd_acc.fcst_acc_cost / NULLIF(pd_all.fcst_total_promo_cost, 0)
+        AS `ID7_Acc花费占比`,
+
+    -- ID 8: vs销售占比 = promotion_sales(Acc) / promotion_sales(All)
+    pd_acc.acc_sales / NULLIF(pd_all.total_promo_sales, 0)
+        AS `ID8_vs销售占比`,
+
+    -- ID 9: Acc ROI = promotion_sales(Acc) / promotion_cost(Acc)
+    pd_acc.acc_sales / NULLIF(pd_acc.acc_cost, 0)
+        AS `ID9_Acc_ROI`,
+
+    -- ID 10: vs目标(Acc ROI) = fcst_promotion_sales(Acc) / fcst_promotion_cost(Acc)
+    pd_acc.fcst_acc_sales / NULLIF(pd_acc.fcst_acc_cost, 0)
+        AS `ID10_vs目标_Acc_ROI`
+
+FROM sm_all, sm_new, ch, pd_acc, pd_all;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 2: TTL（TM + JD 合并）— 10 个指标一次性输出
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 对应 Power BI: TTL 行 × 10 列（RMB，汇率=1）
+-- TTL = TM + JD 合并汇总，比率类指标基于合并分子/分母（加权比率，非简单平均）
+
+WITH
+-- ── summary 全量聚合（TM + JD，不分 customer_type）──
+sm_all AS (
+    SELECT
+        SUM(media_sales_amt)            AS media_sales,
+        SUM(adj_cost_amt)               AS adj_cost,
+        SUM(media_new_member_cnt)       AS new_member_cnt,
+        SUM(fcst_media_sales_amt)       AS fcst_media_sales,
+        SUM(fcst_cost_amt)              AS fcst_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform    IN ('TM', 'JD')
+      AND trans_cycle  = 'T+1'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+),
+-- ── summary customer_type = 'new'（TM + JD）──
+sm_new AS (
+    SELECT
+        SUM(fcst_cost_amt)              AS fcst_cost_new,
+        SUM(fcst_user_cnt)              AS fcst_user_cnt_new
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform    IN ('TM', 'JD')
+      AND trans_cycle  = 'T+1'
+      AND customer_type = 'new'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+),
+-- ── channel_data（TM + JD）──
+ch AS (
+    SELECT
+        SUM(COALESCE(nc_cost_amt, 0))   AS nc_cost,
+        SUM(COALESCE(ec_cost_amt, 0))   AS ec_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+    WHERE platform    IN ('TM', 'JD')
+      AND trans_cycle  = 'T+1'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+),
+-- ── product_data Acceleration（TM + JD）──
+pd_acc AS (
+    SELECT
+        SUM(promotion_cost_amt)         AS acc_cost,
+        SUM(promotion_sales_amt)        AS acc_sales,
+        SUM(fcst_promotion_cost_amt)    AS fcst_acc_cost,
+        SUM(fcst_promotion_sales_amt)   AS fcst_acc_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform    IN ('TM', 'JD')
+      AND trans_cycle  = 'T+1'
+      AND framework   = 'Acceleration'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+),
+-- ── product_data 全部 framework（TM + JD）──
+pd_all AS (
+    SELECT
+        SUM(fcst_promotion_cost_amt)    AS fcst_total_promo_cost,
+        SUM(promotion_sales_amt)        AS total_promo_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform    IN ('TM', 'JD')
+      AND trans_cycle  = 'T+1'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+)
+SELECT
+    'TTL' AS channel,
+
+    sm_all.media_sales / NULLIF(sm_all.adj_cost, 0)
+        AS `ID1_ROI`,
+
+    sm_all.fcst_media_sales / NULLIF(sm_all.fcst_cost, 0)
+        AS `ID2_vs目标_ROI`,
+
+    ch.nc_cost / NULLIF(ch.nc_cost + ch.ec_cost, 0)
+        AS `ID3_新客花费占比`,
+
+    sm_new.fcst_cost_new / NULLIF(sm_all.fcst_cost, 0)
+        AS `ID4_vs目标_新客花费占比`,
+
+    sm_all.adj_cost / NULLIF(sm_all.new_member_cnt, 0)
+        AS `ID5_新客成本`,
+
+    sm_new.fcst_cost_new / NULLIF(sm_new.fcst_user_cnt_new, 0)
+        AS `ID6_vs目标_新客成本`,
+
+    pd_acc.fcst_acc_cost / NULLIF(pd_all.fcst_total_promo_cost, 0)
+        AS `ID7_Acc花费占比`,
+
+    pd_acc.acc_sales / NULLIF(pd_all.total_promo_sales, 0)
+        AS `ID8_vs销售占比`,
+
+    pd_acc.acc_sales / NULLIF(pd_acc.acc_cost, 0)
+        AS `ID9_Acc_ROI`,
+
+    pd_acc.fcst_acc_sales / NULLIF(pd_acc.fcst_acc_cost, 0)
+        AS `ID10_vs目标_Acc_ROI`
+
+FROM sm_all, sm_new, ch, pd_acc, pd_all;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 3: TM / JD / TTL 三行并排输出（一次性对比全部矩阵）
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 对应 Power BI 完整矩阵：3 行 × 10 列
+-- 用于一次执行即可验证整个矩阵
+
+WITH
+-- ══════════════════════════════════════
+-- TM 行
+-- ══════════════════════════════════════
+tm_sm_all AS (
+    SELECT
+        SUM(media_sales_amt) AS media_sales, SUM(adj_cost_amt) AS adj_cost,
+        SUM(media_new_member_cnt) AS new_member_cnt,
+        SUM(fcst_media_sales_amt) AS fcst_media_sales, SUM(fcst_cost_amt) AS fcst_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+tm_sm_new AS (
+    SELECT SUM(fcst_cost_amt) AS fcst_cost_new, SUM(fcst_user_cnt) AS fcst_user_cnt_new
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1' AND customer_type = 'new'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+tm_ch AS (
+    SELECT SUM(COALESCE(nc_cost_amt, 0)) AS nc_cost, SUM(COALESCE(ec_cost_amt, 0)) AS ec_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+tm_pd_acc AS (
+    SELECT SUM(promotion_cost_amt) AS acc_cost, SUM(promotion_sales_amt) AS acc_sales,
+           SUM(fcst_promotion_cost_amt) AS fcst_acc_cost, SUM(fcst_promotion_sales_amt) AS fcst_acc_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1' AND framework = 'Acceleration'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+tm_pd_all AS (
+    SELECT SUM(fcst_promotion_cost_amt) AS fcst_total_promo_cost, SUM(promotion_sales_amt) AS total_promo_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+-- ══════════════════════════════════════
+-- JD 行
+-- ══════════════════════════════════════
+jd_sm_all AS (
+    SELECT
+        SUM(media_sales_amt) AS media_sales, SUM(adj_cost_amt) AS adj_cost,
+        SUM(media_new_member_cnt) AS new_member_cnt,
+        SUM(fcst_media_sales_amt) AS fcst_media_sales, SUM(fcst_cost_amt) AS fcst_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform = 'JD' AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+jd_sm_new AS (
+    SELECT SUM(fcst_cost_amt) AS fcst_cost_new, SUM(fcst_user_cnt) AS fcst_user_cnt_new
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform = 'JD' AND trans_cycle = 'T+1' AND customer_type = 'new'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+jd_ch AS (
+    SELECT SUM(COALESCE(nc_cost_amt, 0)) AS nc_cost, SUM(COALESCE(ec_cost_amt, 0)) AS ec_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+    WHERE platform = 'JD' AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+jd_pd_acc AS (
+    SELECT SUM(promotion_cost_amt) AS acc_cost, SUM(promotion_sales_amt) AS acc_sales,
+           SUM(fcst_promotion_cost_amt) AS fcst_acc_cost, SUM(fcst_promotion_sales_amt) AS fcst_acc_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform = 'JD' AND trans_cycle = 'T+1' AND framework = 'Acceleration'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+jd_pd_all AS (
+    SELECT SUM(fcst_promotion_cost_amt) AS fcst_total_promo_cost, SUM(promotion_sales_amt) AS total_promo_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform = 'JD' AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+-- ══════════════════════════════════════
+-- TTL 行（TM + JD 合并）
+-- ══════════════════════════════════════
+ttl_sm_all AS (
+    SELECT
+        SUM(media_sales_amt) AS media_sales, SUM(adj_cost_amt) AS adj_cost,
+        SUM(media_new_member_cnt) AS new_member_cnt,
+        SUM(fcst_media_sales_amt) AS fcst_media_sales, SUM(fcst_cost_amt) AS fcst_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform IN ('TM', 'JD') AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+ttl_sm_new AS (
+    SELECT SUM(fcst_cost_amt) AS fcst_cost_new, SUM(fcst_user_cnt) AS fcst_user_cnt_new
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform IN ('TM', 'JD') AND trans_cycle = 'T+1' AND customer_type = 'new'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+ttl_ch AS (
+    SELECT SUM(COALESCE(nc_cost_amt, 0)) AS nc_cost, SUM(COALESCE(ec_cost_amt, 0)) AS ec_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+    WHERE platform IN ('TM', 'JD') AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+ttl_pd_acc AS (
+    SELECT SUM(promotion_cost_amt) AS acc_cost, SUM(promotion_sales_amt) AS acc_sales,
+           SUM(fcst_promotion_cost_amt) AS fcst_acc_cost, SUM(fcst_promotion_sales_amt) AS fcst_acc_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform IN ('TM', 'JD') AND trans_cycle = 'T+1' AND framework = 'Acceleration'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+ttl_pd_all AS (
+    SELECT SUM(fcst_promotion_cost_amt) AS fcst_total_promo_cost, SUM(promotion_sales_amt) AS total_promo_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform IN ('TM', 'JD') AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+)
+-- ── TM 行 ──
+SELECT 'TM' AS channel,
+    t.media_sales / NULLIF(t.adj_cost, 0) AS `ID1_ROI`,
+    t.fcst_media_sales / NULLIF(t.fcst_cost, 0) AS `ID2_vs目标_ROI`,
+    c.nc_cost / NULLIF(c.nc_cost + c.ec_cost, 0) AS `ID3_新客花费占比`,
+    n.fcst_cost_new / NULLIF(t.fcst_cost, 0) AS `ID4_vs目标_新客花费占比`,
+    t.adj_cost / NULLIF(t.new_member_cnt, 0) AS `ID5_新客成本`,
+    n.fcst_cost_new / NULLIF(n.fcst_user_cnt_new, 0) AS `ID6_vs目标_新客成本`,
+    pa.fcst_acc_cost / NULLIF(pl.fcst_total_promo_cost, 0) AS `ID7_Acc花费占比`,
+    pa.acc_sales / NULLIF(pl.total_promo_sales, 0) AS `ID8_vs销售占比`,
+    pa.acc_sales / NULLIF(pa.acc_cost, 0) AS `ID9_Acc_ROI`,
+    pa.fcst_acc_sales / NULLIF(pa.fcst_acc_cost, 0) AS `ID10_vs目标_Acc_ROI`
+FROM tm_sm_all t, tm_sm_new n, tm_ch c, tm_pd_acc pa, tm_pd_all pl
+
+UNION ALL
+
+-- ── JD 行 ──
+SELECT 'JD' AS channel,
+    t.media_sales / NULLIF(t.adj_cost, 0),
+    t.fcst_media_sales / NULLIF(t.fcst_cost, 0),
+    c.nc_cost / NULLIF(c.nc_cost + c.ec_cost, 0),
+    n.fcst_cost_new / NULLIF(t.fcst_cost, 0),
+    t.adj_cost / NULLIF(t.new_member_cnt, 0),
+    n.fcst_cost_new / NULLIF(n.fcst_user_cnt_new, 0),
+    pa.fcst_acc_cost / NULLIF(pl.fcst_total_promo_cost, 0),
+    pa.acc_sales / NULLIF(pl.total_promo_sales, 0),
+    pa.acc_sales / NULLIF(pa.acc_cost, 0),
+    pa.fcst_acc_sales / NULLIF(pa.fcst_acc_cost, 0)
+FROM jd_sm_all t, jd_sm_new n, jd_ch c, jd_pd_acc pa, jd_pd_all pl
+
+UNION ALL
+
+-- ── TTL 行 ──
+SELECT 'TTL' AS channel,
+    t.media_sales / NULLIF(t.adj_cost, 0),
+    t.fcst_media_sales / NULLIF(t.fcst_cost, 0),
+    c.nc_cost / NULLIF(c.nc_cost + c.ec_cost, 0),
+    n.fcst_cost_new / NULLIF(t.fcst_cost, 0),
+    t.adj_cost / NULLIF(t.new_member_cnt, 0),
+    n.fcst_cost_new / NULLIF(n.fcst_user_cnt_new, 0),
+    pa.fcst_acc_cost / NULLIF(pl.fcst_total_promo_cost, 0),
+    pa.acc_sales / NULLIF(pl.total_promo_sales, 0),
+    pa.acc_sales / NULLIF(pa.acc_cost, 0),
+    pa.fcst_acc_sales / NULLIF(pa.fcst_acc_cost, 0)
+FROM ttl_sm_all t, ttl_sm_new n, ttl_ch c, ttl_pd_acc pa, ttl_pd_all pl;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 4: 逐指标明细验证（可选 — 逐条执行用于定位差异）
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 每个查询输出：指标名、中间值（分子/分母）、最终计算值
+-- 默认平台 = 'TM'，改为 'JD' 或 IN ('TM','JD') 可验证其他行
+
+-- ─────────────────────────────────────────────
+-- 4.1 ID 1: ROI
+-- DAX: SUM(summary_d[media_sales_amt]) / SUM(summary_d[adj_cost_amt])
+-- ─────────────────────────────────────────────
+SELECT
+    'ID1_ROI' AS metric,
+    SUM(media_sales_amt) AS media_sales,
+    SUM(adj_cost_amt) AS adj_cost,
+    SUM(media_sales_amt) / NULLIF(SUM(adj_cost_amt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.2 ID 2: vs目标(ROI) — 目标 ROI
+-- DAX: SUM(summary_d[fcst_media_sales_amt]) / SUM(summary_d[fcst_cost_amt])
+-- ─────────────────────────────────────────────
+SELECT
+    'ID2_vs目标_ROI' AS metric,
+    SUM(fcst_media_sales_amt) AS fcst_media_sales,
+    SUM(fcst_cost_amt) AS fcst_cost,
+    SUM(fcst_media_sales_amt) / NULLIF(SUM(fcst_cost_amt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.3 ID 3: 新客花费占比
+-- DAX: SUM(channel_d[nc_cost_amt]) / (SUM(nc_cost_amt) + SUM(ec_cost_amt))
+-- ─────────────────────────────────────────────
+SELECT
+    'ID3_新客花费占比' AS metric,
+    SUM(nc_cost_amt) AS nc_cost,
+    SUM(ec_cost_amt) AS ec_cost,
+    SUM(nc_cost_amt) / NULLIF(SUM(nc_cost_amt) + SUM(ec_cost_amt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.4 ID 4: vs目标(新客花费占比) — 目标新客花费占比
+-- DAX: SUM(summary_d[fcst_cost_amt] WHERE customer_type='new')
+--      / SUM(summary_d[fcst_cost_amt])
+-- 说明：分子过滤 customer_type = 'new'，分母不过滤
+-- ─────────────────────────────────────────────
+SELECT
+    'ID4_vs目标_新客花费占比' AS metric,
+    n.fcst_cost_new,
+    a.fcst_cost_all,
+    n.fcst_cost_new / NULLIF(a.fcst_cost_all, 0) AS value
+FROM
+    (SELECT SUM(fcst_cost_amt) AS fcst_cost_new
+     FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1' AND customer_type = 'new'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') n,
+    (SELECT SUM(fcst_cost_amt) AS fcst_cost_all
+     FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') a;
+
+
+-- ─────────────────────────────────────────────
+-- 4.5 ID 5: 新客成本
+-- DAX: SUM(summary_d[adj_cost_amt]) / SUM(summary_d[media_new_member_cnt])
+-- ─────────────────────────────────────────────
+SELECT
+    'ID5_新客成本' AS metric,
+    SUM(adj_cost_amt) AS adj_cost,
+    SUM(media_new_member_cnt) AS new_member_cnt,
+    SUM(adj_cost_amt) / NULLIF(SUM(media_new_member_cnt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.6 ID 6: vs目标(新客成本) — 目标新客成本
+-- DAX: SUM(summary_d[fcst_cost_amt] WHERE customer_type='new')
+--      / SUM(summary_d[fcst_user_cnt] WHERE customer_type='new')
+-- 说明：分子和分母均过滤 customer_type = 'new'
+-- ─────────────────────────────────────────────
+SELECT
+    'ID6_vs目标_新客成本' AS metric,
+    SUM(fcst_cost_amt) AS fcst_cost_new,
+    SUM(fcst_user_cnt) AS fcst_user_cnt_new,
+    SUM(fcst_cost_amt) / NULLIF(SUM(fcst_user_cnt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND customer_type = 'new'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.7 ID 7: Acc花费占比
+-- DAX: SUM(product_d[fcst_promotion_cost_amt] WHERE framework='Acceleration')
+--      / SUM(product_d[fcst_promotion_cost_amt])
+-- 说明：使用 fcst 目标花费数据，非实际花费
+-- ─────────────────────────────────────────────
+SELECT
+    'ID7_Acc花费占比' AS metric,
+    acc.fcst_acc_cost,
+    tot.fcst_total_promo_cost,
+    acc.fcst_acc_cost / NULLIF(tot.fcst_total_promo_cost, 0) AS value
+FROM
+    (SELECT SUM(fcst_promotion_cost_amt) AS fcst_acc_cost
+     FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1' AND framework = 'Acceleration'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') acc,
+    (SELECT SUM(fcst_promotion_cost_amt) AS fcst_total_promo_cost
+     FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') tot;
+
+
+-- ─────────────────────────────────────────────
+-- 4.8 ID 8: vs销售占比
+-- DAX: SUM(product_d[promotion_sales_amt] WHERE framework='Acceleration')
+--      / SUM(product_d[promotion_sales_amt])
+-- 说明：使用实际销售数据，与 Acc花费占比(目标数据) 并列对比
+-- ─────────────────────────────────────────────
+SELECT
+    'ID8_vs销售占比' AS metric,
+    acc.acc_sales,
+    tot.total_promo_sales,
+    acc.acc_sales / NULLIF(tot.total_promo_sales, 0) AS value
+FROM
+    (SELECT SUM(promotion_sales_amt) AS acc_sales
+     FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1' AND framework = 'Acceleration'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') acc,
+    (SELECT SUM(promotion_sales_amt) AS total_promo_sales
+     FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') tot;
+
+
+-- ─────────────────────────────────────────────
+-- 4.9 ID 9: Acc ROI
+-- DAX: SUM(product_d[promotion_sales_amt] WHERE framework='Acceleration')
+--      / SUM(product_d[promotion_cost_amt] WHERE framework='Acceleration')
+-- ─────────────────────────────────────────────
+SELECT
+    'ID9_Acc_ROI' AS metric,
+    SUM(promotion_sales_amt) AS acc_sales,
+    SUM(promotion_cost_amt) AS acc_cost,
+    SUM(promotion_sales_amt) / NULLIF(SUM(promotion_cost_amt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND framework   = 'Acceleration'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.10 ID 10: vs目标(Acc ROI) — 目标 Acc ROI
+-- DAX: SUM(product_d[fcst_promotion_sales_amt] WHERE framework='Acceleration')
+--      / SUM(product_d[fcst_promotion_cost_amt] WHERE framework='Acceleration')
+-- ─────────────────────────────────────────────
+SELECT
+    'ID10_vs目标_Acc_ROI' AS metric,
+    SUM(fcst_promotion_sales_amt) AS fcst_acc_sales,
+    SUM(fcst_promotion_cost_amt) AS fcst_acc_cost,
+    SUM(fcst_promotion_sales_amt) / NULLIF(SUM(fcst_promotion_cost_amt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND framework   = 'Acceleration'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 5: 日期粒度明细 — 按日展开验证（可选 — 排查聚合差异）
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 如果 Power BI 总值与 SQL 不一致，通过日粒度对比定位差异日期
+
+-- 5.1 summary 表日粒度明细（含 fcst 字段）
+SELECT
+    data_date,
+    SUM(media_sales_amt)        AS media_sales,
+    SUM(adj_cost_amt)           AS adj_cost,
+    SUM(media_new_member_cnt)   AS new_member_cnt,
+    SUM(fcst_media_sales_amt)   AS fcst_media_sales,
+    SUM(fcst_cost_amt)          AS fcst_cost,
+    COUNT(*)                    AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15'
+GROUP BY data_date
+ORDER BY data_date;
+
+
+-- 5.2 summary 表日粒度 × customer_type 明细（验证 new 过滤）
+SELECT
+    data_date,
+    customer_type,
+    SUM(fcst_cost_amt)          AS fcst_cost,
+    SUM(fcst_user_cnt)          AS fcst_user_cnt,
+    COUNT(*)                    AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15'
+GROUP BY data_date, customer_type
+ORDER BY data_date, customer_type;
+
+
+-- 5.3 channel_data 表日粒度明细
+SELECT
+    data_date,
+    SUM(nc_cost_amt)            AS nc_cost,
+    SUM(ec_cost_amt)            AS ec_cost,
+    COUNT(*)                    AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15'
+GROUP BY data_date
+ORDER BY data_date;
+
+
+-- 5.4 product_data 表日粒度明细（按 framework 分组，含 fcst 字段）
+SELECT
+    data_date,
+    framework,
+    SUM(promotion_cost_amt)         AS promo_cost,
+    SUM(promotion_sales_amt)        AS promo_sales,
+    SUM(fcst_promotion_cost_amt)    AS fcst_promo_cost,
+    SUM(fcst_promotion_sales_amt)   AS fcst_promo_sales,
+    COUNT(*)                        AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15'
+GROUP BY data_date, framework
+ORDER BY data_date, framework;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 6: 汇率转换验证（可选 — 验证 USD 展示值）
+-- ████████████████████████████████████████████████████████████████████████████████
+-- Power BI 选择 USD 时：金额类指标(ID 5/6) × 7，其余比率类不变
+-- Metric_IsCurrencyAmount = TRUE 的指标：新客成本(ID 5)、目标新客成本(ID 6)
+
+SELECT
+    '本期_USD' AS indicator_type,
+
+    -- ID 5: 新客成本 × 7
+    (SELECT SUM(adj_cost_amt) / NULLIF(SUM(media_new_member_cnt), 0)
+     FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') * 7
+        AS `ID5_新客成本_USD`,
+
+    -- ID 6: 目标新客成本 × 7
+    (SELECT SUM(fcst_cost_amt) / NULLIF(SUM(fcst_user_cnt), 0)
+     FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1' AND customer_type = 'new'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') * 7
+        AS `ID6_vs目标_新客成本_USD`;
+
+-- 注: ID 1~4, 7~10 为比率类指标，不受汇率影响，USD 时值与 RMB 一致
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 7: 数据完整性检查
+-- ████████████████████████████████████████████████████████████████████████████████
+
+-- 7.1 检查本期日期范围是否在三张表中有数据（TM + JD 均检查）
+SELECT
+    'channel_data_TM' AS check_item,
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END AS data_check,
+    COUNT(DISTINCT data_date) AS date_count,
+    COUNT(*) AS row_count
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE platform = 'TM' AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+UNION ALL
+SELECT
+    'channel_data_JD',
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END,
+    COUNT(DISTINCT data_date), COUNT(*)
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE platform = 'JD' AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+UNION ALL
+SELECT
+    'summary_TM',
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END,
+    COUNT(DISTINCT data_date), COUNT(*)
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform = 'TM' AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+UNION ALL
+SELECT
+    'summary_JD',
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END,
+    COUNT(DISTINCT data_date), COUNT(*)
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform = 'JD' AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+UNION ALL
+SELECT
+    'product_data_TM',
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END,
+    COUNT(DISTINCT data_date), COUNT(*)
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform = 'TM' AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+UNION ALL
+SELECT
+    'product_data_JD',
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END,
+    COUNT(DISTINCT data_date), COUNT(*)
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform = 'JD' AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15';
+
+
+-- 7.2 检查 summary 表 customer_type 分布（验证 new 过滤正确性）
+SELECT
+    platform,
+    customer_type,
+    COUNT(*) AS row_cnt,
+    SUM(fcst_cost_amt) AS fcst_cost,
+    SUM(fcst_user_cnt) AS fcst_user_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+GROUP BY platform, customer_type
+ORDER BY platform, customer_type;
+
+
+-- 7.3 检查 product_data 的 framework 字段值（验证 Acceleration 筛选正确性）
+SELECT
+    platform,
+    framework,
+    COUNT(*) AS row_cnt,
+    SUM(promotion_cost_amt) AS total_promo_cost,
+    SUM(promotion_sales_amt) AS total_promo_sales,
+    SUM(fcst_promotion_cost_amt) AS fcst_promo_cost,
+    SUM(fcst_promotion_sales_amt) AS fcst_promo_sales
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+GROUP BY platform, framework
+ORDER BY platform, framework;
+
+
+-- 7.4 检查 NULL 值分布（可能导致聚合差异）
+SELECT
+    'summary' AS table_name,
+    SUM(CASE WHEN media_sales_amt IS NULL THEN 1 ELSE 0 END)       AS null_media_sales,
+    SUM(CASE WHEN adj_cost_amt IS NULL THEN 1 ELSE 0 END)          AS null_adj_cost,
+    SUM(CASE WHEN media_new_member_cnt IS NULL THEN 1 ELSE 0 END)  AS null_new_member,
+    SUM(CASE WHEN fcst_media_sales_amt IS NULL THEN 1 ELSE 0 END)  AS null_fcst_media_sales,
+    SUM(CASE WHEN fcst_cost_amt IS NULL THEN 1 ELSE 0 END)         AS null_fcst_cost,
+    SUM(CASE WHEN fcst_user_cnt IS NULL THEN 1 ELSE 0 END)         AS null_fcst_user_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform IN ('TM', 'JD') AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+UNION ALL
+SELECT
+    'channel_data',
+    SUM(CASE WHEN nc_cost_amt IS NULL THEN 1 ELSE 0 END),
+    SUM(CASE WHEN ec_cost_amt IS NULL THEN 1 ELSE 0 END),
+    0, 0, 0, 0
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE platform IN ('TM', 'JD') AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+UNION ALL
+SELECT
+    'product_data',
+    SUM(CASE WHEN promotion_cost_amt IS NULL THEN 1 ELSE 0 END),
+    SUM(CASE WHEN promotion_sales_amt IS NULL THEN 1 ELSE 0 END),
+    SUM(CASE WHEN fcst_promotion_cost_amt IS NULL THEN 1 ELSE 0 END),
+    SUM(CASE WHEN fcst_promotion_sales_amt IS NULL THEN 1 ELSE 0 END),
+    0, 0
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform IN ('TM', 'JD') AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15';
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 8: TTL 加权验证 — 确认 TTL ≠ 简单平均
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 此查询同时输出 TM 值、JD 值、TTL 加权值、以及简单平均值
+-- 用于验证 TTL 行采用的是加权比率（合并分子/分母）而非简单平均
+
+WITH
+tm AS (
+    SELECT
+        SUM(media_sales_amt) AS ms, SUM(adj_cost_amt) AS ac,
+        SUM(fcst_media_sales_amt) AS fms, SUM(fcst_cost_amt) AS fc
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+jd AS (
+    SELECT
+        SUM(media_sales_amt) AS ms, SUM(adj_cost_amt) AS ac,
+        SUM(fcst_media_sales_amt) AS fms, SUM(fcst_cost_amt) AS fc
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform = 'JD' AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+)
+SELECT
+    -- TM ROI
+    tm.ms / NULLIF(tm.ac, 0)                   AS `TM_ROI`,
+    -- JD ROI
+    jd.ms / NULLIF(jd.ac, 0)                   AS `JD_ROI`,
+    -- TTL 加权 ROI（正确）
+    (tm.ms + jd.ms) / NULLIF(tm.ac + jd.ac, 0) AS `TTL_ROI_加权`,
+    -- TTL 简单平均（错误，仅用于对比）
+    (tm.ms / NULLIF(tm.ac, 0) + jd.ms / NULLIF(jd.ac, 0)) / 2
+                                                AS `TTL_ROI_简单平均_错误`,
+    -- TM 目标 ROI
+    tm.fms / NULLIF(tm.fc, 0)                   AS `TM_vs目标_ROI`,
+    -- JD 目标 ROI
+    jd.fms / NULLIF(jd.fc, 0)                   AS `JD_vs目标_ROI`,
+    -- TTL 加权目标 ROI（正确）
+    (tm.fms + jd.fms) / NULLIF(tm.fc + jd.fc, 0) AS `TTL_vs目标_ROI_加权`,
+    -- TTL 简单平均目标 ROI（错误）
+    (tm.fms / NULLIF(tm.fc, 0) + jd.fms / NULLIF(jd.fc, 0)) / 2
+                                                AS `TTL_vs目标_ROI_简单平均_错误`
+FROM tm, jd;
+
+
+-- ================================================================================
+-- 比对方法说明
+-- ================================================================================
+--
+-- 1. 在 Power BI 中设置切片器：
+--    本期日期 = 2026-04-01 ~ 2026-04-15
+--    数据口径 = T+1，币种 = RMB
+--    Channel 切片器 = 任意值（本矩阵不受 Channel 切片器影响）
+--
+-- 2. 执行 PART 1 → 比对 Power BI「TM」行的 10 个指标值
+--    将 platform = 'TM' 改为 'JD' 后执行 → 比对「JD」行
+--    执行 PART 2 → 比对「TTL」行（TM + JD 合并）
+--    或执行 PART 3 → 一次性比对全部 3 行 × 10 列
+--
+-- 3. 如有差异，执行 PART 4 逐指标核查中间值（分子/分母）
+--    如仍有差异，执行 PART 5 按日展开定位差异日期
+--
+-- 4. 验证 USD 时，执行 PART 6 → 比对 Power BI 币种切换为 USD 后的值
+--    金额类指标（ID 5 新客成本、ID 6 目标新客成本）应 = RMB × 7
+--    比率类指标（ID 1~4, 7~10）应不变
+--
+-- 5. 验证 Channel 切片器隔离：
+--    在 Power BI 中切换 Channel 切片器选择（如从 TM 改为 JD）
+--    本矩阵（目标达成）的 3 行 × 10 列数据应完全不变
+--    仅 TTL 汇总矩阵会响应 Channel 切片器变化
+--
+-- 6. 常见差异原因：
+--    a) customer_type 过滤：ID 4 分子需过滤 customer_type = 'new'，分母不过滤
+--       ID 6 分子和分母均需过滤 customer_type = 'new'
+--       → 用 PART 7.2 检查 customer_type 分布
+--    b) framework 筛选：ID 7~10 的 Acceleration 过滤
+--       确认 framework 字段值拼写一致（大小写敏感）
+--       → 用 PART 7.3 检查 framework 分布
+--    c) fcst 字段为空：vs目标 列依赖 fcst_ 字段
+--       如 fcst 字段全为 NULL，目标值会显示为 "-"
+--       → 用 PART 0.4 / 0.5 检查
+--    d) TTL 加权 vs 简单平均：TTL 行应为加权比率
+--       → 用 PART 8 对比加权值和简单平均值
+--    e) NULL 处理：DAX SUM 忽略 NULL，SQL SUM 同样忽略 NULL
+--       但 DIVIDE(x, 0) 在 DAX 返回 BLANK，SQL 中用 NULLIF 模拟
+--    f) 日期边界：确认两端切片器选择的是 >= AND <=（闭区间）
+--    g) 浮点精度：比率类指标小数位可能有微小差异，属正常
+-- ================================================================================

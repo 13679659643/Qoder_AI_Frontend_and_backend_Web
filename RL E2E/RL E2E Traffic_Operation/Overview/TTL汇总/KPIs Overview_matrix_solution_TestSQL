@@ -1,0 +1,971 @@
+-- ================================================================================
+-- KPIs Overview Matrix — 数据验证测试 SQL
+-- ================================================================================
+--
+-- 用途：在火山引擎 ByteHouse 中执行，验证数据库数据与 Power BI KPIs Overview 矩阵一致性
+-- 对标：KPIs Overview_matrix_solution 中 Base Value / Cell Value 的 DAX 计算口径
+-- 数据库：indep_rl_ads
+-- 事实表：a05_e2e_paid_media_channel_data_d（渠道粒度）
+--         a05_e2e_paid_media_summary_d（汇总粒度）
+--         a05_e2e_paid_media_product_data_d（产品粒度）
+--
+-- 使用说明：
+--   1. 修改下方 ★参数区★ 中的日期范围、平台、数据口径
+--   2. 将参数值替换到各查询中对应的占位处
+--   3. 逐段执行，将结果与 Power BI 矩阵中对应单元格比对
+--   4. 本文件所有金额为 RMB 原始值（不含汇率转换）
+--      Power BI 选择 RMB 时应与此一致；选择 USD 时 = 此值 × 7
+--
+-- ★参数区★（修改这里的值来匹配 Power BI 切片器选择）：
+--   本期日期范围：'2026-04-01' ~ '2026-04-15'
+--   同期日期范围：'2025-04-01' ~ '2025-04-15'
+--   平台：         'TM'（多选时改为 IN ('TM','JD')）
+--   数据口径：     'T+1'
+-- ================================================================================
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 0: 数据探查 — 确认表结构与数据可用性
+-- ████████████████████████████████████████████████████████████████████████████████
+
+-- 0.1 检查 channel_data 表可用的平台和数据口径
+SELECT
+    platform,
+    trans_cycle,
+    COUNT(*)                        AS row_cnt,
+    MIN(data_date)                  AS min_date,
+    MAX(data_date)                  AS max_date
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+GROUP BY platform, trans_cycle
+ORDER BY platform, trans_cycle;
+
+
+-- 0.2 检查 summary 表可用的平台和数据口径
+SELECT
+    platform,
+    trans_cycle,
+    COUNT(*)                        AS row_cnt,
+    MIN(data_date)                  AS min_date,
+    MAX(data_date)                  AS max_date
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+GROUP BY platform, trans_cycle
+ORDER BY platform, trans_cycle;
+
+
+-- 0.3 检查 product_data 表可用的平台、数据口径和 framework
+SELECT
+    platform,
+    trans_cycle,
+    framework,
+    COUNT(*)                        AS row_cnt,
+    MIN(data_date)                  AS min_date,
+    MAX(data_date)                  AS max_date
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+GROUP BY platform, trans_cycle, framework
+ORDER BY platform, trans_cycle, framework;
+
+
+-- 0.4 检查 channel_data 表的 data_type 字段值
+-- 说明：Power BI 日期维度加载时筛选 data_type = 'day'
+--       如果事实表有非 'day' 的 data_type 且同 data_date 存在
+--       可能导致 Power BI 聚合值偏大（关系仅按 data_date 传播）
+SELECT
+    data_type,
+    COUNT(*) AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+GROUP BY data_type;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 1: 本期 — 12 个指标一次性输出（单条查询）
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 对应 Power BI: 本期行 × 12 列（RMB，汇率=1）
+-- 筛选条件等价于 DAX Base Value 的 CALCULATE 过滤器
+
+WITH
+-- ── 本期 summary 聚合 ──
+cur_sm AS (
+    SELECT
+        SUM(cost_amt)                   AS cost,
+        SUM(net_sales_amt)              AS net_sales,
+        SUM(sales_amt)                  AS demand_sales,
+        SUM(media_sales_amt)            AS media_sales,
+        SUM(adj_cost_amt)               AS adj_cost,
+        SUM(media_new_member_cnt)       AS new_member_cnt,
+        SUM(fcst_cost_amt)              AS fcst_cost,
+        SUM(fcst_net_sales_amt)         AS fcst_net_sales,
+        SUM(fcst_sales_amt)             AS fcst_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+),
+-- ── 本期 channel_data 聚合 ──
+cur_ch AS (
+    SELECT
+        SUM(cost_amt)                   AS cost,
+        SUM(coalesce(red_packet, 0))    AS red_pkt,
+        SUM(coalesce(rebate, 0))        AS rebate,
+        SUM(coalesce(nc_cost_amt, 0))   AS nc_cost,
+        SUM(coalesce(ec_cost_amt, 0))   AS ec_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+),
+-- ── 本期 product_data Acceleration 聚合 ──
+cur_pd_acc AS (
+    SELECT
+        SUM(promotion_cost_amt)         AS acc_cost,
+        SUM(promotion_sales_amt)        AS acc_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND framework   = 'Acceleration'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+),
+-- ── 本期 product_data 全部 framework 聚合 ──
+cur_pd_all AS (
+    SELECT
+        SUM(promotion_cost_amt)         AS total_promo_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND data_date   >= '2026-04-01'
+      AND data_date   <= '2026-04-15'
+)
+-- ── 输出 12 个指标 ──
+SELECT
+    '本期' AS indicator_type,
+
+    -- ID 1: Cost（来自 summary）
+    cur_sm.cost
+        AS `ID1_Cost`,
+
+    -- ID 2: 红包（来自 channel）
+    cur_ch.red_pkt
+        AS `ID2_红包`,
+
+    -- ID 3: Cost进度 = cost / fcst_cost
+    cur_sm.cost / NULLIF(cur_sm.fcst_cost, 0)
+        AS `ID3_Cost进度`,
+
+    -- ID 4: NetSales进度 = net_sales / fcst_net_sales
+    cur_sm.net_sales / NULLIF(cur_sm.fcst_net_sales, 0)
+        AS `ID4_NetSales进度`,
+
+    -- ID 5: DemandSales进度 = demand_sales / fcst_sales
+    cur_sm.demand_sales / NULLIF(cur_sm.fcst_sales, 0)
+        AS `ID5_DemandSales进度`,
+
+    -- ID 6: 费比 = (channel.cost - red_packet - rebate) / (summary.net_sales * 1.13 / 1.06)
+    (cur_ch.cost - cur_ch.red_pkt - cur_ch.rebate) / NULLIF(cur_sm.net_sales * 1.13 / 1.06, 0)
+        AS `ID6_费比`,
+
+    -- ID 7: 含红包费比 = summary.cost / (summary.net_sales * 1.13 / 1.06)
+    cur_sm.cost / NULLIF(cur_sm.net_sales * 1.13 / 1.06, 0)
+        AS `ID7_含红包费比`,
+
+    -- ID 8: ROI = media_sales / adj_cost
+    cur_sm.media_sales / NULLIF(cur_sm.adj_cost, 0)
+        AS `ID8_ROI`,
+
+    -- ID 9: 新客花费占比 = nc_cost / (nc_cost + ec_cost)
+    cur_ch.nc_cost / NULLIF(cur_ch.nc_cost + cur_ch.ec_cost, 0)
+        AS `ID9_新客花费占比`,
+
+    -- ID 10: 新客成本 = adj_cost / new_member_cnt
+    cur_sm.adj_cost / NULLIF(cur_sm.new_member_cnt, 0)
+        AS `ID10_新客成本`,
+
+    -- ID 11: Acc花费占比 = Acc promotion_cost / Total promotion_cost
+    cur_pd_acc.acc_cost / NULLIF(cur_pd_all.total_promo_cost, 0)
+        AS `ID11_Acc花费占比`,
+
+    -- ID 12: Acc ROI = Acc promotion_sales / Acc promotion_cost
+    cur_pd_acc.acc_sales / NULLIF(cur_pd_acc.acc_cost, 0)
+        AS `ID12_Acc_ROI`
+
+FROM cur_sm, cur_ch, cur_pd_acc, cur_pd_all;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 2: 同期 — 12 个指标一次性输出
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 对应 Power BI: 同期行（LP 日期覆盖后的 Base Value 原始值）
+-- DAX 中同期 = CALCULATE(Base Value, REMOVEFILTERS + FILTER(LP日期))
+
+WITH
+-- ── 同期 summary 聚合 ──
+ly_sm AS (
+    SELECT
+        SUM(cost_amt)                   AS cost,
+        SUM(net_sales_amt)              AS net_sales,
+        SUM(sales_amt)                  AS demand_sales,
+        SUM(media_sales_amt)            AS media_sales,
+        SUM(adj_cost_amt)               AS adj_cost,
+        SUM(media_new_member_cnt)       AS new_member_cnt,
+        SUM(fcst_cost_amt)              AS fcst_cost,
+        SUM(fcst_net_sales_amt)         AS fcst_net_sales,
+        SUM(fcst_sales_amt)             AS fcst_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND data_date   >= '2025-04-01'
+      AND data_date   <= '2025-04-15'
+),
+-- ── 同期 channel_data 聚合 ──
+ly_ch AS (
+    SELECT
+        SUM(cost_amt)                   AS cost,
+        SUM(coalesce(red_packet, 0))    AS red_pkt,
+        SUM(coalesce(rebate, 0))        AS rebate,
+        SUM(coalesce(nc_cost_amt, 0))   AS nc_cost,
+        SUM(coalesce(ec_cost_amt, 0))   AS ec_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND data_date   >= '2025-04-01'
+      AND data_date   <= '2025-04-15'
+),
+-- ── 同期 product_data Acceleration 聚合 ──
+ly_pd_acc AS (
+    SELECT
+        SUM(promotion_cost_amt)         AS acc_cost,
+        SUM(promotion_sales_amt)        AS acc_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND framework   = 'Acceleration'
+      AND data_date   >= '2025-04-01'
+      AND data_date   <= '2025-04-15'
+),
+-- ── 同期 product_data 全部 framework 聚合 ──
+ly_pd_all AS (
+    SELECT
+        SUM(promotion_cost_amt)         AS total_promo_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform    = 'TM'
+      AND trans_cycle  = 'T+1'
+      AND data_date   >= '2025-04-01'
+      AND data_date   <= '2025-04-15'
+)
+-- ── 输出 12 个指标 ──
+SELECT
+    '同期' AS indicator_type,
+
+    ly_sm.cost                          AS `ID1_Cost`,
+    ly_ch.red_pkt                       AS `ID2_红包`,
+    ly_sm.cost / NULLIF(ly_sm.fcst_cost, 0)
+                                        AS `ID3_Cost进度`,
+    ly_sm.net_sales / NULLIF(ly_sm.fcst_net_sales, 0)
+                                        AS `ID4_NetSales进度`,
+    ly_sm.demand_sales / NULLIF(ly_sm.fcst_sales, 0)
+                                        AS `ID5_DemandSales进度`,
+    (ly_ch.cost - ly_ch.red_pkt - ly_ch.rebate) / NULLIF(ly_sm.net_sales * 1.13 / 1.06, 0)
+                                        AS `ID6_费比`,
+    ly_sm.cost / NULLIF(ly_sm.net_sales * 1.13 / 1.06, 0)
+                                        AS `ID7_含红包费比`,
+    ly_sm.media_sales / NULLIF(ly_sm.adj_cost, 0)
+                                        AS `ID8_ROI`,
+    ly_ch.nc_cost / NULLIF(ly_ch.nc_cost + ly_ch.ec_cost, 0)
+                                        AS `ID9_新客花费占比`,
+    ly_sm.adj_cost / NULLIF(ly_sm.new_member_cnt, 0)
+                                        AS `ID10_新客成本`,
+    ly_pd_acc.acc_cost / NULLIF(ly_pd_all.total_promo_cost, 0)
+                                        AS `ID11_Acc花费占比`,
+    ly_pd_acc.acc_sales / NULLIF(ly_pd_acc.acc_cost, 0)
+                                        AS `ID12_Acc_ROI`
+
+FROM ly_sm, ly_ch, ly_pd_acc, ly_pd_all;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 3: vs LP 增长率 — 本期与同期对比（含边界判断）
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 对应 Power BI: vs LP 行
+-- DAX 边界逻辑：
+--   同期为 0 或空 → NULL（显示 "-"）
+--   本期为 0 或空，同期有值 → -1（即 -100%）
+--   双方均有值 → (本期 - 同期) / 同期
+
+WITH
+-- ── 本期汇总 ──
+cur_sm AS (
+    SELECT
+        SUM(cost_amt)                   AS cost,
+        SUM(net_sales_amt)              AS net_sales,
+        SUM(sales_amt)                  AS demand_sales,
+        SUM(media_sales_amt)            AS media_sales,
+        SUM(adj_cost_amt)               AS adj_cost,
+        SUM(media_new_member_cnt)       AS new_member_cnt,
+        SUM(fcst_cost_amt)              AS fcst_cost,
+        SUM(fcst_net_sales_amt)         AS fcst_net_sales,
+        SUM(fcst_sales_amt)             AS fcst_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+cur_ch AS (
+    SELECT
+        SUM(cost_amt)                   AS cost,
+        SUM(coalesce(red_packet, 0))    AS red_pkt,
+        SUM(coalesce(rebate, 0))        AS rebate,
+        SUM(coalesce(nc_cost_amt, 0))   AS nc_cost,
+        SUM(coalesce(ec_cost_amt, 0))   AS ec_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+cur_pd_acc AS (
+    SELECT
+        SUM(promotion_cost_amt)         AS acc_cost,
+        SUM(promotion_sales_amt)        AS acc_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1' AND framework = 'Acceleration'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+cur_pd_all AS (
+    SELECT
+        SUM(promotion_cost_amt)         AS total_promo_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1'
+      AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+),
+-- ── 同期汇总 ──
+ly_sm AS (
+    SELECT
+        SUM(cost_amt)                   AS cost,
+        SUM(net_sales_amt)              AS net_sales,
+        SUM(sales_amt)                  AS demand_sales,
+        SUM(media_sales_amt)            AS media_sales,
+        SUM(adj_cost_amt)               AS adj_cost,
+        SUM(media_new_member_cnt)       AS new_member_cnt,
+        SUM(fcst_cost_amt)              AS fcst_cost,
+        SUM(fcst_net_sales_amt)         AS fcst_net_sales,
+        SUM(fcst_sales_amt)             AS fcst_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1'
+      AND data_date >= '2025-04-01' AND data_date <= '2025-04-15'
+),
+ly_ch AS (
+    SELECT
+        SUM(cost_amt)                   AS cost,
+        SUM(coalesce(red_packet, 0))    AS red_pkt,
+        SUM(coalesce(rebate, 0))        AS rebate,
+        SUM(coalesce(nc_cost_amt, 0))   AS nc_cost,
+        SUM(coalesce(ec_cost_amt, 0))   AS ec_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1'
+      AND data_date >= '2025-04-01' AND data_date <= '2025-04-15'
+),
+ly_pd_acc AS (
+    SELECT
+        SUM(promotion_cost_amt)         AS acc_cost,
+        SUM(promotion_sales_amt)        AS acc_sales
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1' AND framework = 'Acceleration'
+      AND data_date >= '2025-04-01' AND data_date <= '2025-04-15'
+),
+ly_pd_all AS (
+    SELECT
+        SUM(promotion_cost_amt)         AS total_promo_cost
+    FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+    WHERE platform = 'TM' AND trans_cycle = 'T+1'
+      AND data_date >= '2025-04-01' AND data_date <= '2025-04-15'
+),
+-- ── 本期指标计算 ──
+cur_kpi AS (
+    SELECT
+        cur_sm.cost                     AS cur_cost,
+        cur_ch.red_pkt                  AS cur_red_pkt,
+        cur_sm.cost / NULLIF(cur_sm.fcst_cost, 0)
+                                        AS cur_cost_progress,
+        cur_sm.net_sales / NULLIF(cur_sm.fcst_net_sales, 0)
+                                        AS cur_netsales_progress,
+        cur_sm.demand_sales / NULLIF(cur_sm.fcst_sales, 0)
+                                        AS cur_demandsales_progress,
+        (cur_ch.cost - cur_ch.red_pkt - cur_ch.rebate) / NULLIF(cur_sm.net_sales * 1.13 / 1.06, 0)
+                                        AS cur_feibi,
+        cur_sm.cost / NULLIF(cur_sm.net_sales * 1.13 / 1.06, 0)
+                                        AS cur_feibi_with_red,
+        cur_sm.media_sales / NULLIF(cur_sm.adj_cost, 0)
+                                        AS cur_roi,
+        cur_ch.nc_cost / NULLIF(cur_ch.nc_cost + cur_ch.ec_cost, 0)
+                                        AS cur_nc_ratio,
+        cur_sm.adj_cost / NULLIF(cur_sm.new_member_cnt, 0)
+                                        AS cur_nc_cost,
+        cur_pd_acc.acc_cost / NULLIF(cur_pd_all.total_promo_cost, 0)
+                                        AS cur_acc_cost_ratio,
+        cur_pd_acc.acc_sales / NULLIF(cur_pd_acc.acc_cost, 0)
+                                        AS cur_acc_roi
+    FROM cur_sm, cur_ch, cur_pd_acc, cur_pd_all
+),
+-- ── 同期指标计算 ──
+ly_kpi AS (
+    SELECT
+        ly_sm.cost                      AS ly_cost,
+        ly_ch.red_pkt                   AS ly_red_pkt,
+        ly_sm.cost / NULLIF(ly_sm.fcst_cost, 0)
+                                        AS ly_cost_progress,
+        ly_sm.net_sales / NULLIF(ly_sm.fcst_net_sales, 0)
+                                        AS ly_netsales_progress,
+        ly_sm.demand_sales / NULLIF(ly_sm.fcst_sales, 0)
+                                        AS ly_demandsales_progress,
+        (ly_ch.cost - ly_ch.red_pkt - ly_ch.rebate) / NULLIF(ly_sm.net_sales * 1.13 / 1.06, 0)
+                                        AS ly_feibi,
+        ly_sm.cost / NULLIF(ly_sm.net_sales * 1.13 / 1.06, 0)
+                                        AS ly_feibi_with_red,
+        ly_sm.media_sales / NULLIF(ly_sm.adj_cost, 0)
+                                        AS ly_roi,
+        ly_ch.nc_cost / NULLIF(ly_ch.nc_cost + ly_ch.ec_cost, 0)
+                                        AS ly_nc_ratio,
+        ly_sm.adj_cost / NULLIF(ly_sm.new_member_cnt, 0)
+                                        AS ly_nc_cost,
+        ly_pd_acc.acc_cost / NULLIF(ly_pd_all.total_promo_cost, 0)
+                                        AS ly_acc_cost_ratio,
+        ly_pd_acc.acc_sales / NULLIF(ly_pd_acc.acc_cost, 0)
+                                        AS ly_acc_roi
+    FROM ly_sm, ly_ch, ly_pd_acc, ly_pd_all
+)
+-- ── 输出：本期值、同期值、vs LP 增长率（含边界判断）──
+-- 边界逻辑模拟 DAX：
+--   CASE WHEN ly = 0 OR ly IS NULL THEN NULL        （同期为0/空→BLANK）
+--        WHEN cur = 0 OR cur IS NULL THEN -1        （本期为0/空，同期有值→-100%）
+--        ELSE (cur - ly) / ly                       （双方有值→正常计算）
+SELECT
+    -- ID 1: Cost
+    c.cur_cost                          AS `ID1_Cost_本期`,
+    l.ly_cost                           AS `ID1_Cost_同期`,
+    CASE WHEN l.ly_cost IS NULL OR l.ly_cost = 0 THEN NULL
+         WHEN c.cur_cost IS NULL OR c.cur_cost = 0 THEN -1
+         ELSE (c.cur_cost - l.ly_cost) / l.ly_cost END
+                                        AS `ID1_Cost_vsLP`,
+
+    -- ID 2: 红包
+    c.cur_red_pkt                       AS `ID2_红包_本期`,
+    l.ly_red_pkt                        AS `ID2_红包_同期`,
+    CASE WHEN l.ly_red_pkt IS NULL OR l.ly_red_pkt = 0 THEN NULL
+         WHEN c.cur_red_pkt IS NULL OR c.cur_red_pkt = 0 THEN -1
+         ELSE (c.cur_red_pkt - l.ly_red_pkt) / l.ly_red_pkt END
+                                        AS `ID2_红包_vsLP`,
+
+    -- ID 3: Cost进度
+    c.cur_cost_progress                 AS `ID3_Cost进度_本期`,
+    l.ly_cost_progress                  AS `ID3_Cost进度_同期`,
+    CASE WHEN l.ly_cost_progress IS NULL OR l.ly_cost_progress = 0 THEN NULL
+         WHEN c.cur_cost_progress IS NULL OR c.cur_cost_progress = 0 THEN -1
+         ELSE (c.cur_cost_progress - l.ly_cost_progress) / l.ly_cost_progress END
+                                        AS `ID3_Cost进度_vsLP`,
+
+    -- ID 4: NetSales进度
+    c.cur_netsales_progress             AS `ID4_NetSales进度_本期`,
+    l.ly_netsales_progress              AS `ID4_NetSales进度_同期`,
+    CASE WHEN l.ly_netsales_progress IS NULL OR l.ly_netsales_progress = 0 THEN NULL
+         WHEN c.cur_netsales_progress IS NULL OR c.cur_netsales_progress = 0 THEN -1
+         ELSE (c.cur_netsales_progress - l.ly_netsales_progress) / l.ly_netsales_progress END
+                                        AS `ID4_NetSales进度_vsLP`,
+
+    -- ID 5: DemandSales进度
+    c.cur_demandsales_progress          AS `ID5_DemandSales进度_本期`,
+    l.ly_demandsales_progress           AS `ID5_DemandSales进度_同期`,
+    CASE WHEN l.ly_demandsales_progress IS NULL OR l.ly_demandsales_progress = 0 THEN NULL
+         WHEN c.cur_demandsales_progress IS NULL OR c.cur_demandsales_progress = 0 THEN -1
+         ELSE (c.cur_demandsales_progress - l.ly_demandsales_progress) / l.ly_demandsales_progress END
+                                        AS `ID5_DemandSales进度_vsLP`,
+
+    -- ID 6: 费比
+    c.cur_feibi                         AS `ID6_费比_本期`,
+    l.ly_feibi                          AS `ID6_费比_同期`,
+    CASE WHEN l.ly_feibi IS NULL OR l.ly_feibi = 0 THEN NULL
+         WHEN c.cur_feibi IS NULL OR c.cur_feibi = 0 THEN -1
+         ELSE (c.cur_feibi - l.ly_feibi) / l.ly_feibi END
+                                        AS `ID6_费比_vsLP`,
+
+    -- ID 7: 含红包费比
+    c.cur_feibi_with_red                AS `ID7_含红包费比_本期`,
+    l.ly_feibi_with_red                 AS `ID7_含红包费比_同期`,
+    CASE WHEN l.ly_feibi_with_red IS NULL OR l.ly_feibi_with_red = 0 THEN NULL
+         WHEN c.cur_feibi_with_red IS NULL OR c.cur_feibi_with_red = 0 THEN -1
+         ELSE (c.cur_feibi_with_red - l.ly_feibi_with_red) / l.ly_feibi_with_red END
+                                        AS `ID7_含红包费比_vsLP`,
+
+    -- ID 8: ROI
+    c.cur_roi                           AS `ID8_ROI_本期`,
+    l.ly_roi                            AS `ID8_ROI_同期`,
+    CASE WHEN l.ly_roi IS NULL OR l.ly_roi = 0 THEN NULL
+         WHEN c.cur_roi IS NULL OR c.cur_roi = 0 THEN -1
+         ELSE (c.cur_roi - l.ly_roi) / l.ly_roi END
+                                        AS `ID8_ROI_vsLP`,
+
+    -- ID 9: 新客花费占比
+    c.cur_nc_ratio                      AS `ID9_新客花费占比_本期`,
+    l.ly_nc_ratio                       AS `ID9_新客花费占比_同期`,
+    CASE WHEN l.ly_nc_ratio IS NULL OR l.ly_nc_ratio = 0 THEN NULL
+         WHEN c.cur_nc_ratio IS NULL OR c.cur_nc_ratio = 0 THEN -1
+         ELSE (c.cur_nc_ratio - l.ly_nc_ratio) / l.ly_nc_ratio END
+                                        AS `ID9_新客花费占比_vsLP`,
+
+    -- ID 10: 新客成本
+    c.cur_nc_cost                       AS `ID10_新客成本_本期`,
+    l.ly_nc_cost                        AS `ID10_新客成本_同期`,
+    CASE WHEN l.ly_nc_cost IS NULL OR l.ly_nc_cost = 0 THEN NULL
+         WHEN c.cur_nc_cost IS NULL OR c.cur_nc_cost = 0 THEN -1
+         ELSE (c.cur_nc_cost - l.ly_nc_cost) / l.ly_nc_cost END
+                                        AS `ID10_新客成本_vsLP`,
+
+    -- ID 11: Acc花费占比
+    c.cur_acc_cost_ratio                AS `ID11_Acc花费占比_本期`,
+    l.ly_acc_cost_ratio                 AS `ID11_Acc花费占比_同期`,
+    CASE WHEN l.ly_acc_cost_ratio IS NULL OR l.ly_acc_cost_ratio = 0 THEN NULL
+         WHEN c.cur_acc_cost_ratio IS NULL OR c.cur_acc_cost_ratio = 0 THEN -1
+         ELSE (c.cur_acc_cost_ratio - l.ly_acc_cost_ratio) / l.ly_acc_cost_ratio END
+                                        AS `ID11_Acc花费占比_vsLP`,
+
+    -- ID 12: Acc ROI
+    c.cur_acc_roi                       AS `ID12_Acc_ROI_本期`,
+    l.ly_acc_roi                        AS `ID12_Acc_ROI_同期`,
+    CASE WHEN l.ly_acc_roi IS NULL OR l.ly_acc_roi = 0 THEN NULL
+         WHEN c.cur_acc_roi IS NULL OR c.cur_acc_roi = 0 THEN -1
+         ELSE (c.cur_acc_roi - l.ly_acc_roi) / l.ly_acc_roi END
+                                        AS `ID12_Acc_ROI_vsLP`
+
+FROM cur_kpi c, ly_kpi l;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 4: 逐指标明细验证（可选 — 逐条执行用于定位差异）
+-- ████████████████████████████████████████████████████████████████████████████████
+
+-- ─────────────────────────────────────────────
+-- 4.1 ID 1: Cost（花费）
+-- DAX: SUM(a05_e2e_paid_media_summary_d[cost_amt])
+-- ─────────────────────────────────────────────
+SELECT
+    'ID1_Cost' AS metric,
+    SUM(cost_amt) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.2 ID 2: 红包
+-- DAX: SUM(a05_e2e_paid_media_channel_data_d[red_packet])
+-- ─────────────────────────────────────────────
+SELECT
+    'ID2_红包' AS metric,
+    SUM(red_packet) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.3 ID 3: Cost进度
+-- DAX: SUM(summary[cost_amt]) / SUM(summary[fcst_cost_amt])
+-- ─────────────────────────────────────────────
+SELECT
+    'ID3_Cost进度' AS metric,
+    SUM(cost_amt) AS actual_cost,
+    SUM(fcst_cost_amt) AS fcst_cost,
+    SUM(cost_amt) / NULLIF(SUM(fcst_cost_amt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.4 ID 4: NetSales进度
+-- DAX: SUM(summary[net_sales_amt]) / SUM(summary[fcst_net_sales_amt])
+-- ─────────────────────────────────────────────
+SELECT
+    'ID4_NetSales进度' AS metric,
+    SUM(net_sales_amt) AS actual_net_sales,
+    SUM(fcst_net_sales_amt) AS fcst_net_sales,
+    SUM(net_sales_amt) / NULLIF(SUM(fcst_net_sales_amt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.5 ID 5: DemandSales进度
+-- DAX: SUM(summary[sales_amt]) / SUM(summary[fcst_sales_amt])
+-- ─────────────────────────────────────────────
+SELECT
+    'ID5_DemandSales进度' AS metric,
+    SUM(sales_amt) AS actual_sales,
+    SUM(fcst_sales_amt) AS fcst_sales,
+    SUM(sales_amt) / NULLIF(SUM(fcst_sales_amt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.6 ID 6: 费比
+-- DAX: (channel.cost_amt - channel.red_packet - channel.rebate) / (summary.net_sales_amt * 1.13 / 1.06)
+-- ─────────────────────────────────────────────
+SELECT
+    'ID6_费比' AS metric,
+    ch.cost_total,
+    ch.red_packet_total,
+    ch.rebate_total,
+    sm.net_sales,
+    sm.net_sales * 1.13 / 1.06 AS net_sales_adjusted,
+    (ch.cost_total - ch.red_packet_total - ch.rebate_total)
+        / NULLIF(sm.net_sales * 1.13 / 1.06, 0) AS value
+FROM
+    (SELECT SUM(cost_amt) AS cost_total, SUM(coalesce(red_packet,0)) AS red_packet_total, SUM(coalesce(rebate,0)) AS rebate_total
+     FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') ch,
+    (SELECT SUM(net_sales_amt) AS net_sales
+     FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') sm;
+
+
+-- ─────────────────────────────────────────────
+-- 4.7 ID 7: 含红包费比
+-- DAX: SUM(summary[cost_amt]) / (SUM(summary[net_sales_amt]) * 1.13 / 1.06)
+-- ─────────────────────────────────────────────
+SELECT
+    'ID7_含红包费比' AS metric,
+    SUM(cost_amt) AS summary_cost,
+    SUM(net_sales_amt) AS net_sales,
+    SUM(net_sales_amt) * 1.13 / 1.06 AS net_sales_adjusted,
+    SUM(cost_amt) / NULLIF(SUM(net_sales_amt) * 1.13 / 1.06, 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.8 ID 8: ROI
+-- DAX: SUM(summary[media_sales_amt]) / SUM(summary[adj_cost_amt])
+-- ─────────────────────────────────────────────
+SELECT
+    'ID8_ROI' AS metric,
+    SUM(media_sales_amt) AS media_sales,
+    SUM(adj_cost_amt) AS adj_cost,
+    SUM(media_sales_amt) / NULLIF(SUM(adj_cost_amt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.9 ID 9: 新客花费占比
+-- DAX: SUM(channel[nc_cost_amt]) / (SUM(nc_cost_amt) + SUM(ec_cost_amt))
+-- ─────────────────────────────────────────────
+SELECT
+    'ID9_新客花费占比' AS metric,
+    SUM(nc_cost_amt) AS nc_cost,
+    SUM(ec_cost_amt) AS ec_cost,
+    SUM(nc_cost_amt) / NULLIF(SUM(nc_cost_amt) + SUM(ec_cost_amt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.10 ID 10: 新客成本
+-- DAX: SUM(summary[adj_cost_amt]) / SUM(summary[media_new_member_cnt])
+-- ─────────────────────────────────────────────
+SELECT
+    'ID10_新客成本' AS metric,
+    SUM(adj_cost_amt) AS adj_cost,
+    SUM(media_new_member_cnt) AS new_member_cnt,
+    SUM(adj_cost_amt) / NULLIF(SUM(media_new_member_cnt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ─────────────────────────────────────────────
+-- 4.11 ID 11: Acc花费占比
+-- DAX: SUM(product[promotion_cost_amt] WHERE framework='Acceleration')
+--      / SUM(product[promotion_cost_amt])
+-- ─────────────────────────────────────────────
+SELECT
+    'ID11_Acc花费占比' AS metric,
+    acc.acc_cost,
+    tot.total_promo_cost,
+    acc.acc_cost / NULLIF(tot.total_promo_cost, 0) AS value
+FROM
+    (SELECT SUM(promotion_cost_amt) AS acc_cost
+     FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1' AND framework = 'Acceleration'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') acc,
+    (SELECT SUM(promotion_cost_amt) AS total_promo_cost
+     FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') tot;
+
+
+-- ─────────────────────────────────────────────
+-- 4.12 ID 12: Acc ROI
+-- DAX: SUM(product[promotion_sales_amt] WHERE framework='Acceleration')
+--      / SUM(product[promotion_cost_amt] WHERE framework='Acceleration')
+-- ─────────────────────────────────────────────
+SELECT
+    'ID12_Acc_ROI' AS metric,
+    SUM(promotion_sales_amt) AS acc_sales,
+    SUM(promotion_cost_amt) AS acc_cost,
+    SUM(promotion_sales_amt) / NULLIF(SUM(promotion_cost_amt), 0) AS value
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND framework   = 'Acceleration'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15';
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 5: 日期粒度明细 — 按日展开验证（可选 — 排查聚合差异）
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 如果 Power BI 总值与 SQL 不一致，通过日粒度对比定位差异日期
+
+-- 5.1 summary 表日粒度明细
+SELECT
+    data_date,
+    SUM(cost_amt)              AS cost,
+    SUM(net_sales_amt)         AS net_sales,
+    SUM(sales_amt)             AS demand_sales,
+    SUM(media_sales_amt)       AS media_sales,
+    SUM(adj_cost_amt)          AS adj_cost,
+    SUM(media_new_member_cnt)  AS new_member_cnt,
+    COUNT(*)                   AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15'
+GROUP BY data_date
+ORDER BY data_date;
+
+
+-- 5.2 channel_data 表日粒度明细
+SELECT
+    data_date,
+    SUM(cost_amt)              AS cost,
+    SUM(red_packet)            AS red_pkt,
+    SUM(rebate)                AS rebate,
+    SUM(nc_cost_amt)           AS nc_cost,
+    SUM(ec_cost_amt)           AS ec_cost,
+    COUNT(*)                   AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15'
+GROUP BY data_date
+ORDER BY data_date;
+
+
+-- 5.3 product_data 表日粒度明细（按 framework 分组）
+SELECT
+    data_date,
+    framework,
+    SUM(promotion_cost_amt)    AS promo_cost,
+    SUM(promotion_sales_amt)   AS promo_sales,
+    COUNT(*)                   AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform    = 'TM'
+  AND trans_cycle  = 'T+1'
+  AND data_date   >= '2026-04-01'
+  AND data_date   <= '2026-04-15'
+GROUP BY data_date, framework
+ORDER BY data_date, framework;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 6: 汇率转换验证（可选 — 验证 USD 展示值）
+-- ████████████████████████████████████████████████████████████████████████████████
+-- Power BI 选择 USD 时：金额类指标(ID 1/2/10) × 7，其余不变
+-- Metric_IsCurrencyAmount = TRUE 的指标：Cost、红包、新客成本
+
+SELECT
+    '本期_USD' AS indicator_type,
+    -- ID 1: Cost × 7
+    (SELECT SUM(cost_amt) FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') * 7
+                                        AS `ID1_Cost_USD`,
+    -- ID 2: 红包 × 7
+    (SELECT SUM(red_packet) FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') * 7
+                                        AS `ID2_红包_USD`,
+    -- ID 10: 新客成本 × 7
+    (SELECT SUM(adj_cost_amt) / NULLIF(SUM(media_new_member_cnt), 0)
+     FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+     WHERE platform = 'TM' AND trans_cycle = 'T+1'
+       AND data_date >= '2026-04-01' AND data_date <= '2026-04-15') * 7
+                                        AS `ID10_新客成本_USD`;
+-- 注: ID 3~9, 11, 12 为比率类指标，不受汇率影响，USD 时值与 RMB 一致
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 7: 数据完整性检查
+-- ████████████████████████████████████████████████████████████████████████████████
+
+-- 7.1 检查本期日期范围是否在三张表中有数据
+SELECT
+    'channel_data_本期' AS check_item,
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END AS data_check,
+    COUNT(DISTINCT data_date) AS date_count,
+    COUNT(*) AS row_count
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE platform = 'TM' AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+UNION ALL
+SELECT
+    'summary_本期' AS check_item,
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END AS data_check,
+    COUNT(DISTINCT data_date) AS date_count,
+    COUNT(*) AS row_count
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform = 'TM' AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+UNION ALL
+SELECT
+    'product_data_本期' AS check_item,
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END AS data_check,
+    COUNT(DISTINCT data_date) AS date_count,
+    COUNT(*) AS row_count
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform = 'TM' AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15';
+
+
+-- 7.2 检查同期日期范围是否在三张表中有数据
+SELECT
+    'channel_data_同期' AS check_item,
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END AS data_check,
+    COUNT(DISTINCT data_date) AS date_count,
+    COUNT(*) AS row_count
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE platform = 'TM' AND trans_cycle = 'T+1'
+  AND data_date >= '2025-04-01' AND data_date <= '2025-04-15'
+UNION ALL
+SELECT
+    'summary_同期' AS check_item,
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END AS data_check,
+    COUNT(DISTINCT data_date) AS date_count,
+    COUNT(*) AS row_count
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform = 'TM' AND trans_cycle = 'T+1'
+  AND data_date >= '2025-04-01' AND data_date <= '2025-04-15'
+UNION ALL
+SELECT
+    'product_data_同期' AS check_item,
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END AS data_check,
+    COUNT(DISTINCT data_date) AS date_count,
+    COUNT(*) AS row_count
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform = 'TM' AND trans_cycle = 'T+1'
+  AND data_date >= '2025-04-01' AND data_date <= '2025-04-15';
+
+
+-- 7.3 检查 NULL 值分布（可能导致聚合差异）
+SELECT
+    'summary' AS table_name,
+    SUM(CASE WHEN cost_amt IS NULL THEN 1 ELSE 0 END)              AS null_cost,
+    SUM(CASE WHEN net_sales_amt IS NULL THEN 1 ELSE 0 END)         AS null_net_sales,
+    SUM(CASE WHEN sales_amt IS NULL THEN 1 ELSE 0 END)             AS null_demand_sales,
+    SUM(CASE WHEN media_sales_amt IS NULL THEN 1 ELSE 0 END)       AS null_media_sales,
+    SUM(CASE WHEN adj_cost_amt IS NULL THEN 1 ELSE 0 END)          AS null_adj_cost,
+    SUM(CASE WHEN media_new_member_cnt IS NULL THEN 1 ELSE 0 END)  AS null_new_member,
+    SUM(CASE WHEN fcst_cost_amt IS NULL THEN 1 ELSE 0 END)         AS null_fcst_cost,
+    SUM(CASE WHEN fcst_net_sales_amt IS NULL THEN 1 ELSE 0 END)    AS null_fcst_net_sales,
+    SUM(CASE WHEN fcst_sales_amt IS NULL THEN 1 ELSE 0 END)        AS null_fcst_sales
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
+WHERE platform = 'TM' AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+UNION ALL
+SELECT
+    'channel_data' AS table_name,
+    SUM(CASE WHEN cost_amt IS NULL THEN 1 ELSE 0 END)              AS null_cost,
+    SUM(CASE WHEN red_packet IS NULL THEN 1 ELSE 0 END)            AS null_net_sales,
+    SUM(CASE WHEN rebate IS NULL THEN 1 ELSE 0 END)                AS null_demand_sales,
+    SUM(CASE WHEN nc_cost_amt IS NULL THEN 1 ELSE 0 END)           AS null_media_sales,
+    SUM(CASE WHEN ec_cost_amt IS NULL THEN 1 ELSE 0 END)           AS null_adj_cost,
+    0 AS null_new_member, 0 AS null_fcst_cost, 0 AS null_fcst_net_sales, 0 AS null_fcst_sales
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE platform = 'TM' AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15';
+
+
+-- 7.4 检查 product_data 的 framework 字段值（验证 Acceleration 筛选正确性）
+SELECT
+    framework,
+    COUNT(*) AS row_cnt,
+    SUM(promotion_cost_amt) AS total_promo_cost,
+    SUM(promotion_sales_amt) AS total_promo_sales
+FROM indep_rl_ads.a05_e2e_paid_media_product_data_d
+WHERE platform = 'TM' AND trans_cycle = 'T+1'
+  AND data_date >= '2026-04-01' AND data_date <= '2026-04-15'
+GROUP BY framework
+ORDER BY framework;
+
+
+-- ================================================================================
+-- 比对方法说明
+-- ================================================================================
+--
+-- 1. 在 Power BI 中设置切片器：
+--    本期日期 = 2026-04-01 ~ 2026-04-15
+--    同期日期 = 2025-04-01 ~ 2025-04-15
+--    Channel = TM，数据口径 = T+1，币种 = RMB
+--
+-- 2. 执行 PART 1 → 比对 Power BI「本期」行的 12 个指标值
+--    执行 PART 2 → 比对 Power BI「同期」行的 12 个指标值
+--    执行 PART 3 → 比对 Power BI「vs LP」行的增长率
+--
+-- 3. 如有差异，执行 PART 4 逐指标核查中间值
+--    如仍有差异，执行 PART 5 按日展开定位差异日期
+--
+-- 4. 验证 USD 时，执行 PART 6 → 比对 Power BI 币种切换为 USD 后的值
+--    金额类指标应 = RMB × 7，比率类指标应不变
+--    金额类指标清单：ID 1 Cost、ID 2 红包、ID 10 新客成本
+--
+-- 5. 常见差异原因：
+--    a) data_type 过滤：如 channel_data 有非 'day' 的 data_type，
+--       Power BI 可能多算了行（关系仅按 data_date，不按 data_type）
+--       → 用 PART 0.4 检查，如有问题需在 Power BI 模型中加 data_type 筛选
+--    b) NULL 处理：DAX SUM 忽略 NULL，SQL SUM 同样忽略 NULL
+--       但 DIVIDE(x, 0) 在 DAX 返回 BLANK，SQL 中用 NULLIF 模拟
+--    c) 日期边界：确认两端切片器选择的是 >= AND <=（闭区间）
+--    d) 浮点精度：比率类指标小数位可能有微小差异，属正常
+--    e) product_data framework 筛选：确认 Acceleration 值拼写一致
+--    f) rebate 字段：SQL 加载时如果该字段不存在则默认为 0
+--       DAX 中 SUM(rebate) 对 0 值的处理与 SQL 一致
+--    g) vs LP 边界逻辑：
+--       同期为 0 或 NULL → SQL 返回 NULL，Power BI 显示 "-"（BLANK）
+--       本期为 0 或 NULL，同期有值 → SQL 返回 -1，Power BI 显示 "-100.0%"
+--       双方有值 → 正常计算 (本期 - 同期) / 同期
+-- ================================================================================

@@ -1,0 +1,1412 @@
+KPIs Overview_Target_matrix_solution 解决方案：
+
+> status: propose
+> created: 2026-04-29
+> updated: 2026-04-29 v2
+> complexity: 🔴复杂
+> type: 度量值开发 + 可视化构建
+> naming: 遵循 powerbi_code_copilot/rules/dax-style.md 规范
+
+================================================================================
+0. 需求概述与架构总览
+================================================================================
+
+实现 KPIs Overview 目标达成 矩阵看板：
+- 行：TM / JD / TTL（3 行，代表渠道维度）
+- 列：ROI / vs目标 / 新客花费占比 / vs目标 / 新客成本 / vs目标 /
+      Acc花费占比 / vs销售占比 / Acc ROI / vs目标（10 列）
+- 筛选器：本期日期(Dim_Date_Current) / 数据口径(trans_cycle, 单选) / 币种(currency, 单选)
+- 本矩阵不依赖 Slicer_Platform_Selection（Channel 维度已内嵌到行维度）
+- 仅 TTL 行有背景色 #F8F6F2（浅米色，突出汇总行），其他行白色
+
+指标结构说明：
+- 10 列由 5 对"实际值 + 目标值"组成：
+  ROI + vs目标(ROI) / 新客花费占比 + vs目标(新客花费占比) /
+  新客成本 + vs目标(新客成本) / Acc花费占比 + vs销售占比 /
+  Acc ROI + vs目标(Acc ROI)
+- "vs目标"列 = 目标值本身（来自 fcst_ 前缀字段），非偏差/delta 计算
+  与相邻的"实际值"列并列展示，便于肉眼对比实际与目标
+- "Acc花费占比"使用目标(fcst)花费数据，"vs销售占比"使用实际销售数据
+  两者并列对比花费结构目标与实际销售结构
+
+整体架构：
+```
+筛选器层（断开维度）
+├── Dim_Date_Current ─── 1:* ──→ a05_e2e_paid_media_channel_data_d[data_date]
+│                        1:* ──→ a05_e2e_paid_media_summary_d[data_date]
+│                        1:* ──→ a05_e2e_paid_media_product_data_d[data_date]
+├── Slicer_DataCaliber_Selection（断开，SELECTEDVALUE → trans_cycle 单选）
+└── Slicer_Currency_Selection（断开，SELECTEDVALUE → Currency_ExchangeRate 汇率乘数 单选）
+
+维度层（断开维度）
+├── DIM_RowKPIs_Overview_Channel（行维度：TM / JD / TTL，复用）
+└── DIM_ColMetric_Target（列维度：10 个指标，新建，含格式、颜色、汇率转换标记）
+
+度量值链
+KPIs Overview Target Base Value ── 渠道 × 指标 SWITCH 分发（10 分支）
+        │                          平台筛选由行维度控制（非切片器）
+        │                          TTL = FILTER(platform IN {"TM","JD"})
+        │                          vs目标 列直接计算目标值（fcst_ 字段）
+        │                          返回 RMB 原始值
+        ▼
+KPIs Overview Target Cell Value ── 仅本期逻辑
+        │                          金额类指标 × ExchangeRate 汇率换算
+        ├──→ KPIs Overview Target Cell Display（格式化，读取维度表格式列）
+        ├──→ KPIs Overview Target Cell Font Color（字体颜色，vs目标列条件颜色）
+        └──→ KPIs Overview Target Cell Background Color（仅 TTL 行 #F8F6F2）
+
+事实表（Power BI 表名 = 数据源表名，字段名一致）
+├── a05_e2e_paid_media_channel_data_d（渠道粒度）
+├── a05_e2e_paid_media_summary_d（汇总粒度，有 trans_cycle / customer_type 粒度）
+└── a05_e2e_paid_media_product_data_d（产品粒度，有 framework 维度）
+```
+
+关键技术点：
+1. Metric_ID 路由：列指标通过 Metric_ID（1~10）SWITCH 分发
+2. 渠道路由：行维度 Channel_PlatformID 决定平台筛选
+   TM/JD → 单平台筛选；TTL → TM + JD 双平台合并汇总
+3. TTL 汇总机制：使用 FILTER(ALL(platform), platform IN {"TM","JD"}) 实现
+   比率类指标基于合并分子/分母重新计算（加权比率，非简单平均）
+4. vs目标计算：在 Base Value 内直接计算目标值（fcst_ 前缀字段）
+   target 值来自 fcst_ 前缀字段（forecast 目标数据），直接返回目标指标值
+5. customer_type 过滤：新客花费占比 vs目标、新客成本 vs目标
+   涉及 summary_d[customer_type] = "new" 过滤
+6. 格式与颜色驱动：DIM_ColMetric_Target 内嵌格式列 + 颜色列，
+   度量值通过 SELECTEDVALUE 动态读取，无需硬编码
+   vs目标列与对应实际值列使用相同格式（如 ROI 与 vs目标ROI 均为 decimal_2）
+7. 币种汇率转换：数据源仅 RMB，Base Value 不做 currency 筛选；
+   Cell Value 层通过 Slicer_Currency_Selection[Currency_ExchangeRate] 获取汇率，
+   仅 Metric_IsCurrencyAmount = TRUE 的金额类指标乘以汇率（RMB=1, USD=7）
+8. 与 Channel 切片器隔离：度量值不引用 Slicer_Platform_Selection，
+   行维度 DIM_RowKPIs_Overview_Channel 为独立断开维度
+9. 列名去重：4 个"vs目标"列通过 UNICHAR(8203)（零宽空格）实现技术唯一，
+   Matrix 视觉对象中显示名称视觉一致
+
+指标口径来源对照（与 Overview_目标达成口径.xlsx 及 RL_E2E_数据字典_ADS 对齐）：
+| # | 指标名 | 计算公式 | 主要事实表 | 关键字段 |
+|---|--------|---------|-----------|---------|
+| 1 | ROI | 实际 ROI = 媒体成交金额 / 调整花费 | summary_d | media_sales_amt / adj_cost_amt |
+| 2 | vs目标(ROI) | 目标ROI = fcst媒体成交 / fcst花费 | summary_d | fcst_media_sales_amt / fcst_cost_amt |
+| 3 | 新客花费占比 | 新客花费 / (新客花费 + 老客花费) | channel_data_d | nc_cost_amt / (nc_cost_amt + ec_cost_amt) |
+| 4 | vs目标(新客花费占比) | 目标占比 = fcst花费(new) / fcst花费(all) | summary_d | fcst_cost_amt(customer_type='new') / fcst_cost_amt |
+| 5 | 新客成本 | 调整花费 / 媒体新客人数 | summary_d | adj_cost_amt / media_new_member_cnt |
+| 6 | vs目标(新客成本) | 目标成本 = fcst花费(new) / fcst人数(new) | summary_d | fcst_cost_amt(new) / fcst_user_cnt(new) |
+| 7 | Acc花费占比 | 目标Acc推广花费 / 目标全部推广花费 | product_data_d | fcst_promotion_cost_amt(Acc) / fcst_promotion_cost_amt(All) |
+| 8 | vs销售占比 | 实际Acc推广成交 / 实际全部推广成交 | product_data_d | promotion_sales_amt(Acc) / promotion_sales_amt(All) |
+| 9 | Acc ROI | 实际Acc推广成交 / 实际Acc推广花费 | product_data_d | promotion_sales_amt(Acc) / promotion_cost_amt(Acc) |
+| 10 | vs目标(Acc ROI) | 目标AccROI = fcst成交(Acc) / fcst花费(Acc) | product_data_d | fcst_promotion_sales_amt(Acc) / fcst_promotion_cost_amt(Acc) |
+
+================================================================================
+1. 构建行维度字段 DIM_RowKPIs_Overview_Channel（复用）
+================================================================================
+
+DIM_RowKPIs_Overview_Channel = 
+// ========================================
+// 表: DIM_RowKPIs_Overview_Channel
+// 类型: 断开维度（复用，不新建）
+// 用途: 目标达成矩阵行维度（TM / JD / TTL）
+//       Channel_PlatformID 用于度量值中的平台路由
+//       TTL 代表 TM + JD 合并汇总
+// ========================================
+DATATABLE(
+    "Channel_Name", STRING,         // 行标签（矩阵显示名称）
+    "Channel_PlatformID", STRING,   // 平台路由标识（TM / JD / TTL）
+    "Channel_Order", INTEGER,       // 排序值
+    {
+        {"TM",  "TM",  1},
+        {"JD",  "JD",  2},
+        {"TTL", "TTL", 3}
+    }
+)
+
+Sort by Column 配置：
+| 表                             | 字段           | Sort by Column   |
+|--------------------------------|---------------|------------------|
+| DIM_RowKPIs_Overview_Channel   | Channel_Name  | Channel_Order    |
+
+================================================================================
+2. 构建列维度字段 DIM_ColMetric_Target（新建）
+================================================================================
+
+DIM_ColMetric_Target = 
+// ========================================
+// 表: DIM_ColMetric_Target
+// 类型: 断开维度（新建）
+// 用途: 目标达成矩阵列维度（10 个指标）
+// 设计: 内嵌格式与颜色定义，度量值通过 SELECTEDVALUE 动态读取
+//
+// 列名去重说明：
+//   4 个"vs目标"列通过 UNICHAR(8203)（零宽空格 ZWS）实现技术唯一
+//   Power BI Matrix 视觉对象中显示名称视觉一致，均呈现为"vs目标"
+//   UNICHAR(8203) 是不可见字符，不影响视觉显示
+//   使用 UNION + ROW 构建计算表以支持 UNICHAR 表达式
+//
+// 格式类型清单：
+//   decimal_2     → 两位小数千分位：22.30
+//   percent_1dp   → 百分比1位小数：84.8%
+//   currency      → 货币整数千分位：¥3,301,263（货币符号由币种切片器决定）
+//
+// 说明：
+//   vs目标列的格式与对应实际值列一致（ROI→decimal_2, 占比→percent_1dp, 成本→currency）
+//   vs目标列直接展示目标值，非偏差/delta 值
+//
+// 颜色说明：
+//   所有列统一使用 Metric_ColorDefault（#212121 黑色）
+//   Metric_IsVsTarget 标记仅用于标识该列为目标值列，不驱动条件颜色
+//
+// 汇率转换标记：
+//   Metric_IsCurrencyAmount = TRUE → 金额类指标，切换币种时乘以汇率
+//   Metric_IsCurrencyAmount = FALSE → 比率/计数类指标，不受汇率影响
+// ========================================
+VAR __Rows =
+    UNION(
+        // ═══════════════════════════════════════════════════════
+        // ID 1: ROI — 实际 ROI（媒体成交金额 / 调整花费）
+        // ═══════════════════════════════════════════════════════
+        ROW(
+            "Metric_ID", 1,
+            "Metric_Name", "ROI",
+            "Metric_Sort", 1,
+            "Metric_Format", "decimal_2",
+            "Metric_IsVsTarget", FALSE,
+            "Metric_IsCurrencyAmount", FALSE,
+            "Metric_ColorPositive", "#1A9018",
+            "Metric_ColorNegative", "#D64550",
+            "Metric_ColorZero", "#E1C233",
+            "Metric_ColorDefault", "#212121"
+        ),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 2: vs目标（ROI）— 目标 ROI（fcst_media_sales_amt / fcst_cost_amt）
+        // ═══════════════════════════════════════════════════════
+        ROW(
+            "Metric_ID", 2,
+            "Metric_Name", "vs目标",
+            "Metric_Sort", 2,
+            "Metric_Format", "decimal_2",
+            "Metric_IsVsTarget", TRUE,
+            "Metric_IsCurrencyAmount", FALSE,
+            "Metric_ColorPositive", "#1A9018",
+            "Metric_ColorNegative", "#D64550",
+            "Metric_ColorZero", "#E1C233",
+            "Metric_ColorDefault", "#212121"
+        ),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 3: 新客花费占比 — 新客花费 / (新客+老客花费)
+        // ═══════════════════════════════════════════════════════
+        ROW(
+            "Metric_ID", 3,
+            "Metric_Name", "新客花费占比",
+            "Metric_Sort", 3,
+            "Metric_Format", "percent_1dp",
+            "Metric_IsVsTarget", FALSE,
+            "Metric_IsCurrencyAmount", FALSE,
+            "Metric_ColorPositive", "#1A9018",
+            "Metric_ColorNegative", "#D64550",
+            "Metric_ColorZero", "#E1C233",
+            "Metric_ColorDefault", "#212121"
+        ),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 4: vs目标（新客花费占比）— 目标占比（fcst_cost_amt(new) / fcst_cost_amt(all)）
+        // 列名: "vs目标" & UNICHAR(8203)  ← 追加1个零宽空格以区分ID 2
+        // ═══════════════════════════════════════════════════════
+        ROW(
+            "Metric_ID", 4,
+            "Metric_Name", "vs目标" & UNICHAR(8203),
+            "Metric_Sort", 4,
+            "Metric_Format", "percent_1dp",
+            "Metric_IsVsTarget", TRUE,
+            "Metric_IsCurrencyAmount", FALSE,
+            "Metric_ColorPositive", "#1A9018",
+            "Metric_ColorNegative", "#D64550",
+            "Metric_ColorZero", "#E1C233",
+            "Metric_ColorDefault", "#212121"
+        ),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 5: 新客成本 — 调整花费 / 媒体新客人数
+        // ═══════════════════════════════════════════════════════
+        ROW(
+            "Metric_ID", 5,
+            "Metric_Name", "新客成本",
+            "Metric_Sort", 5,
+            "Metric_Format", "currency",
+            "Metric_IsVsTarget", FALSE,
+            "Metric_IsCurrencyAmount", TRUE,
+            "Metric_ColorPositive", "#1A9018",
+            "Metric_ColorNegative", "#D64550",
+            "Metric_ColorZero", "#E1C233",
+            "Metric_ColorDefault", "#212121"
+        ),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 6: vs目标（新客成本）— 目标新客成本（fcst_cost_amt(new) / fcst_user_cnt(new)）
+        // 列名: UNICHAR(8203) & "vs目标"  ← 追加1个前置零宽空格以区分ID 2/4
+        // 注意: 目标新客成本为金额类指标，IsCurrencyAmount = TRUE，需汇率转换
+        // ═══════════════════════════════════════════════════════
+        ROW(
+            "Metric_ID", 6,
+            "Metric_Name", UNICHAR(8203) & "vs目标",
+            "Metric_Sort", 6,
+            "Metric_Format", "currency",
+            "Metric_IsVsTarget", TRUE,
+            "Metric_IsCurrencyAmount", TRUE,
+            "Metric_ColorPositive", "#1A9018",
+            "Metric_ColorNegative", "#D64550",
+            "Metric_ColorZero", "#E1C233",
+            "Metric_ColorDefault", "#212121"
+        ),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 7: Acc花费占比 — 目标Acc推广花费 / 目标全部推广花费
+        // 注意: 使用 fcst(目标) 花费数据，非实际花费
+        // ═══════════════════════════════════════════════════════
+        ROW(
+            "Metric_ID", 7,
+            "Metric_Name", "Acc花费占比",
+            "Metric_Sort", 7,
+            "Metric_Format", "percent_1dp",
+            "Metric_IsVsTarget", FALSE,
+            "Metric_IsCurrencyAmount", FALSE,
+            "Metric_ColorPositive", "#1A9018",
+            "Metric_ColorNegative", "#D64550",
+            "Metric_ColorZero", "#E1C233",
+            "Metric_ColorDefault", "#212121"
+        ),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 8: vs销售占比 — 实际Acc推广成交 / 实际全部推广成交
+        // 注意: 使用实际销售数据，与 Acc花费占比(目标) 并列对比
+        // ═══════════════════════════════════════════════════════
+        ROW(
+            "Metric_ID", 8,
+            "Metric_Name", "vs销售占比",
+            "Metric_Sort", 8,
+            "Metric_Format", "percent_1dp",
+            "Metric_IsVsTarget", FALSE,
+            "Metric_IsCurrencyAmount", FALSE,
+            "Metric_ColorPositive", "#1A9018",
+            "Metric_ColorNegative", "#D64550",
+            "Metric_ColorZero", "#E1C233",
+            "Metric_ColorDefault", "#212121"
+        ),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 9: Acc ROI — 实际Acc推广成交 / 实际Acc推广花费
+        // ═══════════════════════════════════════════════════════
+        ROW(
+            "Metric_ID", 9,
+            "Metric_Name", "Acc ROI",
+            "Metric_Sort", 9,
+            "Metric_Format", "decimal_2",
+            "Metric_IsVsTarget", FALSE,
+            "Metric_IsCurrencyAmount", FALSE,
+            "Metric_ColorPositive", "#1A9018",
+            "Metric_ColorNegative", "#D64550",
+            "Metric_ColorZero", "#E1C233",
+            "Metric_ColorDefault", "#212121"
+        ),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 10: vs目标（Acc ROI）— 目标 Acc ROI（fcst_promotion_sales_amt(Acc) / fcst_promotion_cost_amt(Acc)）
+        // 列名: "vs目标" & UNICHAR(8203) & UNICHAR(8203)  ← 追加2个零宽空格
+        // ═══════════════════════════════════════════════════════
+        ROW(
+            "Metric_ID", 10,
+            "Metric_Name", "vs目标" & UNICHAR(8203) & UNICHAR(8203),
+            "Metric_Sort", 10,
+            "Metric_Format", "decimal_2",
+            "Metric_IsVsTarget", TRUE,
+            "Metric_IsCurrencyAmount", FALSE,
+            "Metric_ColorPositive", "#1A9018",
+            "Metric_ColorNegative", "#D64550",
+            "Metric_ColorZero", "#E1C233",
+            "Metric_ColorDefault", "#212121"
+        )
+    )
+RETURN __Rows
+
+Sort by Column 配置：
+| 表                    | 字段          | Sort by Column |
+|-----------------------|---------------|----------------|
+| DIM_ColMetric_Target  | Metric_Name   | Metric_Sort    |
+
+列名去重对照表：
+| Metric_ID | DAX 表达式                                        | 显示效果   | 说明                  |
+|-----------|---------------------------------------------------|-----------|----------------------|
+| 2         | "vs目标"                                          | vs目标     | ROI 目标对比          |
+| 4         | "vs目标" & UNICHAR(8203)                          | vs目标     | 新客花费占比目标对比   |
+| 6         | UNICHAR(8203) & "vs目标"                          | vs目标     | 新客成本目标对比       |
+| 10        | "vs目标" & UNICHAR(8203) & UNICHAR(8203)          | vs目标     | Acc ROI 目标对比       |
+
+================================================================================
+3. 切片器参数表
+================================================================================
+
+3.1 数据口径筛选器 Slicer_DataCaliber_Selection（DAX 计算表，复用）
+──────────────────────────────────────────────────────────────────
+
+Slicer_DataCaliber_Selection = 
+// 功能：创建数据口径维度表，用于报表中的数据时效性口径切换
+// 用途：用户可通过此表选择不同数据回收口径查看 KPI 数据
+// 参数表名称：DataCaliber
+// 遵循通用参数表模板规范 
+DATATABLE(
+    // 基础字段 - 必选字段
+    "DataCaliber_ID", STRING,           // 主键标识，用于唯一标识每个数据口径选项
+    "DataCaliber_Label", STRING,        // 显示标签，在报表界面中向用户展示的口径名称
+    "DataCaliber_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "DataCaliber_Description", STRING,  // 详细描述，说明该数据口径的业务含义
+    
+    // 扩展字段 - 可选字段
+    "DataCaliber_IsDefault", BOOLEAN,   // 是否默认选中
+    "DataCaliber_IsActive", BOOLEAN,    // 是否激活状态
+    
+    // 数据行
+    {
+        // T+1 - 次日口径
+        {
+            "T+1",                 // 口径代码
+            "T+1",                 // 口径显示名称
+            1,                     // 排序顺序
+            "次日数据口径，数据在交易发生后 1 天回收确认",  // 口径描述
+            TRUE,                  // 默认选中
+            TRUE                   // 激活状态，当前可用
+        },
+        
+        // T+15 - 15日口径
+        {
+            "T+15",                // 口径代码
+            "T+15",                // 口径显示名称
+            2,                     // 排序顺序
+            "15日数据口径，数据在交易发生后 15 天回收确认，含退货退款等最终结算",  // 口径描述
+            FALSE,                 // 非默认选项
+            TRUE                   // 激活状态，当前可用
+        }
+    }
+)
+
+3.2 币种筛选器 Slicer_Currency_Selection（DAX 计算表，复用）
+────────────────────────────────────────────────────────────
+
+Slicer_Currency_Selection = 
+// 功能：创建币种维度表，用于报表中的货币单位切换与汇率转换
+// 用途：用户可通过此表选择以人民币或美元展示 KPI 金额类数据
+//       数据源仅存储 RMB，选择 USD 时通过 Currency_ExchangeRate 进行汇率换算
+// 参数表名称：Currency
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "Currency_ID", STRING,           // 主键标识，用于唯一标识每个币种选项
+    "Currency_Label", STRING,        // 显示标签，在报表界面中向用户展示的币种名称
+    "Currency_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "Currency_Description", STRING,  // 详细描述，说明该币种的业务含义
+    
+    // 扩展字段 - 可选字段
+    "Currency_IsDefault", BOOLEAN,   // 是否默认选中
+    "Currency_IsActive", BOOLEAN,    // 是否激活状态
+    "Currency_Symbol", STRING,       // 货币符号，用于度量值 FORMAT 拼接
+    "Currency_ExchangeRate", DOUBLE, // 汇率乘数：RMB=1（原始值），USD=7（RMB对USD汇率）
+    
+    // 数据行
+    {
+        // RMB - 人民币（基准币种，汇率 = 1，即原始值）
+        {
+            "RMB",                 // 币种代码
+            "RMB",                 // 币种显示名称
+            1,                     // 排序顺序
+            "人民币，中国境内业务默认结算货币",  // 币种描述
+            TRUE,                  // 默认选中
+            TRUE,                  // 激活状态，当前可用
+            "¥",                   // 货币符号
+            1                      // 汇率乘数：原始值不转换
+        },
+        
+        // USD - 美元（汇率 = 7，RMB 对 USD 默认汇率）
+        {
+            "USD",                 // 币种代码
+            "USD",                 // 币种显示名称
+            2,                     // 排序顺序
+            "美元，用于跨境业务或集团汇报口径",  // 币种描述
+            FALSE,                 // 非默认选项
+            TRUE,                  // 激活状态，当前可用
+            "$",                   // 货币符号
+            7                      // 汇率乘数：RMB × 7 = USD 展示值
+        }
+    }
+)
+
+3.3 Channel/Platform 筛选器 Slicer_Platform_Selection — 复用（但本矩阵不依赖）
+
+说明：本矩阵的度量值不引用 Slicer_Platform_Selection，
+即使页面上存在 Channel 切片器，也不会影响本矩阵的计算结果。
+Channel 维度已内嵌到行维度 DIM_RowKPIs_Overview_Channel 中。
+
+================================================================================
+4. 关系与数据模型说明
+================================================================================
+
+4.1 事实表加载说明
+──────────────────
+| Power BI 表名                           | 说明 |
+|-----------------------------------------|------|
+| a05_e2e_paid_media_channel_data_d       | 渠道粒度，含 nc_cost_amt / ec_cost_amt 等 |
+| a05_e2e_paid_media_summary_d            | 汇总粒度，含 media_sales_amt / adj_cost_amt / media_new_member_cnt / fcst_cost_amt / fcst_media_sales_amt / fcst_user_cnt / customer_type 等 |
+| a05_e2e_paid_media_product_data_d       | 产品粒度，含 promotion_cost_amt / promotion_sales_amt / fcst_promotion_cost_amt / fcst_promotion_sales_amt / framework 等 |
+| Dim_Date_Current                        | 日期维度，本期日期筛选器 |
+
+说明：
+- Power BI 表名与数据源表名完全一致，字段名也一模一样，无需额外映射
+- 本方案不需要 Dim_Date_Ly（无同期/vs LP 逻辑）
+  如 Dim_Date_Ly 已在数据模型中存在，不受影响但本方案度量值不引用它
+
+4.2 关系配置
+────────────
+```
+已连接关系（Active）：
+    Dim_Date_Current[数据日期] ──── 1:* ────→ a05_e2e_paid_media_channel_data_d[data_date]
+    Dim_Date_Current[数据日期] ──── 1:* ────→ a05_e2e_paid_media_summary_d[data_date]
+    Dim_Date_Current[数据日期] ──── 1:* ────→ a05_e2e_paid_media_product_data_d[data_date]
+
+断开维度（无关系）：
+    Slicer_DataCaliber_Selection      ← SELECTEDVALUE → trans_cycle
+    Slicer_Currency_Selection         ← SELECTEDVALUE → Currency_ExchangeRate / Currency_Symbol
+    DIM_RowKPIs_Overview_Channel      ← SELECTEDVALUE → Channel_PlatformID
+    DIM_ColMetric_Target              ← SELECTEDVALUE → Metric_ID / Metric_IsVsTarget / Metric_IsCurrencyAmount
+
+不依赖（本方案不引用）：
+    Slicer_Platform_Selection         ← 本矩阵不使用
+    Dim_Date_Ly                       ← 本矩阵不使用（无同期/vs LP 逻辑）
+    DIM_RowKPIs_Overview              ← TTL汇总行维度，本矩阵不使用
+    DIM_ColMetric_Overview            ← TTL汇总列维度，本矩阵不使用
+```
+
+说明：
+- Dim_Date_Current 与三张事实表均建立 1:* 关系
+  本期日期切片器的选择自动通过关系传递到事实表
+- 本矩阵不引用 Slicer_Platform_Selection，Channel 维度内嵌到行维度
+- DataCaliber 筛选器保持单选，通过 SELECTEDVALUE 应用
+- Currency 筛选器不筛选事实表（数据源仅 RMB），
+  而是在 Cell Value 层通过 Currency_ExchangeRate 进行汇率换算
+
+4.3 Sort by Column 配置
+────────────────────────
+| 表                             | 字段           | Sort by Column    |
+|--------------------------------|---------------|-------------------|
+| DIM_RowKPIs_Overview_Channel   | Channel_Name  | Channel_Order     |
+| DIM_ColMetric_Target           | Metric_Name   | Metric_Sort       |
+| Slicer_DataCaliber_Selection   | DataCaliber_Label | DataCaliber_Sort |
+| Slicer_Currency_Selection      | Currency_Label | Currency_Sort     |
+
+================================================================================
+5. 核心度量值
+================================================================================
+
+5.1 目标达成指标 SWITCH 分发 — KPIs Overview Target Base Value
+──────────────────────────────────────────────────────────────
+
+KPIs Overview Target Base Value = 
+// ========================================
+// 度量值: KPIs Overview Target Base Value
+// Display Folder: KPIs Overview Target
+// 用途: 按渠道（TM/JD/TTL）的目标达成指标 SWITCH 分发器
+//       根据 DIM_ColMetric_Target[Metric_ID] 路由到 10 个指标计算逻辑
+//       平台筛选由行维度 DIM_RowKPIs_Overview_Channel[Channel_PlatformID] 控制
+//       不依赖 Slicer_Platform_Selection
+//       TTL 行 = TM + JD 合并汇总（FILTER platform IN {"TM","JD"}）
+//       TM/JD 行 = 单平台筛选（platform = __ChannelID）
+//       vs目标 列直接计算目标值（fcst_ 前缀字段），非偏差/delta
+//       日期上下文由 Dim_Date_Current 关系自然筛选
+//       币种转换在 Cell Value 层通过汇率乘数实现（数据源仅 RMB）
+// 依赖: DIM_ColMetric_Target[Metric_ID]
+//       DIM_RowKPIs_Overview_Channel[Channel_PlatformID]
+//       Slicer_DataCaliber_Selection[DataCaliber_ID]
+//       a05_e2e_paid_media_channel_data_d, a05_e2e_paid_media_summary_d,
+//       a05_e2e_paid_media_product_data_d
+// 模式: Disconnected Dimension + Metric_ID SWITCH Dispatch + Channel Row Routing
+// ========================================
+
+    // ── 列指标与行渠道上下文 ──
+    VAR __SelID = SELECTEDVALUE(DIM_ColMetric_Target[Metric_ID])
+    VAR __ChannelID = SELECTEDVALUE(DIM_RowKPIs_Overview_Channel[Channel_PlatformID])
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    // ── 平台筛选表（根据渠道行维度动态构建）──
+    // TM/JD: 筛选对应单一平台
+    // TTL: 筛选 TM + JD 两个平台，SUM 自然聚合
+    VAR __PlatformFilter_CD =
+        FILTER(
+            ALL(a05_e2e_paid_media_channel_data_d[platform]),
+            IF(
+                __ChannelID = "TTL",
+                a05_e2e_paid_media_channel_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_channel_data_d[platform] = __ChannelID
+            )
+        )
+    VAR __PlatformFilter_SD =
+        FILTER(
+            ALL(a05_e2e_paid_media_summary_d[platform]),
+            IF(
+                __ChannelID = "TTL",
+                a05_e2e_paid_media_summary_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_summary_d[platform] = __ChannelID
+            )
+        )
+    VAR __PlatformFilter_PD =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[platform]),
+            IF(
+                __ChannelID = "TTL",
+                a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_product_data_d[platform] = __ChannelID
+            )
+        )
+
+    RETURN
+    SWITCH(
+        __SelID,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 1: ROI — 实际媒体投资回报率
+        // 口径: SUM(summary_d[media_sales_amt]) / SUM(summary_d[adj_cost_amt])
+        // 来源: 汇总粒度事实表
+        // TTL: 合并分子 / 合并分母（加权 ROI，非简单平均）
+        // ═══════════════════════════════════════════════════════
+        1, VAR __MediaSales =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_summary_d[media_sales_amt]),
+                    __PlatformFilter_SD,
+                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+                )
+           VAR __AdjCost =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_summary_d[adj_cost_amt]),
+                    __PlatformFilter_SD,
+                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+                )
+           RETURN DIVIDE(__MediaSales, __AdjCost),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 2: vs目标（ROI）— 目标 ROI
+        // 口径: SUM(summary_d[fcst_media_sales_amt]) / SUM(summary_d[fcst_cost_amt])
+        // 来源: 汇总粒度事实表（fcst 目标数据）
+        // TTL: 合并目标分子 / 合并目标分母（加权目标 ROI）
+        // ═══════════════════════════════════════════════════════
+        2, VAR __TgtMediaSales =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_summary_d[fcst_media_sales_amt]),
+                    __PlatformFilter_SD,
+                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+                )
+           VAR __TgtCost =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_summary_d[fcst_cost_amt]),
+                    __PlatformFilter_SD,
+                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+                )
+           RETURN DIVIDE(__TgtMediaSales, __TgtCost),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 3: 新客花费占比 — 实际新客花费占总花费（新客+老客）的比例
+        // 口径: nc_cost_amt / (nc_cost_amt + ec_cost_amt)
+        // 来源: 渠道粒度事实表
+        // TTL: 合并 nc_cost / (合并 nc_cost + 合并 ec_cost)
+        // ═══════════════════════════════════════════════════════
+        3, VAR __NC_Cost =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_channel_data_d[nc_cost_amt]),
+                    __PlatformFilter_CD,
+                    a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+                )
+           VAR __EC_Cost =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_channel_data_d[ec_cost_amt]),
+                    __PlatformFilter_CD,
+                    a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+                )
+           RETURN DIVIDE(__NC_Cost, __NC_Cost + __EC_Cost),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 4: vs目标（新客花费占比）— 目标新客花费占比
+        // 口径: SUM(summary_d[fcst_cost_amt] WHERE customer_type='new')
+        //       / SUM(summary_d[fcst_cost_amt])
+        // 来源: 汇总粒度事实表（fcst 目标数据）
+        // TTL: 合并目标新客花费 / 合并目标总花费
+        // ═══════════════════════════════════════════════════════
+        4, VAR __TgtNC_Cost =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_summary_d[fcst_cost_amt]),
+                    __PlatformFilter_SD,
+                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle,
+                    a05_e2e_paid_media_summary_d[customer_type] = "new"
+                )
+           VAR __TgtAll_Cost =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_summary_d[fcst_cost_amt]),
+                    __PlatformFilter_SD,
+                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+                )
+           RETURN DIVIDE(__TgtNC_Cost, __TgtAll_Cost),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 5: 新客成本 — 实际每新客获取成本
+        // 口径: SUM(summary_d[adj_cost_amt]) / SUM(summary_d[media_new_member_cnt])
+        // 来源: 汇总粒度事实表
+        // TTL: 合并分子 / 合并分母（加权成本，非简单平均）
+        // 注意: media_new_member_cnt 最细到月度粒度，
+        //       需确认 SQL 层已做好粒度处理
+        // ═══════════════════════════════════════════════════════
+        5, VAR __AdjCostForNC =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_summary_d[adj_cost_amt]),
+                    __PlatformFilter_SD,
+                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+                )
+           VAR __NewMemberCnt =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_summary_d[media_new_member_cnt]),
+                    __PlatformFilter_SD,
+                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+                )
+           RETURN DIVIDE(__AdjCostForNC, __NewMemberCnt),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 6: vs目标（新客成本）— 目标新客成本
+        // 口径: SUM(summary_d[fcst_cost_amt] WHERE customer_type='new')
+        //       / SUM(summary_d[fcst_user_cnt] WHERE customer_type='new')
+        // 来源: 汇总粒度事实表（fcst 目标数据）
+        // TTL: 合并目标新客花费 / 合并目标新客人数
+        // 注意: 目标新客成本为金额类指标，Cell Value 层需汇率转换
+        // ═══════════════════════════════════════════════════════
+        6, VAR __TgtNC_FcstCost =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_summary_d[fcst_cost_amt]),
+                    __PlatformFilter_SD,
+                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle,
+                    a05_e2e_paid_media_summary_d[customer_type] = "new"
+                )
+           VAR __TgtNC_FcstUser =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_summary_d[fcst_user_cnt]),
+                    __PlatformFilter_SD,
+                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle,
+                    a05_e2e_paid_media_summary_d[customer_type] = "new"
+                )
+           RETURN DIVIDE(__TgtNC_FcstCost, __TgtNC_FcstUser),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 7: Acc花费占比 — 目标 Acceleration 推广花费占全部推广花费的比例
+        // 口径: SUM(product_d[fcst_promotion_cost_amt] WHERE framework='Acceleration')
+        //       / SUM(product_d[fcst_promotion_cost_amt])
+        // 来源: 产品粒度事实表（使用 fcst 目标数据）
+        // TTL: 合并 Acc 目标花费 / 合并 全部目标推广花费
+        // ═══════════════════════════════════════════════════════
+        7, VAR __TgtAccCost =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_product_data_d[fcst_promotion_cost_amt]),
+                    a05_e2e_paid_media_product_data_d[framework] = "Acceleration",
+                    __PlatformFilter_PD,
+                    a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+                )
+           VAR __TgtAllCost =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_product_data_d[fcst_promotion_cost_amt]),
+                    __PlatformFilter_PD,
+                    a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+                )
+           RETURN DIVIDE(__TgtAccCost, __TgtAllCost),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 8: vs销售占比 — 实际 Acceleration 推广成交占全部推广成交的比例
+        // 口径: SUM(product_d[promotion_sales_amt] WHERE framework='Acceleration')
+        //       / SUM(product_d[promotion_sales_amt])
+        // 来源: 产品粒度事实表（使用实际数据）
+        // 说明: 与 Acc花费占比(目标) 并列展示，对比花费结构目标与销售结构实际
+        // TTL: 合并 Acc 实际成交 / 合并 全部实际成交
+        // ═══════════════════════════════════════════════════════
+        8, VAR __ActAccSales =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_product_data_d[promotion_sales_amt]),
+                    a05_e2e_paid_media_product_data_d[framework] = "Acceleration",
+                    __PlatformFilter_PD,
+                    a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+                )
+           VAR __ActAllSales =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_product_data_d[promotion_sales_amt]),
+                    __PlatformFilter_PD,
+                    a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+                )
+           RETURN DIVIDE(__ActAccSales, __ActAllSales),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 9: Acc ROI — 实际 Acceleration 推广 ROI
+        // 口径: SUM(product_d[promotion_sales_amt] WHERE framework='Acceleration')
+        //       / SUM(product_d[promotion_cost_amt] WHERE framework='Acceleration')
+        // 来源: 产品粒度事实表
+        // TTL: 合并 Acc 成交 / 合并 Acc 花费（加权 ROI）
+        // ═══════════════════════════════════════════════════════
+        9, VAR __AccSales =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_product_data_d[promotion_sales_amt]),
+                    a05_e2e_paid_media_product_data_d[framework] = "Acceleration",
+                    __PlatformFilter_PD,
+                    a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+                )
+           VAR __AccCost =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
+                    a05_e2e_paid_media_product_data_d[framework] = "Acceleration",
+                    __PlatformFilter_PD,
+                    a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+                )
+           RETURN DIVIDE(__AccSales, __AccCost),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 10: vs目标（Acc ROI）— 目标 Acc ROI
+        // 口径: SUM(product_d[fcst_promotion_sales_amt] WHERE framework='Acceleration')
+        //       / SUM(product_d[fcst_promotion_cost_amt] WHERE framework='Acceleration')
+        // 来源: 产品粒度事实表（fcst 目标数据）
+        // TTL: 合并目标 Acc 成交 / 合并目标 Acc 花费（加权目标 ROI）
+        // ═══════════════════════════════════════════════════════
+        10, VAR __TgtAccSales =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_product_data_d[fcst_promotion_sales_amt]),
+                    a05_e2e_paid_media_product_data_d[framework] = "Acceleration",
+                    __PlatformFilter_PD,
+                    a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+                )
+            VAR __TgtAccCost =
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_product_data_d[fcst_promotion_cost_amt]),
+                    a05_e2e_paid_media_product_data_d[framework] = "Acceleration",
+                    __PlatformFilter_PD,
+                    a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+                )
+            RETURN DIVIDE(__TgtAccSales, __TgtAccCost),
+
+        // ─── 默认 ──────────────────────────────────────────
+        BLANK()
+    )
+
+事实表字段依赖清单：
+| 事实表            | 字段                      | 用途                                |
+|-------------------|---------------------------|-------------------------------------|
+| summary_d         | media_sales_amt           | ROI(实际分子)                       |
+| summary_d         | adj_cost_amt              | ROI(实际分母) / 新客成本(实际分子)   |
+| summary_d         | media_new_member_cnt      | 新客成本(实际分母)                   |
+| summary_d         | fcst_media_sales_amt      | vs目标ROI(目标分子)                 |
+| summary_d         | fcst_cost_amt             | vs目标ROI(目标分母) / vs目标新客花费占比(目标) / vs目标新客成本(目标分子) |
+| summary_d         | fcst_user_cnt             | vs目标新客成本(目标分母)             |
+| summary_d         | customer_type             | vs目标新客花费占比(过滤new) / vs目标新客成本(过滤new) |
+| summary_d         | platform                  | 渠道路由筛选                         |
+| summary_d         | trans_cycle               | 维度筛选（单选）                     |
+| summary_d         | data_date                 | 日期关系                             |
+| channel_data_d    | nc_cost_amt               | 新客花费占比(实际)                   |
+| channel_data_d    | ec_cost_amt               | 新客花费占比(实际)                   |
+| channel_data_d    | platform                  | 渠道路由筛选                         |
+| channel_data_d    | trans_cycle               | 维度筛选（单选）                     |
+| channel_data_d    | data_date                 | 日期关系                             |
+| product_data_d    | promotion_cost_amt        | Acc ROI(实际分母)                    |
+| product_data_d    | promotion_sales_amt       | vs销售占比 / Acc ROI(实际分子)       |
+| product_data_d    | fcst_promotion_cost_amt   | Acc花费占比 / vs目标AccROI(目标分母) |
+| product_data_d    | fcst_promotion_sales_amt  | vs目标AccROI(目标分子)               |
+| product_data_d    | framework                 | Acc 指标筛选（= "Acceleration"）     |
+| product_data_d    | platform                  | 渠道路由筛选                         |
+| product_data_d    | trans_cycle               | 维度筛选（单选）                     |
+| product_data_d    | data_date                 | 日期关系                             |
+
+TTL 汇总机制说明：
+| 指标类型         | TTL 汇总方式                                                                      | 示例 |
+|-----------------|-------------------------------------------------------------------------------------|------|
+| 比率类指标       | 合并分子 / 合并分母（加权比率，非简单平均）                                           | ROI = (TM+JD media_sales) / (TM+JD adj_cost) |
+| vs目标类指标     | 合并目标分子 / 合并目标分母（加权目标值，非简单平均）                                   | vs目标ROI = (TM+JD fcst_media_sales) / (TM+JD fcst_cost) |
+| 目标占比类       | 合并目标 Acc 花费 / 合并目标总花费                                                   | Acc花费占比 = (TM+JD Acc fcst_cost) / (TM+JD all fcst_cost) |
+
+
+5.2 目标达成值路由度量值 — KPIs Overview Target Cell Value
+───────────────────────────────────────────────────────────
+
+KPIs Overview Target Cell Value = 
+// ========================================
+// 度量值: KPIs Overview Target Cell Value
+// Display Folder: KPIs Overview Target
+// 用途: 仅包含本期逻辑，对金额类指标应用汇率转换
+//       不包含同期 / vs LP 逻辑（所有行均为"本期"渠道值）
+//       不依赖 Slicer_Platform_Selection（渠道由行维度控制）
+//
+// 币种转换说明：
+//   数据源仅存储 RMB，Base Value 返回 RMB 原始值
+//   切片器选择 RMB → ExchangeRate = 1（原值）
+//   切片器选择 USD → ExchangeRate = 7（乘以汇率）
+//   仅 Metric_IsCurrencyAmount = TRUE 的金额类指标需要转换
+//   当前新客成本（ID 5）和目标新客成本（ID 6）为金额类，需要汇率转换
+//   比率类指标不受汇率影响
+//
+// 依赖: [KPIs Overview Target Base Value],
+//       Slicer_Currency_Selection[Currency_ExchangeRate],
+//       DIM_ColMetric_Target[Metric_IsCurrencyAmount]
+// ========================================
+
+    // ── 汇率上下文（从币种切片器获取）──
+    VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
+    VAR __IsCurrencyAmt = SELECTEDVALUE(DIM_ColMetric_Target[Metric_IsCurrencyAmount], FALSE)
+
+    // ── 本期值（渠道路由已在 Base Value 内完成）──
+    VAR __CurrentValue = [KPIs Overview Target Base Value]
+
+    // ── 汇率换算（仅金额类指标需要）──
+    VAR __CurrentConverted =
+        IF(__IsCurrencyAmt, __CurrentValue * __ExchangeRate, __CurrentValue)
+
+    RETURN
+    __CurrentConverted
+
+================================================================================
+6. 格式化显示度量值 — KPIs Overview Target Cell Display
+================================================================================
+
+KPIs Overview Target Cell Display = 
+// ========================================
+// 度量值: KPIs Overview Target Cell Display
+// Display Folder: KPIs Overview Target > Formatting
+// 用途: 根据列指标的 Metric_Format 返回格式化文本
+//       所有行（TM/JD/TTL）统一使用同一格式
+//       货币符号从 Slicer_Currency_Selection 动态读取
+// 依赖: [KPIs Overview Target Cell Value],
+//       DIM_ColMetric_Target[Metric_Format],
+//       Slicer_Currency_Selection[Currency_Symbol]
+// ========================================
+
+    VAR __Value = [KPIs Overview Target Cell Value]
+
+    // ── 格式类型（从列维度表获取）──
+    VAR __Format = SELECTEDVALUE(DIM_ColMetric_Target[Metric_Format])
+
+    // ── 货币符号（由币种切片器决定）──
+    VAR __CurrencySymbol =
+        SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",                                                                // 空值显示 "-"
+            SWITCH(
+                __Format,
+
+                // ─── 货币 ───────────────────────────────────────────
+                "currency",
+                    __CurrencySymbol & FORMAT(__Value, "#,##0"),                 // ¥3,301,263 / $3,301,263
+
+                // ─── 整数 ───────────────────────────────────────────
+                "integer",
+                    FORMAT(__Value, "#,##0"),                                    // 1,000
+
+                // ─── 两位小数 ───────────────────────────────────────
+                "decimal_2",
+                    FORMAT(__Value, "#,##0.00"),                                 // 22.30
+
+                // ─── 百分比 1 位小数 ────────────────────────────────
+                "percent_1dp",
+                    FORMAT(__Value, "0.0%"),                                     // 84.8%
+
+                // ─── 增减百分比 1 位小数（含正负号）─────────────────
+                "delta_pct_1dp",
+                    IF(__Value > 0, "+", "") & FORMAT(__Value, "0.0%"),          // +31.5% / -3.2% / 0.0%
+
+                // ─── 扩展格式（预留）─────────────────────────────────
+                "currency_k",
+                    __CurrencySymbol & FORMAT(__Value / 1000, "#,##0") & "k",
+                "percent_2dp",
+                    FORMAT(__Value, "0.00%"),
+                "delta_pct_2dp",
+                    IF(__Value > 0, "+", "") & FORMAT(__Value, "0.00%"),
+                "delta_bp",
+                    IF(__Value >= 0, "+", "") & FORMAT(__Value * 10000, "#,##0") & "bp",
+
+                // ─── 默认 ───────────────────────────────────────────
+                FORMAT(__Value, "#,##0.00")
+            )
+        )
+
+================================================================================
+7. 条件格式度量值 — 字体颜色
+================================================================================
+
+KPIs Overview Target Cell Font Color = 
+// ========================================
+// 度量值: KPIs Overview Target Cell Font Color
+// Display Folder: KPIs Overview Target > Formatting
+// 用途: 所有列（实际值列 + vs目标列）统一使用默认字体颜色 #212121
+//       vs目标列展示目标值本身（非偏差），无需正/负/零三色
+//       保留 Metric_IsVsTarget 标记和条件颜色框架以便未来扩展
+// 依赖: [KPIs Overview Target Cell Value],
+//       DIM_ColMetric_Target[Metric_IsVsTarget],
+//       DIM_ColMetric_Target[Metric_Color*]
+// ========================================
+    VAR __Value = [KPIs Overview Target Cell Value]
+    VAR __IsVsTarget = SELECTEDVALUE(DIM_ColMetric_Target[Metric_IsVsTarget], FALSE)
+    RETURN
+        SWITCH(
+            TRUE(),
+            ISBLANK(__Value),
+                SELECTEDVALUE(DIM_ColMetric_Target[Metric_ColorDefault], "#212121"),
+
+            // vs目标 列启用条件颜色
+            __IsVsTarget && __Value > 0,
+                SELECTEDVALUE(DIM_ColMetric_Target[Metric_ColorPositive], "#1A9018"),
+            __IsVsTarget && __Value < 0,
+                SELECTEDVALUE(DIM_ColMetric_Target[Metric_ColorNegative], "#D64550"),
+            __IsVsTarget && __Value = 0,
+                SELECTEDVALUE(DIM_ColMetric_Target[Metric_ColorZero], "#E1C233"),
+
+            // 实际值列统一默认色
+            SELECTEDVALUE(DIM_ColMetric_Target[Metric_ColorDefault], "#212121")
+        )
+
+================================================================================
+8. 条件格式度量值 — 交替行背景色
+================================================================================
+
+KPIs Overview Target Cell Background Color = 
+// ========================================
+// 度量值: KPIs Overview Target Cell Background Color
+// Display Folder: KPIs Overview Target > Formatting
+// 用途: 仅 TTL 行有背景色 #F8F6F2（浅米色，突出汇总行）
+//       TM / JD 行白色背景
+// 依赖: DIM_RowKPIs_Overview_Channel[Channel_PlatformID]
+// ========================================
+    VAR __ChannelID = SELECTEDVALUE(DIM_RowKPIs_Overview_Channel[Channel_PlatformID])
+    RETURN
+        IF(
+            __ChannelID = "TTL",
+            "#F8F6F2",                     // TTL 行：浅米色（汇总行高亮）
+            "#FFFFFF"                      // TM / JD 行：白色
+        )
+
+================================================================================
+9. 视觉对象配置说明
+================================================================================
+
+9.1 矩阵（Matrix）配置
+─────────────────────────
+- 行：DIM_RowKPIs_Overview_Channel[Channel_Name]
+- 列：DIM_ColMetric_Target[Metric_Name]
+- 值：[KPIs Overview Target Cell Display]（文本格式化后的显示值）
+
+9.2 条件格式配置
+──────────────────
+| 格式类型     | 基于字段                                         | 说明 |
+|-------------|--------------------------------------------------|------|
+| 字体颜色     | [KPIs Overview Target Cell Font Color]            | 所有列统一 #212121 默认色（vs目标列为目标值，非偏差） |
+| 背景颜色     | [KPIs Overview Target Cell Background Color]      | 仅 TTL 行 #F8F6F2 |
+
+说明：本矩阵无 SVG 图标度量值（无 vs LP 行，不需要增减箭头）。
+
+9.3 切片器配置
+────────────────
+| 切片器          | 类型     | 字段                                     | 默认值 | 影响本矩阵 |
+|----------------|----------|------------------------------------------|--------|-----------|
+| 本期日期范围    | Between  | Dim_Date_Current[数据日期]               | —      | 是        |
+| 数据口径       | 单选     | Slicer_DataCaliber_Selection[DataCaliber_Label] | T+1 | 是       |
+| 币种           | 单选     | Slicer_Currency_Selection[Currency_Label] | RMB    | 是        |
+| Channel        | 多选     | Slicer_Platform_Selection[Platform_Label] | TM     | 否（不影响）|
+| 同期日期范围    | Between  | Dim_Date_Ly[LY_数据日期]                 | —      | 否（不影响）|
+
+9.4 视觉交互说明
+──────────────────
+如果本矩阵与 KPIs Overview TTL汇总矩阵、Channel TTL 矩阵共存于同一报表页面：
+- 本矩阵使用 DIM_ColMetric_Target 列维度表（独立，不与其他矩阵冲突）
+- 建议在 Power BI 中设置视觉交互为"无"（Edit Interactions → None）
+  防止点击一个矩阵的列标题交叉筛选另一个矩阵
+- Channel 切片器仅影响 TTL汇总矩阵（通过 Slicer_Platform_Selection），不影响本矩阵
+
+================================================================================
+10. 度量值清单与 Display Folder
+================================================================================
+
+| # | 度量值名称                                    | Display Folder                       | 用途 | 返回类型 |
+|---|----------------------------------------------|--------------------------------------|------|----------|
+| 1 | KPIs Overview Target Base Value              | KPIs Overview Target                 | 渠道×指标 SWITCH 分发（10 分支） | 数值 |
+| 2 | KPIs Overview Target Cell Value              | KPIs Overview Target                 | 本期值 + 汇率转换 | 数值 |
+| 3 | KPIs Overview Target Cell Display            | KPIs Overview Target > Formatting    | 格式化显示文本 | 文本 |
+| 4 | KPIs Overview Target Cell Font Color         | KPIs Overview Target > Formatting    | 字体颜色（所有列统一默认色） | 颜色代码 |
+| 5 | KPIs Overview Target Cell Background Color   | KPIs Overview Target > Formatting    | TTL 行背景色 | 颜色代码 |
+
+Display Folder 结构：
+```
+_Measures
+├── KPIs Overview/                              ← TTL汇总度量值
+│   ├── KPIs Overview Base Value
+│   ├── KPIs Overview Cell Value
+│   └── Formatting/
+│       ├── KPIs Overview Cell Display
+│       ├── KPIs Overview Cell Font Color
+│       ├── KPIs Overview Cell SVG Icon
+│       └── KPIs Overview Cell Background Color
+│
+├── KPIs Overview Channel/                      ← Channel TTL 度量值
+│   ├── KPIs Overview Channel Base Value
+│   ├── KPIs Overview Channel Cell Value
+│   └── Formatting/
+│       ├── KPIs Overview Channel Cell Display
+│       ├── KPIs Overview Channel Cell Font Color
+│       └── KPIs Overview Channel Cell Background Color
+│
+└── KPIs Overview Target/                       ← 目标达成度量值（本方案新增）
+    ├── KPIs Overview Target Base Value
+    ├── KPIs Overview Target Cell Value
+    └── Formatting/
+        ├── KPIs Overview Target Cell Display
+        ├── KPIs Overview Target Cell Font Color
+        └── KPIs Overview Target Cell Background Color
+```
+
+新建对象清单：
+| 类型     | 名称                                          | 说明 |
+|----------|-----------------------------------------------|------|
+| 计算表   | DIM_ColMetric_Target                          | 列维度（10 指标，含 ZWS 列名去重） |
+| 度量值   | KPIs Overview Target Base Value               | 渠道×指标分发（含 vs目标 目标值计算） |
+| 度量值   | KPIs Overview Target Cell Value               | 值路由 + 汇率 |
+| 度量值   | KPIs Overview Target Cell Display             | 格式化显示 |
+| 度量值   | KPIs Overview Target Cell Font Color          | 字体颜色 |
+| 度量值   | KPIs Overview Target Cell Background Color    | 背景色 |
+
+复用对象清单（无需新建）：
+| 类型     | 名称                                  | 说明 |
+|----------|---------------------------------------|------|
+| 计算表   | DIM_RowKPIs_Overview_Channel          | 行维度（TM/JD/TTL） |
+| 计算表   | Slicer_DataCaliber_Selection          | 数据口径切片器 |
+| 计算表   | Slicer_Currency_Selection             | 币种切片器 |
+| 事实表   | a05_e2e_paid_media_channel_data_d     | 渠道粒度 |
+| 事实表   | a05_e2e_paid_media_summary_d          | 汇总粒度 |
+| 事实表   | a05_e2e_paid_media_product_data_d     | 产品粒度 |
+| 维度表   | Dim_Date_Current                      | 日期维度 |
+
+================================================================================
+11. 血缘关系图（Lineage Diagram）
+================================================================================
+
+```
+┌─────────────────────────────────┐
+│       Dim_Date_Current           │
+│  ┌─────────────────────────────┐ │
+│  │ 数据日期 │ 数据周 │ 数据月份│ │
+│  │ 数据季度 │ 数据年份         │ │
+│  └─────────────────────────────┘ │
+└────────┬──────────┬─────────┬───┘
+    1:*  │          │  1:*    │  1:*
+         ▼          ▼         ▼
+┌──────────────────┐ ┌───────────────────┐ ┌───────────────────────┐
+│ channel_data_d   │ │ summary_d         │ │ product_data_d        │
+│ ──────────────── │ │ ───────────────── │ │ ───────────────────── │
+│ nc_cost_amt      │ │ media_sales_amt   │ │ promotion_cost_amt    │
+│ ec_cost_amt      │ │ adj_cost_amt      │ │ promotion_sales_amt   │
+│ platform         │ │ media_new_member  │ │ fcst_promotion_cost   │
+│ trans_cycle      │ │ _cnt              │ │ _amt                  │
+│ data_date        │ │ fcst_media_sales  │ │ fcst_promotion_sales  │
+└──────────────────┘ │ _amt              │ │ _amt                  │
+                     │ fcst_cost_amt     │ │ framework             │
+                     │ fcst_user_cnt     │ │ platform, trans_cycle │
+                     │ customer_type     │ │ data_date             │
+                     │ platform          │ └───────────────────────┘
+                     │ trans_cycle       │
+                     │ data_date         │
+                     └───────────────────┘
+         ▲                ▲                ▲
+         │ FILTER(ALL)     │ FILTER(ALL)    │ FILTER(ALL)
+         │ (由行维度路由)   │ (由行维度路由)  │ (由行维度路由)
+         │                 │                │
+┌────────┴─────────────────┴────────────────┴───┐
+│      KPIs Overview Target Base Value           │
+│  ├─ __PlatformFilter_CD                        │
+│  │   (TM/JD → 单平台; TTL → {"TM","JD"})      │
+│  ├─ __PlatformFilter_SD                        │
+│  │   (summary 表渠道筛选)                       │
+│  ├─ __PlatformFilter_PD                        │
+│  │   (product 表渠道筛选)                       │
+│  ├─ Metric_ID SWITCH（10 分支）                │
+│  │   ID 1: ROI 实际                            │
+│  │   ID 2: vs目标(ROI) = 目标ROI               │
+│  │   ID 3: 新客花费占比 实际                    │
+│  │   ID 4: vs目标(新客花费占比) = 目标占比      │
+│  │   ID 5: 新客成本 实际                        │
+│  │   ID 6: vs目标(新客成本) = 目标成本          │
+│  │   ID 7: Acc花费占比(目标数据)                │
+│  │   ID 8: vs销售占比(实际数据)                 │
+│  │   ID 9: Acc ROI 实际                        │
+│  │   ID 10: vs目标(Acc ROI) = 目标AccROI       │
+│  └─ customer_type 过滤（ID 4/6 使用）          │
+└────────────────────┬───────────────────────────┘
+                     │
+                     ▼
+┌──────────────────────────────────────────┐
+│    KPIs Overview Target Cell Value        │
+│  ├─ 金额类（新客成本 ID5 / 目标新客成本 ID6）→ × ExchangeRate │
+│  └─ 非金额类 → 原值返回                  │
+└──────┬──────────────┬─────────────────────┘
+       │              │
+       ▼              ▼
+┌────────────┐  ┌────────────────────────────┐
+│Cell Display│  │Cell Font Color             │
+│            │  │Cell Background Color       │
+└────────────┘  └────────────────────────────┘
+       ▲              ▲              ▲
+       │              │              │
+┌──────┴──────────────┴──────┐ ┌────┴────────────────────────┐
+│  DIM_ColMetric_Target       │ │ DIM_RowKPIs_Overview_Channel│
+│  Metric_ID │ Metric_Name   │ │ Channel_Name                │
+│  Metric_Format              │ │ Channel_PlatformID          │
+│  Metric_IsVsTarget          │ │ Channel_Order               │
+│  Metric_IsCurrencyAmount    │ └─────────────────────────────┘
+│  Metric_Color* (4 列)       │
+└─────────────────────────────┘
+
+┌────────────────────────┐
+│ 断开切片器（本方案引用）│
+├────────────────────────┤
+│ Slicer_DataCaliber     │ ← SELECTEDVALUE → trans_cycle
+│ Slicer_Currency        │ ← SELECTEDVALUE → ExchangeRate / Symbol
+└────────────────────────┘
+
+┌────────────────────────┐
+│ 断开切片器（本方案不引用）│
+├────────────────────────┤
+│ Slicer_Platform        │ ← 不影响本矩阵
+│ Dim_Date_Ly            │ ← 不影响本矩阵（无同期/vs LP）
+│ DIM_RowKPIs_Overview   │ ← TTL汇总行维度，不影响
+│ DIM_ColMetric_Overview │ ← TTL汇总列维度，不影响
+└────────────────────────┘
+```
+
+================================================================================
+12. 扩展指南
+================================================================================
+
+12.1 添加新渠道行（如 DY 抖音）
+─────────────────────────────────
+步骤 1：在 DIM_RowKPIs_Overview_Channel 新增一行
+```dax
+// 示例：在 TTL 之前插入 DY
+{"DY", "DY", 3},
+{"TTL", "TTL", 4}    // TTL 排序值改为 4
+```
+
+步骤 2：修改 __PlatformFilter_CD / __PlatformFilter_SD / __PlatformFilter_PD 中 TTL 的 IN 列表
+```dax
+// 原: platform IN {"TM", "JD"}
+// 改: platform IN {"TM", "JD", "DY"}
+```
+
+其余度量值（Cell Value、Cell Display、Font Color、Background Color）无需改动。
+
+12.2 添加新指标列
+──────────────────
+步骤 1：在 DIM_ColMetric_Target 新增 ROW 行
+```dax
+// 示例：添加 ID=11 的 "新指标" 列
+ROW(
+    "Metric_ID", 11,
+    "Metric_Name", "新指标名",
+    "Metric_Sort", 11,
+    "Metric_Format", "decimal_2",
+    "Metric_IsVsTarget", FALSE,
+    "Metric_IsCurrencyAmount", FALSE,
+    "Metric_ColorPositive", "#1A9018",
+    "Metric_ColorNegative", "#D64550",
+    "Metric_ColorZero", "#E1C233",
+    "Metric_ColorDefault", "#212121"
+)
+```
+
+步骤 2：在 KPIs Overview Target Base Value 的 SWITCH 中新增分支
+```dax
+11, CALCULATE(SUM(a05_e2e_paid_media_summary_d[new_field]), __PlatformFilter_SD, ...),
+```
+
+其余度量值（Cell Value、Cell Display、Font Color、Background Color）无需任何改动。
+
+12.3 添加币种 / 调整汇率
+──────────────────────────
+当前 Slicer_Currency_Selection 已内置 Currency_Symbol 和 Currency_ExchangeRate 列。
+
+添加新币种：在 Slicer_Currency_Selection 新增行，设定对应汇率乘数即可。
+```dax
+// 示例：添加 EUR（欧元），汇率 = 8
+{ "EUR", "EUR", 3, "欧元，欧洲市场口径", FALSE, TRUE, "€", 8 }
+```
+
+调整汇率：直接修改 Slicer_Currency_Selection 中对应行的 Currency_ExchangeRate 值。
+Cell Display 自动读取 Currency_Symbol 显示货币符号，Cell Value 自动读取 ExchangeRate 做汇率换算。
+无需修改任何度量值。
+
+当前新客成本（ID 5）和目标新客成本（ID 6）为金额类指标（Metric_IsCurrencyAmount = TRUE），
+如需新增金额类指标，在 DIM_ColMetric_Target 对应行设 Metric_IsCurrencyAmount = TRUE。
+
+12.4 为 vs目标列启用条件颜色（可选扩展）
+──────────────────────────────────────────
+当前所有 vs目标列展示目标值本身，统一使用默认色 #212121。
+如未来需要对 vs目标列启用正/负/零三色（例如展示偏差值），可修改：
+
+步骤 1：在 DIM_ColMetric_Target 中将目标列的 Metric_Format 改为 "delta_pct_1dp"
+步骤 2：在 Base Value SWITCH 中将对应分支改为 delta 计算（DIVIDE(actual - target, target)）
+步骤 3：Font Color 度量值中已保留 __IsVsTarget 条件分支，自动生效
+
+对于"越低越好"的指标（如新客成本），可在 DIM_ColMetric_Target 中
+交换该行的 Metric_ColorPositive 和 Metric_ColorNegative：
+```
+// 新客成本 vs目标 行：正值红色（超支），负值绿色（省钱）
+Metric_ColorPositive = "#D64550"    // 红色 → 正值表示超支
+Metric_ColorNegative = "#1A9018"    // 绿色 → 负值表示省钱
+```
+
+================================================================================
+13. 注意事项
+================================================================================
+
+13.1 Metric_ID 路由（关键）
+────────────────────────────
+- 使用 Metric_ID（1~10）作为 SWITCH 路由键，非 Metric_Name
+- 4 个"vs目标"列 Metric_Name 视觉相同但技术唯一（通过 UNICHAR(8203) ZWS）
+- SWITCH 基于 Metric_ID 路由，不受列名去重影响
+
+13.2 TTL 汇总准确性
+──────────────────────
+- 比率类指标（ROI、新客花费占比、新客成本、Acc花费占比、vs销售占比、Acc ROI）：
+  基于合并分子/分母重新计算，即加权比率
+  例：TTL ROI = (TM media_sales + JD media_sales) / (TM adj_cost + JD adj_cost)
+  而非 (TM ROI + JD ROI) / 2（简单平均是错误的）
+- vs目标类指标：同样基于合并后的目标分子/目标分母重新计算目标值（加权目标值）
+  例：TTL vs目标ROI = (TM+JD fcst_media_sales) / (TM+JD fcst_cost)
+  而非 (TM 目标ROI + JD 目标ROI) / 2
+
+13.3 三张事实表使用说明
+────────────────────────
+| 事实表 | 粒度 | 涉及指标 |
+|--------|------|---------|
+| a05_e2e_paid_media_summary_d | 汇总粒度 | ROI / vs目标ROI / 新客成本 / vs目标新客成本 / vs目标新客花费占比 |
+| a05_e2e_paid_media_channel_data_d | 渠道粒度 | 新客花费占比 |
+| a05_e2e_paid_media_product_data_d | 产品粒度 | Acc花费占比 / vs销售占比 / Acc ROI / vs目标Acc ROI |
+
+注意：
+- vs目标(新客花费占比) 直接计算目标占比，仅使用 summary_d（fcst_cost_amt）
+- 三张表均按 platform 渠道路由（由行维度控制）+ trans_cycle（单选）统一二维筛选
+- product_data_d 的 Acc 指标额外按 framework = "Acceleration" 筛选
+- 数据源仅 RMB，不按 currency 筛选事实表
+
+13.4 customer_type 过滤说明
+──────────────────────────────
+- vs目标(新客花费占比)（ID 4）：目标分子需过滤 customer_type = "new"，目标分母不过滤
+- vs目标(新客成本)（ID 6）：目标分子和分母均需过滤 customer_type = "new"
+- 其他所有指标不涉及 customer_type 过滤
+- summary_d 表数据存储在 customer_type 粒度（new / existing），
+  不过滤时 SUM 自动聚合全部类型
+
+13.5 币种汇率转换机制
+──────────────────────
+- 数据源表仅存储 RMB 币种数据，Base Value 不做 currency 筛选
+- Cell Value 层通过 Currency_ExchangeRate 进行汇率换算
+- 新客成本（ID 5）和目标新客成本（ID 6）均为金额类（Metric_IsCurrencyAmount = TRUE），乘以汇率
+- 所有比率类指标（ROI、百分比、占比）不受汇率影响
+- vs目标列中，仅 ID 6（目标新客成本）受汇率影响，其他 vs目标列为比率类不受影响
+
+13.6 与 Channel 切片器的隔离机制
+──────────────────────────────────
+- 本方案所有度量值不引用 Slicer_Platform_Selection
+- 即使页面上存在 Channel/Platform 切片器，也不影响本矩阵
+- 渠道维度已内嵌到行维度 DIM_RowKPIs_Overview_Channel 中
+- 用户切换 Channel 切片器时，仅 TTL汇总矩阵响应
+
+13.7 格式驱动方式
+──────────────────
+- 所有行统一使用 Metric_Format 格式列（仅一套格式，无 LP / VsLP 格式）
+- vs目标列与对应实际值列使用相同格式（ROI→decimal_2, 占比→percent_1dp, 成本→currency）
+- 颜色：所有列（实际值 + vs目标）统一使用默认色 #212121
+  Metric_IsVsTarget 标记保留，用于标识目标值列身份，不驱动条件颜色
+  如未来需要为 vs目标列启用条件颜色，可在 Font Color 度量值中启用 __IsVsTarget 分支
+- 如需个别指标使用不同配色，直接修改 DIM_ColMetric_Target 该行的颜色列
+
+13.8 背景色设计说明
+──────────────────────
+- 仅 TTL 行（Channel_PlatformID = "TTL"）显示背景色 #F8F6F2
+- TM / JD 行保持白色 #FFFFFF
+- #F8F6F2 为浅米色，视觉上突出汇总行
+
+13.9 新客成本粒度注意
+──────────────────────
+- media_new_member_cnt（媒体新客人数）在数据字典中标注"时间最细到月度"
+- 若 Power BI 按日筛选，需确认 SQL 层已将月度数据按日展开
+  或在报表层以月度以上粒度筛选此指标
+- 同理，adj_cost_amt（调整花费）需确认粒度一致性
+
+13.10 Acc花费占比口径说明
+─────────────────────────
+- Acc花费占比（ID 7）使用 fcst_ 目标数据（fcst_promotion_cost_amt），展示花费结构目标
+- vs销售占比（ID 8）使用实际数据（promotion_sales_amt），展示销售结构实际
+- 两者并列展示，用于对比"花费如何分配"（目标）vs"销售如何产生"（实际）
+- Acc ROI（ID 9）使用实际数据（promotion_sales_amt / promotion_cost_amt）
+- 三个指标均基于 a05_e2e_paid_media_product_data_d 表，按 framework = "Acceleration" 筛选
+
+13.11 列名去重技术说明
+───────────────────────
+- Power BI Matrix 视觉对象要求列字段值唯一，否则同名列会合并
+- 本方案 4 个"vs目标"列通过 UNICHAR(8203)（Zero-Width Space）实现技术唯一
+- ZWS 是不可见 Unicode 字符，不影响视觉显示效果
+- 使用 UNION + ROW 构建计算表（而非 DATATABLE）以支持 UNICHAR 表达式
+- 如需维护列名，修改 ROW 中的 Metric_Name 表达式即可
+
+================================================================================
+14. 操作清单（Checklist）
+================================================================================
+
+维度表：
+- [ ] 确认 DIM_RowKPIs_Overview_Channel 已存在（复用，3 行：TM / JD / TTL）
+- [ ] 配置 Sort by Column：Channel_Name → Channel_Order
+- [ ] 创建 DIM_ColMetric_Target 计算表（10 行，UNION + ROW 构建，含 UNICHAR 去重）
+- [ ] 配置 Sort by Column：Metric_Name → Metric_Sort
+
+切片器：
+- [ ] 确认 Slicer_DataCaliber_Selection 已存在（复用）
+- [ ] 确认 Slicer_Currency_Selection 已存在（复用）
+
+度量值：
+- [ ] 创建 KPIs Overview Target Base Value（10 个 SWITCH 分支，渠道路由 + 三表查询 + vs目标目标值计算 + customer_type 过滤）
+- [ ] 创建 KPIs Overview Target Cell Value（本期值 + 汇率转换）
+- [ ] 创建 KPIs Overview Target Cell Display（格式化显示）
+- [ ] 创建 KPIs Overview Target Cell Font Color（所有列统一默认色 #212121）
+- [ ] 创建 KPIs Overview Target Cell Background Color（TTL 行 #F8F6F2）
+- [ ] 设置 Display Folder：KPIs Overview Target / KPIs Overview Target > Formatting
+
+视觉对象：
+- [ ] 新建矩阵（Matrix）视觉对象
+- [ ] 配置矩阵行：DIM_RowKPIs_Overview_Channel[Channel_Name]
+- [ ] 配置矩阵列：DIM_ColMetric_Target[Metric_Name]
+- [ ] 配置矩阵值：[KPIs Overview Target Cell Display]
+- [ ] 应用条件格式：字体颜色 → [KPIs Overview Target Cell Font Color]
+- [ ] 应用条件格式：背景颜色 → [KPIs Overview Target Cell Background Color]
+- [ ] 设置视觉交互为"无"（Edit Interactions → None），避免与其他矩阵交叉筛选
+
+验证：
+- [ ] 验证：TM 行 ROI = media_sales_amt / adj_cost_amt（仅 TM 平台数据）
+- [ ] 验证：JD 行 ROI = media_sales_amt / adj_cost_amt（仅 JD 平台数据）
+- [ ] 验证：TTL 行 ROI = (TM+JD media_sales) / (TM+JD adj_cost)（加权，非平均）
+- [ ] 验证：vs目标(ROI) = fcst_media_sales_amt / fcst_cost_amt（目标ROI，格式 XX.XX）
+- [ ] 验证：新客花费占比 = nc_cost_amt / (nc_cost_amt + ec_cost_amt)（来自 channel_data_d）
+- [ ] 验证：vs目标(新客花费占比) = fcst_cost_amt(new) / fcst_cost_amt(all)（目标占比）
+- [ ] 验证：新客成本 = adj_cost_amt / media_new_member_cnt
+- [ ] 验证：vs目标(新客成本) = fcst_cost_amt(new) / fcst_user_cnt(new)（目标成本，格式 ¥X,XXX）
+- [ ] 验证：Acc花费占比 使用 fcst_promotion_cost_amt（目标数据）
+- [ ] 验证：vs销售占比 使用 promotion_sales_amt（实际数据）
+- [ ] 验证：Acc ROI = promotion_sales_amt(Acc) / promotion_cost_amt(Acc)
+- [ ] 验证：vs目标(Acc ROI) = fcst_promotion_sales_amt(Acc) / fcst_promotion_cost_amt(Acc)（目标AccROI，格式 XX.XX）
+- [ ] 验证：product_data_d 的 Acceleration 过滤正确
+- [ ] 验证：切换 Channel 切片器，本矩阵数据不变
+- [ ] 验证：切换数据口径（T+1 / T+15），数据正确变化
+- [ ] 验证：切换币种（RMB / USD），新客成本和目标新客成本的货币符号和数据正确变化
+- [ ] 验证：调整本期日期范围，数据正确变化
+- [ ] 验证：仅 TTL 行有 #F8F6F2 背景色，TM/JD 行为白色
+- [ ] 验证：所有列（实际值 + vs目标）统一使用默认字体颜色 #212121
+- [ ] 验证：10 个指标的 SWITCH 分支均返回正确值
+- [ ] 验证：4 个"vs目标"列在 Matrix 中正确显示为独立列（未合并）

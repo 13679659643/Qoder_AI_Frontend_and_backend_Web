@@ -31,8 +31,8 @@ DATATABLE(
     {
         // M polo - 男装 Polo 系列
         {
-            "M_POLO",             // 品牌代码，男装 Polo 的标识
-            "M polo",             // 品牌显示名称
+            "M polo",             // 品牌代码，男装 Polo 的标识
+            "M POLO",             // 品牌显示名称
             1,                    // 排序顺序，优先级最高
             "男装 Polo 系列，涵盖男士 Polo 衫及相关产品线",  // 品牌描述
             TRUE,                 // 默认选中
@@ -41,8 +41,8 @@ DATATABLE(
         
         // W polo - 女装 Polo 系列
         {
-            "W_POLO",             // 品牌代码，女装 Polo 的标识
-            "W polo",             // 品牌显示名称
+            "W polo",             // 品牌代码，女装 Polo 的标识
+            "W POLO",             // 品牌显示名称
             2,                    // 排序顺序
             "女装 Polo 系列，涵盖女士 Polo 衫及相关产品线",  // 品牌描述
             FALSE,                // 非默认选项
@@ -141,8 +141,8 @@ DATATABLE(
         
         // Carryover - 跨季延续款
         {
-            "CARRYOVER",           // 季节代码
-            "Carryover",           // 季节显示名称
+            "Carryover",           // 季节代码
+            "CARRYOVER",           // 季节显示名称
             3,                     // 排序顺序
             "Carryover 跨季延续款，上季延续至当季销售的产品",  // 季节描述
             FALSE,                 // 非默认选项
@@ -176,8 +176,8 @@ DATATABLE(
     {
         // T-shirt - T恤品类
         {
-            "TSHIRT",              // 品类代码
-            "T-shirt",             // 品类显示名称
+            "T-shirt",             // 品类代码
+            "T-SHIRT",             // 品类显示名称
             1,                     // 排序顺序
             "T恤品类，包含短袖 T 恤、长袖 T 恤等上装产品",  // 品类描述
             TRUE,                  // 默认选中
@@ -186,8 +186,8 @@ DATATABLE(
         
         // Short - 短裤品类
         {
-            "SHORT",               // 品类代码
-            "Short",               // 品类显示名称
+            "Short",               // 品类代码
+            "SHORT",               // 品类显示名称
             2,                     // 排序顺序
             "短裤品类，包含休闲短裤、运动短裤等下装产品",  // 品类描述
             FALSE,                 // 非默认选项
@@ -221,8 +221,8 @@ DATATABLE(
     {
         // Acceleration - 加速增长策略
         {
-            "ACCELERATION",        // 框架代码
-            "Acceleration",        // 框架显示名称
+            "Acceleration",        // 框架代码
+            "ACCELERATION",        // 框架显示名称
             1,                     // 排序顺序
             "加速增长策略，聚焦高增长潜力品类的流量投放和转化提升",  // 框架描述
             TRUE,                  // 默认选中
@@ -231,8 +231,8 @@ DATATABLE(
         
         // Foundation - 基础保障策略
         {
-            "FOUNDATION",          // 框架代码
-            "Foundation",          // 框架显示名称
+            "Foundation",          // 框架代码
+            "FOUNDATION",          // 框架显示名称
             2,                     // 排序顺序
             "基础保障策略，维护核心品类的稳定流量和基本转化",  // 框架描述
             FALSE,                 // 非默认选项
@@ -266,8 +266,8 @@ DATATABLE(
     {
         // Actual - 实际数据
         {
-            "ACTUAL",              // 场景代码
-            "Actual",              // 场景显示名称
+            "Actual",              // 场景代码
+            "ACTUAL",              // 场景显示名称
             1,                     // 排序顺序
             "实际数据场景，展示当前实际发生的业务数据",  // 场景描述
             TRUE,                  // 默认选中
@@ -276,8 +276,8 @@ DATATABLE(
         
         // Target - 目标数据
         {
-            "TARGET",              // 场景代码
-            "Target",              // 场景显示名称
+            "Target",              // 场景代码
+            "TARGET",              // 场景显示名称
             2,                     // 排序顺序
             "目标数据场景，展示计划或预算的目标值",  // 场景描述
             FALSE,                 // 非默认选项
@@ -291,28 +291,28 @@ DATATABLE(
 // 7. %/Absolute 数值格式筛选器
 // ─────────────────────────────────────
 
-Slicer_ValueFormat_Selection = 
+Slicer_%/Absolute_Selection = 
 // 功能：创建数值格式维度表，用于报表中的数值展示格式切换
 // 用途：用户可通过此表切换 KPI 数值的展示格式（百分比/点数/基点）
-// 参数表名称：ValueFormat
+// 参数表名称：%/Absolute
 // 遵循通用参数表模板规范
 DATATABLE(
     // 基础字段 - 必选字段
-    "ValueFormat_ID", STRING,           // 主键标识，用于唯一标识每个格式选项
-    "ValueFormat_Label", STRING,        // 显示标签，在报表界面中向用户展示的格式名称
-    "ValueFormat_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
-    "ValueFormat_Description", STRING,  // 详细描述，说明该格式的具体含义和使用场景
+    "%/Absolute_ID", STRING,           // 主键标识，用于唯一标识每个格式选项
+    "%/Absolute_Label", STRING,        // 显示标签，在报表界面中向用户展示的格式名称
+    "%/Absolute_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "%/Absolute_Description", STRING,  // 详细描述，说明该格式的具体含义和使用场景
     
     // 扩展字段 - 可选字段
-    "ValueFormat_IsDefault", BOOLEAN,   // 是否默认选中
-    "ValueFormat_IsActive", BOOLEAN,    // 是否激活状态
-    "ValueFormat_Suffix", STRING,       // 格式后缀，用于度量值 FORMAT 拼接
+    "%/Absolute_IsDefault", BOOLEAN,   // 是否默认选中
+    "%/Absolute_IsActive", BOOLEAN,    // 是否激活状态
+    "%/Absolute_Suffix", STRING,       // 格式后缀，用于度量值 FORMAT 拼接
     
     // 数据行
     {
         // % - 百分比格式
         {
-            "PCT",                 // 格式代码
+            "%",                   // 格式代码
             "%",                   // 格式显示名称
             1,                     // 排序顺序
             "百分比格式，将数值乘以 100 后加 % 后缀显示（如 +14%）",  // 格式描述
@@ -323,8 +323,8 @@ DATATABLE(
         
         // pts - 百分点格式
         {
-            "PTS",                 // 格式代码
-            "pts",                 // 格式显示名称
+            "pts",                 // 格式代码
+            "PTS",                 // 格式显示名称
             2,                     // 排序顺序
             "百分点格式，以点数形式展示差异值（如 +14pts）",  // 格式描述
             FALSE,                 // 非默认选项
@@ -334,13 +334,151 @@ DATATABLE(
         
         // bp - 基点格式
         {
-            "BP",                  // 格式代码
-            "bp",                  // 格式显示名称
+            "bp",                  // 格式代码
+            "BP",                  // 格式显示名称
             3,                     // 排序顺序
             "基点格式，以基点形式展示差异值，1bp = 0.01%（如 +14bp）",  // 格式描述
             FALSE,                 // 非默认选项
             TRUE,                  // 激活状态，当前可用
             "bp"                   // 格式后缀，用于 FORMAT 拼接
+        }
+    }
+)
+
+
+// ─────────────────────────────────────
+// 8. AdsFormat 广告投放工具筛选器
+// ─────────────────────────────────────
+
+Slicer_AdsFormat_Selection = 
+// 功能：创建广告投放工具维度表，用于报表中的广告工具筛选和分组
+// 用途：用户可通过此表按广告投放工具维度筛选 KPI 数据
+// 参数表名称：AdsFormat
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "AdsFormat_ID", STRING,           // 主键标识，用于唯一标识每个广告工具选项
+    "AdsFormat_Label", STRING,        // 显示标签，在报表界面中向用户展示的广告工具名称
+    "AdsFormat_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "AdsFormat_Description", STRING,  // 详细描述，说明该广告工具的具体特点和业务含义
+    
+    // 扩展字段 - 可选字段
+    "AdsFormat_IsDefault", BOOLEAN,   // 是否默认选中，TRUE 表示用户打开报表时默认选择此工具
+    "AdsFormat_IsActive", BOOLEAN,    // 是否激活状态，控制该广告工具选项是否可用
+    
+    // 数据行
+    {
+        // 引力魔方 - 阿里妈妈信息流推荐广告工具
+        {
+            "引力魔方",             // 广告工具代码
+            "引力魔方",             // 广告工具显示名称
+            1,                     // 排序顺序，优先级最高
+            "阿里妈妈信息流推荐广告工具，基于人群定向的展示类广告，侧重于拉新和种草",  // 工具描述
+            TRUE,                  // 默认选中
+            TRUE                   // 激活状态，当前可用
+        },
+        
+        // 直通车 - 阿里妈妈搜索竞价广告工具
+        {
+            "直通车",               // 广告工具代码
+            "直通车",               // 广告工具显示名称
+            2,                     // 排序顺序
+            "阿里妈妈搜索竞价广告工具，基于关键词的搜索类广告，侧重于精准流量获取",  // 工具描述
+            FALSE,                 // 非默认选项
+            TRUE                   // 激活状态，当前可用
+        }
+    }
+)
+
+
+// ─────────────────────────────────────
+// 9. DataCaliber 数据口径筛选器
+// ─────────────────────────────────────
+
+Slicer_DataCaliber_Selection = 
+// 功能：创建数据口径维度表，用于报表中的数据时效性口径切换
+// 用途：用户可通过此表选择不同数据回收口径查看 KPI 数据
+// 参数表名称：DataCaliber
+// 遵循通用参数表模板规范 
+DATATABLE(
+    // 基础字段 - 必选字段
+    "DataCaliber_ID", STRING,           // 主键标识，用于唯一标识每个数据口径选项
+    "DataCaliber_Label", STRING,        // 显示标签，在报表界面中向用户展示的口径名称
+    "DataCaliber_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "DataCaliber_Description", STRING,  // 详细描述，说明该数据口径的业务含义
+    
+    // 扩展字段 - 可选字段
+    "DataCaliber_IsDefault", BOOLEAN,   // 是否默认选中
+    "DataCaliber_IsActive", BOOLEAN,    // 是否激活状态
+    
+    // 数据行
+    {
+        // T+1 - 次日口径
+        {
+            "T+1",                 // 口径代码
+            "T+1",                 // 口径显示名称
+            1,                     // 排序顺序
+            "次日数据口径，数据在交易发生后 1 天回收确认",  // 口径描述
+            TRUE,                  // 默认选中
+            TRUE                   // 激活状态，当前可用
+        },
+        
+        // T+15 - 15日口径
+        {
+            "T+15",                // 口径代码
+            "T+15",                // 口径显示名称
+            2,                     // 排序顺序
+            "15日数据口径，数据在交易发生后 15 天回收确认，含退货退款等最终结算",  // 口径描述
+            FALSE,                 // 非默认选项
+            TRUE                   // 激活状态，当前可用
+        }
+    }
+)
+
+
+// ─────────────────────────────────────
+// 10. Currency 币种筛选器
+// ─────────────────────────────────────
+
+Slicer_Currency_Selection = 
+// 功能：创建币种维度表，用于报表中的货币单位切换
+// 用途：用户可通过此表选择以人民币或美元展示 KPI 金额类数据
+// 参数表名称：Currency
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "Currency_ID", STRING,           // 主键标识，用于唯一标识每个币种选项
+    "Currency_Label", STRING,        // 显示标签，在报表界面中向用户展示的币种名称
+    "Currency_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "Currency_Description", STRING,  // 详细描述，说明该币种的业务含义
+    
+    // 扩展字段 - 可选字段
+    "Currency_IsDefault", BOOLEAN,   // 是否默认选中
+    "Currency_IsActive", BOOLEAN,    // 是否激活状态
+    "Currency_Symbol", STRING,       // 货币符号，用于度量值 FORMAT 拼接
+    
+    // 数据行
+    {
+        // RMB - 人民币
+        {
+            "RMB",                 // 币种代码
+            "RMB",                 // 币种显示名称
+            1,                     // 排序顺序
+            "人民币，中国境内业务默认结算货币",  // 币种描述
+            TRUE,                  // 默认选中
+            TRUE,                  // 激活状态，当前可用
+            "¥"                    // 货币符号
+        },
+        
+        // USD - 美元
+        {
+            "USD",                 // 币种代码
+            "USD",                 // 币种显示名称
+            2,                     // 排序顺序
+            "美元，用于跨境业务或集团汇报口径",  // 币种描述
+            FALSE,                 // 非默认选项
+            TRUE,                  // 激活状态，当前可用
+            "$"                    // 货币符号
         }
     }
 )

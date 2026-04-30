@@ -1,0 +1,110 @@
+-- ========================================
+-- SQL: 本期日期维度数据
+-- 用途: Power BI 日期表加载，用于"本期"筛选器
+-- 表: indep_rl_ads.a05_e2e_paid_media_channel_data
+-- 说明: 
+--   - dt 和 data_date 转为 DATE 类型
+--   - etl_time 保持原始 STRING 保留时间部分
+--   - 提取完整的日期维度字段
+-- ========================================
+
+SELECT DISTINCT
+    etl_time                                    AS `数据更新时间`,
+    STR_TO_DATE(dt, '%Y-%m-%d')                   AS `分区字段_数据快照日期`,
+    data_type                                   AS `数据类型`,
+    STR_TO_DATE(data_date, '%Y-%m-%d')            AS `数据日期`,
+    data_week                                   AS `数据周`,
+    data_week_name                              AS `数据周名称`,
+    data_month                                  AS `数据月份`,
+    data_month_name                             AS `数据月份名称`,
+    data_quarter                                AS `数据季度`,
+    data_quarter_name                           AS `数据季度名称`,
+    data_year                                   AS `数据年份`,
+    data_year_name                              AS `数据年份名称`
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE data_type = 'day'
+ORDER BY STR_TO_DATE(data_date, '%Y-%m-%d');
+
+
+-- ========================================
+-- SQL: 同期日期维度数据
+-- 用途: Power BI 日期表加载，用于"同期"（同比/上期）筛选器
+-- 表: indep_rl_ads.a05_e2e_paid_media_channel_data
+-- 说明: 
+--   - 同期日期用于 vs LY 计算，日期范围与本期独立
+--   - 通过 SELECTEDVALUE 在 DAX 中读取，断开维度加载
+--   - 字段加 LY_ 前缀区分，避免与本期字段混淆
+--   - dt 和 data_date 转为 DATE 类型
+--   - etl_time 保持原始 STRING 保留时间部分
+-- ========================================
+
+SELECT DISTINCT
+    etl_time                                    AS `LY_数据更新时间`,
+    STR_TO_DATE(dt, '%Y-%m-%d')                   AS `LY_分区字段_数据快照日期`,
+    data_type                                   AS `LY_数据类型`,
+    STR_TO_DATE(data_date, '%Y-%m-%d')            AS `LY_数据日期`,
+    data_week                                   AS `LY_数据周`,
+    data_week_name                              AS `LY_数据周名称`,
+    data_month                                  AS `LY_数据月份`,
+    data_month_name                             AS `LY_数据月份名称`,
+    data_quarter                                AS `LY_数据季度`,
+    data_quarter_name                           AS `LY_数据季度名称`,
+    data_year                                   AS `LY_数据年份`,
+    data_year_name                              AS `LY_数据年份名称`
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d
+WHERE data_type = 'day'
+ORDER BY STR_TO_DATE(data_date, '%Y-%m-%d');
+
+
+-- ========================================
+-- SQL: 获取powerbi中使用的数据
+-- 表: `indep_rl_ads`.a05_e2e_paid_media_summary_d
+-- ========================================
+select 
+IF(currency is null, 'RMB', currency) AS currency,
+0 AS media_sales_amt,
+0 AS adj_cost_amt,
+0 AS fcst_media_sales_amt,
+0 AS fcst_user_cnt,
+* from 
+`indep_rl_ads`.a05_e2e_paid_media_summary_d
+
+
+-- ========================================
+-- SQL: 获取powerbi中使用的数据
+-- 表: `indep_rl_ads`.a05_e2e_paid_media_channel_data_d
+-- ========================================
+select 
+IF(currency is null, 'RMB', currency) AS currency,
+0 AS rebate,
+* 
+from 
+`indep_rl_ads`.a05_e2e_paid_media_channel_data_d
+
+
+-- ========================================
+-- SQL: 获取powerbi中使用的数据
+-- 表: `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+-- ========================================
+select 
+IF(currency is null, 'RMB', currency) AS currency,
+* 
+from 
+`indep_rl_ads`.a05_e2e_paid_media_product_data_d
+
+
+-- ========================================
+-- SQL: 获取事实表最大日期
+-- 表: indep_rl_ads.a05_e2e_paid_media_summary_d
+-- 说明: data_date 为 String 类型，格式 YYYY-MM-DD
+-- ========================================
+
+SELECT 
+    CONCAT(
+        '数据截至：',
+        DATE_FORMAT(
+            MAX(STR_TO_DATE(data_date, '%Y-%m-%d')),
+            '%Y-%m-%d'
+        )
+    ) AS `Constants_Date_Max`
+FROM indep_rl_ads.a05_e2e_paid_media_summary_d
