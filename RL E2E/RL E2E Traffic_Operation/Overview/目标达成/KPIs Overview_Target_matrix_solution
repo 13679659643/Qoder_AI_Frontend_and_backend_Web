@@ -17,7 +17,7 @@ KPIs Overview_Target_matrix_solution 解决方案：
       Acc花费占比 / vs销售占比 / Acc ROI / vs目标（10 列）
 - 筛选器：本期日期(Dim_Date_Current) / 数据口径(trans_cycle, 单选) / 币种(currency, 单选)
 - 本矩阵不依赖 Slicer_Platform_Selection（Channel 维度已内嵌到行维度）
-- 仅 TTL 行有背景色 #F8F6F2（浅米色，突出汇总行），其他行白色
+- 仅 TTL 行有背景色 #F2EFEC（“米白色”或“奶咖色”，突出汇总行），其他行白色
 
 指标结构说明：
 - 10 列由 5 对"实际值 + 目标值"组成：
@@ -53,7 +53,7 @@ KPIs Overview Target Cell Value ── 仅本期逻辑
         │                          金额类指标 × ExchangeRate 汇率换算
         ├──→ KPIs Overview Target Cell Display（格式化，读取维度表格式列）
         ├──→ KPIs Overview Target Cell Font Color（字体颜色，vs目标列条件颜色）
-        └──→ KPIs Overview Target Cell Background Color（仅 TTL 行 #F8F6F2）
+        └──→ KPIs Overview Target Cell Background Color（仅 TTL 行 #F2EFEC）
 
 事实表（Power BI 表名 = 数据源表名，字段名一致）
 ├── a05_e2e_paid_media_channel_data_d（渠道粒度）
@@ -974,7 +974,7 @@ KPIs Overview Target Cell Background Color =
 // ========================================
 // 度量值: KPIs Overview Target Cell Background Color
 // Display Folder: KPIs Overview Target > Formatting
-// 用途: 仅 TTL 行有背景色 #F8F6F2（浅米色，突出汇总行）
+// 用途: 仅 TTL 行有背景色 #F2EFEC（浅米色，突出汇总行）
 //       TM / JD 行白色背景
 // 依赖: DIM_RowKPIs_Overview_Channel[Channel_PlatformID]
 // ========================================
@@ -982,7 +982,7 @@ KPIs Overview Target Cell Background Color =
     RETURN
         IF(
             __ChannelID = "TTL",
-            "#F8F6F2",                     // TTL 行：浅米色（汇总行高亮）
+            "#F2EFEC",                     // TTL 行：浅米色（汇总行高亮）
             "#FFFFFF"                      // TM / JD 行：白色
         )
 
@@ -1001,7 +1001,7 @@ KPIs Overview Target Cell Background Color =
 | 格式类型     | 基于字段                                         | 说明 |
 |-------------|--------------------------------------------------|------|
 | 字体颜色     | [KPIs Overview Target Cell Font Color]            | 所有列统一 #212121 默认色（vs目标列为目标值，非偏差） |
-| 背景颜色     | [KPIs Overview Target Cell Background Color]      | 仅 TTL 行 #F8F6F2 |
+| 背景颜色     | [KPIs Overview Target Cell Background Color]      | 仅 TTL 行 #F2EFEC（“米白色”或“奶咖色”，突出汇总行） |
 
 说明：本矩阵无 SVG 图标度量值（无 vs LP 行，不需要增减箭头）。
 
@@ -1323,16 +1323,16 @@ Metric_ColorNegative = "#1A9018"    // 绿色 → 负值表示省钱
 ──────────────────
 - 所有行统一使用 Metric_Format 格式列（仅一套格式，无 LP / VsLP 格式）
 - vs目标列与对应实际值列使用相同格式（ROI→decimal_2, 占比→percent_1dp, 成本→currency）
-- 颜色：所有列（实际值 + vs目标）统一使用默认色 #212121
+- 颜色：所有列（实际值 + vs目标）统一使用默认色 #212121（黑色）
   Metric_IsVsTarget 标记保留，用于标识目标值列身份，不驱动条件颜色
   如未来需要为 vs目标列启用条件颜色，可在 Font Color 度量值中启用 __IsVsTarget 分支
 - 如需个别指标使用不同配色，直接修改 DIM_ColMetric_Target 该行的颜色列
 
 13.8 背景色设计说明
 ──────────────────────
-- 仅 TTL 行（Channel_PlatformID = "TTL"）显示背景色 #F8F6F2
+- 仅 TTL 行（Channel_PlatformID = "TTL"）显示背景色 #F2EFEC
 - TM / JD 行保持白色 #FFFFFF
-- #F8F6F2 为浅米色，视觉上突出汇总行
+- #F2EFEC 为“米白色”或“奶咖色”，视觉上突出汇总行
 
 13.9 新客成本粒度注意
 ──────────────────────
@@ -1376,7 +1376,7 @@ Metric_ColorNegative = "#1A9018"    // 绿色 → 负值表示省钱
 - [ ] 创建 KPIs Overview Target Cell Value（本期值 + 汇率转换）
 - [ ] 创建 KPIs Overview Target Cell Display（格式化显示）
 - [ ] 创建 KPIs Overview Target Cell Font Color（所有列统一默认色 #212121）
-- [ ] 创建 KPIs Overview Target Cell Background Color（TTL 行 #F8F6F2）
+- [ ] 创建 KPIs Overview Target Cell Background Color（仅 TTL 行 #F2EFEC，其他行 #FFFFFF）
 - [ ] 设置 Display Folder：KPIs Overview Target / KPIs Overview Target > Formatting
 
 视觉对象：
@@ -1406,7 +1406,7 @@ Metric_ColorNegative = "#1A9018"    // 绿色 → 负值表示省钱
 - [ ] 验证：切换数据口径（T+1 / T+15），数据正确变化
 - [ ] 验证：切换币种（RMB / USD），新客成本和目标新客成本的货币符号和数据正确变化
 - [ ] 验证：调整本期日期范围，数据正确变化
-- [ ] 验证：仅 TTL 行有 #F8F6F2 背景色，TM/JD 行为白色
+- [ ] 验证：仅 TTL 行有 #F2EFEC 背景色，TM/JD 行为白色
 - [ ] 验证：所有列（实际值 + vs目标）统一使用默认字体颜色 #212121
 - [ ] 验证：10 个指标的 SWITCH 分支均返回正确值
 - [ ] 验证：4 个"vs目标"列在 Matrix 中正确显示为独立列（未合并）

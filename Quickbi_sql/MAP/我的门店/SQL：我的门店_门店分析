@@ -1,0 +1,443 @@
+-- 主查询：门店分析排名
+WITH store_data AS (SELECT t.dt,
+                           t.reseller_hq_id,
+                           t.reseller_hq_name,
+                           t.reseller_type,
+                           t.rtm,
+                           t.sales_channel,
+                           t.category_name_3,
+                           IF(t.category_name_4 IS NULL OR t.category_name_4 = '', t.category_name_3,
+                              t.category_name_4)                       AS category_name_4,
+                           t.brand_code,
+                           t.brand_name,
+                           t.lob,
+                           t.purchase_price_level,
+                           t.settlement_mode,
+                           t.store_code,
+                           t.store_name,
+                           t.store_tier,                 -- 门店层级
+                           t.store_scope,
+                           t.store_type,
+                           t.bar_code,
+                           t.mpn,
+                           t.sku_info,
+                           t.specification,
+                           t.reduce_time_type,
+                           t.reduce_time_value,
+                           t.pre_reduce_time_value,
+                           t.data_cutoff_time::date,
+                           t.sell_out_qty,               -- 数值字段：保持原值，不进行COALESCE处理
+                           t.pre_sell_out_qty,
+                           t.sell_out_amount,
+                           t.pre_sell_out_amount,
+                           t.profit_amount,
+                           t.pre_profit_amount,
+                           -- 流量字段：进行类型转换但不处理NULL
+                           CASE
+                               WHEN t.offline_traffic IS NOT NULL
+                                   THEN t.offline_traffic::integer END AS offline_traffic,
+                           CASE
+                               WHEN t.pre_offline_traffic IS NOT NULL THEN t.pre_offline_traffic:: integer
+                               END
+                                                                       AS pre_offline_traffic,
+                           t.inventory,
+                           t.pre_inventory,
+                           t.available_inventory,
+                           t.pre_available_inventory,
+                           t.inventory_cost,
+                           t.pre_inventory_cost,
+                           t.offline_sales_sku_count::int,    -- 线下门店销售SKU总数
+                           t.pre_offline_sales_sku_count::int -- 上一期线下门店销售SKU总数
+                    FROM apple3pp_ads.dashboard_map_reseller_t_reseller_store_product_sales_detail t
+                    WHERE t.dt:: date = (SELECT MAX(dt)
+                                         FROM apple3pp_ads.dashboard_map_reseller_t_reseller_store_product_sales_detail)
+                      AND t.store_code IS NOT NULL -- 确保有门店信息
+-- 应用所有筛选条件 --
+                      AND reseller_hq_id = '$val{reseller_hq_id}'
+                      AND reduce_time_type = '$val{reduce_time_type}'
+--                       AND reduce_time_value = '$val{reduce_time_value}'
+                      AND category_name_3 = '$val{category_name_3}'
+--                       AND IF(t.category_name_4 IS NULL OR t.category_name_4 = '', t.category_name_3,
+--                              t.category_name_4) = '$val{category_name_4}'
+                      AND sales_channel = '$val{sales_channel}'
+                      AND store_scope = '$val{store_scope}'
+                      AND brand_name = '$val{brand_name}'
+                      AND lob LIKE '%$val{lob}%'   -- 模糊匹配
+                      AND specification = '$val{specification}'
+                      AND store_tier = '$val{store_tier}'
+                      AND purchase_price_level = '$val{purchase_price_level}'
+                      AND settlement_mode = '$val{settlement_mode}'
+                      AND store_type = '店'        -- 仅统计门店
+                      AND CASE
+                              WHEN '$val{category_name_4}' IS NULL OR '$val{category_name_4}' = ' ' THEN TRUE
+                              ELSE IF(t.category_name_4 IS NULL OR t.category_name_4 = '', t.category_name_3,
+                                      t.category_name_4) = '$val{category_name_4}' END),
+     FILTERED_DATA AS (SELECT category_name_3,
+                              category_name_4,
+                              bar_code,                                                       -- 商品条码
+                              mpn,                                                            -- MPN
+                              sku_info,                                                       -- 商品名称
+                              specification,  
+                              store_code,                                                  -- 门店id
+                              store_name,                                                     -- 门店名称
+                              store_tier,                                                     -- Group Tier（T1-T12）
+                              pre_reduce_time_value,                                          -- 上一周期快照日期
+                              SUM(sell_out_qty)                AS sell_out_qty,               -- 当前周期销售量
+                              SUM(pre_sell_out_qty)            AS pre_sell_out_qty,           -- 上期销售量
+                              SUM(sell_out_amount)             AS sell_out_amount,            -- 当前周期销售额
+                              SUM(pre_sell_out_amount)         AS pre_sell_out_amount,        -- 上期销售额
+                              SUM(profit_amount)               AS profit_amount,              -- 当前周期毛利额
+                              SUM(pre_profit_amount)           AS pre_profit_amount,          -- 上期毛利额
+                              MAX(offline_traffic)             AS offline_traffic,            -- 当前周期线下客流量
+                              MAX(pre_offline_traffic)         AS pre_offline_traffic,        -- 上期线下客流量
+                              MAX(inventory)                   AS inventory,                  -- 当前周期库存量
+                              MAX(pre_inventory)               AS pre_inventory,              -- 上期库存量
+                              MAX(available_inventory)         AS available_inventory,        -- 当前周期可支配库存量
+                              MAX(pre_available_inventory)     AS pre_available_inventory,    -- 上期可支配库存量
+                              MAX(inventory_cost)              AS inventory_cost,             -- 当前周期库存成本
+                              MAX(pre_inventory_cost)          AS pre_inventory_cost,         -- 上期库存成本
+                              SUM(offline_sales_sku_count)     AS offline_sales_sku_count,    -- 线下门店销售SKU总数
+                              SUM(pre_offline_sales_sku_count) AS pre_offline_sales_sku_count -- 上一期线下门店销售SKU总数
+                       FROM store_data
+                       WHERE reduce_time_value = '$val{reduce_time_value}'
+                       GROUP BY category_name_3, category_name_4, mpn, bar_code, sku_info, specification, store_code, store_name,
+                                store_tier, pre_reduce_time_value),
+
+-- 上一周期基础数据
+     PREV_FILTERED_DATA AS (SELECT category_name_3,
+                                   category_name_4,
+                                   bar_code,                                                       -- 商品条码
+                                   mpn,                                                            -- MPN
+                                   sku_info,                                                       -- 商品名称
+                                   specification,   
+                                   store_code,                                                  -- 门店id                                               -- 规格
+                                   store_name,                                                     -- 门店名称
+                                   store_tier,                                                     -- Group Tier（T1-T12）
+                                   SUM(sell_out_qty)                AS sell_out_qty,               -- 当前周期销售量
+                                   SUM(pre_sell_out_qty)            AS pre_sell_out_qty,           -- 上期销售量
+                                   SUM(sell_out_amount)             AS sell_out_amount,            -- 当前周期销售额
+                                   SUM(pre_sell_out_amount)         AS pre_sell_out_amount,        -- 上期销售额
+                                   SUM(profit_amount)               AS profit_amount,              -- 当前周期毛利额
+                                   SUM(pre_profit_amount)           AS pre_profit_amount,          -- 上期毛利额
+                                   MAX(offline_traffic)             AS offline_traffic,            -- 当前周期线下客流量
+                                   MAX(pre_offline_traffic)         AS pre_offline_traffic,        -- 上期线下客流量
+                                   MAX(inventory)                   AS inventory,                  -- 当前周期库存量
+                                   MAX(pre_inventory)               AS pre_inventory,              -- 上期库存量
+                                   MAX(available_inventory)         AS available_inventory,        -- 当前周期可支配库存量
+                                   MAX(pre_available_inventory)     AS pre_available_inventory,    -- 上期可支配库存量
+                                   MAX(inventory_cost)              AS inventory_cost,             -- 当前周期库存成本
+                                   MAX(pre_inventory_cost)          AS pre_inventory_cost,         -- 上期库存成本
+                                   SUM(offline_sales_sku_count)     AS offline_sales_sku_count,    -- 线下门店销售SKU总数
+                                   SUM(pre_offline_sales_sku_count) AS pre_offline_sales_sku_count -- 上一期线下门店销售SKU总数
+                            FROM store_data
+                            WHERE reduce_time_value =
+                                  (SELECT MAX(pre_reduce_time_value) AS pre_reduce_time_value
+                                   FROM FILTERED_DATA) -- 使用上一周期快照日期
+                            GROUP BY category_name_3, category_name_4, mpn, bar_code, sku_info, specification,
+                                      store_code, store_name, store_tier),
+
+     -- 计算各门店store_tier+store_name维度的上期汇总数据
+     pre_store_data AS (SELECT  t.store_code, 
+                                t.store_name,
+                               t.store_tier,
+                               t.mpn,
+                               MAX(t.available_inventory) AS available_inventory,
+                               SUM(t.sell_out_qty)        AS sell_out_qty
+                        FROM PREV_FILTERED_DATA t
+                        GROUP BY t.store_code, 
+                        t.store_name,
+                                 t.store_tier,
+                                 t.mpn),
+
+     -- 计算各门店store_tier+store_name维度的上期有可支配库存SKU数
+     in_store_name_sku_count AS (SELECT psd.store_tier                                                         AS store_tier,              -- Group Tier（T1-T12）
+                                        psd.store_code, 
+                                        psd.store_name                                                         AS store_name,              -- 门店名称
+                                        COUNT(DISTINCT CASE WHEN psd.available_inventory > 0 THEN psd.mpn END) AS pre_inventory_sku_count, -- 商品种类：上期有可支配库存SKU数
+                                        COUNT(DISTINCT CASE WHEN psd.sell_out_qty > 0 THEN psd.mpn END)        AS pre_sales_sku_count      -- 上期销售SKU计数
+                                 FROM pre_store_data psd
+                                 GROUP BY  psd.store_code, psd.store_name, psd.store_tier),
+
+     in_sku_count
+         AS (SELECT sd.store_tier                                                        AS store_tier,                   -- Group Tier（T1-T12）
+                    COUNT(DISTINCT CASE WHEN sd.available_inventory > 0 THEN sd.mpn END) AS total_inventory_sku_count,    -- 商品种类汇总：当前周期有可支配库存SKU数
+                    MAX(pd.total_pre_inventory_sku_count)                                AS total_pre_inventory_sku_count -- 商品种类汇总：上期有可支配库存SKU数
+             FROM FILTERED_DATA sd
+                      LEFT JOIN (SELECT psd.store_tier,
+                                        COUNT(DISTINCT CASE WHEN psd.available_inventory > 0 THEN psd.mpn END) AS total_pre_inventory_sku_count -- 商品种类：上期有可支配库存SKU数
+                                 FROM pre_store_data psd
+                                 GROUP BY psd.store_tier) pd
+                                ON sd.store_tier = pd.store_tier
+             GROUP BY sd.store_tier),
+
+     -- 汇总各门店的各项指标
+     final_data AS (SELECT sd.store_tier,   
+                            sd.store_code,                                                                                         -- Group Tier（T1-T12）
+                           sd.store_name,                                                                                           -- 门店名称
+
+                           -- 库存SKU计数：只统计有库存的SKU
+                           COUNT(DISTINCT CASE WHEN sd.available_inventory > 0 THEN sd.mpn END) AS inventory_sku_count,             -- 商品种类：当前周期有可支配库存SKU数
+                           MAX(isnkc.pre_inventory_sku_count)                                   AS pre_inventory_sku_count,         -- 商品种类：上期有可支配库存SKU数
+                           MAX(isk.total_inventory_sku_count)                                   AS total_inventory_sku_count,       -- 商品种类汇总：当前周期有可支配库存SKU数
+                           MAX(isk.total_pre_inventory_sku_count)                               AS total_pre_inventory_sku_count,   -- 商品种类汇总：上期有可支配库存SKU数
+                           CASE
+                               WHEN MAX(isnkc.pre_inventory_sku_count) = 0
+                                   THEN NULL
+                               WHEN COUNT(DISTINCT CASE WHEN sd.available_inventory > 0 THEN sd.mpn END) = 0
+                                   THEN 0
+                               ELSE
+                                   1.0000 * COUNT(DISTINCT CASE WHEN sd.available_inventory > 0 THEN sd.mpn END) /
+                                   MAX(isnkc.pre_inventory_sku_count) - 1
+                               END                                                              AS inventory_sku_count_growth_rate, -- 商品种类环比增长率
+
+                           -- 销售指标
+                           SUM(sd.sell_out_qty)                                                 AS sell_out_qty,                    -- 当前周期销售量
+                           SUM(SUM(sd.sell_out_qty)) OVER ()                                    AS sell_out_qty_all,                -- 当前周期销售量汇总
+
+                           SUM(sd.sell_out_amount)                                              AS sell_out_amount,                 -- 当前周期销售额
+                           SUM(SUM(sd.sell_out_amount)) OVER ()                                 AS sell_out_amount_all,             -- 当前周期销售额汇总
+
+                           SUM(sd.profit_amount)                                                AS profit_amount,                   -- 当前周期毛利额
+                           SUM(SUM(profit_amount)) OVER ()                                      AS profit_amount_all,               -- 当前周期毛利额汇总
+
+                           -- 流量指标
+                           MAX(sd.offline_traffic)                                              AS offline_traffic,                 -- 当前周期线下客流量
+
+                           -- 销售SKU计数：只统计有销售的SKU
+                           COUNT(DISTINCT CASE WHEN sd.sell_out_qty > 0 THEN sd.mpn END)        AS sales_sku_count,                 -- 当前周期销售SKU计数
+                           MAX(isnkc.pre_sales_sku_count)                                       AS pre_sales_sku_count,             -- 上期销售SKU计数
+                           SUM(sd.offline_sales_sku_count)                                      AS offline_sales_sku_count,         -- 当前周期销售SKU总数
+                           ROUND(SUM(sd.offline_sales_sku_count)::NUMERIC / MAX(sd.offline_traffic),
+                                 6)                                                             AS offline_conversion_rate,         -- 当前周期线下转化率
+
+                           -- 库存指标
+                           SUM(sd.inventory)                                                    AS inventory,                       -- 当前周期库存量
+
+                           SUM(sd.available_inventory)                                          AS available_inventory,             -- 当前周期可支配库存量
+                           SUM(SUM(sd.available_inventory)) OVER ()                             AS available_inventory_all,         -- 当前周期可支配库存量汇总
+
+                           -- 库存成本
+                           SUM(sd.inventory_cost)                                               AS inventory_cost                   -- 当前周期库存成本
+
+                    FROM FILTERED_DATA sd
+                             LEFT JOIN in_store_name_sku_count isnkc
+                                       ON sd.store_name = isnkc.store_name
+                                       and sd.store_code = isnkc.store_code
+                                           AND sd.store_tier = isnkc.store_tier
+                             LEFT JOIN in_sku_count isk
+                                       ON sd.store_tier = isk.store_tier
+                    -- WHERE sd.store_tier in ('T4', 'T6')
+-- 按门店维度的字段分组
+                    GROUP BY sd.store_tier,
+                    sd.store_code,
+                             sd.store_name),
+     -- 汇总上期各门店的各项指标
+     pre_final_data AS (SELECT pfd.store_tier,   
+                                pfd.store_code,      -- Group Tier（T1-T12）
+                               pfd.store_name,                                                  -- 门店名称
+
+                               -- 上期销售指标
+                               SUM(pfd.sell_out_qty)            AS pre_sell_out_qty,            -- 上期销售量
+                               SUM(pfd.sell_out_amount)         AS pre_sell_out_amount,         -- 上期销售额
+                               SUM(pfd.profit_amount)           AS pre_profit_amount,           -- 上期毛利额
+                               -- 上期流量指标
+                               MAX(pfd.offline_traffic)         AS pre_offline_traffic,         -- 上期线下客流量
+                               -- 销售SKU计数：只统计有销售的SKU
+                               SUM(pfd.offline_sales_sku_count) AS pre_offline_sales_sku_count, -- 上期销售SKU总数
+                               ROUND(SUM(pfd.offline_sales_sku_count)::NUMERIC / MAX(pfd.offline_traffic),
+                                     6)                         AS pre_offline_conversion_rate, -- 上期线下转化率
+                               -- 上期库存指标
+                               SUM(pfd.inventory)               AS pre_inventory,               -- 上期库存量
+                               SUM(pfd.available_inventory)     AS pre_available_inventory,     -- 上期可支配库存量
+                               -- 上期库存成本
+                               SUM(pfd.inventory_cost)          AS pre_inventory_cost           -- 上期库存成本
+
+                        FROM PREV_FILTERED_DATA pfd
+                        -- WHERE sd.store_tier in ('T4', 'T6')
+-- 按门店维度的字段分组
+                        GROUP BY pfd.store_tier,
+                        pfd.store_code,
+                                 pfd.store_name),
+
+     -- 将上期数据合并到最终数据中
+     summary_final_data AS (SELECT COALESCE(fd.store_tier, pfd.store_tier), 
+           COALESCE(fd.store_code, pfd.store_code), -- Group Tier（T1-T12）
+                                   COALESCE(fd.store_name, pfd.store_name),       -- 门店名称
+                                   fd.*,
+                                   pfd.pre_sell_out_qty,
+                                   pfd.pre_sell_out_amount,
+                                   pfd.pre_profit_amount,
+                                   pfd.pre_offline_traffic,
+                                   pfd.pre_offline_sales_sku_count,
+                                   pfd.pre_offline_conversion_rate,
+                                   pfd.pre_inventory,
+                                   pfd.pre_available_inventory,
+                                   pfd.pre_inventory_cost,
+                                   CASE
+                                       WHEN pfd.pre_offline_conversion_rate = 0
+                                           THEN NULL
+                                       WHEN fd.offline_conversion_rate = 0 THEN 0
+                                       ELSE 100 * fd.offline_conversion_rate - 100 * pfd.pre_offline_conversion_rate
+                                       END AS offline_conversion_rate_growth_rate -- 线下转化率环比增长率
+                            FROM final_data fd
+                                     FULL JOIN pre_final_data pfd
+                                               ON fd.store_name = pfd.store_name
+                                                   AND fd.store_tier = pfd.store_tier
+                                                   and fd.store_code = pfd.store_code),
+
+-- 按store_tier维度计算线下客流量，max store_tier+store_name，sum到store_tier维度
+     off_traffic AS (SELECT fd.store_tier,
+                            fd.offline_traffic_sum         AS offline_traffic_sum,    -- 当前周期线下客流量汇总_tier
+                            pre_ot.pre_offline_traffic_sum AS pre_offline_traffic_sum -- 上期线下客流量汇总_tier
+                     FROM (SELECT store_tier,
+                                  SUM(offline_traffic) AS offline_traffic_sum -- 当前周期线下客流量汇总_tier
+                           FROM final_data
+                           GROUP BY store_tier) AS fd
+                              LEFT JOIN (SELECT store_tier,
+                                                SUM(pre_offline_traffic) AS pre_offline_traffic_sum -- 上期线下客流量汇总_tier
+                                         FROM pre_final_data
+                                         GROUP BY store_tier) AS pre_ot
+                                        ON fd.store_tier = pre_ot.store_tier),
+     ranked_data AS (SELECT fd.*,
+                            oft.offline_traffic_sum,
+                            oft.pre_offline_traffic_sum,
+                            CASE
+                                -- 根据排名类型和排序方向创建动态排名
+                                WHEN '$val{rank_type}' = '销量排行' AND '$val{rank_type_asc_desc}' = '降序' THEN
+                                            ROW_NUMBER()
+                                            OVER (PARTITION BY fd.store_tier ORDER BY fd.sell_out_qty DESC NULLS LAST,fd.store_name ASC)
+                                WHEN '$val{rank_type}' = '销量排行' AND '$val{rank_type_asc_desc}' = '升序' THEN
+                                            ROW_NUMBER()
+                                            OVER (PARTITION BY fd.store_tier ORDER BY fd.sell_out_qty ASC NULLS LAST,fd.store_name ASC)
+                                WHEN '$val{rank_type}' = '销售额排行' AND '$val{rank_type_asc_desc}' = '降序' THEN
+                                            ROW_NUMBER()
+                                            OVER (PARTITION BY fd.store_tier ORDER BY fd.sell_out_amount DESC NULLS LAST,fd.store_name ASC)
+                                WHEN '$val{rank_type}' = '销售额排行' AND '$val{rank_type_asc_desc}' = '升序' THEN
+                                            ROW_NUMBER()
+                                            OVER (PARTITION BY fd.store_tier ORDER BY fd.sell_out_amount ASC NULLS LAST,fd.store_name ASC)
+                                WHEN '$val{rank_type}' = '毛利额排行' AND '$val{rank_type_asc_desc}' = '降序' THEN
+                                            ROW_NUMBER()
+                                            OVER (PARTITION BY fd.store_tier ORDER BY fd.profit_amount DESC NULLS LAST,fd.store_name ASC)
+                                WHEN '$val{rank_type}' = '毛利额排行' AND '$val{rank_type_asc_desc}' = '升序' THEN
+                                            ROW_NUMBER()
+                                            OVER (PARTITION BY fd.store_tier ORDER BY fd.profit_amount ASC NULLS LAST,fd.store_name ASC)
+                                WHEN '$val{rank_type}' = '线下转化率排行' AND '$val{rank_type_asc_desc}' = '降序' THEN
+                                            ROW_NUMBER()
+                                            OVER (PARTITION BY fd.store_tier ORDER BY fd.offline_conversion_rate DESC NULLS LAST,fd.store_name ASC)
+                                WHEN '$val{rank_type}' = '线下转化率排行' AND '$val{rank_type_asc_desc}' = '升序' THEN
+                                            ROW_NUMBER()
+                                            OVER (PARTITION BY fd.store_tier ORDER BY fd.offline_conversion_rate ASC NULLS LAST,fd.store_name ASC)
+                                END AS dynamic_rank -- 动态计算的排名字段
+                     FROM summary_final_data fd
+                              LEFT JOIN off_traffic oft
+                                        ON fd.store_tier = oft.store_tier),
+-- 最终输出：所有字段 + store_tier组内动态排名
+pos_detail as (SELECT store_tier,                          -- Group Tier（T1-T12）
+       CASE store_tier
+           WHEN 'T1' THEN 1
+           WHEN 'T2' THEN 2
+           WHEN 'T3' THEN 3
+           WHEN 'T4' THEN 4
+           WHEN 'T5' THEN 5
+           WHEN 'T6' THEN 6
+           WHEN 'T7' THEN 7
+           WHEN 'T8' THEN 8
+           WHEN 'T9' THEN 9
+           WHEN 'T10' THEN 10
+           WHEN 'T11' THEN 11
+           WHEN 'T12' THEN 12
+           ELSE 99 -- 非标准Tier排在最后
+           END AS store_tier_sort,
+           store_code,
+       store_name,                          -- 门店名称
+       inventory_sku_count,                 -- 当前周期有可支配库存SKU数
+       pre_inventory_sku_count,             -- 上期有可支配库存SKU数
+       total_inventory_sku_count,           -- 当前周期有可支配库存SKU数汇总
+       total_pre_inventory_sku_count,       -- 上期有可支配库存SKU数汇总
+       inventory_sku_count_growth_rate,     -- 有可支配库存SKU数环比增长率
+       sell_out_qty,                        -- 当前周期销售量
+       pre_sell_out_qty,                    -- 上期销售量
+       sell_out_qty_all,                    -- 当前周期销售量汇总
+       sell_out_amount,                     -- 当前周期销售额
+       pre_sell_out_amount,                 -- 上期销售额
+       sell_out_amount_all,                 -- 当前周期销售额汇总
+       profit_amount,                       -- 当前周期毛利额
+       pre_profit_amount,                   -- 上期毛利额
+       profit_amount_all,                   -- 当前周期毛利额汇总
+       offline_traffic,                     -- 当前周期线下客流量
+       pre_offline_traffic,                 -- 上期线下客流量
+       sales_sku_count,                     -- 当前周期销售SKU计数
+       pre_sales_sku_count,                 -- 上期销售SKU计数
+       offline_sales_sku_count,             -- 当前周期销售SKU总数
+       pre_offline_sales_sku_count,         -- 上期销售SKU总数
+       offline_conversion_rate,             -- 当前周期线下转化率
+       pre_offline_conversion_rate,         -- 上期线下转化率
+       offline_conversion_rate_growth_rate, -- 线下转化率环比增长率
+       offline_traffic_sum,                 -- 当前周期线下客流量汇总_tier
+       pre_offline_traffic_sum,             -- 上期线下客流量汇总_tier
+       inventory,                           -- 当前周期库存量
+       pre_inventory,                       -- 上期库存量
+       available_inventory,                 -- 当前周期可支配库存量
+       pre_available_inventory,             -- 上期可支配库存量
+       available_inventory_all,             -- 当前周期可支配库存量汇总
+       inventory_cost,                      -- 当前周期库存成本
+       pre_inventory_cost,                  -- 上期库存成本
+       dynamic_rank                         -- 动态排名值
+FROM ranked_data
+-- 根据排名类型过滤结果
+WHERE CASE '$val{top_rank_type}'
+          WHEN '全部' THEN TRUE -- 全部数据不过滤
+          WHEN 'top10' THEN dynamic_rank <= 10 -- 取每组前10名
+          WHEN 'bottom10' THEN dynamic_rank <= 10 -- 取每组前10名（升序时即为bottom10）
+          END
+ORDER BY store_tier, dynamic_rank), -- 按门店层级和排名排序
+
+
+tag_tb AS (
+    SELECT *
+    FROM apple3pp_ads.dashboard_map_tag_pos_week
+    WHERE dealer_hq_id = '$val{reseller_hq_id}'
+    and tag_code not like  '%ClosedDays%'
+      AND CASE tag_cycle_time 
+      WHEN '周' THEN 'week'
+       WHEN '月' THEN 'month' 
+       WHEN '季' THEN 'quarter' 
+       WHEN '年' THEN 'year' 
+       END = '$val{reduce_time_type}'
+      AND tag_cycle_time_value = '$val{reduce_time_value}'
+      AND tag_sales_touchpoint = '$val{tag_sales_touchpoint}'
+      AND tag_statistical_index = '$val{tag_statistical_index}'
+      AND tag_evaluation_scope = '$val{tag_evaluation_scope}'
+      --and store_cd = '3804400'
+
+    UNION ALL
+
+    SELECT *
+    FROM apple3pp_ads.dashboard_map_tag_pos_week
+    WHERE ((tag_code LIKE '%isAbnormal' AND tag_value_display = '待验证门店') or (tag_code LIKE '%Appointed_Window' AND tag_value_display = '预授权门店（系统标记门店）')) 
+      AND dealer_hq_id = '$val{reseller_hq_id}'
+      AND CASE tag_cycle_time 
+      WHEN '周' THEN 'week' 
+      WHEN '月' THEN 'month'
+       WHEN '季' THEN 'quarter'
+        WHEN '年' THEN 'year' END = '$val{reduce_time_type}'
+      AND tag_cycle_time_value = '$val{reduce_time_value}'
+      --and store_cd = '3804400'
+     
+)
+
+--select * from tag_tb where store_cd ='3804400'
+
+
+
+-- 最终输出
+ SELECT 
+     d.*,
+     t.tag_code,
+     CASE 
+        WHEN t.tag_value_display = '预授权门店（系统标记门店）' THEN '系统标记门店'
+        ELSE t.tag_value_display 
+    END AS tag_value_display
+ FROM pos_detail d 
+ LEFT JOIN tag_tb t
+ ON d.store_code = t.store_cd
