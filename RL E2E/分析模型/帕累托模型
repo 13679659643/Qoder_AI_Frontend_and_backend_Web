@@ -1,0 +1,124 @@
+帕累托累计占比(SUMMARIZE 版本) = 
+
+// ========================================
+// 度量值: Sales Pareto % V2
+// Display Folder: RATIO
+// 用途: 帕累托累计占比（SUMMARIZE 版本）
+// ========================================
+
+    VAR __CurrentSales = SUM('G帕累托分析模板数据'[销售额])
+    
+    VAR __ChannelSales = 
+        SUMMARIZE(
+            ALLSELECTED('G帕累托分析模板数据'),
+            'G帕累托分析模板数据'[子类别],
+            "@Sales", CALCULATE(SUM('G帕累托分析模板数据'[销售额]))
+        )
+    
+    VAR __CumulativeSales = 
+        SUMX(
+            FILTER(
+                __ChannelSales,
+                [@Sales] >= __CurrentSales
+            ),
+            [@Sales]
+        )
+    
+    VAR __TotalSales = SUMX(__ChannelSales, [@Sales])
+    
+    RETURN
+        DIVIDE(__CumulativeSales, __TotalSales, 0)
+
+
+
+帕累托累计占比(CALCULATE 嵌套版) = 
+
+// ========================================
+// 度量值: Sales Pareto % (CALCULATE 嵌套版)
+// Display Folder: RATIO
+// 用途: 帕累托累计占比（CALCULATE 嵌套版）
+// 说明: 
+//   - 纯 CALCULATE + FILTER 实现，不借助虚拟表变量
+//   - 要求视觉对象按销售额降序排列
+//   - 原理: 利用 FILTER + CALCULATE 上下文转换，
+//     在 ALLSELECTED 全表的子类别列表中逐行求值并筛选出
+//     销售额 >= 当前行的所有子类别，再对筛选结果求和得到累计值
+//   - 注意: 此处使用 ALLSELECTED(全表) 而非 ALLSELECTED(单列)，
+//     确保 FILTER 迭代时的筛选行为与 SUMMARIZE 版本一致
+// ========================================
+
+    // ── Step 1: 获取当前行（子类别）的销售额 ──
+    // 在度量值中直接使用 SUM，由视觉对象的筛选上下文决定当前子类别
+    VAR __CurrentSales = SUM('G帕累托分析模板数据'[销售额])
+    
+    // ── Step 2: 计算累计销售额 ──
+    // FILTER 遍历 ALLSELECTED(全表) 按子类别分组后的每个值，
+    // 对每一行做 CALCULATE(SUM(...)) 获取该子类别的销售额，
+    // 仅保留销售额 >= 当前行值的子类别，外层 CALCULATE 对筛选结果求和
+    VAR __CumulativeSales = 
+        CALCULATE(
+            SUM('G帕累托分析模板数据'[销售额]),
+            FILTER(
+                ALLSELECTED('G帕累托分析模板数据'),
+                CALCULATE(SUM('G帕累托分析模板数据'[销售额])) >= __CurrentSales
+            )
+        )
+    
+    // ── Step 3: 计算总销售额（所有可见子类别的总和） ──
+    VAR __TotalSales = CALCULATE(
+        SUM('G帕累托分析模板数据'[销售额]),
+        ALLSELECTED('G帕累托分析模板数据')
+    )
+    
+    // ── Step 4: 返回累计占比 = 累计值 / 总计 ──
+    RETURN
+        DIVIDE(__CumulativeSales, __TotalSales, 0)
+
+
+
+帕累托累计占比(ADDCOLUMNS 版本) = 
+
+// ========================================
+// 度量值: Sales Pareto % (ADDCOLUMNS 版本)
+// Display Folder: RATIO
+// 用途: 帕累托分析中的累计销售额占比
+// 说明: 
+//   - 按销售额降序排列后，计算累计占比
+//   - 使用 ADDCOLUMNS ALLSELECTED(全表) 预计算虚拟表
+//   - 再用 FILTER + 变量比较完成累计筛选，避免上下文干扰
+//   - 关键点: 基表使用 ADDCOLUMNS(ALLSELECTED(全表), [子类别])
+//     而非 ALLSELECTED([子类别])
+// ========================================
+
+    // ── Step 1: 获取当前行（子类别）的销售额 ──
+    VAR __CurrentSales = SUM('G帕累托分析模板数据'[销售额])
+    
+    // ── Step 2: 构建虚拟表 ──
+    VAR __AllChannels = 
+        ADDCOLUMNS(
+                ALLSELECTED('G帕累托分析模板数据'),
+            "@Sales", CALCULATE(SUM('G帕累托分析模板数据'[销售额]))
+        )
+    
+    // ── Step 3: 计算累计销售额 ──
+    // 筛选出销售额 >= 当前行的所有子类别（即排名在当前行之前或并列的），
+    // 对其 @Sales 求和得到累计值
+    VAR __CumulativeSales = 
+        SUMX(
+            FILTER(
+                __AllChannels,
+                [@Sales] >= __CurrentSales
+            ),
+            [@Sales]
+        )
+    
+    // ── Step 4: 计算总销售额 ──
+    VAR __TotalSales = 
+        SUMX(
+            __AllChannels,
+            [@Sales]
+        )
+    
+    // ── Step 5: 返回累计占比 = 累计值 / 总计 ──
+    RETURN
+        DIVIDE(__CumulativeSales, __TotalSales, 0)
