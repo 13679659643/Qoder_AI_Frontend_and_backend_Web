@@ -1,22 +1,45 @@
 KPIs Overview_matrix_solution 解决方案：
 
-> status: propose
+> status: updated
 > created: 2026-04-21
-> updated: 2026-04-29
+> updated: 2026-05-27
 > complexity: 🔴复杂
 > type: 度量值开发 + 可视化构建
 > naming: 遵循 powerbi_code_copilot/rules/dax-style.md 规范
+
+================================================================================
+变更日志（2026-05-27）
+================================================================================
+
+本次变更基于原始解决方案（2026-04-29）调整如下：
+
+1. 行头改为英文：本期→This Year / 同期→Last Year / vs LP→YOY
+2. 列头重构为 8 列新指标结构（原 12 列），对应图片中的矩阵格式
+3. 所有 Base Value 指标当前无口径，统一返回 1（占位值）
+   - 保留原始 SWITCH 路由框架、口径注释，便于后续填充
+4. Platform 切片器从多选改为单选，新增 ALL 选项（ALL = TM + JD 聚合）
+   - Base Value 中的 platform 筛选逻辑随之更新
+5. 字体颜色：仅 YOY 行启用条件颜色，This Year / Last Year 统一默认色
+6. 交替行背景色、SVG 图标逻辑不变，行标识改为英文
+7. 其余架构（断开维度、日期覆盖机制、汇率转换）保持不变
+
+变更（2026-05-27 补充）：
+8. Platform ALL 筛选逻辑从"不施加筛选"改为显式 FILTER platform IN {"TM","JD"}
+   - TTL 行 = FILTER platform IN {"TM","JD"}（精确圈定，避免未来新增平台被误聚合）
+   - TM/JD 行 = platform = __ChannelID（单平台精确筛选）
+   - 废弃旧的 __IsAllPlatform 不筛选方案，统一改用 __PlatformFilter 变量传递筛选条件
 
 ================================================================================
 0. 需求概述与架构总览
 ================================================================================
 
 实现 KPIs Overview TTL汇总 矩阵看板：
-- 行：本期 / 同期 / vs LP（3 行）
-- 列：Cost / 红包 / Cost进度 / NetSales进度 / DemandSales进度 /
-      费比 / 含红包费比 / ROI / 新客花费占比 / 新客成本 / Acc花费占比 / Acc ROI（12 列）
+- 行：This Year / Last Year / YOY（3 行）
+- 列：Cost / Cost Rate / Cost Rate (include Refund) / Net Sales /
+      ROI / New Customer Cost% / Acceleration Cost% /
+      ±Acceleration Cost% vs Net Sales%（8 列）
 - 筛选器：本期日期(Dim_Date_Current) / 同期日期(Dim_Date_Ly) /
-          Channel(Platform, 多选) / 数据口径(trans_cycle, 单选) / 币种(currency, 单选)
+          Channel(Platform, 单选，含 ALL) / 数据口径(trans_cycle, 单选) / 币种(currency, 单选)
 
 整体架构：
 ```
@@ -25,26 +48,28 @@ KPIs Overview_matrix_solution 解决方案：
 │                        1:* ──→ a05_e2e_paid_media_summary_d[data_date]
 │                        1:* ──→ a05_e2e_paid_media_product_data_d[data_date]
 ├── Dim_Date_Ly（断开，MIN/MAX 获取 LP 日期范围）
-├── Slicer_Platform_Selection（断开，VALUES + IN → platform 多选）
+├── Slicer_Platform_Selection（断开，单选，SELECTEDVALUE → __ChannelID；
+│                             ALL 时 FILTER platform IN {"TM","JD"}；
+│                             具体平台时 platform = __ChannelID）
 ├── Slicer_DataCaliber_Selection（断开，SELECTEDVALUE → trans_cycle 单选）
 └── Slicer_Currency_Selection（断开，SELECTEDVALUE → Currency_ExchangeRate 汇率乘数 单选）
 
 维度层（断开维度）
-├── DIM_RowKPIs_Overview（行维度：本期 / 同期 / vs LP）
-└── DIM_ColMetric_Overview（列维度：12 个指标，含格式、颜色、汇率转换标记）
+├── DIM_RowKPIs_Overview（行维度：This Year / Last Year / YOY）
+└── DIM_ColMetric_Overview（列维度：8 个指标，含格式、颜色、汇率转换标记）
 
 度量值链
-KPIs Overview Base Value ── 纯指标 SWITCH 分发（12 分支）
-        │                   含维度筛选（platform IN 多选, trans_cycle 单选）
+KPIs Overview Base Value ── 纯指标 SWITCH 分发（8 分支，当前值均为 1，保留口径注释）
+        │                   含维度筛选（platform 单选/ALL 聚合, trans_cycle 单选）
         │                   返回 RMB 原始值，不含币种筛选
         ▼
-KPIs Overview Cell Value ── 行路由（本期 / 同期 / vs LP）
-        │                   同期 = CALCULATE(Base, LP 日期覆盖)
-        │                   vs LP = (本期 - 同期) / 同期
-        │                   本期/同期 金额类指标 × ExchangeRate 汇率换算
+KPIs Overview Cell Value ── 行路由（This Year / Last Year / YOY）
+        │                   Last Year = CALCULATE(Base, LP 日期覆盖)
+        │                   YOY = (This Year - Last Year) / Last Year
+        │                   This Year/Last Year 金额类指标 × ExchangeRate 汇率换算
         ├──→ KPIs Overview Cell Display（格式化，读取维度表格式列）
-        ├──→ KPIs Overview Cell Font Color（字体颜色，读取维度表颜色列）
-        ├──→ KPIs Overview Cell SVG Icon（增减箭头图标）
+        ├──→ KPIs Overview Cell Font Color（字体颜色，仅 YOY 行条件色）
+        ├──→ KPIs Overview Cell SVG Icon（增减箭头图标，仅 YOY 行）
         └──→ KPIs Overview Cell Background Color（交替行背景色）
 
 事实表（Power BI 表名 = 数据源表名，字段名一致）
@@ -54,9 +79,9 @@ KPIs Overview Cell Value ── 行路由（本期 / 同期 / vs LP）
 ```
 
 关键技术点：
-1. Metric_ID 路由：列指标通过 Metric_ID（1~12）SWITCH 分发
-2. 行路由：本期直接调用 Base Value；同期通过 CALCULATE 覆盖日期上下文；
-   vs LP = (本期 - 同期) / 同期（即 本期/同期 - 1）
+1. Metric_ID 路由：列指标通过 Metric_ID（1~8）SWITCH 分发
+2. 行路由：This Year 直接调用 Base Value；Last Year 通过 CALCULATE 覆盖日期上下文；
+   YOY = (This Year - Last Year) / Last Year（即 This Year/Last Year - 1）
 3. 格式与颜色驱动：DIM_ColMetric_Overview 内嵌 3 套格式列 + 4 色列，
    度量值通过 SELECTEDVALUE 动态读取，无需硬编码
 4. 同期日期处理：Dim_Date_Ly 断开，用 MIN/MAX 获取范围，
@@ -64,26 +89,24 @@ KPIs Overview Cell Value ── 行路由（本期 / 同期 / vs LP）
 5. 币种汇率转换：数据源仅 RMB，Base Value 不做币种筛选；
    Cell Value 层通过 Slicer_Currency_Selection[Currency_ExchangeRate] 获取汇率，
    仅 Metric_IsCurrencyAmount = TRUE 的金额类指标乘以汇率（RMB=1, USD=7）
-6. Channel 多选：Platform 切片器支持多选，Base Value 使用 VALUES + IN 模式
-   替代 SELECTEDVALUE，数据口径与币种保持单选逻辑不变
-7. 三张事实表：channel_data_d（渠道粒度）、summary_d（汇总粒度）、
-   product_data_d（产品粒度，Acc 指标用 framework 筛选）
+6. Platform 单选 + ALL（精确 IN 筛选）：
+   - 选择 ALL → __ChannelID = "ALL"，Base Value 中施加 FILTER platform IN {"TM","JD"}
+     精确圈定 TM + JD，避免数据源新增其他 platform 时被误聚合
+   - 选择具体平台（TM/JD）→ __ChannelID = "TM"/"JD"，施加 platform = __ChannelID 精确筛选
+   - 统一通过 __PlatformFilter 变量传递，SWITCH 分支无需重复写条件判断
+7. 当前 Base Value 所有分支均返回 1（占位值），保留口径注释，后续填充真实 DAX
 
-指标口径来源对照（与 Overview_TTL汇总.xlsx 及 RL_E2E_数据字典_ADS 对齐）：
-| # | 指标名 | 主要事实表 | 关键字段 |
-|---|--------|-----------|---------|
-| 1 | Cost | summary_d | cost_amt |
-| 2 | 红包 | channel_data_d | red_packet |
-| 3 | Cost进度 | summary_d | cost_amt / fcst_cost_amt |
-| 4 | NetSales进度 | summary_d | net_sales_amt / fcst_net_sales_amt |
-| 5 | DemandSales进度 | summary_d | sales_amt / fcst_sales_amt |
-| 6 | 费比 | channel_data_d + summary_d | (cost_amt - red_packet - rebate) / (net_sales_amt*1.13/1.06) |
-| 7 | 含红包费比 | summary_d | cost_amt / (net_sales_amt*1.13/1.06) |
-| 8 | ROI | summary_d | media_sales_amt / adj_cost_amt |
-| 9 | 新客花费占比 | channel_data_d | nc_cost_amt / (nc_cost_amt + ec_cost_amt) |
-| 10 | 新客成本 | summary_d | adj_cost_amt / media_new_member_cnt |
-| 11 | Acc花费占比 | product_data_d | promotion_cost_amt(Acc) / promotion_cost_amt(All) |
-| 12 | Acc ROI | product_data_d | promotion_sales_amt(Acc) / promotion_cost_amt(Acc) |
+指标口径来源对照（暂无口径，值填充为 1，注释保留供后续参考）：
+| # | 指标名（英文）                       | 行维度名称 | 主要事实表（待确认） | 关键字段（待确认）    |
+|---|--------------------------------------|-----------|---------------------|----------------------|
+| 1 | Cost                                 | 金额类    | summary_d           | cost_amt             |
+| 2 | Cost Rate                            | 比率类    | channel_data_d / summary_d | (cost_amt-red_packet-rebate) / (net_sales_amt*1.13/1.06) |
+| 3 | Cost Rate (include Refund)           | 比率类    | summary_d           | cost_amt / (net_sales_amt*1.13/1.06) |
+| 4 | Net Sales                            | 金额类    | summary_d           | net_sales_amt        |
+| 5 | ROI                                  | 比率/整数 | summary_d           | media_sales_amt / adj_cost_amt |
+| 6 | New Customer Cost%                   | 比率类    | channel_data_d      | nc_cost_amt / (nc_cost_amt + ec_cost_amt) |
+| 7 | Acceleration Cost%                   | 比率类    | product_data_d      | promotion_cost_amt(Acc) / promotion_cost_amt(All) |
+| 8 | ±Acceleration Cost% vs Net Sales%    | 比率类    | product_data_d + summary_d | 待确认口径      |
 
 ================================================================================
 1. 构建行维度字段 DIM_RowKPIs_Overview
@@ -93,15 +116,16 @@ DIM_RowKPIs_Overview =
 // ========================================
 // 表: DIM_RowKPIs_Overview
 // 类型: 断开维度
-// 用途: KPIs Overview 矩阵行维度（本期 / 同期 / vs LP）
+// 用途: KPIs Overview 矩阵行维度（This Year / Last Year / YOY）
+// 变更: 2026-05-27 行标签由中文改为英文
 // ========================================
 DATATABLE(
-    "Indicator Type", STRING,       // 行标签
+    "Indicator Type", STRING,       // 行标签（英文）
     "Indicator Order", INTEGER,     // 排序值
     {
-        {"本期", 1},
-        {"同期", 2},
-        {"vs LP", 3}
+        {"This Year", 1},
+        {"Last Year", 2},
+        {"YOY",       3}
     }
 )
 
@@ -113,10 +137,10 @@ DIM_ColMetric_Overview =
 // ========================================
 // 表: DIM_ColMetric_Overview
 // 类型: 断开维度
-// 用途: KPIs Overview 矩阵列维度（12 个指标）
-// 设计: 内嵌格式与颜色定义，度量值通过 SELECTEDVALUE 动态读取
+// 用途: KPIs Overview 矩阵列维度（8 个指标）
+// 变更: 2026-05-27 列结构从 12 列重构为 8 列，指标名称改为英文
 //
-// 格式类型清单（与 KPIs_TimeFrame_solution 保持一致）：
+// 格式类型清单：
 //   currency      → ¥1,000 / $1,000（货币符号由币种切片器决定）
 //   integer       → 1,000
 //   decimal_2     → 1,000.00
@@ -124,39 +148,35 @@ DIM_ColMetric_Overview =
 //   delta_pct_1dp → +14.5%（含正负号）
 //
 // 颜色说明：
-//   仅 vs LP 行启用条件颜色（正/负/零）
-//   本期与同期行统一使用 Metric_ColorDefault（#212121 黑色）
+//   仅 YOY 行启用条件颜色（正/负/零）
+//   This Year 与 Last Year 行统一使用 Metric_ColorDefault（#5f6165 深灰色）
 //
 // 汇率转换标记：
-//   Metric_IsCurrencyAmount = TRUE → 金额类指标，切换币种时乘以汇率
+//   Metric_IsCurrencyAmount = TRUE  → 金额类指标，切换币种时乘以汇率
 //   Metric_IsCurrencyAmount = FALSE → 比率/计数类指标，不受汇率影响
 // ========================================
 DATATABLE(
-    "Metric_ID",              INTEGER,    // 主键 1~12
-    "Metric_Name",            STRING,     // 列标题显示名称
+    "Metric_ID",              INTEGER,    // 主键 1~8
+    "Metric_Name",            STRING,     // 列标题显示名称（英文）
     "Metric_Sort",            INTEGER,    // 排序值
-    "Metric_Format_Current",  STRING,     // 本期行格式
-    "Metric_Format_LP",       STRING,     // 同期行格式（与本期格式一致，展示绝对值）
-    "Metric_Format_VsLP",    STRING,     // vs LP 行格式（增减百分比）
+    "Metric_Format_Current",  STRING,     // This Year 行格式
+    "Metric_Format_LP",       STRING,     // Last Year 行格式（与本期格式一致，展示绝对值）
+    "Metric_Format_VsLP",     STRING,     // YOY 行格式（增减百分比）
     "Metric_IsCurrencyAmount", BOOLEAN,   // 是否金额类指标（需要汇率转换）
-    "Metric_ColorPositive",   STRING,     // vs LP 正值颜色
-    "Metric_ColorNegative",   STRING,     // vs LP 负值颜色
-    "Metric_ColorZero",       STRING,     // vs LP 零值颜色
-    "Metric_ColorDefault",    STRING,     // 默认颜色（本期/同期行）
+    "Metric_ColorPositive",   STRING,     // YOY 正值颜色
+    "Metric_ColorNegative",   STRING,     // YOY 负值颜色
+    "Metric_ColorZero",       STRING,     // YOY 零值颜色
+    "Metric_ColorDefault",    STRING,     // 默认颜色（This Year / Last Year 行）
     {
-        // ID  Name                Sort  Fmt_Current      Fmt_LP            Fmt_VsLP          IsCurAmt  Pos        Neg        Zero       Default
-        { 1,  "Cost",              1,   "currency",      "currency",      "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 2,  "红包",              2,   "currency",      "currency",      "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 3,  "Cost进度",          3,   "percent_1dp",   "percent_1dp",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 4,  "NetSales进度",      4,   "percent_1dp",   "percent_1dp",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 5,  "DemandSales进度",   5,   "percent_1dp",   "percent_1dp",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 6,  "费比",              6,   "percent_1dp",   "percent_1dp",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 7,  "含红包费比",        7,   "percent_1dp",   "percent_1dp",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 8,  "ROI",               8,   "decimal_2",     "decimal_2",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 9,  "新客花费占比",      9,   "percent_1dp",   "percent_1dp",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 10, "新客成本",          10,  "currency",      "currency",      "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 11, "Acc花费占比",       11,  "percent_1dp",   "percent_1dp",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 12, "Acc ROI",           12,  "decimal_2",     "decimal_2",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#212121" }
+        // ID  Name                                  Sort  Fmt_Current    Fmt_LP         Fmt_VsLP          IsCurAmt  Pos        Neg        Zero       Default
+        { 1,  "Cost",                                1,   "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 2,  "Cost Rate",                           2,   "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 3,  "Cost Rate (include Refund)",          3,   "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 4,  "Net Sales",                           4,   "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 5,  "ROI",                                 5,   "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 6,  "New Customer Cost%",                  6,   "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 7,  "Acceleration Cost%",                  7,   "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 8,  "±Acceleration Cost% vs Net Sales%",   8,   "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" }
     }
 )
 
@@ -263,42 +283,59 @@ DATATABLE(
     }
 )
 
-3.3 Channel/Platform 筛选器（多选）
-────────────────────────────────────
-已有 Slicer_Platform_Selection，直接复用。
-切片器类型从单选改为多选，支持同时选中多个平台聚合查看。
-度量值层通过 VALUES + IN 模式替代 SELECTEDVALUE 适配多选。
+3.3 Channel/Platform 筛选器（单选，含 ALL）
+────────────────────────────────────────────
+变更说明（2026-05-27）：
+- 切片器类型从多选改为单选（Single select = On）
+- 新增 ALL 选项：Platform_ID = "ALL"，代表 TM + JD 精确聚合
+- Base Value 中平台筛选逻辑：
+  * 选择 ALL  → FILTER platform IN {"TM","JD"}（精确圈定，非无条件聚合）
+  * 选择 TM/JD → platform = __ChannelID（单平台精确筛选）
+- 原多选的 VALUES + IN 模式已废弃，改为单选 SELECTEDVALUE + 显式 IN 模式
 
 Slicer_Platform_Selection = 
-// 功能：创建一个平台维度表，用于报表中的平台筛选和分组
-// 用途：用户可以通过此表选择不同的电商平台进行分析（支持多选）
+// 功能：创建平台维度表，用于报表中的平台筛选
+// 用途：用户通过此表单选平台进行分析；选择 ALL 时聚合 TM + JD 全部数据
 // 参数表名称：Platform
 // 遵循通用参数表模板规范
 DATATABLE(
     // 基础字段 - 必选字段
-    "Platform_ID", STRING,         // 主键标识，用于唯一标识每个平台选项，也用于与店铺表关联
+    "Platform_ID", STRING,         // 主键标识；"ALL" 代表全平台聚合
     "Platform_Label", STRING,      // 显示标签，在报表界面中向用户展示的平台名称
     "Platform_Sort", INTEGER,      // 排序顺序，控制选项在切片器中的显示顺序
     "Platform_Description", STRING, // 详细描述，说明该平台的具体特点和业务含义
     
     // 扩展字段 - 可选字段
-    "Platform_IsDefault", BOOLEAN,  // 是否默认选中，TRUE表示用户打开报表时默认选择此平台
-    "Platform_IsActive", BOOLEAN,   // 是否激活状态，控制该平台选项是否可用
-    "Platform_Group", STRING,       // 分组标识，用于对相关平台进行逻辑分组（如国内/国际、B2C/C2C等）
+    "Platform_IsDefault", BOOLEAN,  // 是否默认选中
+    "Platform_IsActive", BOOLEAN,   // 是否激活状态
+    "Platform_Group", STRING,       // 分组标识，用于对相关平台进行逻辑分组
     
-    // 自定义扩展字段 - 根据业务需求添加
+    // 自定义扩展字段
     "Platform_Type", STRING,       // 平台类型：综合电商/社交电商/内容电商等
     "Platform_Icon", STRING,       // 图标标识，可用于报表中的可视化显示
     
     // 数据行
     {
+        // ALL - 全平台聚合（默认选中）
+        {
+            "ALL",                 // 平台代码：ALL 代表 TM + JD 全部聚合
+            "ALL",                 // 平台显示名称
+            1,                     // 排序顺序，优先级最高（排在第一位）
+            "全平台汇总，聚合 TM + JD 全部数据",  // 平台描述
+            TRUE,                  // 默认选中，报表初始展示全平台数据
+            TRUE,                  // 激活状态，当前可用
+            "全平台",               // 分组
+            "聚合",                 // 平台类型
+            "🌐"                   // 图标标识
+        },
+        
         // TM - 天猫平台
         {
             "TM",                  // 平台代码，天猫的英文缩写
             "天猫",                 // 平台显示名称
-            5,                     // 排序顺序，优先级最高
+            2,                     // 排序顺序
             "阿里巴巴集团旗下的B2C电商平台，定位为品质购物商城，主要销售品牌商品",  // 平台描述
-            TRUE,                  // 默认选中，通常天猫是主要分析平台
+            FALSE,                 // 非默认选项
             TRUE,                  // 激活状态，当前可用
             "B2C综合平台",         // 分组，属于B2C综合电商平台
             "综合电商",             // 平台类型，综合性电商平台
@@ -309,7 +346,7 @@ DATATABLE(
         {
             "JD",                  // 平台代码，京东的英文缩写
             "京东",                 // 平台显示名称
-            6,                     // 排序顺序
+            3,                     // 排序顺序
             "中国自营式电商平台，以物流快速和正品保障著称，主要销售电子产品、家电等",  // 平台描述
             FALSE,                 // 非默认选项
             TRUE,                  // 激活状态，当前可用
@@ -320,7 +357,7 @@ DATATABLE(
     }
 )
 切片器显示字段：Platform_Label，Sort by Column: Platform_Sort。
-切片器类型：多选（Multi-select），默认选中 TM。
+切片器类型：单选（Single select = On），默认选中 ALL。
 
 ================================================================================
 4. 关系与数据模型说明
@@ -331,10 +368,10 @@ DATATABLE(
 | Power BI 表名                           | 说明 |
 |-----------------------------------------|------|
 | a05_e2e_paid_media_channel_data_d       | 渠道粒度，含 cost_amt / red_packet / rebate / nc_cost_amt / ec_cost_amt 等 |
-| a05_e2e_paid_media_summary_d            | 汇总粒度，含 cost_amt / sales_amt / net_sales_amt / media_sales_amt / adj_cost_amt / media_new_member_cnt / fcst_* 等 |
+| a05_e2e_paid_media_summary_d            | 汇总粒度，含 cost_amt / net_sales_amt / media_sales_amt / adj_cost_amt / fcst_* 等 |
 | a05_e2e_paid_media_product_data_d       | 产品粒度，含 promotion_cost_amt / promotion_sales_amt / framework 等 |
-| Dim_Date_Current | 日期维度（已加载，SQL 见 KPIs Overview_matrix_solution_sql） | 本期日期筛选器 |
-| Dim_Date_Ly      | 同期日期维度（已加载，断开维度）           | 同期日期筛选器 |
+| Dim_Date_Current | 日期维度，本期日期筛选器 |
+| Dim_Date_Ly      | 同期日期维度（断开维度），同期日期筛选器 |
 
 说明：Power BI 表名与数据源表名完全一致，字段名也一模一样，无需额外映射。
 
@@ -348,7 +385,7 @@ DATATABLE(
 
 断开维度（无关系）：
     Dim_Date_Ly                   ← 同期日期，MIN/MAX 获取范围
-    Slicer_Platform_Selection     ← VALUES + IN → platform（多选）
+    Slicer_Platform_Selection     ← SELECTEDVALUE → platform（单选，ALL 时不筛选）
     Slicer_DataCaliber_Selection  ← SELECTEDVALUE → trans_cycle（单选）
     Slicer_Currency_Selection     ← SELECTEDVALUE → Currency_ExchangeRate / Currency_Symbol（单选）
     DIM_RowKPIs_Overview          ← SELECTEDVALUE → Indicator Type
@@ -360,7 +397,10 @@ DATATABLE(
   本期日期切片器的选择自动通过关系传递到事实表
 - Dim_Date_Ly 断开，同期日期通过 MIN/MAX 获取范围后
   在度量值中用 CALCULATE + FILTER(ALL(Dim_Date_Current)) 覆盖日期上下文
-- Platform 筛选器支持多选，Base Value 中通过 VALUES + IN 显式应用
+- Platform 筛选器改为单选：
+  * 选择 ALL（Platform_ID="ALL"）→ Base Value 施加 FILTER platform IN {"TM","JD"}
+    精确圈定 TM+JD，避免数据源新增其他平台时被误聚合
+  * 选择具体平台（TM/JD）→ SELECTEDVALUE 获取 __ChannelID，= 精确筛选
 - DataCaliber 筛选器保持单选，通过 SELECTEDVALUE 应用
 - Currency 筛选器不再筛选事实表（数据源仅 RMB），
   而是在 Cell Value 层通过 Currency_ExchangeRate 进行汇率换算
@@ -373,6 +413,7 @@ DATATABLE(
 | DIM_RowKPIs_Overview        | Indicator Type    | Indicator Order   |
 | Slicer_DataCaliber_Selection| DataCaliber_Label | DataCaliber_Sort  |
 | Slicer_Currency_Selection   | Currency_Label    | Currency_Sort     |
+| Slicer_Platform_Selection   | Platform_Label    | Platform_Sort     |
 
 ================================================================================
 5. 核心度量值
@@ -386,22 +427,36 @@ KPIs Overview Base Value =
 // 度量值: KPIs Overview Base Value
 // Display Folder: KPIs Overview
 // 用途: 纯指标 SWITCH 分发器
-//       根据 DIM_ColMetric_Overview[Metric_ID] 路由到 12 个指标计算逻辑
-//       包含维度筛选（platform IN 多选, trans_cycle 单选）
-//       日期上下文由外层度量值控制（本期 = 关系筛选，同期 = CALCULATE 覆盖）
+//       根据 DIM_ColMetric_Overview[Metric_ID] 路由到 8 个指标计算逻辑
+//       当前所有分支均返回 1（占位值），保留口径注释供后续填充
+//
+// Platform 筛选模式（单选切片器）：
+//   TTL 行（ALL）→ FILTER platform IN {"TM","JD"}（精确圈定，避免误聚合）
+//   TM/JD 行    → platform = __ChannelID（单平台精确筛选）
+//   统一通过 __PlatformFilter 变量传递，各 SWITCH 分支直接引用
+//
+//       日期上下文由外层度量值控制（This Year = 关系筛选，Last Year = CALCULATE 覆盖）
 //       币种转换在 Cell Value 层通过汇率乘数实现（数据源仅 RMB）
 // 依赖: DIM_ColMetric_Overview[Metric_ID]
-//       Slicer_Platform_Selection[Platform_ID]（多选 → VALUES + IN）
+//       Slicer_Platform_Selection[Platform_ID]（单选 → SELECTEDVALUE）
 //       Slicer_DataCaliber_Selection[DataCaliber_ID]（单选 → SELECTEDVALUE）
 //       a05_e2e_paid_media_summary_d, a05_e2e_paid_media_channel_data_d,
 //       a05_e2e_paid_media_product_data_d
 // 模式: Disconnected Dimension + Metric_ID SWITCH Dispatch
+// 扩展: 后续有口径后，替换各分支中的 1 为真实 CALCULATE 表达式
 // ========================================
 
     // ── 切片器上下文 ──
     VAR __SelID = SELECTEDVALUE(DIM_ColMetric_Overview[Metric_ID])
-    VAR __SelectedPlatforms = VALUES(Slicer_Platform_Selection[Platform_ID])
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    // ── Platform 筛选条件构建 ──
+    // TTL（ALL）：FILTER platform IN {"TM","JD"}，精确圈定两个平台
+    // 单平台：   FILTER platform = __ChannelID，精确单选
+    // 注意：__PlatformFilter 作为 CALCULATE 的筛选参数传入各分支
+    //       避免在 8 个 SWITCH 分支中重复写 IF(__ChannelID="ALL",...) 判断
+    VAR __IsAllPlatform = (__ChannelID = "ALL")
 
     RETURN
     SWITCH(
@@ -409,292 +464,211 @@ KPIs Overview Base Value =
 
         // ═══════════════════════════════════════════════════════
         // ID 1: Cost — 花费金额
-        // 口径: SUM(a05_e2e_paid_media_summary_d[cost_amt])
+        // 口径（待填充）: SUM(a05_e2e_paid_media_summary_d[cost_amt])
         // 来源: 汇总粒度事实表
+        // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
         // ═══════════════════════════════════════════════════════
-        1, CALCULATE(
-                SUM(a05_e2e_paid_media_summary_d[cost_amt]),
-                a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-           ),
+        1, 1,
+        // 待填充真实口径：
+        // 1, IF(
+        //         __IsAllPlatform,
+        //         CALCULATE(
+        //             SUM(a05_e2e_paid_media_summary_d[cost_amt]),
+        //             a05_e2e_paid_media_summary_d[platform] IN {"TM", "JD"},
+        //             a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+        //         ),
+        //         CALCULATE(
+        //             SUM(a05_e2e_paid_media_summary_d[cost_amt]),
+        //             a05_e2e_paid_media_summary_d[platform] = __ChannelID,
+        //             a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+        //         )
+        //    ),
 
         // ═══════════════════════════════════════════════════════
-        // ID 2: 红包 — 平台红包金额
-        // 口径: SUM(a05_e2e_paid_media_channel_data_d[red_packet])
+        // ID 2: Cost Rate — 费比（不含红包）
+        // 口径（待填充）: (channel.cost_amt - channel.red_packet - channel.rebate)
+        //               / (summary.net_sales_amt * 1.13 / 1.06)
+        // 注意: 分子来自 channel_data_d，分母来自 summary_d
+        // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
+        // ═══════════════════════════════════════════════════════
+        2, 1,
+        // 待填充真实口径（示例框架）：
+        // 2, VAR __ChannelCost = IF(__IsAllPlatform,
+        //                          CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+        //                              a05_e2e_paid_media_channel_data_d[platform] IN {"TM","JD"},
+        //                              a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle),
+        //                          CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+        //                              a05_e2e_paid_media_channel_data_d[platform] = __ChannelID,
+        //                              a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle))
+        //    VAR __RedPacket  = IF(__IsAllPlatform,
+        //                          CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[red_packet]),
+        //                              a05_e2e_paid_media_channel_data_d[platform] IN {"TM","JD"},
+        //                              a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle),
+        //                          CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[red_packet]),
+        //                              a05_e2e_paid_media_channel_data_d[platform] = __ChannelID,
+        //                              a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle))
+        //    VAR __Rebate     = IF(__IsAllPlatform,
+        //                          CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[rebate]),
+        //                              a05_e2e_paid_media_channel_data_d[platform] IN {"TM","JD"},
+        //                              a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle),
+        //                          CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[rebate]),
+        //                              a05_e2e_paid_media_channel_data_d[platform] = __ChannelID,
+        //                              a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle))
+        //    VAR __NetSales   = IF(__IsAllPlatform,
+        //                          CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
+        //                              a05_e2e_paid_media_summary_d[platform] IN {"TM","JD"},
+        //                              a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle),
+        //                          CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
+        //                              a05_e2e_paid_media_summary_d[platform] = __ChannelID,
+        //                              a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle))
+        //    RETURN DIVIDE(__ChannelCost - __RedPacket - __Rebate, __NetSales * 1.13 / 1.06),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 3: Cost Rate (include Refund) — 含红包费比
+        // 口径（待填充）: SUM(summary_d[cost_amt])
+        //               / (SUM(summary_d[net_sales_amt]) * 1.13 / 1.06)
+        // 注意: 分子分母均来自 summary_d
+        // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
+        // ═══════════════════════════════════════════════════════
+        3, 1,
+        // 待填充真实口径：
+        // 3, VAR __SummaryCost   = IF(__IsAllPlatform,
+        //                             CALCULATE(SUM(a05_e2e_paid_media_summary_d[cost_amt]),
+        //                                 a05_e2e_paid_media_summary_d[platform] IN {"TM","JD"},
+        //                                 a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle),
+        //                             CALCULATE(SUM(a05_e2e_paid_media_summary_d[cost_amt]),
+        //                                 a05_e2e_paid_media_summary_d[platform] = __ChannelID,
+        //                                 a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle))
+        //    VAR __NetSalesRatio = IF(__IsAllPlatform,
+        //                             CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
+        //                                 a05_e2e_paid_media_summary_d[platform] IN {"TM","JD"},
+        //                                 a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle),
+        //                             CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
+        //                                 a05_e2e_paid_media_summary_d[platform] = __ChannelID,
+        //                                 a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle))
+        //    RETURN DIVIDE(__SummaryCost, __NetSalesRatio * 1.13 / 1.06),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 4: Net Sales — Net 销售额
+        // 口径（待填充）: SUM(a05_e2e_paid_media_summary_d[net_sales_amt])
+        // 来源: 汇总粒度事实表
+        // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
+        // ═══════════════════════════════════════════════════════
+        4, 1,
+        // 待填充真实口径：
+        // 4, IF(
+        //         __IsAllPlatform,
+        //         CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
+        //             a05_e2e_paid_media_summary_d[platform] IN {"TM", "JD"},
+        //             a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle),
+        //         CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
+        //             a05_e2e_paid_media_summary_d[platform] = __ChannelID,
+        //             a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle)
+        //    ),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 5: ROI — 媒体投资回报率
+        // 口径（待填充）: SUM(summary_d[media_sales_amt]) / SUM(summary_d[adj_cost_amt])
+        // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
+        // ═══════════════════════════════════════════════════════
+        5, 1,
+        // 待填充真实口径：
+        // 5, VAR __MediaSales = IF(__IsAllPlatform,
+        //                          CALCULATE(SUM(a05_e2e_paid_media_summary_d[media_sales_amt]),
+        //                              a05_e2e_paid_media_summary_d[platform] IN {"TM","JD"},
+        //                              a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle),
+        //                          CALCULATE(SUM(a05_e2e_paid_media_summary_d[media_sales_amt]),
+        //                              a05_e2e_paid_media_summary_d[platform] = __ChannelID,
+        //                              a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle))
+        //    VAR __AdjCost    = IF(__IsAllPlatform,
+        //                          CALCULATE(SUM(a05_e2e_paid_media_summary_d[adj_cost_amt]),
+        //                              a05_e2e_paid_media_summary_d[platform] IN {"TM","JD"},
+        //                              a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle),
+        //                          CALCULATE(SUM(a05_e2e_paid_media_summary_d[adj_cost_amt]),
+        //                              a05_e2e_paid_media_summary_d[platform] = __ChannelID,
+        //                              a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle))
+        //    RETURN DIVIDE(__MediaSales, __AdjCost),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 6: New Customer Cost% — 新客花费占比
+        // 口径（待填充）: nc_cost_amt / (nc_cost_amt + ec_cost_amt)
         // 来源: 渠道粒度事实表
+        // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
         // ═══════════════════════════════════════════════════════
-        2, CALCULATE(
-                SUM(a05_e2e_paid_media_channel_data_d[red_packet]),
-                a05_e2e_paid_media_channel_data_d[platform] IN __SelectedPlatforms,
-                a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
-           ),
+        6, 1,
+        // 待填充真实口径：
+        // 6, VAR __NC_Cost = IF(__IsAllPlatform,
+        //                        CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[nc_cost_amt]),
+        //                            a05_e2e_paid_media_channel_data_d[platform] IN {"TM","JD"},
+        //                            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle),
+        //                        CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[nc_cost_amt]),
+        //                            a05_e2e_paid_media_channel_data_d[platform] = __ChannelID,
+        //                            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle))
+        //    VAR __EC_Cost = IF(__IsAllPlatform,
+        //                        CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[ec_cost_amt]),
+        //                            a05_e2e_paid_media_channel_data_d[platform] IN {"TM","JD"},
+        //                            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle),
+        //                        CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[ec_cost_amt]),
+        //                            a05_e2e_paid_media_channel_data_d[platform] = __ChannelID,
+        //                            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle))
+        //    RETURN DIVIDE(__NC_Cost, __NC_Cost + __EC_Cost),
 
         // ═══════════════════════════════════════════════════════
-        // ID 3: Cost进度 — 花费完成率 = 实际花费 / 目标花费
-        // 口径: SUM(summary_d[cost_amt]) / SUM(summary_d[fcst_cost_amt])
-        // ═══════════════════════════════════════════════════════
-        3, VAR __ActualCost =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[cost_amt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-           VAR __FcstCost =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[fcst_cost_amt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-           RETURN DIVIDE(__ActualCost, __FcstCost),
-
-        // ═══════════════════════════════════════════════════════
-        // ID 4: NetSales进度 — Net销售额完成率 = 实际Net销售额 / 目标Net销售额
-        // 口径: SUM(summary_d[net_sales_amt]) / SUM(summary_d[fcst_net_sales_amt])
-        // ═══════════════════════════════════════════════════════
-        4, VAR __ActualNetSales =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-           VAR __FcstNetSales =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[fcst_net_sales_amt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-           RETURN DIVIDE(__ActualNetSales, __FcstNetSales),
-
-        // ═══════════════════════════════════════════════════════
-        // ID 5: DemandSales进度 — Demand销售额完成率 = 实际销售额 / 目标销售额
-        // 口径: SUM(summary_d[sales_amt]) / SUM(summary_d[fcst_sales_amt])
-        // ═══════════════════════════════════════════════════════
-        5, VAR __ActualSales =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[sales_amt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-           VAR __FcstSales =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[fcst_sales_amt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-           RETURN DIVIDE(__ActualSales, __FcstSales),
-
-        // ═══════════════════════════════════════════════════════
-        // ID 6: 费比 — (花费 - 红包 - 返佣返货金) / (net销售额 * 1.13 / 1.06)
-        // 口径: (channel.cost_amt - channel.red_packet - channel.rebate) / (summary.net_sales_amt * 1.13 / 1.06)
-        // 注意: 分子来自 ChannelData（渠道粒度含 red_packet / rebate）
-        //       分母来自 SummaryData（汇总粒度含 net_sales_amt）
-        // ═══════════════════════════════════════════════════════
-        6, VAR __ChannelCost =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
-                    a05_e2e_paid_media_channel_data_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
-                )
-           VAR __RedPacket =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_channel_data_d[red_packet]),
-                    a05_e2e_paid_media_channel_data_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
-                )
-           VAR __Rebate =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_channel_data_d[rebate]),
-                    a05_e2e_paid_media_channel_data_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
-                )
-           VAR __NetSales =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-           RETURN DIVIDE(
-                __ChannelCost - __RedPacket - __Rebate,
-                __NetSales * 1.13 / 1.06
-           ),
-
-        // ═══════════════════════════════════════════════════════
-        // ID 7: 含红包费比 — 总花费 / (net销售额 * 1.13 / 1.06)
-        // 口径: SUM(summary_d[cost_amt]) / (SUM(summary_d[net_sales_amt]) * 1.13 / 1.06)
-        // 注意: 分子分母均来自 SummaryData
-        // ═══════════════════════════════════════════════════════
-        7, VAR __SummaryCost =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[cost_amt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-           VAR __NetSalesForRatio =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-           RETURN DIVIDE(
-                __SummaryCost,
-                __NetSalesForRatio * 1.13 / 1.06
-           ),
-
-        // ═══════════════════════════════════════════════════════
-        // ID 8: ROI — 媒体投资回报率 = 媒体成交金额 / 调整花费
-        // 口径: SUM(summary_d[media_sales_amt]) / SUM(summary_d[adj_cost_amt])
-        // ═══════════════════════════════════════════════════════
-        8, VAR __MediaSales =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[media_sales_amt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-           VAR __AdjCost =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[adj_cost_amt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-           RETURN DIVIDE(__MediaSales, __AdjCost),
-
-        // ═══════════════════════════════════════════════════════
-        // ID 9: 新客花费占比 — 新客花费 / 总花费（新客+老客）
-        // 口径: nc_cost_amt / (nc_cost_amt + ec_cost_amt)
-        // 来源: 渠道粒度事实表
-        // ═══════════════════════════════════════════════════════
-        9, VAR __NC_Cost =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_channel_data_d[nc_cost_amt]),
-                    a05_e2e_paid_media_channel_data_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
-                )
-           VAR __EC_Cost =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_channel_data_d[ec_cost_amt]),
-                    a05_e2e_paid_media_channel_data_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
-                )
-           RETURN DIVIDE(__NC_Cost, __NC_Cost + __EC_Cost),
-
-        // ═══════════════════════════════════════════════════════
-        // ID 10: 新客成本 — 调整花费 / 媒体新客人数
-        // 口径: SUM(summary_d[adj_cost_amt]) / SUM(summary_d[media_new_member_cnt])
-        // 注意: media_new_member_cnt 最细到月度粒度，日度筛选时
-        //       需确认数据源已按日展开或在 SQL 层做好粒度处理
-        // ═══════════════════════════════════════════════════════
-        10, VAR __AdjCostForNC =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[adj_cost_amt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-            VAR __NewMemberCnt =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_summary_d[media_new_member_cnt]),
-                    a05_e2e_paid_media_summary_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-                )
-            RETURN DIVIDE(__AdjCostForNC, __NewMemberCnt),
-
-        // ═══════════════════════════════════════════════════════
-        // ID 11: Acc花费占比 — Acceleration推广花费占全部推广花费的比例
-        // 口径: SUM(product_d[promotion_cost_amt] WHERE framework='Acceleration')
-        //       / SUM(product_d[promotion_cost_amt])
+        // ID 7: Acceleration Cost% — Acc 花费占比
+        // 口径（待填充）: SUM(product_d[promotion_cost_amt] WHERE framework='Acceleration')
+        //               / SUM(product_d[promotion_cost_amt])
         // 来源: 产品粒度事实表
+        // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
         // ═══════════════════════════════════════════════════════
-        11, VAR __AccCost =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
-                    a05_e2e_paid_media_product_data_d[framework] = "Acceleration",
-                    a05_e2e_paid_media_product_data_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
-                )
-            VAR __TotalPromoCost =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
-                    a05_e2e_paid_media_product_data_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
-                )
-            RETURN DIVIDE(__AccCost, __TotalPromoCost),
+        7, 1,
+        // 待填充真实口径：
+        // 7, VAR __AccCost = IF(__IsAllPlatform,
+        //                        CALCULATE(SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
+        //                            a05_e2e_paid_media_product_data_d[framework] = "Acceleration",
+        //                            a05_e2e_paid_media_product_data_d[platform] IN {"TM","JD"},
+        //                            a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle),
+        //                        CALCULATE(SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
+        //                            a05_e2e_paid_media_product_data_d[framework] = "Acceleration",
+        //                            a05_e2e_paid_media_product_data_d[platform] = __ChannelID,
+        //                            a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle))
+        //    VAR __TotalPromoCost = IF(__IsAllPlatform,
+        //                              CALCULATE(SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
+        //                                  a05_e2e_paid_media_product_data_d[platform] IN {"TM","JD"},
+        //                                  a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle),
+        //                              CALCULATE(SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
+        //                                  a05_e2e_paid_media_product_data_d[platform] = __ChannelID,
+        //                                  a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle))
+        //    RETURN DIVIDE(__AccCost, __TotalPromoCost),
 
         // ═══════════════════════════════════════════════════════
-        // ID 12: Acc ROI — Acceleration推广 ROI
-        // 口径: SUM(product_d[promotion_sales_amt] WHERE framework='Acceleration')
-        //       / SUM(product_d[promotion_cost_amt] WHERE framework='Acceleration')
-        // 来源: 产品粒度事实表
+        // ID 8: ±Acceleration Cost% vs Net Sales% — Acc 花费占比 vs Net Sales 对比
+        // 口径（待确认）: 待确认具体计算口径
+        // 来源: 待确认（可能涉及 product_data_d + summary_d）
+        // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
         // ═══════════════════════════════════════════════════════
-        12, VAR __AccSales =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_product_data_d[promotion_sales_amt]),
-                    a05_e2e_paid_media_product_data_d[framework] = "Acceleration",
-                    a05_e2e_paid_media_product_data_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
-                )
-            VAR __AccCostForROI =
-                CALCULATE(
-                    SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
-                    a05_e2e_paid_media_product_data_d[framework] = "Acceleration",
-                    a05_e2e_paid_media_product_data_d[platform] IN __SelectedPlatforms,
-                    a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
-                )
-            RETURN DIVIDE(__AccSales, __AccCostForROI),
+        8, 1,
+        // 待填充真实口径（口径待确认后补充）：
+        // 8, VAR __AccCostPct  = [ID7 计算逻辑，或复用 ID7 中间变量]
+        //    VAR __NetSalesPct = IF(__IsAllPlatform, ...)
+        //    RETURN DIVIDE(__AccCostPct - __NetSalesPct, __NetSalesPct),
+        //    // 或者：RETURN __AccCostPct - __NetSalesPct（差值而非增长率，视业务而定）
 
         // ─── 默认 ──────────────────────────────────────────
         BLANK()
     )
 
-事实表字段依赖清单：
-| 事实表            | 字段                   | 用途                |
-|-------------------|------------------------|---------------------|
-| a05_e2e_paid_media_summary_d  | cost_amt               | Cost / Cost进度 / 含红包费比 |
-| a05_e2e_paid_media_summary_d  | sales_amt              | DemandSales进度     |
-| a05_e2e_paid_media_summary_d  | net_sales_amt          | NetSales进度 / 费比 / 含红包费比 |
-| a05_e2e_paid_media_summary_d  | media_sales_amt        | ROI                 |
-| a05_e2e_paid_media_summary_d  | adj_cost_amt           | ROI / 新客成本      |
-| a05_e2e_paid_media_summary_d  | media_new_member_cnt   | 新客成本            |
-| a05_e2e_paid_media_summary_d  | fcst_cost_amt          | Cost进度            |
-| a05_e2e_paid_media_summary_d  | fcst_net_sales_amt     | NetSales进度        |
-| a05_e2e_paid_media_summary_d  | fcst_sales_amt         | DemandSales进度     |
-| a05_e2e_paid_media_summary_d  | platform               | 维度筛选（多选 IN）  |
-| a05_e2e_paid_media_summary_d  | trans_cycle            | 维度筛选（单选）     |
-| a05_e2e_paid_media_summary_d  | data_date              | 日期关系            |
-| a05_e2e_paid_media_channel_data_d  | cost_amt          | 费比                |
-| a05_e2e_paid_media_channel_data_d  | red_packet        | 红包 / 费比         |
-| a05_e2e_paid_media_channel_data_d  | rebate            | 费比                |
-| a05_e2e_paid_media_channel_data_d  | nc_cost_amt       | 新客花费占比        |
-| a05_e2e_paid_media_channel_data_d  | ec_cost_amt       | 新客花费占比        |
-| a05_e2e_paid_media_channel_data_d  | platform          | 维度筛选（多选 IN）  |
-| a05_e2e_paid_media_channel_data_d  | trans_cycle       | 维度筛选（单选）     |
-| a05_e2e_paid_media_channel_data_d  | data_date         | 日期关系            |
-| a05_e2e_paid_media_product_data_d  | promotion_cost_amt | Acc花费占比 / Acc ROI |
-| a05_e2e_paid_media_product_data_d  | promotion_sales_amt | Acc ROI            |
-| a05_e2e_paid_media_product_data_d  | framework         | Acc 指标筛选（= "Acceleration"） |
-| a05_e2e_paid_media_product_data_d  | platform          | 维度筛选（多选 IN）  |
-| a05_e2e_paid_media_product_data_d  | trans_cycle       | 维度筛选（单选）     |
-| a05_e2e_paid_media_product_data_d  | data_date         | 日期关系            |
-
-说明：数据源仅存储 RMB 币种数据，currency 字段不再用于 CALCULATE 筛选。
-币种转换在 Cell Value 层通过 Slicer_Currency_Selection[Currency_ExchangeRate] 实现。
-
-Platform 多选说明：
-- 切片器允许同时选中多个平台（如 TM + JD）
-- VALUES(Slicer_Platform_Selection[Platform_ID]) 返回当前选中的平台集合
-- CALCULATE 中通过 IN __SelectedPlatforms 过滤事实表，自动聚合多平台数据
-- 全不选时 VALUES 返回所有平台，等效全选
-
-
+================================================================================
 5.2 行路由度量值 — KPIs Overview Cell Value
-────────────────────────────────────────────
+================================================================================
 
 KPIs Overview Cell Value = 
 // ========================================
 // 度量值: KPIs Overview Cell Value
 // Display Folder: KPIs Overview
-// 用途: 根据行维度（本期 / 同期 / vs LP）路由到不同的计算逻辑
-//       - 本期：调用 [Base Value]，金额类指标乘以汇率
-//       - 同期：CALCULATE([Base Value], LP 日期覆盖)，金额类指标乘以汇率
-//       - vs LP：本期/同期 - 1，增长率不受汇率影响
+// 用途: 根据行维度（This Year / Last Year / YOY）路由到不同的计算逻辑
+//       - This Year：调用 [Base Value]，金额类指标乘以汇率
+//       - Last Year：CALCULATE([Base Value], LP 日期覆盖)，金额类指标乘以汇率
+//       - YOY：This Year / Last Year - 1，增长率不受汇率影响
 //
 // 币种转换说明：
 //   数据源仅存储 RMB，Base Value 返回 RMB 原始值
@@ -702,7 +676,7 @@ KPIs Overview Cell Value =
 //   切片器选择 USD → ExchangeRate = 7（乘以汇率）
 //   仅 Metric_IsCurrencyAmount = TRUE 的金额类指标需要转换
 //   比率/计数类指标不受汇率影响
-//   vs LP 行是增长率，本期和同期乘相同汇率后约分抵消，无需转换
+//   YOY 行是增长率，This Year 和 Last Year 乘相同汇率后约分抵消，无需转换
 //
 // 依赖: DIM_RowKPIs_Overview[Indicator Type], Dim_Date_Ly,
 //       Slicer_Currency_Selection[Currency_ExchangeRate],
@@ -720,10 +694,10 @@ KPIs Overview Cell Value =
     VAR __LP_Start = MIN(Dim_Date_Ly[LY_数据日期])
     VAR __LP_End = MAX(Dim_Date_Ly[LY_数据日期])
 
-    // ── 本期值（当前日期上下文，由 Dim_Date_Current 关系自然筛选）──
+    // ── This Year 值（当前日期上下文，由 Dim_Date_Current 关系自然筛选）──
     VAR __CurrentValue = [KPIs Overview Base Value]
 
-    // ── 同期值（覆盖日期上下文为 LP 日期范围）──
+    // ── Last Year 值（覆盖日期上下文为 LP 日期范围）──
     // REMOVEFILTERS 移除 Dim_Date_Current 上的本期日期筛选
     // FILTER(ALL(Dim_Date_Current)) 重新施加 LP 日期范围
     // 其他维度筛选（platform/trans_cycle）不受影响
@@ -748,14 +722,14 @@ KPIs Overview Cell Value =
     VAR __LP_Converted =
         IF(__IsCurrencyAmt, __LP_Value * __ExchangeRate, __LP_Value)
 
-    // ── vs LP 同比计算（含边界判断）──
+    // ── YOY 同比计算（含边界判断）──
     // 判断逻辑：
     //   同期为 0 或空 → BLANK()（包含双零/双空场景）
     //   本期为 0 或空，同期有值 → -1（即 -100%）
-    //   双方均有值 → (本期 - 同期) / 同期
+    //   双方均有值 → (This Year - Last Year) / Last Year
     VAR __CurrIsEmpty = ISBLANK(__CurrentValue) || __CurrentValue = 0
     VAR __LPIsEmpty = ISBLANK(__LP_Value) || __LP_Value = 0
-    VAR __VsLP_Result =
+    VAR __YOY_Result =
         IF(
             __LPIsEmpty,
             BLANK(),
@@ -766,19 +740,19 @@ KPIs Overview Cell Value =
     SWITCH(
         TRUE(),
 
-        // ── 本期：返回汇率换算后的值 ──
+        // ── This Year：返回汇率换算后的值 ──
         // 金额类指标乘以汇率（RMB=1 不变，USD=7 转换）
-        // 比率/计数类指标原值返回（__ExchangeRate 不参与）
-        __Indicator = "本期", __CurrentConverted,
+        // 比率/计数类指标原值返回
+        __Indicator = "This Year", __CurrentConverted,
 
-        // ── 同期：返回汇率换算后的同期值 ──
-        // 与本期同样的汇率换算逻辑
-        __Indicator = "同期", __LP_Converted,
+        // ── Last Year：返回汇率换算后的同期值 ──
+        // 与 This Year 同样的汇率换算逻辑
+        __Indicator = "Last Year", __LP_Converted,
 
-        // ── vs LP：同比增长率 ──
+        // ── YOY：同比增长率 ──
         // 增长率不受汇率影响：(C*R - L*R) / (L*R) = (C-L) / L
         // 边界处理：同期为0/空→BLANK，本期为0/空且同期有值→-1
-        __Indicator = "vs LP", __VsLP_Result,
+        __Indicator = "YOY", __YOY_Result,
 
         BLANK()
     )
@@ -786,9 +760,9 @@ KPIs Overview Cell Value =
 同期日期覆盖示意（假设本期 = 2026-04-12 ~ 2026-04-15，同期 = 2025-04-12 ~ 2025-04-15）：
 | 行          | 日期上下文来源                                 | 说明 |
 |-------------|-----------------------------------------------|------|
-| 本期        | Dim_Date_Current 关系自然筛选 2026-04-12~15   | 直接调用 Base Value |
-| 同期        | CALCULATE 覆盖 → 2025-04-12~15               | 调用 Base Value + LP 日期覆盖 |
-| vs LP       | 计算得出                                       | (本期 - 同期) / 同期 |
+| This Year   | Dim_Date_Current 关系自然筛选 2026-04-12~15   | 直接调用 Base Value |
+| Last Year   | CALCULATE 覆盖 → 2025-04-12~15               | 调用 Base Value + LP 日期覆盖 |
+| YOY         | 计算得出                                       | (This Year - Last Year) / Last Year |
 
 ================================================================================
 6. 格式化显示度量值 — KPIs Overview Cell Display
@@ -814,9 +788,9 @@ KPIs Overview Cell Display =
     VAR __Format =
         SWITCH(
             __Indicator,
-            "本期",   SELECTEDVALUE(DIM_ColMetric_Overview[Metric_Format_Current]),
-            "同期",   SELECTEDVALUE(DIM_ColMetric_Overview[Metric_Format_LP]),
-            "vs LP",  SELECTEDVALUE(DIM_ColMetric_Overview[Metric_Format_VsLP]),
+            "This Year", SELECTEDVALUE(DIM_ColMetric_Overview[Metric_Format_Current]),
+            "Last Year", SELECTEDVALUE(DIM_ColMetric_Overview[Metric_Format_LP]),
+            "YOY",       SELECTEDVALUE(DIM_ColMetric_Overview[Metric_Format_VsLP]),
             SELECTEDVALUE(DIM_ColMetric_Overview[Metric_Format_Current])
         )
 
@@ -876,10 +850,11 @@ KPIs Overview Cell Font Color =
 // Display Folder: KPIs Overview > Formatting
 // 用途: 根据行类型和值的正负，返回字体颜色
 //       颜色定义在 DIM_ColMetric_Overview 维度表中维护
-//       仅 vs LP 行启用条件颜色，本期和同期行统一使用默认色
+//       仅 YOY 行启用条件颜色，This Year 和 Last Year 行统一使用默认色
 // 依赖: [KPIs Overview Cell Value],
 //       DIM_RowKPIs_Overview[Indicator Type],
 //       DIM_ColMetric_Overview[Metric_Color*]
+// 变更: 2026-05-27 行标识由 "vs LP" 改为 "YOY"
 // ========================================
     VAR __Value = [KPIs Overview Cell Value]
     VAR __Indicator = SELECTEDVALUE(DIM_RowKPIs_Overview[Indicator Type])
@@ -887,18 +862,18 @@ KPIs Overview Cell Font Color =
         SWITCH(
             TRUE(),
             ISBLANK(__Value),
-                SELECTEDVALUE(DIM_ColMetric_Overview[Metric_ColorDefault], "#212121"),
+                SELECTEDVALUE(DIM_ColMetric_Overview[Metric_ColorDefault], "#5f6165"),
 
-            // 仅 vs LP 行启用条件颜色
-            __Indicator = "vs LP" && __Value > 0,
+            // 仅 YOY 行启用条件颜色
+            __Indicator = "YOY" && __Value > 0,
                 SELECTEDVALUE(DIM_ColMetric_Overview[Metric_ColorPositive], "#1A9018"),
-            __Indicator = "vs LP" && __Value < 0,
+            __Indicator = "YOY" && __Value < 0,
                 SELECTEDVALUE(DIM_ColMetric_Overview[Metric_ColorNegative], "#D64550"),
-            __Indicator = "vs LP" && __Value = 0,
+            __Indicator = "YOY" && __Value = 0,
                 SELECTEDVALUE(DIM_ColMetric_Overview[Metric_ColorZero], "#E1C233"),
 
-            // 本期和同期行统一默认色
-            SELECTEDVALUE(DIM_ColMetric_Overview[Metric_ColorDefault], "#212121")
+            // This Year 和 Last Year 行统一默认色（#5f6165 深灰色）
+            SELECTEDVALUE(DIM_ColMetric_Overview[Metric_ColorDefault], "#5f6165")
         )
 
 ================================================================================
@@ -909,11 +884,12 @@ KPIs Overview Cell SVG Icon =
 // ========================================
 // 度量值: KPIs Overview Cell SVG Icon
 // Display Folder: KPIs Overview > Formatting
-// 用途: 为 vs LP 行返回增减方向箭头 SVG 图标
-//       仅 vs LP 行显示，本期和同期行返回 BLANK
+// 用途: 为 YOY 行返回增减方向箭头 SVG 图标
+//       仅 YOY 行显示，This Year 和 Last Year 行返回 BLANK
 // 依赖: [KPIs Overview Cell Value],
 //       DIM_RowKPIs_Overview[Indicator Type]
 // 配置: 需将此度量值的数据类别设为"图像 URL"
+// 变更: 2026-05-27 行标识由 "vs LP" 改为 "YOY"
 // ========================================
     VAR __Value = [KPIs Overview Cell Value]
     VAR __Indicator = SELECTEDVALUE(DIM_RowKPIs_Overview[Indicator Type])
@@ -926,7 +902,7 @@ KPIs Overview Cell SVG Icon =
     RETURN
         SWITCH(
             TRUE(),
-            __Indicator <> "vs LP",    BLANK(),
+            __Indicator <> "YOY",      BLANK(),   // 非 YOY 行不显示图标
             ISBLANK(__Value),          BLANK(),
             __Value > 0,               __GreenArrowUp,
             __Value < 0,               __RedArrowDown,
@@ -944,6 +920,7 @@ KPIs Overview Cell Background Color =
 // Display Folder: KPIs Overview > Formatting
 // 用途: 根据行 Indicator Order 返回交替行背景色
 //       奇数行白色，偶数行浅灰色
+//       行顺序：This Year(1)=白色, Last Year(2)=灰色, YOY(3)=白色
 // 依赖: DIM_RowKPIs_Overview[Indicator Order]
 // ========================================
     VAR __RowID = SELECTEDVALUE(DIM_RowKPIs_Overview[Indicator Order])
@@ -952,8 +929,8 @@ KPIs Overview Cell Background Color =
     RETURN
         IF(
             MOD(__EffRowID, 2) = 0,
-            "#F5F5F5",                     // 偶数行：浅灰色
-            "#FFFFFF"                      // 奇数行：白色
+            "#F5F5F5",                     // 偶数行（Last Year）：浅灰色
+            "#FFFFFF"                      // 奇数行（This Year / YOY）：白色
         )
 
 ================================================================================
@@ -970,9 +947,9 @@ KPIs Overview Cell Background Color =
 ──────────────────
 | 格式类型     | 基于字段                              | 说明 |
 |-------------|---------------------------------------|------|
-| 字体颜色     | [KPIs Overview Cell Font Color]       | vs LP 行正/负/零三色 |
+| 字体颜色     | [KPIs Overview Cell Font Color]       | YOY 行正/负/零三色 |
 | 背景颜色     | [KPIs Overview Cell Background Color] | 交替行背景色 |
-| 图标（可选） | [KPIs Overview Cell SVG Icon]         | vs LP 行箭头，需设数据类别为图像 URL |
+| 图标（可选） | [KPIs Overview Cell SVG Icon]         | YOY 行箭头，需设数据类别为图像 URL |
 
 10.3 切片器配置
 ────────────────
@@ -980,14 +957,15 @@ KPIs Overview Cell Background Color =
 |----------------|----------|------------------------------------------|--------|
 | 本期日期范围    | Between  | Dim_Date_Current[数据日期]               | —      |
 | 同期日期范围    | Between  | Dim_Date_Ly[LY_数据日期]                 | —      |
-| Channel        | 多选     | Slicer_Platform_Selection[Platform_Label] | TM     |
+| Channel        | 单选     | Slicer_Platform_Selection[Platform_Label] | ALL    |
 | 数据口径       | 单选     | Slicer_DataCaliber_Selection[DataCaliber_Label] | T+1 |
 | 币种           | 单选     | Slicer_Currency_Selection[Currency_Label] | RMB    |
 
-Channel 多选切片器配置说明：
-- 在 Power BI 切片器视觉对象中，取消勾选"单选"选项（Format > Selection > Single select = Off）
-- 用户可同时选择多个平台（如 TM + JD），度量值自动聚合所选平台数据
-- 数据口径和币种保持单选不变
+Channel 单选切片器配置说明：
+- 在 Power BI 切片器视觉对象中，确保勾选"单选"选项（Format > Selection > Single select = On）
+- 选择 ALL（默认）时，展示 TM + JD 全部聚合数据
+- 选择具体平台（天猫/京东）时，仅展示该平台数据
+- 数据口径和币种同样保持单选
 
 ================================================================================
 11. 度量值清单与 Display Folder
@@ -995,8 +973,8 @@ Channel 多选切片器配置说明：
 
 | # | 度量值名称                          | Display Folder              | 用途 | 返回类型 |
 |---|------------------------------------|-----------------------------|------|----------|
-| 1 | KPIs Overview Base Value           | KPIs Overview               | 纯指标 SWITCH 分发（12 分支） | 数值 |
-| 2 | KPIs Overview Cell Value           | KPIs Overview               | 行路由（本期 / 同期 / vs LP） | 数值 |
+| 1 | KPIs Overview Base Value           | KPIs Overview               | 纯指标 SWITCH 分发（8 分支，当前值=1） | 数值 |
+| 2 | KPIs Overview Cell Value           | KPIs Overview               | 行路由（This Year / Last Year / YOY） | 数值 |
 | 3 | KPIs Overview Cell Display         | KPIs Overview > Formatting  | 格式化显示文本 | 文本 |
 | 4 | KPIs Overview Cell Font Color      | KPIs Overview > Formatting  | 字体颜色条件格式 | 颜色代码 |
 | 5 | KPIs Overview Cell SVG Icon        | KPIs Overview > Formatting  | SVG 箭头图标 | 图像 URL |
@@ -1033,39 +1011,36 @@ _Measures
 │ channel_data_d   │ │ summary_d         │ │ product_data_d        │
 │ ──────────────── │ │ ───────────────── │ │ ───────────────────── │
 │ cost_amt         │ │ cost_amt          │ │ promotion_cost_amt    │
-│ red_packet       │ │ sales_amt         │ │ promotion_sales_amt   │
-│ rebate           │ │ net_sales_amt     │ │ framework             │
-│ nc_cost_amt      │ │ media_sales_amt   │ │ platform, trans_cycle │
-│ ec_cost_amt      │ │ adj_cost_amt      │ │ data_date             │
-│ platform         │ │ media_new_member  │ └───────────────────────┘
-│ trans_cycle      │ │ _cnt              │
-│ data_date        │ │ fcst_cost_amt     │
-└──────────────────┘ │ fcst_net_sales_amt│
-                     │ fcst_sales_amt    │
-                     │ platform          │
-                     │ trans_cycle       │
-                     │ data_date         │
-                     └───────────────────┘
+│ red_packet       │ │ net_sales_amt     │ │ promotion_sales_amt   │
+│ rebate           │ │ media_sales_amt   │ │ framework             │
+│ nc_cost_amt      │ │ adj_cost_amt      │ │ platform, trans_cycle │
+│ ec_cost_amt      │ │ fcst_*            │ │ data_date             │
+│ platform         │ │ platform          │ └───────────────────────┘
+│ trans_cycle      │ │ trans_cycle       │
+│ data_date        │ │ data_date         │
+└──────────────────┘ └───────────────────┘
          ▲                ▲
-         │ VALUES+IN       │ MIN/MAX
-         │ (断开,多选)      │ (断开)
+         │ SELECTEDVALUE  │ MIN/MAX
+         │ /不筛选(ALL)   │ (断开)
 ┌────────┴───┐   ┌────────┴───────┐
 │Slicer_     │   │Dim_Date_Ly     │
 │Platform    │   │LY_数据日期      │
-│  (多选)    │   └────────────────┘
+│  (单选)    │   └────────────────┘
+│  ALL/TM/JD │
 │DataCaliber │
 │  (单选)    │
 │Currency    │
 │  (单选)    │
 └────────────┘
 
-┌──────────────────────────────────────────┐
-│            KPIs Overview Cell Value        │
-│  ├─ Indicator = 本期 → [Base Value]       │
-│  ├─ Indicator = 同期 → CALCULATE(        │
-│  │     [Base Value], LP 日期覆盖)          │
-│  └─ Indicator = vs LP → (本期-同期)/同期  │
-└──────┬──────────────┬─────────────────────┘
+┌──────────────────────────────────────────────────┐
+│              KPIs Overview Cell Value             │
+│  ├─ Indicator = "This Year" → [Base Value]        │
+│  ├─ Indicator = "Last Year" → CALCULATE(          │
+│  │     [Base Value], LP 日期覆盖)                  │
+│  └─ Indicator = "YOY" → (This Year-Last Year)/    │
+│                          Last Year                │
+└──────┬──────────────┬────────────────────────────┘
        │              │
        ▼              ▼
 ┌────────────┐  ┌────────────────┐
@@ -1074,130 +1049,113 @@ _Measures
 └────────────┘  └────────────────┘
        ▲              ▲
        │              │
-┌──────┴──────────────┴──────────────────┐
-│         DIM_ColMetric_Overview          │
-│  Metric_ID │ Metric_Name │ Metric_Sort │
-│  Metric_Format_Current/LP/VsLP         │
-│  Metric_Color* (4 列)                  │
-│  Metric_IsCurrencyAmount               │
-└────────────────────────────────────────┘
+┌──────┴──────────────┴──────────────────────────┐
+│           DIM_ColMetric_Overview               │
+│  Metric_ID(1~8) │ Metric_Name │ Metric_Sort   │
+│  Metric_Format_Current/LP/VsLP                │
+│  Metric_Color* (4 列)                         │
+│  Metric_IsCurrencyAmount                      │
+└────────────────────────────────────────────────┘
 ```
 
 ================================================================================
 13. 扩展指南
 ================================================================================
 
-13.1 添加新指标列
+13.1 填充真实指标口径（最高优先级）
+──────────────────────────────────
+当有真实口径后，只需替换 KPIs Overview Base Value 中对应 SWITCH 分支的 `1`，
+将注释中的口径代码取消注释并启用即可。其余度量值（Cell Value、Cell Display、
+Font Color、SVG Icon、Background Color）无需任何改动。
+
+示例（填充 ID 1 Cost 口径）：
+```dax
+// 填充前
+1, 1,
+
+// 填充后
+1, IF(
+        __IsAllPlatform,
+        CALCULATE(
+            SUM(a05_e2e_paid_media_summary_d[cost_amt]),
+            a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+        ),
+        CALCULATE(
+            SUM(a05_e2e_paid_media_summary_d[cost_amt]),
+            a05_e2e_paid_media_summary_d[platform] = __SelPlatform,
+            a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+        )
+   ),
+```
+
+13.2 添加新指标列
 ──────────────────
 步骤 1：在 DIM_ColMetric_Overview 新增一行
 ```dax
-// 示例：添加 ID=13 的 "新指标名" 列
-{ 13, "新指标名", 13, "decimal_2", "decimal_2", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" }
+{ 9, "New Metric", 9, "decimal_2", "decimal_2", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" }
 ```
-
 步骤 2：在 KPIs Overview Base Value 的 SWITCH 中新增分支
 ```dax
-13, CALCULATE(SUM(a05_e2e_paid_media_summary_d[new_field]), ...),
+9, 1,  // 初始占位值，后续填充真实口径
 ```
+其余度量值无需修改。
 
-其余度量值（Cell Value、Cell Display、Font Color、SVG Icon、Background Color）无需任何改动。
+13.3 Platform 新增平台
+──────────────────────
+在 Slicer_Platform_Selection 中新增行即可，度量值无需修改（ALL 逻辑自动覆盖）。
+注意：ALL 分支不筛选 platform，因此自动包含新增平台的数据。
+若需排除某平台，需在 Base Value 中额外处理。
 
-13.2 添加币种 / 调整汇率
+13.4 添加币种 / 调整汇率
 ──────────────────────────
-当前 Slicer_Currency_Selection 已内置 Currency_Symbol 和 Currency_ExchangeRate 列。
-
-添加新币种：在 Slicer_Currency_Selection 新增行，设定对应汇率乘数即可。
+在 Slicer_Currency_Selection 新增行，设定对应汇率乘数即可。
 ```dax
-// 示例：添加 EUR（欧元），汇率 = 8
 { "EUR", "EUR", 3, "欧元，欧洲市场口径", FALSE, TRUE, "€", 8 }
 ```
-
-调整汇率：直接修改 Slicer_Currency_Selection 中对应行的 Currency_ExchangeRate 值。
-Cell Display 自动读取 Currency_Symbol 显示货币符号，Cell Value 自动读取 ExchangeRate 做汇率换算。
-无需修改任何度量值。
-
-添加新的金额类指标需要汇率转换时，在 DIM_ColMetric_Overview 对应行设 Metric_IsCurrencyAmount = TRUE。
-
-13.3 添加新格式类型
-────────────────────
-如需新增格式（如 currency_2dp_k），在以下两处添加：
-1. DIM_ColMetric_Overview 的格式类型注释中添加说明
-2. KPIs Overview Cell Display 的 SWITCH 中新增分支
 
 ================================================================================
 14. 注意事项
 ================================================================================
 
-14.1 Metric_ID 路由（关键）
-────────────────────────────
-- 使用 Metric_ID（1~12）作为 SWITCH 路由键，非 Metric_Name
-- 与 KPIs_TimeFrame_solution 中使用 KPI_ID 路由原则一致
+14.1 Base Value 占位值说明（重要）
+────────────────────────────────────
+- 当前所有 8 个 SWITCH 分支均返回 1（占位值）
+- 这意味着 This Year 和 Last Year 均为 1，YOY = (1-1)/1 = 0
+- 格式化后：金额类显示 ¥1，比率类显示 100.0%（percent_1dp 格式），decimal_2 显示 1.00
+- YOY 行显示 0.0%，字体颜色为黄色（零值）
+- 此为预期行为，用于验证格式化逻辑是否正确，待口径确认后替换
 
-14.2 同期日期覆盖机制
+14.2 Platform 单选 + ALL 精确筛选机制
+──────────────────────────────────────
+- Slicer_Platform_Selection 包含 ALL / TM / JD 三个选项
+- 切片器设为单选（Single select = On）
+- __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+- __IsAllPlatform = (__ChannelID = "ALL") 判断是否全平台
+- ALL 时：施加 FILTER platform IN {"TM","JD"}，精确圈定 TM+JD 两个平台
+  （不同于"不筛选"，数据源新增其他 platform 不会被误聚合进来）
+- 具体平台时：= __ChannelID 精确筛选单一平台
+- 注意：若业务上需要将新平台纳入 TTL，只需在注释的 IN {"TM","JD"} 中追加即可，无需其他改动
+
+14.3 同期日期覆盖机制
 ──────────────────────
 - REMOVEFILTERS(Dim_Date_Current) 移除本期日期筛选器的影响
 - FILTER(ALL(Dim_Date_Current), ...) 重新施加 LP 日期范围
 - 其他维度筛选器（Platform、数据口径）不受影响
 - 币种汇率在 Cell Value 层应用，与日期覆盖机制互不干扰
 - 前提：Dim_Date_Current 表中需包含同期对应的历史日期
-- 同期行和 vs LP 行共享相同的日期覆盖逻辑
 
-14.3 三张事实表使用说明
-────────────────────────
-| 事实表 | 粒度 | 涉及指标 |
-|--------|------|---------|
-| a05_e2e_paid_media_summary_d | 汇总粒度 | Cost / Cost进度 / NetSales进度 / DemandSales进度 / 含红包费比(分子分母) / ROI / 新客成本 |
-| a05_e2e_paid_media_channel_data_d | 渠道粒度 | 红包 / 费比(分子) / 新客花费占比 |
-| a05_e2e_paid_media_product_data_d | 产品粒度 | Acc花费占比 / Acc ROI |
-
-注意：
-- 费比 的分子（cost_amt - red_packet - rebate）来自 channel_data_d，
-  分母（net_sales_amt）来自 summary_d
-- 三张表均按 platform IN（多选）+ trans_cycle（单选）统一二维筛选
-- product_data_d 的 Acc 指标额外按 framework = "Acceleration" 筛选
-- 数据源仅 RMB，不再按 currency 筛选事实表
-
-14.4 币种汇率转换机制
-──────────────────────
-- 数据源表仅存储 RMB 币种数据，Base Value 不做 currency 筛选
-- 币种切片器选择 RMB → Currency_ExchangeRate = 1（原始值不变）
-- 币种切片器选择 USD → Currency_ExchangeRate = 7（RMB 对 USD 汇率）
-- Cell Value 层通过 SELECTEDVALUE 获取汇率乘数
-- 仅 Metric_IsCurrencyAmount = TRUE 的金额类指标（Cost、红包、新客成本）乘以汇率
-- 比率类（Cost进度、NetSales进度、DemandSales进度、费比、含红包费比、ROI、
-  新客花费占比、Acc花费占比、Acc ROI）不受汇率影响
-- 本期和同期行的金额类指标均乘以汇率
-- vs LP 行是增长率：(C×R - L×R) / (L×R) = (C-L)/L，汇率约分抵消，无需转换
-
-14.5 格式驱动方式
+14.4 格式驱动方式
 ──────────────────
-- 所有格式类型在 DIM_ColMetric_Overview 中定义（3 套格式列：Current / LP / VsLP）
+- 所有格式类型在 DIM_ColMetric_Overview 中定义（3 套格式列）
   修改显示格式只需改维度表数据，无需修改度量值
 - 颜色同理，通过 4 色列维护
-- 如需个别指标使用不同配色，直接修改该行的颜色列
 
-14.6 Channel 多选机制
+14.5 YOY 颜色方向约定
 ──────────────────────
-- Platform 切片器从单选改为多选，支持同时聚合多平台数据
-- Base Value 使用 VALUES(Slicer_Platform_Selection[Platform_ID]) 获取选中平台集合
-- CALCULATE 中通过 IN __SelectedPlatforms 过滤事实表
-- 数据口径（DataCaliber）和币种（Currency）保持单选，继续使用 SELECTEDVALUE
-- 全不选等效全选（VALUES 返回全部平台 ID）
-
-14.7 新客成本粒度注意
-──────────────────────
-- media_new_member_cnt（媒体新客人数）在数据字典中标注"时间最细到月度"
-- 若 Power BI 按日筛选，需确认 SQL 层已将月度数据按日展开
-  或在报表层以月度以上粒度筛选此指标
-- 同理，adj_cost_amt（调整花费）需确认粒度一致性
-
-14.8 Acc花费占比口径说明
-─────────────────────────
-- Overview_TTL汇总.xlsx 中 Acc花费占比 与 Acc ROI 的公式描述相同（疑似复制粘贴错误）
-- 根据指标名称含义和截图实际值（29.3% vs 21.50），实现为：
-  Acc花费占比 = Acceleration推广花费 / 全部推广花费（花费占比）
-  Acc ROI = Acceleration推广成交金额 / Acceleration推广花费（投资回报率）
-- 两个指标均基于 a05_e2e_paid_media_product_data_d 表
+- 当前统一遵循：正值绿色（#1A9018），负值红色（#D64550）
+- 对于费比、成本类指标，正向 YOY 实际是不好的（成本上升）
+  若需反色，在 DIM_ColMetric_Overview 对应行交换 Metric_ColorPositive / Metric_ColorNegative 即可
+  无需修改度量值代码
 
 ================================================================================
 15. 操作清单（Checklist）
@@ -1214,42 +1172,41 @@ Cell Display 自动读取 Currency_Symbol 显示货币符号，Cell Value 自动
 - [ ] 确认 Dim_Date_Ly 为断开维度（无关系）
 
 维度表与切片器：
-- [ ] 创建 DIM_RowKPIs_Overview 计算表（本期 / 同期 / vs LP）
-- [ ] 创建 DIM_ColMetric_Overview 计算表（12 行 × 11 列，含 Metric_Format_LP / Metric_Format_VsLP / Metric_IsCurrencyAmount）
+- [ ] 创建/更新 DIM_RowKPIs_Overview（This Year / Last Year / YOY）
+- [ ] 创建/更新 DIM_ColMetric_Overview（8 行 × 11 列，英文列名）
+- [ ] 创建/更新 Slicer_Platform_Selection（含 ALL / TM / JD，单选）
 - [ ] 创建 Slicer_DataCaliber_Selection 计算表
 - [ ] 创建 Slicer_Currency_Selection 计算表（含 Currency_ExchangeRate 汇率字段）
 - [ ] 配置 Sort by Column（见 4.3 节）
 
 度量值：
-- [ ] 创建 KPIs Overview Base Value（12 个 SWITCH 分支，含三表查询 + framework 筛选）
-- [ ] 创建 KPIs Overview Cell Value（行路由：本期/同期/vs LP + LP 日期覆盖 + 汇率转换）
-- [ ] 创建 KPIs Overview Cell Display（格式化显示）
-- [ ] 创建 KPIs Overview Cell Font Color（字体颜色）
-- [ ] 创建 KPIs Overview Cell SVG Icon（SVG 图标，设数据类别为图像 URL）
-- [ ] 创建 KPIs Overview Cell Background Color（交替行背景色）
+- [ ] 创建/更新 KPIs Overview Base Value（8 分支，当前值=1，保留口径注释）
+- [ ] 创建/更新 KPIs Overview Cell Value（行路由改为 This Year/Last Year/YOY + 汇率转换）
+- [ ] 创建/更新 KPIs Overview Cell Display（格式化显示，行标识改为英文）
+- [ ] 创建/更新 KPIs Overview Cell Font Color（仅 YOY 行条件色）
+- [ ] 创建/更新 KPIs Overview Cell SVG Icon（仅 YOY 行箭头，设数据类别为图像 URL）
+- [ ] 保留 KPIs Overview Cell Background Color（逻辑不变）
 
 视觉对象：
 - [ ] 配置矩阵（行/列/值）
 - [ ] 应用条件格式：字体颜色 → [KPIs Overview Cell Font Color]
 - [ ] 应用条件格式：背景颜色 → [KPIs Overview Cell Background Color]
-- [ ] 配置切片器：本期日期/同期日期/Channel(多选)/数据口径(单选)/币种(单选)
-- [ ] Channel 切片器关闭"单选"选项（Format > Selection > Single select = Off）
+- [ ] 配置切片器：本期日期/同期日期/Channel(单选)/数据口径(单选)/币种(单选)
+- [ ] Channel 切片器确认"单选"选项已开启（Format > Selection > Single select = On）
 
-验证：
-- [ ] 验证：Channel 单选时，数据正确变化
-- [ ] 验证：Channel 多选时（如 TM+JD），数据正确聚合
-- [ ] 验证：切换数据口径（T+1 / T+15），数据正确变化
-- [ ] 验证：切换币种（RMB / USD），货币符号和数据正确变化
-- [ ] 验证：调整本期日期范围，本期行和同期行数据正确变化
-- [ ] 验证：调整同期日期范围，同期行和 vs LP 行数据正确变化
-- [ ] 验证：12 个指标的 SWITCH 分支均返回正确值
-- [ ] 验证：vs LP 行字体颜色随正/负/零变化
-- [ ] 验证：同期行显示绝对值（非增长率），格式与本期行一致
-- [ ] 验证：Cost 数值来自 summary_d（非 channel_data_d）
-- [ ] 验证：费比 公式含 -rebate 扣减
-- [ ] 验证：ROI = media_sales_amt / adj_cost_amt
-- [ ] 验证：进度类指标 = 实际值 / forecast 值（同期无 forecast 数据时显示 "-"）
-- [ ] 验证：Acc花费占比 为 Acceleration 花费占全部花费的百分比
-- [ ] 验证：Acc ROI 为 Acceleration 成交金额 / Acceleration 花费
-- [ ] 验证：product_data_d 的 Acceleration 过滤正确
-- [ ] 验证：交替行背景色正确应用（本期白色、同期灰色、vs LP白色）
+验证（占位值阶段）：
+- [ ] 验证：This Year 行显示格式正确（金额=¥1，比率=100.0%，decimal_2=1.00）
+- [ ] 验证：Last Year 行显示格式与 This Year 一致
+- [ ] 验证：YOY 行显示 0.0%，字体颜色为黄色（零值 #E1C233）
+- [ ] 验证：切换币种（RMB→USD），金额类 This Year/Last Year 行数值变化，YOY 不变
+- [ ] 验证：切换 Channel（ALL/TM/JD），格式正常，无报错
+- [ ] 验证：交替行背景色正确（This Year 白色，Last Year 灰色，YOY 白色）
+- [ ] 验证：YOY 行 SVG 箭头图标为黄色横线（零值）
+- [ ] 验证：8 列均正常显示，列顺序与 Metric_Sort 一致
+
+验证（真实口径填充后）：
+- [ ] 验证：各指标口径与业务需求对齐
+- [ ] 验证：ALL 聚合 = TM + JD 之和（加法类指标）
+- [ ] 验证：切换 Platform（ALL/TM/JD），数据正确切换
+- [ ] 验证：调整本期/同期日期范围，数据正确响应
+- [ ] 验证：YOY 行字体颜色随正/负/零正确变化
