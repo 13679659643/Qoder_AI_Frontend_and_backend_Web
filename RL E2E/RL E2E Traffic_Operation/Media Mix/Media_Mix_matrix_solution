@@ -1,0 +1,1038 @@
+Media Mix_matrix_solution 解决方案：
+
+> status: updated
+> created: 2026-05-29
+> updated: 2026-05-29 (v1.1)
+> complexity: 🔴复杂
+> type: 度量值开发 + 可视化构建
+> naming: 遵循 powerbi_code_copilot/rules/dax-style.md 规范
+
+================================================================================
+变更日志（2026-05-29）
+================================================================================
+
+1. 初版创建：Media Mix 渠道粒度矩阵看板
+2. 行维度：Dim_Media_Mix_Channel（含 TM/JD 双平台渠道，DETAIL + SUMMARY 行）
+   - SUMMARY 行（RTB Total / 品销宝 Total / JCGP Total / Total / Total 不含JCGP 等）
+     通过 DAX 在度量值中用 Channel_ID IN 枚举明细行聚合，事实表不含这些汇总值
+   - Platform 通过 SELECTEDVALUE(Dim_Media_Mix_Channel[Platform]) 获取上下文筛选
+     不依赖 Slicer_Platform_Selection 对本模块的传递（Platform 来自维度表行上下文）
+3. 列维度：DIM_ColMetric_Media_Mix（13 个指标）
+   - Cost（有口径）/ Cost%（有口径）/ ROI、Impression、Click、Add to Cart、Orders、
+     GMV、CTR、CPC、CPATC、CVR、AOV（暂无口径，返回 1 占位）
+4. 行路由：DIM_RowKPIs_Media_Mix（This Year / Last Year / YOY，与 Overview 同构）
+5. Platform 筛选规范：ALL → FILTER platform IN {"TM","JD"}；单平台 → = __SelPlatform
+   注意：本模块 Platform 上下文来自维度表行，不直接读 Slicer_Platform_Selection
+6. YOY 行条件颜色：正绿 / 负红 / 零黄；This Year / Last Year 统一 #5f6165 深灰
+
+变更日志（2026-05-29 v1.1）
+────────────────────────────
+7. [修订] 移除第1节 Dim_Media_Mix_Channel 的 DAX 计算表定义
+   → 用户已通过 Media_Mix_SQL 在 Power BI 中加载此表，无需重复创建
+   → 第1节保留字段说明和 Sort by Column 配置，删除 DATATABLE 代码
+8. [修订] 删除 5.7 辅助度量值 Media Mix Channel Platform Filter
+   → 原设计用 Slicer_Platform_Selection 过滤矩阵行，但两者均为断开维度，切片器无法传递
+   → 正确方案：将 Dim_Media_Mix_Channel[Platform] 直接作为切片器（单选，含 ALL）
+     Power BI 对断开维度的行上下文天然隔离：切片器选 TM，矩阵仅呈现 Platform=TM 的行
+     Base Value 中 __RowPlatform = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform]) 自然收到 TM
+     无需任何辅助度量值或视觉层筛选器
+9. [修订] 更新 0 节架构说明、5.1 Base Value 注释、6.1/6.3 视觉配置说明，与新设计对齐
+10. [修订] 度量值总数从 7 个减少为 6 个（删除 Channel Platform Filter）
+
+================================================================================
+0. 需求概述与架构总览
+================================================================================
+
+实现 Media Mix 渠道粒度矩阵看板：
+- 行：Dim_Media_Mix_Channel[Channel_Label]（按 Platform + Channel_Sort 排序）
+      SUMMARY 行加粗显示（通过矩阵条件格式或 Channel_Type 控制）
+- 列：Cost / Cost% / ROI / Impression / Click / Add to Cart /
+      Orders / GMV / CTR / CPC / CPATC / CVR / AOV（13 列）
+- 每列下方：This Year → Last Year → YOY（3 行嵌套，通过 DIM_RowKPIs_Media_Mix 控制）
+  实现方式：矩阵行 = Dim_Media_Mix_Channel[Channel_Label]（外层）
+             + DIM_RowKPIs_Media_Mix[Indicator Type]（内层，折叠/展开）
+- 切片器：
+  * Dim_Media_Mix_Channel[Platform]（单选，含 ALL/TM/JD）
+    → 直接作为切片器，Power BI 自动将行上下文限制到选中平台的渠道行
+    → 选 TM 时，矩阵仅展示 TM 渠道；选 JD 时，仅展示 JD 渠道；
+      选 ALL 时，TM + JD 全部渠道均展示（但 ALL 需为 Dim_Media_Mix_Channel 中的值，
+      或通过新增独立 Slicer_Platform_Selection 控制，见 6.3 节说明）
+    ⚠️  注意：Slicer_Platform_Selection（Overview 复用）对本矩阵无效，
+      因为两者均为断开维度，切片器不通过模型关系传递到 Dim_Media_Mix_Channel
+  * Slicer_DataCaliber_Selection（trans_cycle 口径，单选，复用 Overview）
+  * Slicer_Currency_Selection（币种，单选，复用 Overview）
+
+整体架构：
+```
+筛选器层（断开维度 + 关系维度）
+├── Dim_Date_Current ─── 1:* ──→ a05_e2e_paid_media_channel_data_d[data_date]
+├── Dim_Date_Ly（断开，MIN/MAX 获取 LP 日期范围）
+├── Dim_Media_Mix_Channel（断开维度，矩阵行维度 + Platform 切片器来源）
+│   ├── Platform: TM / JD（直接作为切片器，单选控制矩阵行可见范围）
+│   ├── Channel_Label: 渠道显示名称（行头）
+│   ├── Channel_ID: 渠道唯一标识（用于 SUMMARY 聚合枚举）
+│   ├── Channel_Type: DETAIL / SUMMARY
+│   ├── Channel_Sort: 平台内排序
+│   └── Summary_Scope: SUMMARY 行聚合的 Channel_ID 列表（DAX 解析用）
+├── DIM_RowKPIs_Media_Mix（断开维度，行内层：This Year / Last Year / YOY）
+├── Slicer_DataCaliber_Selection（断开，SELECTEDVALUE → trans_cycle 单选，复用 Overview）
+└── Slicer_Currency_Selection（断开，SELECTEDVALUE → Currency_ExchangeRate 汇率乘数，复用 Overview）
+
+维度层（断开维度）
+├── Dim_Media_Mix_Channel（行维度：渠道结构，含 DETAIL + SUMMARY）
+├── DIM_RowKPIs_Media_Mix（行内层维度：This Year / Last Year / YOY）
+└── DIM_ColMetric_Media_Mix（列维度：13 个指标，含格式、颜色、汇率转换标记）
+
+度量值链
+Media Mix Base Value ── 纯指标 SWITCH 分发（13 分支）
+        │                含 Channel 行上下文处理（DETAIL 直接筛 channel，SUMMARY 枚举聚合）
+        │                Platform 来自行上下文 SELECTEDVALUE(Dim_Media_Mix_Channel[Platform])
+        │                返回 RMB 原始值
+        ▼
+Media Mix Cell Value ── 行路由（This Year / Last Year / YOY）
+        │                Last Year = CALCULATE(Base, LP 日期覆盖)
+        │                YOY = (This Year - Last Year) / Last Year
+        │                金额类指标 × ExchangeRate 汇率换算
+        ├──→ Media Mix Cell Display（格式化）
+        ├──→ Media Mix Cell Font Color（字体颜色，仅 YOY 行条件色）
+        ├──→ Media Mix Cell SVG Icon（增减箭头图标，仅 YOY 行）
+        └──→ Media Mix Cell Background Color（交替行背景色）
+
+事实表（Power BI 表名 = 数据源表名）
+└── a05_e2e_paid_media_channel_data_d（渠道粒度，含 channel / platform / cost_amt /
+        pv / click / add_cart_cnt / sales_order_cnt / sales_amt /
+        nc_cost_amt / ec_cost_amt 等）
+```
+
+关键设计决策：
+1. Dim_Media_Mix_Channel 为断开维度（不建关系），矩阵行来自此表
+   度量值通过 SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_ID]) 获取当前行上下文
+   再判断 Channel_Type = "DETAIL" 还是 "SUMMARY"，分别走不同聚合路径
+2. SUMMARY 行聚合：不依赖事实表中的汇总 channel 值（事实表无此行）
+   而是枚举对应 DETAIL Channel_ID，在 CALCULATE + FILTER 中求和
+3. Platform 筛选（核心设计）：
+   - 将 Dim_Media_Mix_Channel[Platform] 字段直接作为 Power BI 切片器（单选）
+   - 当用户选择 TM 时，Power BI 对断开维度施加筛选上下文，矩阵中 Platform=TM 的行
+     被激活，Platform=JD 的行被过滤不显示；度量值中 __RowPlatform = "TM" 自然成立
+   - 无需 Slicer_Platform_Selection，无需辅助度量值，无需视觉层筛选器
+   - ⚠️ ALL 场景处理：若需要 ALL 选项（TM+JD 同时展示），
+     需在 Dim_Media_Mix_Channel 外部新增一个包含 ALL/TM/JD 的独立切片器参数表，
+     并通过辅助度量值控制（见 5.7 节可选扩展）；
+     若无 ALL 需求，切片器直接用 Dim_Media_Mix_Channel[Platform] 即可，最简洁
+4. Cost% 口径：当前行 cost_amt / 当前平台所有 DETAIL channel cost_amt 之和
+   → 分母固定为当前行所在平台（__RowPlatform）所有 DETAIL channel 的 cost 之和
+
+================================================================================
+1. 行维度 Dim_Media_Mix_Channel（已由 Media_Mix_SQL 加载，无需重复创建）
+================================================================================
+
+// 说明：此表已通过 Media_Mix_SQL 文件在 Power BI 中以 SQL 查询方式加载，
+//       Power BI 中的表名即为 Dim_Media_Mix_Channel，字段名称与下方说明一致。
+//       本节仅记录字段规格和 Sort by Column 配置，供 DAX 编写参考。
+
+字段说明：
+| 字段名          | 类型    | 说明 |
+|----------------|---------|------|
+| Channel_PK     | INTEGER | 唯一主键（自增序号）|
+| Platform       | STRING  | 平台：TM / JD |
+| Platform_Sort  | INTEGER | 平台排序（TM=1, JD=2）|
+| Channel_Label  | STRING  | 矩阵行头显示值（业务名称，如"直通车"、"RTB Total"）|
+| Channel_Sort   | INTEGER | 平台内排序（控制矩阵行顺序）|
+| Channel_ID     | STRING  | 渠道唯一标识（如 TM_ZTC、TM_RTB_TOTAL）|
+| Channel_Type   | STRING  | DETAIL=明细行 / SUMMARY=汇总行 |
+| Summary_Scope  | STRING  | SUMMARY 行覆盖的 DETAIL Channel_ID 枚举（| 分隔）|
+|                |         | 例：RTB Total → "TM_ZTC|TM_YLMF|TM_QZT|TM_DSP" |
+|                |         | DETAIL 行为空字符串 "" |
+
+关键说明：
+- 事实表 a05_e2e_paid_media_channel_data_d 的 [channel] 字段值 = Channel_Label（中文名）
+  即事实表中存储的是"直通车"、"快车"等业务名称，与 Channel_Label 一一对应
+- SUMMARY 行在事实表中不存在对应 channel 值（无"RTB Total"等行）
+  度量值中通过解析 Summary_Scope 枚举对应 DETAIL 行的 Channel_Label，再 IN 过滤聚合
+- Channel_ID 仅用于 Summary_Scope 中的枚举标识，不直接过滤事实表
+
+Sort by Column 配置：
+| 表                    | 字段           | Sort by Column  |
+|-----------------------|----------------|-----------------|
+| Dim_Media_Mix_Channel | Channel_Label  | Channel_Sort    |
+| Dim_Media_Mix_Channel | Platform       | Platform_Sort   |
+
+切片器配置说明（Platform 筛选）：
+- 将 Dim_Media_Mix_Channel[Platform] 直接拖入切片器，类型：单选（Single select = On）
+- 当用户选择 TM 时，Power BI 对 Dim_Media_Mix_Channel 施加筛选上下文（Platform = "TM"），
+  矩阵仅呈现 Platform = "TM" 的渠道行，JD 渠道行不显示
+- 度量值中 __RowPlatform = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform]) 自然获取 "TM"
+  无需任何辅助度量值或视觉层筛选器
+- 若需 ALL 选项（TM + JD 同时显示），此切片器不选任何值（清空选择）即等效 ALL，
+  或参考 5.7 节可选扩展方案
+
+================================================================================
+2. 构建行路由维度 DIM_RowKPIs_Media_Mix
+================================================================================
+
+DIM_RowKPIs_Media_Mix = 
+// ========================================
+// 表: DIM_RowKPIs_Media_Mix
+// 类型: 断开维度
+// 用途: Media Mix 矩阵行内层维度（This Year / Last Year / YOY）
+//       结构与 DIM_RowKPIs_Overview 完全一致，复用同一模式
+//       单独建表以避免跨页面相互干扰
+// ========================================
+DATATABLE(
+    "Indicator Type",  STRING,     // 行标签（英文）
+    "Indicator Order", INTEGER,    // 排序值
+    {
+        { "This Year", 1 },
+        { "Last Year", 2 },
+        { "YOY",       3 }
+    }
+)
+
+Sort by Column 配置：
+| 表                    | 字段           | Sort by Column  |
+|-----------------------|----------------|-----------------|
+| DIM_RowKPIs_Media_Mix | Indicator Type | Indicator Order |
+
+================================================================================
+3. 构建列维度 DIM_ColMetric_Media_Mix
+================================================================================
+
+DIM_ColMetric_Media_Mix = 
+// ========================================
+// 表: DIM_ColMetric_Media_Mix
+// 类型: 断开维度
+// 用途: Media Mix 矩阵列维度（13 个指标）
+//
+// 指标清单：
+//   1  Cost              花费金额（有口径: cost_amt）
+//   2  Cost%             花费占比（有口径: 当前行 cost / 对应平台 Total cost）
+//   3  ROI               投资回报率（暂无口径，返回 1）
+//   4  Impression        展现量（暂无口径，返回 1）
+//   5  Click             点击量（暂无口径，返回 1）
+//   6  Add to Cart       加购量（暂无口径，返回 1）
+//   7  Orders            成交笔数（暂无口径，返回 1）
+//   8  GMV               总成交金额（暂无口径，返回 1）
+//   9  CTR               点击率（暂无口径，返回 1）
+//   10 CPC               单次点击成本（暂无口径，返回 1）
+//   11 CPATC             加购成本（暂无口径，返回 1）
+//   12 CVR               转化率（暂无口径，返回 1）
+//   13 AOV               客单价（暂无口径，返回 1）
+//
+// 格式类型：
+//   currency      → ¥1,000 / $1,000
+//   integer       → 1,000
+//   decimal_2     → 1,000.00
+//   percent_1dp   → 40.5%
+//   delta_pct_1dp → +14.5%（含正负号）
+//
+// 颜色约定（YOY 行）：
+//   正向：#1A9018 绿色（Cost/Cost% 业务上正向不好，可在此反转）
+//   负向：#D64550 红色
+//   零值：#E1C233 黄色
+//   默认：#5f6165 深灰（This Year / Last Year 行）
+//
+// 汇率标记：Metric_IsCurrencyAmount = TRUE → 金额类，切换币种时乘汇率
+// ========================================
+DATATABLE(
+    "Metric_ID",               INTEGER,
+    "Metric_Name",             STRING,
+    "Metric_Sort",             INTEGER,
+    "Metric_Format_Current",   STRING,
+    "Metric_Format_LP",        STRING,
+    "Metric_Format_VsLP",      STRING,
+    "Metric_IsCurrencyAmount", BOOLEAN,
+    "Metric_ColorPositive",    STRING,
+    "Metric_ColorNegative",    STRING,
+    "Metric_ColorZero",        STRING,
+    "Metric_ColorDefault",     STRING,
+    {
+        // ID  Name             Sort  Fmt_Current    Fmt_LP         Fmt_VsLP          IsCurAmt  Pos        Neg        Zero       Default
+        {  1, "Cost",            1,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#D64550", "#1A9018", "#E1C233", "#5f6165" },
+        // Cost 和 Cost% 为成本类指标：YOY 正向（成本上升）颜色设为红色，负向设绿色
+        {  2, "Cost%",           2,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" },
+        // ROI 正向为绿（ROI 越高越好）
+        {  3, "ROI",             3,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  4, "Impression",      4,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  5, "Click",           5,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  6, "Add to Cart",     6,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  7, "Orders",          7,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  8, "GMV",             8,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  9, "CTR",             9,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 10, "CPC",            10,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" },
+        // CPC 为单次成本类：YOY 正向设红（成本上升不好），负向设绿
+        { 11, "CPATC",          11,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" },
+        // CPATC 为加购成本：同 CPC 颜色约定
+        { 12, "CVR",            12,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 13, "AOV",            13,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+    }
+)
+
+Sort by Column 配置：
+| 表                     | 字段        | Sort by Column |
+|------------------------|-------------|----------------|
+| DIM_ColMetric_Media_Mix | Metric_Name | Metric_Sort    |
+
+================================================================================
+4. 关系与数据模型说明
+================================================================================
+
+4.1 事实表加载说明
+──────────────────
+| Power BI 表名                           | 用途 |
+|-----------------------------------------|------|
+| a05_e2e_paid_media_channel_data_d       | 渠道粒度事实表（主要来源）|
+|                                         | 关键字段：channel / platform / trans_cycle / data_date |
+|                                         | cost_amt / pv（展现）/ click（点击）|
+|                                         | add_cart_cnt / sales_order_cnt / sales_amt |
+|                                         | nc_cost_amt / ec_cost_amt |
+
+4.2 关系配置
+────────────
+```
+已连接关系（Active）：
+    Dim_Date_Current[数据日期] ──── 1:* ────→ a05_e2e_paid_media_channel_data_d[data_date]
+
+断开维度（无关系）：
+    Dim_Date_Ly                   ← 同期日期，MIN/MAX 获取范围
+    Dim_Media_Mix_Channel         ← 矩阵行维度，Channel_ID 在度量值中解析
+    DIM_RowKPIs_Media_Mix         ← SELECTEDVALUE → Indicator Type
+    DIM_ColMetric_Media_Mix       ← SELECTEDVALUE → Metric_ID
+    Slicer_Platform_Selection     ← SELECTEDVALUE → Platform_ID（复用 Overview 方案）
+    Slicer_DataCaliber_Selection  ← SELECTEDVALUE → DataCaliber_ID（复用 Overview 方案）
+    Slicer_Currency_Selection     ← SELECTEDVALUE → Currency_ExchangeRate（复用 Overview 方案）
+```
+
+4.3 Dim_Media_Mix_Channel 与事实表的联动方式
+─────────────────────────────────────────────
+- Dim_Media_Mix_Channel 为断开维度，不与事实表建立模型关系
+- 度量值通过以下方式获取当前行上下文：
+  * __ChannelID   = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_ID])
+  * __ChannelType = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Type])
+  * __SummaryScope = SELECTEDVALUE(Dim_Media_Mix_Channel[Summary_Scope])
+  * __RowPlatform = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform])
+- DETAIL 行：FILTER 事实表 channel = 对应原始渠道名
+  注意：Channel_ID 为虚拟标识（如 TM_ZTC），事实表中 channel 字段值为中文名（如"直通车"）
+  需在度量值中建立 Channel_ID → 事实表 channel 值的映射
+- SUMMARY 行：解析 Summary_Scope（| 分隔的 Channel_ID 列表），枚举对应 DETAIL 行聚合
+
+4.4 Channel_ID 到事实表 channel 字段的映射
+──────────────────────────────────────────
+事实表 a05_e2e_paid_media_channel_data_d 中的 channel 字段为业务原始值，
+与 Dim_Media_Mix_Channel[Channel_Label] 一致（中文名称）。
+度量值中通过 FILTER 事实表 [channel] = [Channel_Label] 实现精确筛选，
+而非通过 Channel_ID 映射（Channel_ID 仅用于 SUMMARY 行的 Summary_Scope 枚举标识）。
+
+SUMMARY 行聚合时，将 Summary_Scope 中的 Channel_ID 转换为对应 Channel_Label 后，
+通过 Dim_Media_Mix_Channel 辅助查找，或直接在度量值中 SWITCH 枚举。
+见 5.1 节度量值中的 __ScopeLabels 辅助变量实现。
+
+================================================================================
+5. 核心度量值
+================================================================================
+
+5.1 本期指标 SWITCH 分发 — Media Mix Base Value
+────────────────────────────────────────────────
+
+Media Mix Base Value = 
+// ========================================
+// 度量值: Media Mix Base Value
+// Display Folder: Media Mix
+// 用途: 纯指标 SWITCH 分发器
+//       根据 DIM_ColMetric_Media_Mix[Metric_ID] 路由到 13 个指标计算逻辑
+//       根据 Dim_Media_Mix_Channel[Channel_Type] 决定聚合方式：
+//         DETAIL → FILTER 事实表 channel = Channel_Label（精确单渠道）
+//         SUMMARY → FILTER 事实表 channel IN 对应明细 Channel_Label 集合
+//
+// Platform 获取方式：
+//   __RowPlatform = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform])
+//   由矩阵行上下文自然传入（用户切换 Platform 切片器时，行上下文已被限定）
+//   无需读取外部切片器，无需 IF(ALL/单平台) 分支判断
+//   ⚠️ 若 Platform 切片器未选（显示所有行），__RowPlatform 在每个矩阵行上下文中仍
+//      唯一确定为该行的 Platform 值（TM 行 = "TM"，JD 行 = "JD"），聚合不会跨平台混淆
+//
+// Cost% 口径：当前行 cost_amt / 当前平台所有 DETAIL channel cost_amt 之和
+//   分母为 __RowPlatform 下所有 DETAIL 行的 channel 集合聚合（不受 Channel 切片器影响）
+//
+// 依赖: DIM_ColMetric_Media_Mix[Metric_ID]
+//       Dim_Media_Mix_Channel[Channel_ID/Channel_Type/Channel_Label/Summary_Scope/Platform]
+//       Slicer_DataCaliber_Selection[DataCaliber_ID]
+//       a05_e2e_paid_media_channel_data_d
+// ========================================
+
+    // ── 列上下文 ──
+    VAR __MetricID      = SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ID])
+
+    // ── 行上下文（来自 Dim_Media_Mix_Channel 断开维度）──
+    VAR __ChannelLabel  = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Label])
+    VAR __ChannelType   = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Type])
+    VAR __SummaryScope  = SELECTEDVALUE(Dim_Media_Mix_Channel[Summary_Scope], "")
+    VAR __RowPlatform   = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform])
+
+    // ── 数据口径上下文 ──
+    VAR __TransCycle    = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    // ── SUMMARY 行：解析 Summary_Scope 中的 Channel_ID，映射回 Channel_Label ──
+    // Summary_Scope 格式："TM_ZTC|TM_YLMF|TM_QZT|TM_DSP"（| 分隔 Channel_ID）
+    // 通过 Dim_Media_Mix_Channel 辅助表，将 Channel_ID 转换为 Channel_Label 集合
+    VAR __ScopeIDs      =
+        SELECTCOLUMNS(
+            FILTER(
+                Dim_Media_Mix_Channel,
+                CONTAINSSTRING(__SummaryScope, Dim_Media_Mix_Channel[Channel_ID])
+                    && Dim_Media_Mix_Channel[Channel_Type] = "DETAIL"
+            ),
+            "@Label", Dim_Media_Mix_Channel[Channel_Label]
+        )
+    // __ScopeIDs 为包含各 DETAIL 行 Channel_Label 的单列虚拟表
+    // 用于 FILTER 事实表 channel IN __ScopeIDs
+
+    // ── 构建事实表筛选条件（channel 字段过滤）──
+    // DETAIL 行：channel = 当前行 Channel_Label
+    // SUMMARY 行：channel IN 对应 DETAIL Channel_Label 集合
+    VAR __IsDetail      = (__ChannelType = "DETAIL")
+    VAR __IsSummary     = (__ChannelType = "SUMMARY")
+
+    // ── 辅助：计算单个指标在指定 channel 过滤下的 SUM ──
+    // DETAIL 路径
+    VAR __Cost_Detail   =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+            FILTER(
+                ALL(a05_e2e_paid_media_channel_data_d),
+                a05_e2e_paid_media_channel_data_d[channel]      = __ChannelLabel
+                    && a05_e2e_paid_media_channel_data_d[platform]  = __RowPlatform
+                    && a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+            )
+        )
+    // SUMMARY 路径
+    VAR __Cost_Summary  =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+            FILTER(
+                ALL(a05_e2e_paid_media_channel_data_d),
+                a05_e2e_paid_media_channel_data_d[channel] IN __ScopeIDs
+                    && a05_e2e_paid_media_channel_data_d[platform]  = __RowPlatform
+                    && a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+            )
+        )
+    VAR __Cost          = IF(__IsDetail, __Cost_Detail, IF(__IsSummary, __Cost_Summary, BLANK()))
+
+    // ── Cost%：分母为当前平台 Total（所有 DETAIL channel 之和）──
+    VAR __TotalScopeIDs =
+        SELECTCOLUMNS(
+            FILTER(
+                Dim_Media_Mix_Channel,
+                Dim_Media_Mix_Channel[Platform]      = __RowPlatform
+                    && Dim_Media_Mix_Channel[Channel_Type] = "DETAIL"
+            ),
+            "@Label", Dim_Media_Mix_Channel[Channel_Label]
+        )
+    VAR __TotalCost     =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+            FILTER(
+                ALL(a05_e2e_paid_media_channel_data_d),
+                a05_e2e_paid_media_channel_data_d[channel] IN __TotalScopeIDs
+                    && a05_e2e_paid_media_channel_data_d[platform]  = __RowPlatform
+                    && a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+            )
+        )
+    VAR __CostPct       = DIVIDE(__Cost, __TotalCost)
+
+    RETURN
+    SWITCH(
+        __MetricID,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 1: Cost — 花费金额
+        // 口径: SUM(a05_e2e_paid_media_channel_data_d[cost_amt])
+        //       按当前行 channel（DETAIL）或 channel IN 枚举集（SUMMARY）过滤
+        //       Platform 由行维度 __RowPlatform 锁定
+        // ═══════════════════════════════════════════════════════
+        1, __Cost,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 2: Cost% — 花费占总花费的百分比
+        // 口径: 当前行 cost_amt / 当前平台所有 DETAIL channel cost_amt 之和
+        //       示例：直通车 Cost% = 直通车 cost / TM 所有 DETAIL channel cost 之和
+        //             RTB Total Cost% = RTB Total cost / TM 所有 DETAIL channel cost 之和
+        // ═══════════════════════════════════════════════════════
+        2, __CostPct,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 3: ROI — 媒体投资回报率（暂无口径）
+        // 待填充口径: media_sales_amt / adj_cost_amt（来源待确认）
+        // ═══════════════════════════════════════════════════════
+        3, 1,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 4: Impression — 展现量（暂无口径）
+        // 待填充口径: SUM(a05_e2e_paid_media_channel_data_d[pv])
+        // ═══════════════════════════════════════════════════════
+        4, 1,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 5: Click — 点击量（暂无口径）
+        // 待填充口径: SUM(a05_e2e_paid_media_channel_data_d[click])
+        // ═══════════════════════════════════════════════════════
+        5, 1,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 6: Add to Cart — 加购量（暂无口径）
+        // 待填充口径: SUM(a05_e2e_paid_media_channel_data_d[add_cart_cnt])
+        // ═══════════════════════════════════════════════════════
+        6, 1,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 7: Orders — 成交笔数（暂无口径）
+        // 待填充口径: SUM(a05_e2e_paid_media_channel_data_d[sales_order_cnt])
+        // ═══════════════════════════════════════════════════════
+        7, 1,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 8: GMV — 总成交金额（暂无口径）
+        // 待填充口径: SUM(a05_e2e_paid_media_channel_data_d[sales_amt])
+        // ═══════════════════════════════════════════════════════
+        8, 1,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 9: CTR — 点击率（暂无口径）
+        // 待填充口径: DIVIDE(SUM([click]), SUM([pv]))
+        // ═══════════════════════════════════════════════════════
+        9, 1,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 10: CPC — 单次点击成本（暂无口径）
+        // 待填充口径: DIVIDE(SUM([cost_amt]), SUM([click]))
+        // ═══════════════════════════════════════════════════════
+        10, 1,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 11: CPATC — 加购成本（暂无口径）
+        // 待填充口径: DIVIDE(SUM([cost_amt]), SUM([add_cart_cnt]))
+        // ═══════════════════════════════════════════════════════
+        11, 1,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 12: CVR — 成交转化率（暂无口径）
+        // 待填充口径: DIVIDE(SUM([sales_order_cnt]), SUM([click]))
+        // ═══════════════════════════════════════════════════════
+        12, 1,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 13: AOV — 客单价（暂无口径）
+        // 待填充口径: DIVIDE(SUM([sales_amt]), SUM([sales_order_cnt]))
+        // ═══════════════════════════════════════════════════════
+        13, 1,
+
+        // ─── 默认 ──────────────────────────────────────────────
+        BLANK()
+    )
+
+================================================================================
+5.2 行路由度量值 — Media Mix Cell Value
+================================================================================
+
+Media Mix Cell Value = 
+// ========================================
+// 度量值: Media Mix Cell Value
+// Display Folder: Media Mix
+// 用途: 根据行维度（This Year / Last Year / YOY）路由到不同的计算逻辑
+//       - This Year：调用 [Media Mix Base Value]，金额类指标乘以汇率
+//       - Last Year：CALCULATE([Media Mix Base Value], LP 日期覆盖)，金额类指标乘以汇率
+//       - YOY：This Year / Last Year - 1，增长率不受汇率影响
+//
+// 同期日期覆盖机制与 KPIs Overview Cell Value 完全一致：
+//   REMOVEFILTERS(Dim_Date_Current) + FILTER(ALL(Dim_Date_Current), 日期范围)
+//
+// 依赖: DIM_RowKPIs_Media_Mix[Indicator Type], Dim_Date_Ly,
+//       Slicer_Currency_Selection[Currency_ExchangeRate],
+//       DIM_ColMetric_Media_Mix[Metric_IsCurrencyAmount]
+// ========================================
+
+    // ── 行上下文 ──
+    VAR __Indicator     = SELECTEDVALUE(DIM_RowKPIs_Media_Mix[Indicator Type])
+
+    // ── 汇率上下文 ──
+    VAR __ExchangeRate  = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
+    VAR __IsCurrencyAmt = SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_IsCurrencyAmount], FALSE)
+
+    // ── 同期日期范围 ──
+    VAR __LP_Start      = MIN(Dim_Date_Ly[LY_数据日期])
+    VAR __LP_End        = MAX(Dim_Date_Ly[LY_数据日期])
+
+    // ── This Year 值 ──
+    VAR __CurrentValue  = [Media Mix Base Value]
+
+    // ── Last Year 值（覆盖日期上下文为 LP 日期范围）──
+    VAR __LP_Value      =
+        IF(
+            ISBLANK(__LP_Start) || ISBLANK(__LP_End),
+            BLANK(),
+            CALCULATE(
+                [Media Mix Base Value],
+                REMOVEFILTERS(Dim_Date_Current),
+                FILTER(
+                    ALL(Dim_Date_Current),
+                    Dim_Date_Current[数据日期] >= __LP_Start
+                        && Dim_Date_Current[数据日期] <= __LP_End
+                )
+            )
+        )
+
+    // ── 汇率换算 ──
+    VAR __CurrentConverted =
+        IF(__IsCurrencyAmt, __CurrentValue * __ExchangeRate, __CurrentValue)
+    VAR __LP_Converted     =
+        IF(__IsCurrencyAmt, __LP_Value * __ExchangeRate, __LP_Value)
+
+    // ── YOY 同比计算 ──
+    VAR __CurrIsEmpty   = ISBLANK(__CurrentValue) || __CurrentValue = 0
+    VAR __LPIsEmpty     = ISBLANK(__LP_Value)     || __LP_Value = 0
+    VAR __YOY_Result    =
+        IF(
+            __LPIsEmpty,
+            BLANK(),
+            IF(__CurrIsEmpty, -1, DIVIDE(__CurrentValue - __LP_Value, __LP_Value))
+        )
+
+    RETURN
+    SWITCH(
+        TRUE(),
+        __Indicator = "This Year", __CurrentConverted,
+        __Indicator = "Last Year", __LP_Converted,
+        __Indicator = "YOY",       __YOY_Result,
+        BLANK()
+    )
+
+================================================================================
+5.3 格式化显示度量值 — Media Mix Cell Display
+================================================================================
+
+Media Mix Cell Display = 
+// ========================================
+// 度量值: Media Mix Cell Display
+// Display Folder: Media Mix > Formatting
+// 用途: 根据行类型 + 列指标格式，返回格式化文本
+//       格式类型从 DIM_ColMetric_Media_Mix 动态读取
+//       货币符号从 Slicer_Currency_Selection 动态读取
+// 依赖: [Media Mix Cell Value],
+//       DIM_ColMetric_Media_Mix[Metric_Format_*],
+//       DIM_RowKPIs_Media_Mix[Indicator Type],
+//       Slicer_Currency_Selection[Currency_Symbol]
+// ========================================
+
+    VAR __Value          = [Media Mix Cell Value]
+    VAR __Indicator      = SELECTEDVALUE(DIM_RowKPIs_Media_Mix[Indicator Type])
+    VAR __Format         =
+        SWITCH(
+            __Indicator,
+            "This Year", SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_Format_Current]),
+            "Last Year", SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_Format_LP]),
+            "YOY",       SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_Format_VsLP]),
+            SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_Format_Current])
+        )
+    VAR __CurrencySymbol =
+        SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",
+            SWITCH(
+                __Format,
+                "currency",
+                    __CurrencySymbol & FORMAT(__Value, "#,##0"),
+                "integer",
+                    FORMAT(__Value, "#,##0"),
+                "decimal_2",
+                    FORMAT(__Value, "#,##0.00"),
+                "percent_1dp",
+                    FORMAT(__Value, "0.0%"),
+                "delta_pct_1dp",
+                    IF(__Value > 0, "+", "") & FORMAT(__Value, "0.0%"),
+                "currency_k",
+                    __CurrencySymbol & FORMAT(__Value / 1000, "#,##0") & "k",
+                "percent_2dp",
+                    FORMAT(__Value, "0.00%"),
+                "delta_pct_2dp",
+                    IF(__Value > 0, "+", "") & FORMAT(__Value, "0.00%"),
+                "delta_bp",
+                    IF(__Value >= 0, "+", "") & FORMAT(__Value * 10000, "#,##0") & "bp",
+                FORMAT(__Value, "#,##0.00")
+            )
+        )
+
+================================================================================
+5.4 条件格式度量值 — 字体颜色
+================================================================================
+
+Media Mix Cell Font Color = 
+// ========================================
+// 度量值: Media Mix Cell Font Color
+// Display Folder: Media Mix > Formatting
+// 用途: 根据行类型和值的正负，返回字体颜色
+//       仅 YOY 行启用条件颜色（正/负/零）
+//       This Year 和 Last Year 行统一使用 Metric_ColorDefault（#5f6165 深灰色）
+// 依赖: [Media Mix Cell Value],
+//       DIM_RowKPIs_Media_Mix[Indicator Type],
+//       DIM_ColMetric_Media_Mix[Metric_Color*]
+// ========================================
+
+    VAR __Value     = [Media Mix Cell Value]
+    VAR __Indicator = SELECTEDVALUE(DIM_RowKPIs_Media_Mix[Indicator Type])
+    RETURN
+        SWITCH(
+            TRUE(),
+            ISBLANK(__Value),
+                SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ColorDefault], "#5f6165"),
+            __Indicator = "YOY" && __Value > 0,
+                SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ColorPositive], "#1A9018"),
+            __Indicator = "YOY" && __Value < 0,
+                SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ColorNegative], "#D64550"),
+            __Indicator = "YOY" && __Value = 0,
+                SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ColorZero], "#E1C233"),
+            SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ColorDefault], "#5f6165")
+        )
+
+================================================================================
+5.5 条件格式度量值 — SVG 图标
+================================================================================
+
+Media Mix Cell SVG Icon = 
+// ========================================
+// 度量值: Media Mix Cell SVG Icon
+// Display Folder: Media Mix > Formatting
+// 用途: 为 YOY 行返回增减方向箭头 SVG 图标
+//       仅 YOY 行显示，This Year 和 Last Year 行返回 BLANK
+// 配置: 需将此度量值的数据类别设为"图像 URL"
+// ========================================
+
+    VAR __Value         = [Media Mix Cell Value]
+    VAR __Indicator     = SELECTEDVALUE(DIM_RowKPIs_Media_Mix[Indicator Type])
+    VAR __GreenArrowUp  =
+        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%231A9018' d='M6 2L10 8H2z'/></svg>"
+    VAR __RedArrowDown  =
+        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23D64550' d='M6 10L2 4h8z'/></svg>"
+    VAR __YellowDash    =
+        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><line x1='2' y1='6' x2='10' y2='6' stroke='%23E1C233' stroke-width='2'/></svg>"
+    RETURN
+        SWITCH(
+            TRUE(),
+            __Indicator <> "YOY", BLANK(),
+            ISBLANK(__Value),     BLANK(),
+            __Value > 0,          __GreenArrowUp,
+            __Value < 0,          __RedArrowDown,
+            __Value = 0,          __YellowDash,
+            BLANK()
+        )
+
+================================================================================
+5.6 条件格式度量值 — 交替行背景色
+================================================================================
+
+Media Mix Cell Background Color = 
+// ========================================
+// 度量值: Media Mix Cell Background Color
+// Display Folder: Media Mix > Formatting
+// 用途: 根据 Indicator Order 返回交替行背景色
+//       This Year(1)=白色, Last Year(2)=浅灰, YOY(3)=白色
+// 依赖: DIM_RowKPIs_Media_Mix[Indicator Order]
+// ========================================
+
+    VAR __RowID     = SELECTEDVALUE(DIM_RowKPIs_Media_Mix[Indicator Order])
+    VAR __EffRowID  =
+        IF(NOT ISBLANK(__RowID), __RowID, SUM(DIM_RowKPIs_Media_Mix[Indicator Order]))
+    RETURN
+        IF(
+            MOD(__EffRowID, 2) = 0,
+            "#F5F5F5",      // 偶数行（Last Year）：浅灰色
+            "#FFFFFF"       // 奇数行（This Year / YOY）：白色
+        )
+
+================================================================================
+5.7 [可选扩展] ALL 场景：Platform 切片器支持全平台同时显示
+================================================================================
+
+// 说明：若业务需要 ALL 选项（TM + JD 同时展示所有渠道），
+//       由于 Dim_Media_Mix_Channel[Platform] 字段只有 "TM" / "JD" 两个值，
+//       切片器中没有 "ALL" 选项，清空切片器选择等效 ALL（两平台均显示）。
+//
+// 推荐处理方式（按优先级）：
+//
+// 方案A（最简）：不选任何值 = ALL
+//   切片器留空，Power BI 不施加任何筛选，TM + JD 全部渠道行均展示
+//   Base Value 中 __RowPlatform = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform])
+//   此时每行仍能正确获取自身的 Platform（TM 行 = "TM"，JD 行 = "JD"）
+//   聚合计算不受影响，天然隔离，无需额外处理
+//
+// 方案B（需 ALL 按钮）：新增独立参数表切片器
+//   创建 Slicer_MM_Platform_Selection（与 Overview 同构，含 ALL/TM/JD，单选），
+//   使用辅助度量值控制矩阵视觉层筛选：
+//
+//   Media Mix Channel Platform Filter =
+//       VAR __Sel = SELECTEDVALUE(Slicer_MM_Platform_Selection[Platform_ID], "ALL")
+//       VAR __Row = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform])
+//       RETURN IF(__Sel = "ALL" || __Sel = __Row || ISBLANK(__Row), 1, 0)
+//
+//   矩阵视觉对象级筛选器：[Media Mix Channel Platform Filter] 大于 0
+//   Base Value 中 __RowPlatform 仍从行上下文获取，聚合逻辑不变
+//
+// 当前解决方案采用方案A，无需额外度量值。如需方案B，将上述度量值补充创建即可。
+
+================================================================================
+6. 视觉对象配置说明
+================================================================================
+
+6.1 矩阵（Matrix）配置
+─────────────────────────
+- 行（Rows）：
+  * 外层：Dim_Media_Mix_Channel[Platform]（分组，TM 组 / JD 组）
+  * 中层：Dim_Media_Mix_Channel[Channel_Label]（渠道名称）
+  * 内层：DIM_RowKPIs_Media_Mix[Indicator Type]（This Year / Last Year / YOY）
+- 列（Columns）：DIM_ColMetric_Media_Mix[Metric_Name]（13 个指标）
+- 值（Values）：[Media Mix Cell Display]
+
+注意：Platform 行维度与切片器来自同一个表 Dim_Media_Mix_Channel，
+      切片器选择 TM 后，矩阵的 Platform 外层行自动只显示 TM，无需额外配置。
+
+6.2 条件格式配置
+──────────────────
+| 格式类型     | 基于字段                                    | 说明 |
+|-------------|---------------------------------------------|------|
+| 字体颜色     | [Media Mix Cell Font Color]                 | YOY 行正/负/零三色 |
+| 背景颜色     | [Media Mix Cell Background Color]           | 交替行背景色 |
+| 图标（可选） | [Media Mix Cell SVG Icon]                   | YOY 行箭头，需设数据类别为图像 URL |
+
+6.3 切片器配置
+──────────────────────────────────────
+| 切片器          | 类型     | 字段                                                  | 默认值 |
+|----------------|----------|-------------------------------------------------------|--------|
+| 本期日期范围    | Between  | Dim_Date_Current[数据日期]                            | —      |
+| 同期日期范围    | Between  | Dim_Date_Ly[LY_数据日期]                              | —      |
+| Platform       | 单选     | Dim_Media_Mix_Channel[Platform]                       | 不选（等效 ALL）|
+| 数据口径       | 单选     | Slicer_DataCaliber_Selection[DataCaliber_Label]       | T+1   |
+| 币种           | 单选     | Slicer_Currency_Selection[Currency_Label]             | RMB   |
+
+Platform 切片器说明：
+- 字段来自 Dim_Media_Mix_Channel[Platform]，值为 TM / JD
+- 切片器类型设为单选（Single select = On）
+- 不选任何值时 = 全平台（TM + JD 所有渠道均显示）
+- 选 TM：矩阵仅显示 TM 渠道；选 JD：矩阵仅显示 JD 渠道
+- 注意：Slicer_Platform_Selection（Overview 共用）对本矩阵无效，不连接到 Dim_Media_Mix_Channel
+
+6.4 SUMMARY 行加粗样式
+────────────────────────
+Power BI 矩阵原生不支持按行条件加粗字体。
+推荐方案：
+1. 通过条件格式→字体颜色区分 SUMMARY 行（SUMMARY 行颜色加深）
+2. 矩阵中 Platform 外层行天然加粗（层级行头）
+3. 若需精确控制，创建辅助度量值返回 Channel_Type 对应颜色，在条件格式中应用
+
+================================================================================
+7. 度量值清单与 Display Folder
+================================================================================
+
+| # | 度量值名称                              | Display Folder               | 返回类型 |
+|---|----------------------------------------|------------------------------|----------|
+| 1 | Media Mix Base Value                   | Media Mix                    | 数值 |
+| 2 | Media Mix Cell Value                   | Media Mix                    | 数值 |
+| 3 | Media Mix Cell Display                 | Media Mix > Formatting       | 文本 |
+| 4 | Media Mix Cell Font Color              | Media Mix > Formatting       | 颜色代码 |
+| 5 | Media Mix Cell SVG Icon                | Media Mix > Formatting       | 图像 URL |
+| 6 | Media Mix Cell Background Color        | Media Mix > Formatting       | 颜色代码 |
+
+Display Folder 结构：
+```
+_Measures
+└── Media Mix/
+    ├── Media Mix Base Value
+    ├── Media Mix Cell Value
+    └── Formatting/
+        ├── Media Mix Cell Display
+        ├── Media Mix Cell Font Color
+        ├── Media Mix Cell SVG Icon
+        └── Media Mix Cell Background Color
+```
+
+================================================================================
+8. 指标口径说明
+================================================================================
+
+| # | 指标名     | 状态   | 口径说明                                                    |
+|---|-----------|--------|-------------------------------------------------------------|
+| 1 | Cost      | 有口径 | SUM(a05_e2e_paid_media_channel_data_d[cost_amt])，按 channel+platform+trans_cycle 过滤 |
+| 2 | Cost%     | 有口径 | 当前行 cost_amt / 当前平台所有 DETAIL channel cost_amt 之和 |
+| 3 | ROI       | 占位=1 | 待确认：media_sales_amt / adj_cost_amt（来源待定） |
+| 4 | Impression| 占位=1 | 待填充：SUM(pv) |
+| 5 | Click     | 占位=1 | 待填充：SUM(click) |
+| 6 | Add to Cart| 占位=1 | 待填充：SUM(add_cart_cnt) |
+| 7 | Orders    | 占位=1 | 待填充：SUM(sales_order_cnt) |
+| 8 | GMV       | 占位=1 | 待填充：SUM(sales_amt) |
+| 9 | CTR       | 占位=1 | 待填充：DIVIDE(SUM(click), SUM(pv)) |
+|10 | CPC       | 占位=1 | 待填充：DIVIDE(SUM(cost_amt), SUM(click)) |
+|11 | CPATC     | 占位=1 | 待填充：DIVIDE(SUM(cost_amt), SUM(add_cart_cnt)) |
+|12 | CVR       | 占位=1 | 待填充：DIVIDE(SUM(sales_order_cnt), SUM(click)) |
+|13 | AOV       | 占位=1 | 待填充：DIVIDE(SUM(sales_amt), SUM(sales_order_cnt)) |
+
+YOY 颜色方向说明：
+- Cost / Cost% / CPC / CPATC：成本类指标，YOY 正向（上升）= 红色（不好），负向 = 绿色
+- 其余指标：正向（上升）= 绿色，负向 = 红色
+- 已在 DIM_ColMetric_Media_Mix 的 Metric_ColorPositive / Metric_ColorNegative 中配置
+
+================================================================================
+9. 关键技术说明
+================================================================================
+
+9.1 SUMMARY 行聚合机制
+──────────────────────
+- 事实表 a05_e2e_paid_media_channel_data_d 的 channel 字段不含 "RTB Total"、
+  "JCGP Total"、"Total" 等汇总值，仅含明细渠道名（如"直通车"、"快车"等）
+- SUMMARY 行的聚合通过以下步骤实现：
+  1. SELECTEDVALUE(Dim_Media_Mix_Channel[Summary_Scope]) 获取当前 SUMMARY 行的覆盖范围
+     例：RTB Total 的 Summary_Scope = "TM_ZTC|TM_YLMF|TM_QZT|TM_DSP"
+  2. FILTER(Dim_Media_Mix_Channel, CONTAINSSTRING(__SummaryScope, Channel_ID) AND Channel_Type="DETAIL")
+     找出对应的所有 DETAIL 行，提取其 Channel_Label（即事实表 channel 字段值）
+  3. FILTER(事实表, channel IN __ScopeLabels) 进行多渠道聚合 SUM
+
+9.2 Platform 筛选与维度表行过滤
+────────────────────────────────
+- 方案设计：Dim_Media_Mix_Channel 为断开维度，切片器不能通过模型关系自动过滤
+- 通过 [Media Mix Channel Platform Filter] 辅助度量值 + 矩阵视觉层筛选器实现：
+  * 切片器选 ALL → 过滤度量值返回 1 → 所有行可见
+  * 切片器选 TM → TM 行返回 1（可见），JD 行返回 0（隐藏）
+  * 切片器选 JD → JD 行返回 1（可见），TM 行返回 0（隐藏）
+
+9.3 同期日期覆盖
+────────────────
+- 与 KPIs Overview Cell Value 完全相同的机制
+- REMOVEFILTERS(Dim_Date_Current) + FILTER(ALL(Dim_Date_Current), 日期范围)
+- Platform、trans_cycle、channel 等其他维度筛选不受影响
+
+9.4 占位值说明
+──────────────
+- 暂无口径的指标（ID 3~13，除 ID 2 外）均返回 1
+- This Year = 1，Last Year = 1，YOY = 0%（黄色零值）
+- 用于验证格式化、颜色、矩阵结构是否正确
+
+================================================================================
+10. 操作清单（Checklist）
+================================================================================
+
+数据模型：
+- [ ] 确认 Dim_Media_Mix_Channel 已通过 Media_Mix_SQL 加载（31 行）
+- [ ] 确认 a05_e2e_paid_media_channel_data_d 已加载，channel 字段为中文原始渠道名
+- [ ] 确认 Dim_Date_Current 和 Dim_Date_Ly 已加载（复用 Overview 方案）
+- [ ] 建立/确认关系：Dim_Date_Current[数据日期] 1:* a05_e2e_paid_media_channel_data_d[data_date]
+- [ ] 配置 Sort by Column：Dim_Media_Mix_Channel[Channel_Label] → Channel_Sort
+- [ ] 配置 Sort by Column：Dim_Media_Mix_Channel[Platform] → Platform_Sort
+
+维度表（新建）：
+- [ ] 创建 DIM_RowKPIs_Media_Mix（This Year / Last Year / YOY，3 行）
+- [ ] 创建 DIM_ColMetric_Media_Mix（13 列指标，含格式 + 颜色 + 汇率标记）
+- [ ] 配置 Sort by Column：DIM_RowKPIs_Media_Mix[Indicator Type] → Indicator Order
+- [ ] 配置 Sort by Column：DIM_ColMetric_Media_Mix[Metric_Name] → Metric_Sort
+
+切片器（复用 Overview 方案）：
+- [ ] 确认 Slicer_DataCaliber_Selection 已创建
+- [ ] 确认 Slicer_Currency_Selection 已创建（含 Currency_ExchangeRate 字段）
+- [ ] 新增 Platform 切片器：字段 = Dim_Media_Mix_Channel[Platform]，单选（Single select = On）
+
+度量值（共 6 个）：
+- [ ] 创建 Media Mix Base Value（13 分支 SWITCH，含 DETAIL/SUMMARY 双路径聚合）
+- [ ] 创建 Media Mix Cell Value（行路由 + 汇率换算 + LP 日期覆盖）
+- [ ] 创建 Media Mix Cell Display（格式化显示）
+- [ ] 创建 Media Mix Cell Font Color（YOY 行条件颜色）
+- [ ] 创建 Media Mix Cell SVG Icon（YOY 行箭头，设数据类别为图像 URL）
+- [ ] 创建 Media Mix Cell Background Color（交替行背景色）
+
+视觉对象：
+- [ ] 配置矩阵行：外层 Platform + 中层 Channel_Label + 内层 Indicator Type
+- [ ] 配置矩阵列：Metric_Name（13 列）；值：[Media Mix Cell Display]
+- [ ] 应用条件格式：字体颜色 → [Media Mix Cell Font Color]
+- [ ] 应用条件格式：背景颜色 → [Media Mix Cell Background Color]
+- [ ] Platform 切片器确认单选已开启
+
+验证：
+- [ ] 验证：直通车 Cost 数值正确（DETAIL 路径，单渠道）
+- [ ] 验证：RTB Total Cost = 直通车 + 引力魔方 + 全站推/万象台 + 超级短视频（SUMMARY 路径）
+- [ ] 验证：直通车 Cost% = 直通车 Cost / TM 所有 DETAIL channel Cost
+- [ ] 验证：切换 Platform 切片器（TM/JD），矩阵行正确显示对应平台渠道
+- [ ] 验证：不选 Platform 时（ALL 等效），TM + JD 全部渠道均显示
+- [ ] 验证：This Year / Last Year / YOY 行路由正确
+- [ ] 验证：YOY 行颜色正确（Cost 正向=红色，ROI 正向=绿色）
+- [ ] 验证：切换币种（RMB → USD），Cost / GMV / AOV 变化，Cost% / CTR 不变
+
+================================================================================
+11. 血缘关系图（Lineage Diagram）
+================================================================================
+
+```
+┌─────────────────────────────────┐
+│       Dim_Date_Current           │
+│  [数据日期]                      │
+└────────────┬────────────────────┘
+        1:*  │
+             ▼
+┌──────────────────────────────────────┐
+│ a05_e2e_paid_media_channel_data_d    │
+│ ──────────────────────────────────── │
+│ channel（原始中文渠道名）             │
+│ platform（TM/JD）                    │
+│ trans_cycle（T+1/T+15）             │
+│ data_date                            │
+│ cost_amt / pv / click                │
+│ add_cart_cnt / sales_order_cnt       │
+│ sales_amt / nc_cost_amt / ec_cost_amt│
+└──────────────────────────────────────┘
+         ▲
+         │ FILTER channel = __ChannelLabel（DETAIL）
+         │ FILTER channel IN __ScopeLabels（SUMMARY）
+         │ FILTER platform = __RowPlatform
+         │ FILTER trans_cycle = __TransCycle
+         │
+┌────────┴────────────────────────────────────────┐
+│           Media Mix Base Value                   │
+│  ├─ MetricID 1: Cost = SUM(cost_amt)             │
+│  ├─ MetricID 2: Cost% = Cost / TotalCost         │
+│  └─ MetricID 3~13: 1（占位值）                   │
+│                                                  │
+│  Channel 上下文: Dim_Media_Mix_Channel（断开）    │
+│  ├─ DETAIL 行 → channel = Channel_Label          │
+│  └─ SUMMARY 行 → channel IN ScopeLabels          │
+└────────┬────────────────────────────────────────┘
+         ▼
+┌──────────────────────────────────────────────────┐
+│              Media Mix Cell Value                 │
+│  ├─ "This Year" → [Base Value] × ExchangeRate    │
+│  ├─ "Last Year" → CALCULATE([Base], LP日期覆盖)  │
+│  └─ "YOY"       → (TY - LY) / LY                │
+└──────┬──────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────┐  ┌──────────────────┐  ┌─────────────────────────┐
+│ Cell Display │  │ Cell Font Color  │  │ Cell Background Color   │
+│ (格式化文本) │  │ (条件颜色)       │  │ (交替行背景)            │
+└──────────────┘  └──────────────────┘  └─────────────────────────┘
+       ▲                  ▲                          ▲
+       │                  │                          │
+┌──────┴──────────────────┴──────────────────────────┴────────────┐
+│              DIM_ColMetric_Media_Mix（列维度，断开）              │
+│   Metric_ID(1~13) | Metric_Name | Metric_Sort                    │
+│   Metric_Format_Current/LP/VsLP                                  │
+│   Metric_Color* (4列) | Metric_IsCurrencyAmount                  │
+└──────────────────────────────────────────────────────────────────┘
+
+断开维度：
+┌──────────────────────────┐  ┌────────────────────────────────┐
+│ Dim_Media_Mix_Channel    │  │ DIM_RowKPIs_Media_Mix          │
+│ 行头（31行，双平台渠道）  │  │ This Year / Last Year / YOY    │
+│ Channel_ID / Platform    │  └────────────────────────────────┘
+│ Channel_Type(DETAIL/SUM) │
+│ Summary_Scope            │  ┌────────────────────────────────┐
+└──────────────────────────┘  │ Slicer_Platform_Selection      │
+                              │ （单选，ALL/TM/JD）            │
+                              │ → [Channel Platform Filter]    │
+                              │   控制矩阵行可见性              │
+                              └────────────────────────────────┘
+```
