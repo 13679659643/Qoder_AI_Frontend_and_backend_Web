@@ -2,58 +2,19 @@ Media Mix_matrix_solution 解决方案：
 
 > status: updated
 > created: 2026-05-29
-> updated: 2026-06-01 (v1.2)
+> updated: 2026-06-01 (v1.5)
 > complexity: 🔴复杂
 > type: 度量值开发 + 可视化构建
 > naming: 遵循 powerbi_code_copilot/rules/dax-style.md 规范
 
 ================================================================================
-变更日志（2026-06-01 v1.2）
-────────────────────────────
-11. [修订] 修正 DIM_ColMetric_Media_Mix DATATABLE 中 Metric_Sort 字段起始值
-    违规：原值 1,2,3...13，违反 domain-rule "排序字段起始值从7开始"
-    修正：改为 7,8,9,10,11,12,13,14,15,16,17,18,19（起始 7，步长 1）
-12. [修订] 修正 Section 4.2 断开维度列表
-    移除 Slicer_Platform_Selection 条目（v1.1 已废弃，本模块不使用此切片器）
-    新增注释说明 Platform 筛选通过 Dim_Media_Mix_Channel[Platform] 字段直接切片器实现
-13. [修订] 修正 Section 9.2 平台筛选技术说明
-    移除旧方案描述（辅助度量值 [Media Mix Channel Platform Filter] + 视觉层筛选器）
-    改写为 v1.1 正确方案：直接用 Dim_Media_Mix_Channel[Platform] 作切片器
-14. [修订] 修正 Section 11 血缘关系图
-    移除旧方案中的 Slicer_Platform_Selection 和 [Channel Platform Filter] 方框
-    补充正确的 Slicer_DataCaliber_Selection 和 Slicer_Currency_Selection 方框
-
-================================================================================
-变更日志（2026-05-29）
+最新变更摘要（v1.5 — 2026-06-01）
 ================================================================================
 
-1. 初版创建：Media Mix 渠道粒度矩阵看板
-2. 行维度：Dim_Media_Mix_Channel（含 TM/JD 双平台渠道，DETAIL + SUMMARY 行）
-   - SUMMARY 行（RTB Total / 品销宝 Total / JCGP Total / Total / Total 不含JCGP 等）
-     通过 DAX 在度量值中用 Channel_ID IN 枚举明细行聚合，事实表不含这些汇总值
-   - Platform 通过 SELECTEDVALUE(Dim_Media_Mix_Channel[Platform]) 获取上下文筛选
-     不依赖 Slicer_Platform_Selection 对本模块的传递（Platform 来自维度表行上下文）
-3. 列维度：DIM_ColMetric_Media_Mix（13 个指标）
-   - Cost（有口径）/ Cost%（有口径）/ ROI、Impression、Click、Add to Cart、Orders、
-     GMV、CTR、CPC、CPATC、CVR、AOV（暂无口径，返回 1 占位）
-4. 行路由：DIM_RowKPIs_Media_Mix（This Year / Last Year / YOY，与 Overview 同构）
-5. Platform 筛选规范：ALL → FILTER platform IN {"TM","JD"}；单平台 → = __SelPlatform
-   注意：本模块 Platform 上下文来自维度表行，不直接读 Slicer_Platform_Selection
-6. YOY 行条件颜色：正绿 / 负红 / 零黄；This Year / Last Year 统一 #5f6165 深灰
-
-变更日志（2026-05-29 v1.1）
-────────────────────────────
-7. [修订] 移除第1节 Dim_Media_Mix_Channel 的 DAX 计算表定义
-   → 用户已通过 Media_Mix_SQL 在 Power BI 中加载此表，无需重复创建
-   → 第1节保留字段说明和 Sort by Column 配置，删除 DATATABLE 代码
-8. [修订] 删除 5.7 辅助度量值 Media Mix Channel Platform Filter
-   → 原设计用 Slicer_Platform_Selection 过滤矩阵行，但两者均为断开维度，切片器无法传递
-   → 正确方案：将 Dim_Media_Mix_Channel[Platform] 直接作为切片器（单选，含 ALL）
-     Power BI 对断开维度的行上下文天然隔离：切片器选 TM，矩阵仅呈现 Platform=TM 的行
-     Base Value 中 __RowPlatform = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform]) 自然收到 TM
-     无需任何辅助度量值或视觉层筛选器
-9. [修订] 更新 0 节架构说明、5.1 Base Value 注释、6.1/6.3 视觉配置说明，与新设计对齐
-10. [修订] 度量值总数从 7 个减少为 6 个（删除 Channel Platform Filter）
+- [修订] domain-rules.md 排序字段起始值：7 → 10（用户修改规范文件后同步）
+- [修订] DIM_RowKPIs_Media_Mix Indicator Order：7,17,27 → 10,20,30
+- [修订] DIM_ColMetric_Media_Mix Metric_Sort：7,17,...,127 → 10,20,...,130
+- 详细历史变更见 changelog.md → [Media Mix] 模块
 
 ================================================================================
 0. 需求概述与架构总览
@@ -196,11 +157,11 @@ DIM_RowKPIs_Media_Mix =
 // ========================================
 DATATABLE(
     "Indicator Type",  STRING,     // 行标签（英文）
-    "Indicator Order", INTEGER,    // 排序值
+    "Indicator Order", INTEGER,    // 排序值（起始10，步长10，便于后续插入新行）
     {
-        { "This Year", 1 },
-        { "Last Year", 2 },
-        { "YOY",       3 }
+        { "This Year",  10 },
+        { "Last Year",  20 },
+        { "YOY",        30 }
     }
 )
 
@@ -242,10 +203,11 @@ DIM_ColMetric_Media_Mix =
 //   delta_pct_1dp → +14.5%（含正负号）
 //
 // 颜色约定（YOY 行）：
-//   正向：#1A9018 绿色（Cost/Cost% 业务上正向不好，可在此反转）
-//   负向：#D64550 红色
-//   零值：#E1C233 黄色
+//   正值（>0）：#1A9018 绿色
+//   负值（<0）：#D64550 红色
+//   零值（=0）：#E1C233 黄色
 //   默认：#5f6165 深灰（This Year / Last Year 行）
+//   不区分指标业务性质，统一按数值正负判断
 //
 // 汇率标记：Metric_IsCurrencyAmount = TRUE → 金额类，切换币种时乘汇率
 // ========================================
@@ -263,24 +225,21 @@ DATATABLE(
     "Metric_ColorDefault",     STRING,
     {
         // ID  Name             Sort  Fmt_Current    Fmt_LP         Fmt_VsLP          IsCurAmt  Pos        Neg        Zero       Default
-        // ⚠️ Metric_Sort 起始值从 7 开始（domain-rule：排序字段起始值从7开始）
-        {  1, "Cost",            7,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#D64550", "#1A9018", "#E1C233", "#5f6165" },
-        // Cost 和 Cost% 为成本类指标：YOY 正向（成本上升）颜色设为红色，负向设绿色
-        {  2, "Cost%",           8,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" },
-        // ROI 正向为绿（ROI 越高越好）
-        {  3, "ROI",             9,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  4, "Impression",     10,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  5, "Click",          11,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  6, "Add to Cart",    12,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  7, "Orders",         13,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  8, "GMV",            14,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  9, "CTR",            15,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 10, "CPC",            16,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" },
-        // CPC 为单次成本类：YOY 正向设红（成本上升不好），负向设绿
-        { 11, "CPATC",          17,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" },
-        // CPATC 为加购成本：同 CPC 颜色约定
-        { 12, "CVR",            18,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 13, "AOV",            19,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+        // Metric_Sort：起始10，步长10（domain-rule：便于后续在指标间插入新列）
+        // 颜色规则：正值一律绿色 #1A9018，负值一律红色 #D64550，零值黄色 #E1C233（不区分指标业务性质）
+        {  1, "Cost",            10,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  2, "Cost%",           20,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  3, "ROI",             30,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  4, "Impression",      40,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  5, "Click",           50,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  6, "Add to Cart",     60,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  7, "Orders",          70,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  8, "GMV",             80,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  9, "CTR",             90,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 10, "CPC",            100,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 11, "CPATC",          110,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 12, "CVR",            120,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 13, "AOV",            130,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" }
     }
 )
 
@@ -894,9 +853,9 @@ _Measures
 |13 | AOV       | 占位=1 | 待填充：DIVIDE(SUM(sales_amt), SUM(sales_order_cnt)) |
 
 YOY 颜色方向说明：
-- Cost / Cost% / CPC / CPATC：成本类指标，YOY 正向（上升）= 红色（不好），负向 = 绿色
-- 其余指标：正向（上升）= 绿色，负向 = 红色
-- 已在 DIM_ColMetric_Media_Mix 的 Metric_ColorPositive / Metric_ColorNegative 中配置
+- 所有指标统一规则：正值（>0）= #1A9018 绿色，负值（<0）= #D64550 红色，零值 = #E1C233 黄色
+- 不区分指标业务性质，只看数值正负
+- 已在 DIM_ColMetric_Media_Mix 的 Metric_ColorPositive / Metric_ColorNegative 中统一配置
 
 ================================================================================
 9. 关键技术说明
@@ -983,7 +942,7 @@ YOY 颜色方向说明：
 - [ ] 验证：切换 Platform 切片器（TM/JD），矩阵行正确显示对应平台渠道
 - [ ] 验证：不选 Platform 时（ALL 等效），TM + JD 全部渠道均显示
 - [ ] 验证：This Year / Last Year / YOY 行路由正确
-- [ ] 验证：YOY 行颜色正确（Cost 正向=红色，ROI 正向=绿色）
+- [ ] 验证：YOY 行颜色正确（正值=绿色，负值=红色，零值=黄色，全指标统一）
 - [ ] 验证：切换币种（RMB → USD），Cost / GMV / AOV 变化，Cost% / CTR 不变
 
 ================================================================================

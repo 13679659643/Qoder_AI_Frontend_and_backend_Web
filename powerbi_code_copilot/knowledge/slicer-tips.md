@@ -15,7 +15,7 @@
 |--------|------|------|
 | `{Entity}_ID` | STRING / INTEGER | 主键标识，唯一标识每个选项，可用于 SELECTEDVALUE 读取 |
 | `{Entity}_Label` | STRING | 显示标签，在切片器界面向用户展示的名称 |
-| `{Entity}_Sort` | INTEGER | 排序顺序，控制选项在切片器中的显示顺序 |
+| `{Entity}_Sort` | INTEGER | 排序顺序，控制选项在切片器中的显示顺序 尽量别从1开始排序，步长不能为1，步长用 10，便于后续新增字段的拓展性|
 | `{Entity}_Description` | STRING | 详细描述，说明该选项的具体含义 |
 
 **可选字段**
@@ -37,8 +37,8 @@ DATATABLE(
     "Entity_IsActive",    BOOLEAN,
     "Entity_Group",       STRING,
     {
-        { "ID_1", "显示名称1", 1, "描述1", TRUE,  TRUE, "分组A" },
-        { "ID_2", "显示名称2", 2, "描述2", FALSE, TRUE, "分组A" }
+        { "ID_1", "显示名称1", 10, "描述1", TRUE,  TRUE, "分组A" },
+        { "ID_2", "显示名称2", 20, "描述2", FALSE, TRUE, "分组A" }
     }
 )
 ```
@@ -63,13 +63,13 @@ DATATABLE(
     {
         // TM - 天猫
         {
-            "TM", "天猫", 5,
+            "TM", "天猫", 50,
             "阿里巴巴集团旗下的B2C电商平台，定位为品质购物商城，主要销售品牌商品",
             TRUE, TRUE, "B2C综合平台", "综合电商", "🐱"
         },
         // JD - 京东
         {
-            "JD", "京东", 6,
+            "JD", "京东", 60,
             "中国自营式电商平台，以物流快速和正品保障著称，主要销售电子产品、家电等",
             FALSE, TRUE, "B2C综合平台", "综合电商", "🐶"
         }
@@ -108,18 +108,18 @@ DATATABLE(
     "Metric_ColorZero",        STRING,
     "Metric_ColorDefault",     STRING,
     {
-        { 1,  "Cost",           1,  "currency",    "currency",    "delta_pct_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 2,  "红包",           2,  "currency",    "currency",    "delta_pct_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 3,  "Cost进度",       3,  "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 4,  "NetSales进度",   4,  "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 5,  "DemandSales进度",5,  "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 6,  "费比",           6,  "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 7,  "含红包费比",     7,  "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 8,  "ROI",            8,  "decimal_2",   "decimal_2",   "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 9,  "新客花费占比",   9,  "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 10, "新客成本",       10, "currency",    "currency",    "delta_pct_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 11, "Acc花费占比",    11, "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
-        { 12, "Acc ROI",        12, "decimal_2",   "decimal_2",   "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" }
+        { 1,  "Cost",           20,  "currency",    "currency",    "delta_pct_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#212121" },
+        { 2,  "红包",           30,  "currency",    "currency",    "delta_pct_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#212121" },
+        { 3,  "Cost进度",       40,  "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
+        { 4,  "NetSales进度",   50,  "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
+        { 5,  "DemandSales进度",60,  "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
+        { 6,  "费比",           70,  "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
+        { 7,  "含红包费比",     80,  "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
+        { 8,  "ROI",            90,  "decimal_2",   "decimal_2",   "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
+        { 9,  "新客花费占比",   100, "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
+        { 10, "新客成本",       110, "currency",    "currency",    "delta_pct_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#212121" },
+        { 11, "Acc花费占比",    120, "percent_1dp", "percent_1dp", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" },
+        { 12, "Acc ROI",        130, "decimal_2",   "decimal_2",   "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" }
     }
 )
 ```

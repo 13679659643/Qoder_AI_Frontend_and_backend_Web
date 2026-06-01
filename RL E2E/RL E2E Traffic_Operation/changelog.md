@@ -187,7 +187,7 @@
 
 ---
 
-## [2026-06-01 HH:MM ⚠️ 请补填具体时间] 修改 — Media Mix 矩阵方案 v1.2 规范合规修订
+## [2026-06-01 09:30] 修改 — Media Mix 矩阵方案 v1.2 规范合规修订
 
 - **模块**: Media Mix
 - **任务**: Media Mix 矩阵看板规范合规修订 — 修正 domain-rule 违规 + 消除 v1.1 后遗留的陈旧引用
@@ -206,6 +206,65 @@
 - **备注**:  
   - Metric_ColorPositive/Negative 按指标差异化（成本类反转）属于有意的业务设计，非违规；domain-rule 颜色为 fallback 默认值，维度表驱动差异化颜色是断开维度模式标准做法  
   - 本次修订无 DAX 逻辑变更，仅修正排序字段值和陈旧文档内容
+
+---
+
+## [2026-06-01 10:30] 修改 — Media Mix 矩阵方案 v1.3 颜色规则统一修正
+
+- **模块**: Media Mix
+- **任务**: DIM_ColMetric_Media_Mix 颜色规则修正 — 统一按数值正负判断，不区分指标业务性质
+- **操作**: 修改
+- **变更内容**:
+  - `DIM_ColMetric_Media_Mix`（DATATABLE 颜色列修正）：  
+    将 Cost / Cost% / CPC / CPATC 四个指标的 `Metric_ColorPositive` 从 `#D64550`（红）改回 `#1A9018`（绿），  
+    `Metric_ColorNegative` 从 `#1A9018`（绿）改回 `#D64550`（红）；  
+    所有 13 个指标颜色规则统一：正值（>0）= 绿色，负值（<0）= 红色，零值 = 黄色
+  - Section 3 颜色约定注释（修正）：移除"Cost/Cost% 业务上正向不好，可在此反转"误导性描述
+  - Section 8 YOY 颜色方向说明（修正）：改为"不区分指标业务性质，只看数值正负"
+- **关联文件**: `Media Mix/Media_Mix_matrix_solution`
+- **备注**: 参考 KPIs Overview_matrix_solution（`DIM_ColMetric_Overview`）的颜色配置，确认 Overview 方案中 Cost 等成本指标同样使用统一颜色规则（无反转）
+
+---
+
+## [2026-06-01 11:30] 修改 — Media Mix 矩阵方案 v1.4 排序字段步长规范修订
+
+- **模块**: Media Mix
+- **任务**: 排序字段步长规范修订 — slicer-tips.md 规则更新后对齐，步长改为 10 提升扩展性
+- **操作**: 修改
+- **变更内容**:
+  - `DIM_RowKPIs_Media_Mix`（Indicator Order 字段修正）：  
+    `1, 2, 3` → `7, 17, 27`（起始7，步长10，便于后续在行间插入新类型）
+  - `DIM_ColMetric_Media_Mix`（Metric_Sort 字段修正）：  
+    `7, 8, 9, ..., 19`（步长1）→ `7, 17, 27, 37, 47, 57, 67, 77, 87, 97, 107, 117, 127`（步长10）  
+    起始值 7 保持不变（符合 domain-rule），步长从 1 改为 10
+  - `Media_Mix_matrix_solution` 文件头部日志清理：  
+    移除文件内全量历史变更日志，只保留最新版本摘要（v1.4）；  
+    历史详细记录统一归档至 `changelog.md`
+  - Section 10 验证清单颜色描述（顺带修正）：  
+    "Cost 正向=红色，ROI 正向=绿色" → "正值=绿色，负值=红色，零值=黄色，全指标统一"
+- **关联文件**: `Media Mix/Media_Mix_matrix_solution`
+- **备注**:  
+  - slicer-tips.md 规范：`_Sort` 字段尽量不从1开始，步长不能为1，便于后续新增字段扩展  
+  - domain-rules.md 规范：排序字段起始值从7开始（⚠️ 已被 v1.5 修订为起始10）
+  - 两条规则组合结果：起始7，步长10（7, 17, 27...）（⚠️ 已被 v1.5 修订为起始10，步长10）
+
+---
+
+## [2026-06-01 12:30] 修改 — Media Mix 矩阵方案 v1.5 排序起始值修正（7→10）
+
+- **模块**: Media Mix
+- **任务**: domain-rules.md 排序规范起始值修正后同步更新 — 起始值 7 → 10
+- **操作**: 修改
+- **变更内容**:
+  - `domain-rules.md`（用户已直接修改）：  
+    `起始值从7开始` → `起始值从10开始，步长用 10，便于后续插入`
+  - `DIM_RowKPIs_Media_Mix`（Indicator Order 修正）：  
+    `7, 17, 27` → `10, 20, 30`
+  - `DIM_ColMetric_Media_Mix`（Metric_Sort 修正）：  
+    `7, 17, 27, ..., 127` → `10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130`
+  - `Media_Mix_matrix_solution` 文件头版本摘要更新至 v1.5
+- **关联文件**: `Media Mix/Media_Mix_matrix_solution`, `powerbi_code_copilot/rules/domain-rules.md`
+- **备注**: 同步清理 memory 中旧的"起始值7"规范条目，保留最新的"起始10步长10"规范
 
 ---
 
