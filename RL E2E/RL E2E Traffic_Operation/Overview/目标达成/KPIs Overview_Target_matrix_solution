@@ -41,7 +41,7 @@ Platform 单选说明：
 - 度量值通过 SELECTEDVALUE 获取平台选择，再路由平台筛选逻辑
 
 时间粒度切片器说明（TargetPeriod）：
-- 选项：Week / Month / Quarter / Year（按周月季年顺序，Sort: 1/2/3/4）
+- 选项：Week / Month / Quarter / Year（按周月季年顺序，Sort: 10/20/30/40）
 - 通过切换粒度，在 Base Value 中路由到对应的目标字段
   └── 当前占位符：所有粒度路由均填充 1，待数据表就绪后补充真实口径
 - 切片器字段：Slicer_TargetPeriod_Selection[TargetPeriod_Label]
@@ -133,11 +133,11 @@ DIM_RowKPIs_Overview_Target =
 // ========================================
 DATATABLE(
     "Indicator_Type",  STRING,    // 行标签（矩阵显示名称）
-    "Indicator_Order", INTEGER,   // 排序值（1=Actual, 2=Target, 3=±Actual vs Target）
+    "Indicator_Order", INTEGER,   // 排序值（起始10，步长10：10=Actual, 20=Target, 30=±Actual vs Target）
     {
-        {"Actual",             1},
-        {"Target",             2},
-        {"±Actual vs Target",  3}
+        {"Actual",             10},
+        {"Target",             20},
+        {"±Actual vs Target",  30}
     }
 )
 
@@ -185,7 +185,7 @@ VAR __Rows =
         ROW(
             "Metric_ID",              1,
             "Metric_Name",            "Cost Rate",
-            "Metric_Sort",            7,              // 排序起始值 7（遵循 domain-rules 规范）
+            "Metric_Sort",            10,             // 排序值（起始10，步长10，便于插入）
             "Metric_Format",          "percent_1dp",
             "Metric_IsCurrencyAmount", FALSE,
             "Metric_ColorPositive",   "#1A9018",      // 正值 → 草绿色（domain-rules）
@@ -202,7 +202,7 @@ VAR __Rows =
         ROW(
             "Metric_ID",              2,
             "Metric_Name",            "RTB Cost ACH%",
-            "Metric_Sort",            8,
+            "Metric_Sort",            20,
             "Metric_Format",          "percent_1dp",
             "Metric_IsCurrencyAmount", FALSE,
             "Metric_ColorPositive",   "#1A9018",
@@ -219,7 +219,7 @@ VAR __Rows =
         ROW(
             "Metric_ID",              3,
             "Metric_Name",            "Cost ACH%",
-            "Metric_Sort",            9,
+            "Metric_Sort",            30,
             "Metric_Format",          "percent_1dp",
             "Metric_IsCurrencyAmount", FALSE,
             "Metric_ColorPositive",   "#1A9018",
@@ -236,7 +236,7 @@ VAR __Rows =
         ROW(
             "Metric_ID",              4,
             "Metric_Name",            "Net Sales ACH%",
-            "Metric_Sort",            10,
+            "Metric_Sort",            40,
             "Metric_Format",          "percent_1dp",
             "Metric_IsCurrencyAmount", FALSE,
             "Metric_ColorPositive",   "#1A9018",
@@ -253,7 +253,7 @@ VAR __Rows =
         ROW(
             "Metric_ID",              5,
             "Metric_Name",            "Demand Sales ACH%",
-            "Metric_Sort",            11,
+            "Metric_Sort",            50,
             "Metric_Format",          "percent_1dp",
             "Metric_IsCurrencyAmount", FALSE,
             "Metric_ColorPositive",   "#1A9018",
@@ -270,7 +270,7 @@ VAR __Rows =
         ROW(
             "Metric_ID",              6,
             "Metric_Name",            "Media New Customer Coverage%",
-            "Metric_Sort",            12,
+            "Metric_Sort",            60,
             "Metric_Format",          "percent_1dp",
             "Metric_IsCurrencyAmount", FALSE,
             "Metric_ColorPositive",   "#1A9018",
@@ -287,7 +287,7 @@ VAR __Rows =
         ROW(
             "Metric_ID",              7,
             "Metric_Name",            "Cost Per New Acquisition",
-            "Metric_Sort",            13,
+            "Metric_Sort",            70,
             "Metric_Format",          "currency",
             "Metric_IsCurrencyAmount", TRUE,           // 金额类，需汇率转换
             "Metric_ColorPositive",   "#1A9018",
@@ -304,7 +304,7 @@ VAR __Rows =
         ROW(
             "Metric_ID",              8,
             "Metric_Name",            "Acceleration Cost%",
-            "Metric_Sort",            14,
+            "Metric_Sort",            80,
             "Metric_Format",          "percent_1dp",
             "Metric_IsCurrencyAmount", FALSE,
             "Metric_ColorPositive",   "#1A9018",
@@ -321,7 +321,7 @@ VAR __Rows =
         ROW(
             "Metric_ID",              9,
             "Metric_Name",            "Net Sales%",
-            "Metric_Sort",            15,
+            "Metric_Sort",            90,
             "Metric_Format",          "percent_1dp",
             "Metric_IsCurrencyAmount", FALSE,
             "Metric_ColorPositive",   "#1A9018",
@@ -380,7 +380,7 @@ DATATABLE(
     // 基础字段 - 必选字段
     "Platform_ID", STRING,         // 主键标识；"ALL" 代表全平台聚合
     "Platform_Label", STRING,      // 显示标签，在报表界面中向用户展示的平台名称
-    "Platform_Sort", INTEGER,      // 排序顺序，控制选项在切片器中的显示顺序
+    "Platform_Sort", INTEGER,      // 排序顺序（起始10，步长10，控制选项在切片器中的显示顺序）
     "Platform_Description", STRING, // 详细描述，说明该平台的具体特点和业务含义
     
     // 扩展字段 - 可选字段
@@ -398,7 +398,7 @@ DATATABLE(
         {
             "ALL",                 // 平台代码：ALL 代表 TM + JD 全部聚合
             "ALL",                 // 平台显示名称
-            1,                     // 排序顺序，优先级最高（排在第一位）
+            10,                    // 排序顺序（起始10，步长10，优先级最高）
             "全平台汇总，聚合 TM + JD 全部数据",  // 平台描述
             TRUE,                  // 默认选中，报表初始展示全平台数据
             TRUE,                  // 激活状态，当前可用
@@ -411,7 +411,7 @@ DATATABLE(
         {
             "TM",                  // 平台代码，天猫的英文缩写
             "天猫",                 // 平台显示名称
-            2,                     // 排序顺序
+            20,                    // 排序顺序（起始10，步长10）
             "阿里巴巴集团旗下的B2C电商平台，定位为品质购物商城，主要销售品牌商品",  // 平台描述
             FALSE,                 // 非默认选项
             TRUE,                  // 激活状态，当前可用
@@ -424,7 +424,7 @@ DATATABLE(
         {
             "JD",                  // 平台代码，京东的英文缩写
             "京东",                 // 平台显示名称
-            3,                     // 排序顺序
+            30,                    // 排序顺序（起始10，步长10）
             "中国自营式电商平台，以物流快速和正品保障著称，主要销售电子产品、家电等",  // 平台描述
             FALSE,                 // 非默认选项
             TRUE,                  // 激活状态，当前可用
@@ -452,7 +452,7 @@ Slicer_TargetPeriod_Selection =
 DATATABLE(
     "TargetPeriod_ID", INTEGER,      // 主键标识（1=Week, 2=Month, 3=Quarter, 4=Year）
     "TargetPeriod_Label", STRING,    // 显示标签（Week / Month / Quarter / Year）
-    "TargetPeriod_Sort", INTEGER,    // 排序顺序（按周月季年顺序）
+    "TargetPeriod_Sort", INTEGER,    // 排序顺序（起始10，步长10，按周月季年顺序）
     "TargetPeriod_Description", STRING, // 详细描述
     "TargetPeriod_IsDefault", BOOLEAN,  // 是否默认选中
     "TargetPeriod_IsActive", BOOLEAN,   // 是否激活状态
@@ -461,7 +461,7 @@ DATATABLE(
         {
             1,                     // TargetPeriod_ID = 1（Week）
             "Week",                // 显示名称
-            1,                     // 排序顺序：第1位（按周月季年）
+            10,                    // 排序顺序：第1位（起始10，步长10）
             "按自然周粒度查看目标达成，目标值取对应周的 fcst 字段",
             FALSE,                  // 默认选中
             TRUE
@@ -470,7 +470,7 @@ DATATABLE(
         {
             2,                     // TargetPeriod_ID = 2（Month）
             "Month",               // 显示名称
-            2,                     // 排序顺序：第2位
+            20,                    // 排序顺序：第2位
             "按自然月粒度查看目标达成，目标值取对应月的 fcst 字段",
             TRUE,
             TRUE
@@ -479,7 +479,7 @@ DATATABLE(
         {
             3,                     // TargetPeriod_ID = 3（Quarter）
             "Quarter",             // 显示名称
-            3,                     // 排序顺序：第3位
+            30,                    // 排序顺序：第3位
             "按自然季粒度查看目标达成，目标值取对应季的 fcst 字段",
             FALSE,
             TRUE
@@ -488,7 +488,7 @@ DATATABLE(
         {
             4,                     // TargetPeriod_ID = 4（Year）
             "Year",                // 显示名称
-            4,                     // 排序顺序：第4位
+            40,                    // 排序顺序：第4位
             "按自然年粒度查看目标达成，目标值取对应年的 fcst 字段",
             FALSE,
             TRUE
@@ -1303,19 +1303,22 @@ KPIs Overview Target Cell Background Color =
 // 度量值: KPIs Overview Target Cell Background Color
 // Display Folder: KPIs Overview Target > Formatting
 // 用途: 根据行 Indicator_Order 返回交替行背景色
-//       奇数行（Actual=1, ±Actual vs Target=3）→ 白色 #FFFFFF
-//       偶数行（Target=2）→ 浅灰色 #F5F5F5
+//       Indicator_Order 采用起始10步长10规范（10, 20, 30）
+//       先除以10还原行位次（10→1, 20→2, 30→3），再取 MOD 判断奇偶
+//       奇数位次（Actual=10→1, ±Actual vs Target=30→3）→ 白色 #FFFFFF
+//       偶数位次（Target=20→2）→ 浅灰色 #F5F5F5
 //       仅 3 行，颜色交替规律：白 → 灰 → 白
 // 依赖: DIM_RowKPIs_Overview_Target[Indicator_Order]
 // ========================================
     VAR __RowID = SELECTEDVALUE(DIM_RowKPIs_Overview_Target[Indicator_Order])
     VAR __EffRowID =
         IF(NOT ISBLANK(__RowID), __RowID, SUM(DIM_RowKPIs_Overview_Target[Indicator_Order]))
+    VAR __RowPos = INT(__EffRowID / 10)    // 还原行位次：10→1, 20→2, 30→3
     RETURN
         IF(
-            MOD(__EffRowID, 2) = 0,
-            "#F5F5F5",                     // 偶数行（Target 行）：浅灰色
-            "#FFFFFF"                      // 奇数行（Actual / ±delta 行）：白色
+            MOD(__RowPos, 2) = 0,
+            "#F5F5F5",                     // 偶数位次（Target 行）：浅灰色
+            "#FFFFFF"                      // 奇数位次（Actual / ±delta 行）：白色
         )
 
 ================================================================================
@@ -1397,7 +1400,7 @@ _Measures
 | 类型     | 名称                                               | 变更说明 |
 |----------|----------------------------------------------------|---------|
 | 计算表   | DIM_RowKPIs_Overview_Target                        | 新建；行改为 Actual/Target/±Actual vs Target |
-| 计算表   | DIM_ColMetric_Target                               | 重建；列改为9列（图示），Metric_Sort起始值7 |
+| 计算表   | DIM_ColMetric_Target                               | 重建；列改为9列（图示），Metric_Sort起始10步长10 |
 | 计算表   | Slicer_TargetPeriod_Selection                      | 新增；Week/Month/Quarter/Year |
 | 度量值   | KPIs Overview Target Actual Base Value             | 新建（原 Base Value 拆分）；仅返回 Actual 值，无行判断 |
 | 度量值   | KPIs Overview Target Target Base Value             | 新建（原 Base Value 拆分）；仅返回 Target 值，含粒度路由 |
@@ -1479,7 +1482,7 @@ _Measures
        │                   │
 ┌──────┴───────────────────┴───────────────────┐
 │         DIM_ColMetric_Target                  │
-│  Metric_ID │ Metric_Name │ Metric_Sort (7~)  │
+│  Metric_ID │ Metric_Name │ Metric_Sort (10~) │
 │  Metric_Format（Actual/Target 行格式）        │
 │  Metric_IsCurrencyAmount（汇率标记）          │
 │  Metric_Color* (4 色列)                       │
@@ -1489,9 +1492,9 @@ _Measures
 ┌──────┴─────────────────────────────────────┐
 │     DIM_RowKPIs_Overview_Target             │
 │  Indicator_Type  │ Indicator_Order          │
-│  "Actual"        │ 1                        │
-│  "Target"        │ 2                        │
-│  "±Actual vs Target" │ 3                   │
+│  "Actual"        │ 10                       │
+│  "Target"        │ 20                       │
+│  "±Actual vs Target" │ 30                  │
 └─────────────────────────────────────────────┘
 
 ┌──────────────────────────────┐
@@ -1614,11 +1617,14 @@ _Measures
 - 设置路径：选中度量值 → 度量值工具 → 数据类别 → 图像 URL
 - 未设置时图标列不显示图片
 
-14.6 Metric_Sort 排序起始值
+14.6 _Sort 排序字段规范
 ────────────────────────────
-- 遵循 domain-rules：涉及排序字段起始值从 7 开始
-- DIM_ColMetric_Target 的 Metric_Sort：7, 8, 9, ..., 15（共9列）
-- DIM_RowKPIs_Overview_Target 的 Indicator_Order：1, 2, 3（不影响，行数少）
+- 遵循项目规范：_Sort 字段起始值从 10 开始，步长 10（10, 20, 30...），便于后续插入
+- DIM_ColMetric_Target 的 Metric_Sort：10, 20, 30, ..., 90（起始10，步长10，共9列）
+- DIM_RowKPIs_Overview_Target 的 Indicator_Order：10, 20, 30（起始10，步长10）
+- Slicer_TargetPeriod_Selection 的 TargetPeriod_Sort：10, 20, 30, 40（起始10，步长10）
+- Slicer_Platform_Selection 的 Platform_Sort：10, 20, 30（与 TTL汇总方案一致）
+- Slicer_DataCaliber_Selection / Slicer_Currency_Selection：复用 TTL汇总方案（已为10, 20）
 
 ================================================================================
 15. 操作清单（Checklist）
@@ -1631,7 +1637,7 @@ _Measures
 
 维度表与切片器：
 - [ ] 新建 DIM_RowKPIs_Overview_Target 计算表（Actual / Target / ±Actual vs Target）
-- [ ] 重建 DIM_ColMetric_Target 计算表（9列，Metric_Sort 起始值 7）
+- [ ] 重建 DIM_ColMetric_Target 计算表（9列，Metric_Sort 起始10，步长10）
 - [ ] 重建 Slicer_Platform_Selection 计算表（新增 ALL 选项，单选模式）
 - [ ] 新增 Slicer_TargetPeriod_Selection 计算表（Week/Month/Quarter/Year）
 - [ ] 配置 Sort by Column（见 4.3 节）
