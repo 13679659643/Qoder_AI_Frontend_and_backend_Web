@@ -2,10 +2,26 @@ Media Mix_matrix_solution 解决方案：
 
 > status: updated
 > created: 2026-05-29
-> updated: 2026-05-29 (v1.1)
+> updated: 2026-06-01 (v1.2)
 > complexity: 🔴复杂
 > type: 度量值开发 + 可视化构建
 > naming: 遵循 powerbi_code_copilot/rules/dax-style.md 规范
+
+================================================================================
+变更日志（2026-06-01 v1.2）
+────────────────────────────
+11. [修订] 修正 DIM_ColMetric_Media_Mix DATATABLE 中 Metric_Sort 字段起始值
+    违规：原值 1,2,3...13，违反 domain-rule "排序字段起始值从7开始"
+    修正：改为 7,8,9,10,11,12,13,14,15,16,17,18,19（起始 7，步长 1）
+12. [修订] 修正 Section 4.2 断开维度列表
+    移除 Slicer_Platform_Selection 条目（v1.1 已废弃，本模块不使用此切片器）
+    新增注释说明 Platform 筛选通过 Dim_Media_Mix_Channel[Platform] 字段直接切片器实现
+13. [修订] 修正 Section 9.2 平台筛选技术说明
+    移除旧方案描述（辅助度量值 [Media Mix Channel Platform Filter] + 视觉层筛选器）
+    改写为 v1.1 正确方案：直接用 Dim_Media_Mix_Channel[Platform] 作切片器
+14. [修订] 修正 Section 11 血缘关系图
+    移除旧方案中的 Slicer_Platform_Selection 和 [Channel Platform Filter] 方框
+    补充正确的 Slicer_DataCaliber_Selection 和 Slicer_Currency_Selection 方框
 
 ================================================================================
 变更日志（2026-05-29）
@@ -247,23 +263,24 @@ DATATABLE(
     "Metric_ColorDefault",     STRING,
     {
         // ID  Name             Sort  Fmt_Current    Fmt_LP         Fmt_VsLP          IsCurAmt  Pos        Neg        Zero       Default
-        {  1, "Cost",            1,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#D64550", "#1A9018", "#E1C233", "#5f6165" },
+        // ⚠️ Metric_Sort 起始值从 7 开始（domain-rule：排序字段起始值从7开始）
+        {  1, "Cost",            7,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#D64550", "#1A9018", "#E1C233", "#5f6165" },
         // Cost 和 Cost% 为成本类指标：YOY 正向（成本上升）颜色设为红色，负向设绿色
-        {  2, "Cost%",           2,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" },
+        {  2, "Cost%",           8,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" },
         // ROI 正向为绿（ROI 越高越好）
-        {  3, "ROI",             3,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  4, "Impression",      4,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  5, "Click",           5,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  6, "Add to Cart",     6,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  7, "Orders",          7,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  8, "GMV",             8,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  9, "CTR",             9,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 10, "CPC",            10,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" },
+        {  3, "ROI",             9,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  4, "Impression",     10,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  5, "Click",          11,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  6, "Add to Cart",    12,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  7, "Orders",         13,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  8, "GMV",            14,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  9, "CTR",            15,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 10, "CPC",            16,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" },
         // CPC 为单次成本类：YOY 正向设红（成本上升不好），负向设绿
-        { 11, "CPATC",          11,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" },
+        { 11, "CPATC",          17,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" },
         // CPATC 为加购成本：同 CPC 颜色约定
-        { 12, "CVR",            12,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 13, "AOV",            13,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+        { 12, "CVR",            18,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 13, "AOV",            19,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" }
     }
 )
 
@@ -294,12 +311,13 @@ Sort by Column 配置：
 
 断开维度（无关系）：
     Dim_Date_Ly                   ← 同期日期，MIN/MAX 获取范围
-    Dim_Media_Mix_Channel         ← 矩阵行维度，Channel_ID 在度量值中解析
+    Dim_Media_Mix_Channel         ← 矩阵行维度 + Platform 切片器来源（[Platform] 字段直接作切片器）
     DIM_RowKPIs_Media_Mix         ← SELECTEDVALUE → Indicator Type
     DIM_ColMetric_Media_Mix       ← SELECTEDVALUE → Metric_ID
-    Slicer_Platform_Selection     ← SELECTEDVALUE → Platform_ID（复用 Overview 方案）
     Slicer_DataCaliber_Selection  ← SELECTEDVALUE → DataCaliber_ID（复用 Overview 方案）
     Slicer_Currency_Selection     ← SELECTEDVALUE → Currency_ExchangeRate（复用 Overview 方案）
+    // ⚠️ 注意：本模块不使用 Slicer_Platform_Selection（Overview 共用切片器对断开维度无效）
+    //          Platform 筛选通过 Dim_Media_Mix_Channel[Platform] 字段直接作切片器实现
 ```
 
 4.3 Dim_Media_Mix_Channel 与事实表的联动方式
@@ -897,11 +915,16 @@ YOY 颜色方向说明：
 
 9.2 Platform 筛选与维度表行过滤
 ────────────────────────────────
-- 方案设计：Dim_Media_Mix_Channel 为断开维度，切片器不能通过模型关系自动过滤
-- 通过 [Media Mix Channel Platform Filter] 辅助度量值 + 矩阵视觉层筛选器实现：
-  * 切片器选 ALL → 过滤度量值返回 1 → 所有行可见
-  * 切片器选 TM → TM 行返回 1（可见），JD 行返回 0（隐藏）
-  * 切片器选 JD → JD 行返回 1（可见），TM 行返回 0（隐藏）
+- 方案设计（v1.1 修订后）：
+  将 Dim_Media_Mix_Channel[Platform] 字段**直接作为 Power BI 切片器**（单选）
+- 工作原理：
+  * 用户选择 TM → Power BI 对断开维度 Dim_Media_Mix_Channel 施加筛选上下文（Platform="TM"）
+    → 矩阵中只有 Platform="TM" 的渠道行被激活（JD 行不显示）
+    → 度量值中 SELECTEDVALUE(Dim_Media_Mix_Channel[Platform]) 自然返回 "TM"
+  * 不需要辅助度量值，不需要视觉层筛选器
+  * 不选任何值 = ALL（TM + JD 同时显示）
+- ⚠️ 注意：Slicer_Platform_Selection（Overview 共用，断开维度）对本矩阵无效
+  因为两者均为断开维度，切片器无法通过模型关系传递到 Dim_Media_Mix_Channel
 
 9.3 同期日期覆盖
 ────────────────
@@ -1030,9 +1053,11 @@ YOY 颜色方向说明：
 │ Channel_ID / Platform    │  └────────────────────────────────┘
 │ Channel_Type(DETAIL/SUM) │
 │ Summary_Scope            │  ┌────────────────────────────────┐
-└──────────────────────────┘  │ Slicer_Platform_Selection      │
-                              │ （单选，ALL/TM/JD）            │
-                              │ → [Channel Platform Filter]    │
-                              │   控制矩阵行可见性              │
+│ [Platform] 字段直接       │  │ Slicer_DataCaliber_Selection   │
+│ 作为 Platform 切片器      │  │ （复用 Overview，单选 T+1）     │
+└──────────────────────────┘  └────────────────────────────────┘
+                              ┌────────────────────────────────┐
+                              │ Slicer_Currency_Selection      │
+                              │ （复用 Overview，含汇率乘数）   │
                               └────────────────────────────────┘
 ```

@@ -187,6 +187,28 @@
 
 ---
 
+## [2026-06-01 HH:MM ⚠️ 请补填具体时间] 修改 — Media Mix 矩阵方案 v1.2 规范合规修订
+
+- **模块**: Media Mix
+- **任务**: Media Mix 矩阵看板规范合规修订 — 修正 domain-rule 违规 + 消除 v1.1 后遗留的陈旧引用
+- **操作**: 修改
+- **变更内容**:
+  - `DIM_ColMetric_Media_Mix`（DATATABLE Metric_Sort 字段修正）：  
+    原值 `1,2,3...13` 违反 domain-rule「排序字段起始值从7开始」  
+    修正为 `7,8,9,10,11,12,13,14,15,16,17,18,19`（起始 7，步长 1）
+  - `Section 4.2 断开维度列表`（修正）：  
+    移除 `Slicer_Platform_Selection` 条目（v1.1 已废弃）；补充注释说明 Platform 筛选通过 `Dim_Media_Mix_Channel[Platform]` 直接切片器实现
+  - `Section 9.2 平台筛选技术说明`（修正）：  
+    移除旧方案描述（辅助度量值 + 视觉层筛选器）；改写为 v1.1 正确方案（直接切片器方案）
+  - `Section 11 血缘关系图`（修正）：  
+    移除 `Slicer_Platform_Selection` 和 `[Channel Platform Filter]` 旧方框；补充 `Slicer_DataCaliber_Selection` 和 `Slicer_Currency_Selection` 方框
+- **关联文件**: `Media Mix/Media_Mix_matrix_solution`
+- **备注**:  
+  - Metric_ColorPositive/Negative 按指标差异化（成本类反转）属于有意的业务设计，非违规；domain-rule 颜色为 fallback 默认值，维度表驱动差异化颜色是断开维度模式标准做法  
+  - 本次修订无 DAX 逻辑变更，仅修正排序字段值和陈旧文档内容
+
+---
+
 ## [Category Growth] 模块
 
 > 暂无变更记录
