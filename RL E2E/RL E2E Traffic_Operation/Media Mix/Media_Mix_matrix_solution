@@ -2,10 +2,70 @@ Media Mix_matrix_solution 解决方案：
 
 > status: updated
 > created: 2026-05-29
-> updated: 2026-06-01 (v1.5)
+> updated: 2026-06-01 (v1.8)
 > complexity: 🔴复杂
 > type: 度量值开发 + 可视化构建
 > naming: 遵循 powerbi_code_copilot/rules/dax-style.md 规范
+
+================================================================================
+最新变更摘要（v1.8 — 2026-06-01）
+================================================================================
+
+[架构修订] 修正 v1.7 遗留的 DAX 语法错误 + Cost% 口径修正 + SQL 结构升级：
+
+1. [修复] DAX IF() 无法返回表表达式 → 去掉 IF，统一 SELECTCOLUMNS
+   SQL 层 DETAIL 行 Summary_Scope 改为自身 Channel_ID → CONTAINSSTRING 自然命中
+
+2. [修正] Cost% 口径：分母从"平台 Total"改为"所属上级 SUMMARY（Parent）"
+   DETAIL 行 Cost% = 当前行 cost / Parent SUMMARY cost（如 直通车/RTB Total）
+   SUMMARY 行 Cost% = 100%（Parent 自指）
+
+3. [新增] SQL 新增 Parent_Channel_ID 字段
+   标识每行的 Cost% 分母归属（DETAIL→上级SUMMARY，SUMMARY→自身）
+
+================================================================================
+最新变更摘要（v1.7 — 2026-06-01）
+================================================================================
+
+[架构修订] Media Mix Base Value 重大架构问题修复：
+
+1. [致命修复] 移除 FILTER(ALL(事实表), ...) 滥用
+   - 原方案：ALL(a05_e2e_paid_media_channel_data_d) 把整张事实表的所有
+     筛选上下文一并清空，包括通过 Dim_Date_Current 关系传递的 data_date
+   - 后果：用户切换日期切片器时数据不变；Cell Value 层 LP 日期覆盖失效，
+     导致 Last Year ≡ This Year，YOY 永远为 0
+   - 修复：改用列级条件过滤（CALCULATE + 列条件），日期上下文通过关系
+     自然传递，用户切换日期切片器时矩阵正确响应
+
+2. [设计加固] CONTAINSSTRING 边界包裹（防子串误匹配）
+   - 原方案：CONTAINSSTRING(__SummaryScope, Channel_ID) 存在子串误匹配风险
+     如 Channel_ID = "TM_Z" 会误匹配 Summary_Scope = "TM_ZTC|TM_YLMF"
+   - 修复：DAX 侧拼接 "|" 作为边界，
+     CONTAINSSTRING("|" & __SummaryScope & "|", "|" & Channel_ID & "|")
+     SQL 侧 Summary_Scope 字段无需调整
+
+3. [架构精简] DETAIL / SUMMARY 路径合并为统一 channel IN __Labels
+   - 原方案：两个 CALCULATE（__Cost_Detail / __Cost_Summary），代码冗余
+   - 修复：DETAIL 行 Summary_Scope = 自身 Channel_ID，统一 SELECTCOLUMNS 处理
+     DETAIL 行 __Labels = {自身 Channel}（单元素）
+     SUMMARY 行 __Labels = {底层多个 Channel}（多元素）
+     后续 13 个指标的 CALCULATE 均复用此 __Labels，代码量减半
+
+4. [关联字段规范] __Labels 取 Channel 字段（原始渠道名）用于事实表筛选
+   - Channel_Label 仅用于页面展示（矩阵行头），不参与 DAX 筛选/关联
+   - Channel 字段与事实表 [channel] 字段保持一致，是正确的关联键
+
+================================================================================
+最新变更摘要（v1.6 — 2026-06-01）
+================================================================================
+
+- [修复] Summary_Scope 格式 Bug：统一改为 | 分隔（无空格），修正注释中的 | 与 SQL 一致
+- [修复] 嵌套 SUMMARY 展开 Bug：所有 SUMMARY 行的 Summary_Scope 只允许引用底层 DETAIL
+  Channel_ID，禁止引用中间 SUMMARY Channel_ID（如 TM_RTB_TOTAL），避免
+  CONTAINSSTRING + Channel_Type="DETAIL" 过滤后找不到任何行导致结果为 0
+  受影响行：TM JCGP Total / TM Total / TM Total 不含JCGP /
+           JD RTB Total+京选店铺 / JD Total / JD Total 不含JCGP
+- [同步] Media_Mix_SQL 所有 SUMMARY 行 Summary_Scope 已同步更新
 
 ================================================================================
 最新变更摘要（v1.5 — 2026-06-01）
@@ -50,7 +110,8 @@ Media Mix_matrix_solution 解决方案：
 │   ├── Channel_ID: 渠道唯一标识（用于 SUMMARY 聚合枚举）
 │   ├── Channel_Type: DETAIL / SUMMARY
 │   ├── Channel_Sort: 平台内排序
-│   └── Summary_Scope: SUMMARY 行聚合的 Channel_ID 列表（DAX 解析用）
+│   └── Summary_Scope: SUMMARY 行聚合的底层 DETAIL Channel_ID 枚举（| 分隔，DAX 解析用）
+│                       ⚠️ 只允许引用底层 DETAIL Channel_ID，禁止嵌套引用 SUMMARY Channel_ID
 ├── DIM_RowKPIs_Media_Mix（断开维度，行内层：This Year / Last Year / YOY）
 ├── Slicer_DataCaliber_Selection（断开，SELECTEDVALUE → trans_cycle 单选，复用 Overview）
 └── Slicer_Currency_Selection（断开，SELECTEDVALUE → Currency_ExchangeRate 汇率乘数，复用 Overview）
@@ -117,9 +178,12 @@ Media Mix Cell Value ── 行路由（This Year / Last Year / YOY）
 | Channel_Sort   | INTEGER | 平台内排序（控制矩阵行顺序）|
 | Channel_ID     | STRING  | 渠道唯一标识（如 TM_ZTC、TM_RTB_TOTAL）|
 | Channel_Type   | STRING  | DETAIL=明细行 / SUMMARY=汇总行 |
-| Summary_Scope  | STRING  | SUMMARY 行覆盖的 DETAIL Channel_ID 枚举（| 分隔）|
+| Summary_Scope  | STRING  | SUMMARY 行覆盖的底层 DETAIL Channel_ID 枚举（| 分隔，无空格）|
+|                |         | ⚠️ 只能包含底层 DETAIL Channel_ID，禁止引用 SUMMARY Channel_ID |
 |                |         | 例：RTB Total → "TM_ZTC|TM_YLMF|TM_QZT|TM_DSP" |
-|                |         | DETAIL 行为空字符串 "" |
+|                |         | 例：JCGP Total → "TM_PPZQ|TM_PPTX"（展开品销宝 Total 到底层）|
+|                |         | 例：Total → "TM_ZTC|TM_YLMF|TM_QZT|TM_DSP|TM_PPZQ|TM_PPTX" |
+|                |         | DETAIL 行为 NULL |
 
 关键说明：
 - 事实表 a05_e2e_paid_media_channel_data_d 的 [channel] 字段值 = Channel_Label（中文名）
@@ -127,6 +191,10 @@ Media Mix Cell Value ── 行路由（This Year / Last Year / YOY）
 - SUMMARY 行在事实表中不存在对应 channel 值（无"RTB Total"等行）
   度量值中通过解析 Summary_Scope 枚举对应 DETAIL 行的 Channel_Label，再 IN 过滤聚合
 - Channel_ID 仅用于 Summary_Scope 中的枚举标识，不直接过滤事实表
+- Summary_Scope 必须全部展开为底层 DETAIL Channel_ID：
+  DAX 中 CONTAINSSTRING(Summary_Scope, Channel_ID) + Channel_Type="DETAIL" 过滤后，
+  若 Summary_Scope 引用了 SUMMARY Channel_ID（如 TM_RTB_TOTAL），
+  DETAIL 过滤器会将其排除，导致该 SUMMARY 行计算结果为 0
 
 Sort by Column 配置：
 | 表                    | 字段           | Sort by Column  |
@@ -283,25 +351,25 @@ Sort by Column 配置：
 ─────────────────────────────────────────────
 - Dim_Media_Mix_Channel 为断开维度，不与事实表建立模型关系
 - 度量值通过以下方式获取当前行上下文：
-  * __ChannelID   = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_ID])
-  * __ChannelType = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Type])
   * __SummaryScope = SELECTEDVALUE(Dim_Media_Mix_Channel[Summary_Scope])
-  * __RowPlatform = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform])
-- DETAIL 行：FILTER 事实表 channel = 对应原始渠道名
-  注意：Channel_ID 为虚拟标识（如 TM_ZTC），事实表中 channel 字段值为中文名（如"直通车"）
-  需在度量值中建立 Channel_ID → 事实表 channel 值的映射
-- SUMMARY 行：解析 Summary_Scope（| 分隔的 Channel_ID 列表），枚举对应 DETAIL 行聚合
+  * __RowPlatform  = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform])
+  * __ParentID     = SELECTEDVALUE(Dim_Media_Mix_Channel[Parent_Channel_ID])
+- DETAIL / SUMMARY 统一路径（v1.8 架构）：
+  解析 Summary_Scope → CONTAINSSTRING 匹配 Channel_ID → 取 Channel 字段 → channel IN __Labels
+  ⚠️ 关联事实表必须使用 Dim_Media_Mix_Channel[Channel]（原始渠道名），
+     禁止使用 Channel_Label（展示标签，含去重后缀，不与事实表对应）
+  ⚠️ Summary_Scope 中只允许底层 DETAIL Channel_ID，禁止嵌套引用 SUMMARY Channel_ID
 
-4.4 Channel_ID 到事实表 channel 字段的映射
-──────────────────────────────────────────
-事实表 a05_e2e_paid_media_channel_data_d 中的 channel 字段为业务原始值，
-与 Dim_Media_Mix_Channel[Channel_Label] 一致（中文名称）。
-度量值中通过 FILTER 事实表 [channel] = [Channel_Label] 实现精确筛选，
-而非通过 Channel_ID 映射（Channel_ID 仅用于 SUMMARY 行的 Summary_Scope 枚举标识）。
+4.4 Channel 到事实表 channel 字段的映射
+────────────────────────────────────────
+事实表 a05_e2e_paid_media_channel_data_d 中的 channel 字段为业务原始渠道名，
+与 Dim_Media_Mix_Channel[Channel] 字段一致（中文名称，如"直通车"、"快车"）。
+⚠️ 关联/筛选必须使用 Channel 字段，禁止使用 Channel_Label：
+   Channel_Label 为展示标签，可能包含用于去重的全角空格等处理后缀，与事实表不一致。
 
-SUMMARY 行聚合时，将 Summary_Scope 中的 Channel_ID 转换为对应 Channel_Label 后，
-通过 Dim_Media_Mix_Channel 辅助查找，或直接在度量值中 SWITCH 枚举。
-见 5.1 节度量值中的 __ScopeLabels 辅助变量实现。
+SUMMARY 行聚合时，将 Summary_Scope（| 分隔的底层 DETAIL Channel_ID）通过
+CONTAINSSTRING + Channel_Type="DETAIL" 在 Dim_Media_Mix_Channel 中找到对应 Channel 集合，
+再用 channel IN __Labels 过滤事实表聚合。见 5.1 节度量值中的 __Labels 变量。
 
 ================================================================================
 5. 核心度量值
@@ -312,127 +380,141 @@ SUMMARY 行聚合时，将 Summary_Scope 中的 Channel_ID 转换为对应 Chann
 
 Media Mix Base Value = 
 // ========================================
-// 度量值: Media Mix Base Value
+// 度量值: Media Mix Base Value (v1.7)
 // Display Folder: Media Mix
-// 用途: 纯指标 SWITCH 分发器
-//       根据 DIM_ColMetric_Media_Mix[Metric_ID] 路由到 13 个指标计算逻辑
-//       根据 Dim_Media_Mix_Channel[Channel_Type] 决定聚合方式：
-//         DETAIL → FILTER 事实表 channel = Channel_Label（精确单渠道）
-//         SUMMARY → FILTER 事实表 channel IN 对应明细 Channel_Label 集合
+// 用途: 纯指标 SWITCH 分发器，13 列指标统一聚合分发
+//
+// 架构修订（v1.7 — 2026-06-01）：
+//   1. [致命修复] 不再使用 FILTER(ALL(事实表), ...)，改用 CALCULATE + 列级条件
+//      原因：ALL(事实表) 会把通过 Dim_Date_Current 关系传递的 data_date 筛选
+//            一并清空，导致用户切换日期切片器无效，且 Cell Value 层 LP 日期
+//            覆盖失效（Last Year ≡ This Year，YOY ≡ 0）
+//      修复：列级筛选不影响关系传递，data_date 由 Dim_Date_Current 自然控制
+//
+//   2. [设计加固] CONTAINSSTRING 边界包裹（防子串误匹配）
+//      "|" & __SummaryScope & "|" 包含 "|" & Channel_ID & "|"
+//      避免 Channel_ID="TM_Z" 误命中 Summary_Scope="TM_ZTC|TM_YLMF"
+//
+//   3. [架构精简] DETAIL / SUMMARY 路径合并为统一 channel IN __Labels
+//      DETAIL 行 Summary_Scope = 自身 Channel_ID → __Labels = {自身 Channel}（单元素）
+//      SUMMARY 行 Summary_Scope = 底层 DETAIL 枚举 → __Labels = {多个 Channel}（多元素）
+//      13 个指标的 CALCULATE 共用此 __Labels，代码量减半
+//
+//   4. [关联字段规范] __Labels 取 Channel 字段（原始渠道名）而非 Channel_Label（展示标签）
+//      Channel_Label 用于页面展示，可能含全角空格等后缀（如 JD 去重处理）
+//      Channel 与事实表 [channel] 字段保持一致，是正确的关联/筛选字段
 //
 // Platform 获取方式：
 //   __RowPlatform = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform])
-//   由矩阵行上下文自然传入（用户切换 Platform 切片器时，行上下文已被限定）
-//   无需读取外部切片器，无需 IF(ALL/单平台) 分支判断
-//   ⚠️ 若 Platform 切片器未选（显示所有行），__RowPlatform 在每个矩阵行上下文中仍
-//      唯一确定为该行的 Platform 值（TM 行 = "TM"，JD 行 = "JD"），聚合不会跨平台混淆
+//   由矩阵行上下文自然传入；无需读取外部切片器，无需 ALL/单平台分支判断
 //
-// Cost% 口径：当前行 cost_amt / 当前平台所有 DETAIL channel cost_amt 之和
-//   分母为 __RowPlatform 下所有 DETAIL 行的 channel 集合聚合（不受 Channel 切片器影响）
+// Cost% 口径：当前行 cost / Parent_Channel_ID 对应 SUMMARY 行的 cost
+//   分母通过 Parent_Channel_ID → __ParentScope → __ParentLabels 链路获取
+//   SUMMARY 行 Parent 自指 → Cost% = 100%
 //
 // 依赖: DIM_ColMetric_Media_Mix[Metric_ID]
-//       Dim_Media_Mix_Channel[Channel_ID/Channel_Type/Channel_Label/Summary_Scope/Platform]
+//       Dim_Media_Mix_Channel[Channel_ID/Channel_Type/Channel/Summary_Scope/Parent_Channel_ID/Platform]
 //       Slicer_DataCaliber_Selection[DataCaliber_ID]
 //       a05_e2e_paid_media_channel_data_d
+//       Dim_Date_Current（关系传递 data_date 筛选，本度量值不直接引用）
 // ========================================
 
     // ── 列上下文 ──
     VAR __MetricID      = SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ID])
 
     // ── 行上下文（来自 Dim_Media_Mix_Channel 断开维度）──
-    VAR __ChannelLabel  = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Label])
-    VAR __ChannelType   = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Type])
     VAR __SummaryScope  = SELECTEDVALUE(Dim_Media_Mix_Channel[Summary_Scope], "")
     VAR __RowPlatform   = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform])
 
     // ── 数据口径上下文 ──
     VAR __TransCycle    = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
 
-    // ── SUMMARY 行：解析 Summary_Scope 中的 Channel_ID，映射回 Channel_Label ──
-    // Summary_Scope 格式："TM_ZTC|TM_YLMF|TM_QZT|TM_DSP"（| 分隔 Channel_ID）
-    // 通过 Dim_Media_Mix_Channel 辅助表，将 Channel_ID 转换为 Channel_Label 集合
-    VAR __ScopeIDs      =
+    // ── 当前行需聚合的 Channel 集合（DETAIL/SUMMARY 路径统一）──
+    // Summary_Scope 规则：DETAIL 行 = 自身 Channel_ID；SUMMARY 行 = 底层 DETAIL 枚举
+    // | 边界包裹 + CONTAINSSTRING 精确匹配，无需 IF 判断 Channel_Type
+    // ⚠️ 取 Channel 字段（原始渠道名，与事实表 [channel] 一致）而非 Channel_Label（展示用，含全角空格后缀）
+    VAR __ScopedSummary = "|" & __SummaryScope & "|"
+    VAR __Labels =
         SELECTCOLUMNS(
             FILTER(
                 Dim_Media_Mix_Channel,
-                CONTAINSSTRING(__SummaryScope, Dim_Media_Mix_Channel[Channel_ID])
-                    && Dim_Media_Mix_Channel[Channel_Type] = "DETAIL"
+                Dim_Media_Mix_Channel[Channel_Type] = "DETAIL"
+                    && Dim_Media_Mix_Channel[Platform] = __RowPlatform
+                    && CONTAINSSTRING(
+                           __ScopedSummary,
+                           "|" & Dim_Media_Mix_Channel[Channel_ID] & "|"
+                       )
             ),
-            "@Label", Dim_Media_Mix_Channel[Channel_Label]
+            "@Channel", Dim_Media_Mix_Channel[Channel]
         )
-    // __ScopeIDs 为包含各 DETAIL 行 Channel_Label 的单列虚拟表
-    // 用于 FILTER 事实表 channel IN __ScopeIDs
 
-    // ── 构建事实表筛选条件（channel 字段过滤）──
-    // DETAIL 行：channel = 当前行 Channel_Label
-    // SUMMARY 行：channel IN 对应 DETAIL Channel_Label 集合
-    VAR __IsDetail      = (__ChannelType = "DETAIL")
-    VAR __IsSummary     = (__ChannelType = "SUMMARY")
-
-    // ── 辅助：计算单个指标在指定 channel 过滤下的 SUM ──
-    // DETAIL 路径
-    VAR __Cost_Detail   =
+    // ── Cost%：分母 = 当前行所属上级 SUMMARY 的 cost（通过 Parent_Channel_ID 定位）──
+    // Parent_Channel_ID 规则：DETAIL → 所属最近上级 SUMMARY；SUMMARY → 自身（Cost%=100%）
+    // 步骤：通过 Parent_Channel_ID 找到分母行的 Summary_Scope → 解析为 channel 集合 → 聚合 cost
+    VAR __ParentID = SELECTEDVALUE(Dim_Media_Mix_Channel[Parent_Channel_ID])
+    VAR __ParentScope =
         CALCULATE(
-            SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+            SELECTEDVALUE(Dim_Media_Mix_Channel[Summary_Scope]),
             FILTER(
-                ALL(a05_e2e_paid_media_channel_data_d),
-                a05_e2e_paid_media_channel_data_d[channel]      = __ChannelLabel
-                    && a05_e2e_paid_media_channel_data_d[platform]  = __RowPlatform
-                    && a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+                ALL(Dim_Media_Mix_Channel),
+                Dim_Media_Mix_Channel[Channel_ID] = __ParentID
+                    && Dim_Media_Mix_Channel[Platform] = __RowPlatform
             )
         )
-    // SUMMARY 路径
-    VAR __Cost_Summary  =
-        CALCULATE(
-            SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
-            FILTER(
-                ALL(a05_e2e_paid_media_channel_data_d),
-                a05_e2e_paid_media_channel_data_d[channel] IN __ScopeIDs
-                    && a05_e2e_paid_media_channel_data_d[platform]  = __RowPlatform
-                    && a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
-            )
-        )
-    VAR __Cost          = IF(__IsDetail, __Cost_Detail, IF(__IsSummary, __Cost_Summary, BLANK()))
-
-    // ── Cost%：分母为当前平台 Total（所有 DETAIL channel 之和）──
-    VAR __TotalScopeIDs =
+    VAR __ScopedParent = "|" & __ParentScope & "|"
+    VAR __ParentLabels =
         SELECTCOLUMNS(
             FILTER(
                 Dim_Media_Mix_Channel,
-                Dim_Media_Mix_Channel[Platform]      = __RowPlatform
-                    && Dim_Media_Mix_Channel[Channel_Type] = "DETAIL"
+                Dim_Media_Mix_Channel[Channel_Type] = "DETAIL"
+                    && Dim_Media_Mix_Channel[Platform] = __RowPlatform
+                    && CONTAINSSTRING(
+                           __ScopedParent,
+                           "|" & Dim_Media_Mix_Channel[Channel_ID] & "|"
+                       )
             ),
-            "@Label", Dim_Media_Mix_Channel[Channel_Label]
+            "@Channel", Dim_Media_Mix_Channel[Channel]
         )
-    VAR __TotalCost     =
+
+    // ────────────────────────────────────────────────
+    // 13 个指标的统一聚合（无 ALL，列级条件，日期通过关系传递）
+    // ────────────────────────────────────────────────
+    VAR __Cost =
         CALCULATE(
             SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
-            FILTER(
-                ALL(a05_e2e_paid_media_channel_data_d),
-                a05_e2e_paid_media_channel_data_d[channel] IN __TotalScopeIDs
-                    && a05_e2e_paid_media_channel_data_d[platform]  = __RowPlatform
-                    && a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
-            )
+            a05_e2e_paid_media_channel_data_d[channel] IN __Labels,
+            a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
+            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
         )
-    VAR __CostPct       = DIVIDE(__Cost, __TotalCost)
+    VAR __TotalCost =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+            a05_e2e_paid_media_channel_data_d[channel] IN __ParentLabels,
+            a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
+            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+        )
+    VAR __CostPct = DIVIDE(__Cost, __TotalCost)
 
     RETURN
     SWITCH(
         __MetricID,
 
         // ═══════════════════════════════════════════════════════
-        // ID 1: Cost — 花费金额
+        // ID 1: Cost — 花费金额（已有口径）
         // 口径: SUM(a05_e2e_paid_media_channel_data_d[cost_amt])
-        //       按当前行 channel（DETAIL）或 channel IN 枚举集（SUMMARY）过滤
-        //       Platform 由行维度 __RowPlatform 锁定
+        //       channel IN __Labels（DETAIL=单元素 / SUMMARY=多元素），
+        //       platform = __RowPlatform，trans_cycle = __TransCycle
+        //       data_date 通过 Dim_Date_Current 关系自然传递（不在此处显式筛选）
         // ═══════════════════════════════════════════════════════
         1, __Cost,
 
         // ═══════════════════════════════════════════════════════
-        // ID 2: Cost% — 花费占总花费的百分比
-        // 口径: 当前行 cost_amt / 当前平台所有 DETAIL channel cost_amt 之和
-        //       示例：直通车 Cost% = 直通车 cost / TM 所有 DETAIL channel cost 之和
-        //             RTB Total Cost% = RTB Total cost / TM 所有 DETAIL channel cost 之和
+        // ID 2: Cost% — 花费占所属上级 SUMMARY 花费的百分比（已有口径）
+        // 口径: __Cost / __TotalCost
+        //       __TotalCost = Parent_Channel_ID 对应 SUMMARY 行的 cost 聚合值
+        //       DETAIL 行分母 = 所属上级 SUMMARY 的 cost（如 直通车/RTB Total）
+        //       SUMMARY 行分母 = 自身 cost（Parent 自指 → Cost% = 100%）
+        //       示例：直通车 Cost% = 直通车 cost / RTB Total cost
         // ═══════════════════════════════════════════════════════
         2, __CostPct,
 
@@ -505,6 +587,31 @@ Media Mix Base Value =
         // ─── 默认 ──────────────────────────────────────────────
         BLANK()
     )
+
+────────────────────────────────────────────────────────────────────────────────
+后续指标口径填充模板（统一模式，与 __Cost 同构，复用 __Labels）
+────────────────────────────────────────────────────────────────────────────────
+
+新增指标 X（事实表 [字段] 求和）：
+    VAR __MetricX =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_channel_data_d[字段]),
+            a05_e2e_paid_media_channel_data_d[channel] IN __Labels,
+            a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
+            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+        )
+
+新增指标 Y（A/B 比率）：
+    VAR __MetricY =
+        CALCULATE(
+            DIVIDE(SUM([字段A]), SUM([字段B])),
+            a05_e2e_paid_media_channel_data_d[channel] IN __Labels,
+            a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
+            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+        )
+
+⚠️ 严禁在 CALCULATE 内部使用 FILTER(ALL(事实表), ...)，会破坏 Dim_Date_Current
+   通过关系传递的 data_date 上下文，导致 Cell Value 层 LP 日期覆盖失效
 
 ================================================================================
 5.2 行路由度量值 — Media Mix Cell Value
@@ -713,18 +820,21 @@ Media Mix Cell Background Color =
 // 度量值: Media Mix Cell Background Color
 // Display Folder: Media Mix > Formatting
 // 用途: 根据 Indicator Order 返回交替行背景色
-//       This Year(1)=白色, Last Year(2)=浅灰, YOY(3)=白色
+//       This Year(10)=白色, Last Year(20)=浅灰, YOY(30)=白色
 // 依赖: DIM_RowKPIs_Media_Mix[Indicator Order]
+// ⚠️ v1.8 调整：Indicator Order 从 1/2/3 改为 10/20/30，
+//    需用 INT(__EffRowID / 10) 还原行位次后再做 MOD 判断
 // ========================================
 
     VAR __RowID     = SELECTEDVALUE(DIM_RowKPIs_Media_Mix[Indicator Order])
     VAR __EffRowID  =
         IF(NOT ISBLANK(__RowID), __RowID, SUM(DIM_RowKPIs_Media_Mix[Indicator Order]))
+    VAR __RowPos    = INT(__EffRowID / 10)  // 还原行位次：10→1, 20→2, 30→3
     RETURN
         IF(
-            MOD(__EffRowID, 2) = 0,
-            "#F5F5F5",      // 偶数行（Last Year）：浅灰色
-            "#FFFFFF"       // 奇数行（This Year / YOY）：白色
+            MOD(__RowPos, 2) = 0,
+            "#F5F5F5",      // 偶数位次（Last Year = 20）：浅灰色
+            "#FFFFFF"       // 奇数位次（This Year = 10 / YOY = 30）：白色
         )
 
 ================================================================================
@@ -861,16 +971,27 @@ YOY 颜色方向说明：
 9. 关键技术说明
 ================================================================================
 
-9.1 SUMMARY 行聚合机制
-──────────────────────
+9.1 SUMMARY 行聚合机制（v1.8 架构）
+────────────────────────────────────
 - 事实表 a05_e2e_paid_media_channel_data_d 的 channel 字段不含 "RTB Total"、
   "JCGP Total"、"Total" 等汇总值，仅含明细渠道名（如"直通车"、"快车"等）
-- SUMMARY 行的聚合通过以下步骤实现：
-  1. SELECTEDVALUE(Dim_Media_Mix_Channel[Summary_Scope]) 获取当前 SUMMARY 行的覆盖范围
-     例：RTB Total 的 Summary_Scope = "TM_ZTC|TM_YLMF|TM_QZT|TM_DSP"
-  2. FILTER(Dim_Media_Mix_Channel, CONTAINSSTRING(__SummaryScope, Channel_ID) AND Channel_Type="DETAIL")
-     找出对应的所有 DETAIL 行，提取其 Channel_Label（即事实表 channel 字段值）
-  3. FILTER(事实表, channel IN __ScopeLabels) 进行多渠道聚合 SUM
+- v1.8 架构：DETAIL / SUMMARY 路径统一为 channel IN __Labels
+  1. SELECTEDVALUE(Dim_Media_Mix_Channel[Summary_Scope]) 获取当前行覆盖范围
+     DETAIL 行：Summary_Scope = 自身 Channel_ID（如 "TM_ZTC"）
+     SUMMARY 行：Summary_Scope = 底层 DETAIL 枚举（如 "TM_ZTC|TM_YLMF|TM_QZT|TM_DSP"）
+  2. CONTAINSSTRING 边界包裹精确匹配：
+     "|" & Summary_Scope & "|" 包含 "|" & Channel_ID & "|"
+     同时过滤 Channel_Type="DETAIL" + Platform=__RowPlatform
+     结果 → __Labels 虚拟表（Channel 单列，存原始渠道名）
+  3. CALCULATE(SUM([字段]), [channel] IN __Labels, [platform]=..., [trans_cycle]=...)
+     统一聚合，无 DETAIL/SUMMARY 分支，无 ALL(事实表)
+
+- ⚠️ 关键约束：
+  a. Summary_Scope 中只能含底层 DETAIL Channel_ID，禁止引用 SUMMARY（v1.6 修复）
+  b. 禁止在 CALCULATE 中使用 FILTER(ALL(事实表), ...)（v1.7 修复，会破坏日期传递）
+  c. CONTAINSSTRING 必须边界包裹 "|"，防止子串误匹配（v1.7 加固）
+  d. __Labels 必须取 Dim_Media_Mix_Channel[Channel]（原始渠道名）关联事实表，
+     禁止使用 Channel_Label（展示标签，可能含全角空格等处理后缀）（v1.8.2 修正）
 
 9.2 Platform 筛选与维度表行过滤
 ────────────────────────────────
@@ -896,6 +1017,57 @@ YOY 颜色方向说明：
 - 暂无口径的指标（ID 3~13，除 ID 2 外）均返回 1
 - This Year = 1，Last Year = 1，YOY = 0%（黄色零值）
 - 用于验证格式化、颜色、矩阵结构是否正确
+
+9.5 常见问题排查（FAQ）
+──────────────────────
+
+【现象】仅个别 DETAIL 行（如超级短视频）有 Cost 值，其他行全为空白
+
+【已修复 v1.8.2】根本原因：__Labels 使用了 Channel_Label 字段关联事实表，
+而 Channel_Label 是展示标签（Task 2 中已为 JD 重名行添加全角空格后缀），
+导致与事实表 channel 字段（原始渠道名）不匹配 → 除偶然一致的行外全为空值。
+修复：__Labels / __ParentLabels 统一改为取 Dim_Media_Mix_Channel[Channel] 字段，
+Channel 字段存储原始渠道名，与事实表 [channel] 字段保持一致。
+
+若刷新后仍有问题，按以下步骤排查：
+┌──────────────────────────────────────────────────────────────┐
+│ 原因B：Dim_Media_Mix_Channel 未刷新，DETAIL 行 Summary_Scope  │
+│   仍为 NULL → __Labels 为空表 → CALCULATE 返回 BLANK          │
+│   → 排查：EVALUATE Dim_Media_Mix_Channel                     │
+│     确认 DETAIL 行 Summary_Scope = 自身 Channel_ID（非空）    │
+├──────────────────────────────────────────────────────────────┤
+│ 原因C：Parent_Channel_ID 字段未加载（v1.8 新增字段）          │
+│   → 仅影响 Cost%（Cost 绝对值不受影响）                       │
+└──────────────────────────────────────────────────────────────┘
+
+排查 DAX（在 Power BI Desktop DAX 查询编辑器中执行）：
+// 步骤1：检查 Dim_Media_Mix_Channel 是否已刷新
+EVALUATE
+    SELECTCOLUMNS(
+        FILTER(Dim_Media_Mix_Channel, Dim_Media_Mix_Channel[Channel_Type] = "DETAIL"),
+        "Channel_ID",    Dim_Media_Mix_Channel[Channel_ID],
+        "Channel",       Dim_Media_Mix_Channel[Channel],
+        "Summary_Scope", Dim_Media_Mix_Channel[Summary_Scope],
+        "Parent_ID",     Dim_Media_Mix_Channel[Parent_Channel_ID]
+    )
+// 预期：每行 DETAIL 的 Summary_Scope = 自身 Channel_ID（非空）
+
+// 步骤2：检查事实表 channel 值与维度表 Channel 字段是否完全一致
+EVALUATE DISTINCT(a05_e2e_paid_media_channel_data_d[channel])
+// 对比 EVALUATE DISTINCT(Dim_Media_Mix_Channel[Channel])
+// 两者应完全一致（包含大小写、空格等）
+
+// 步骤3：手动验证直通车 cost
+EVALUATE
+    CALCULATETABLE(
+        SUMMARIZE(
+            a05_e2e_paid_media_channel_data_d,
+            a05_e2e_paid_media_channel_data_d[channel],
+            "cost", SUM(a05_e2e_paid_media_channel_data_d[cost_amt])
+        ),
+        a05_e2e_paid_media_channel_data_d[platform] = "TM"
+    )
+// 若直通车有值说明数据存在，问题为原因B（维度表未刷新）
 
 ================================================================================
 10. 操作清单（Checklist）
@@ -938,7 +1110,8 @@ YOY 颜色方向说明：
 验证：
 - [ ] 验证：直通车 Cost 数值正确（DETAIL 路径，单渠道）
 - [ ] 验证：RTB Total Cost = 直通车 + 引力魔方 + 全站推/万象台 + 超级短视频（SUMMARY 路径）
-- [ ] 验证：直通车 Cost% = 直通车 Cost / TM 所有 DETAIL channel Cost
+- [ ] 验证：直通车 Cost% = 直通车 Cost / RTB Total Cost（Parent_Channel_ID = TM_RTB_TOTAL）
+- [ ] 验证：RTB Total Cost% = 100%（SUMMARY 行 Parent 自指）
 - [ ] 验证：切换 Platform 切片器（TM/JD），矩阵行正确显示对应平台渠道
 - [ ] 验证：不选 Platform 时（ALL 等效），TM + JD 全部渠道均显示
 - [ ] 验证：This Year / Last Year / YOY 行路由正确
@@ -968,8 +1141,7 @@ YOY 颜色方向说明：
 │ sales_amt / nc_cost_amt / ec_cost_amt│
 └──────────────────────────────────────┘
          ▲
-         │ FILTER channel = __ChannelLabel（DETAIL）
-         │ FILTER channel IN __ScopeLabels（SUMMARY）
+         │ FILTER channel IN __Labels（DETAIL=单元素 / SUMMARY=多元素）
          │ FILTER platform = __RowPlatform
          │ FILTER trans_cycle = __TransCycle
          │
@@ -980,8 +1152,8 @@ YOY 颜色方向说明：
 │  └─ MetricID 3~13: 1（占位值）                   │
 │                                                  │
 │  Channel 上下文: Dim_Media_Mix_Channel（断开）    │
-│  ├─ DETAIL 行 → channel = Channel_Label          │
-│  └─ SUMMARY 行 → channel IN ScopeLabels          │
+│  ├─ DETAIL 行 → __Labels = {Channel}（单元素）   │
+│  └─ SUMMARY 行 → __Labels = {Channel×N}（多元素）│
 └────────┬────────────────────────────────────────┘
          ▼
 ┌──────────────────────────────────────────────────┐

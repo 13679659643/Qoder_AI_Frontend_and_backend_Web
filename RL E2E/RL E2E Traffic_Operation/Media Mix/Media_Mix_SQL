@@ -1,28 +1,42 @@
 -- ============================================================
 -- 文件: Media_Mix_SQL
 -- 用途: Media Mix Channel 维度配置 —— 当前阶段写死结构与数据
+-- 更新: 2026-06-01 (v1.8)
+--   1. Summary_Scope：DETAIL 行从 NULL 改为自身 Channel_ID（统一 DAX 聚合路径）
+--   2. 新增 Parent_Channel_ID 字段：标识每行 Cost% 分母所属的 SUMMARY 行
+--      SUMMARY 行自指（Cost% = 100%），DETAIL 行指向最近上级 SUMMARY
+-- 更新: 2026-06-01 (v1.8.1)
+--   3. 解决 Power BI Sort-by-Column 冲突：Channel_Label 跨平台重名（如 Total/RTB Total/JCGP Total）
+--      → JD 侧同名 Channel_Label 末尾追加全角空格（U+3000），视觉无差异但字符串唯一
+--      → JD 内两个"品牌动态秀"：第二个（JD_PPDTX_2）同样追加全角空格
+--      ⚠️ DAX __Labels 中 CONTAINSSTRING 匹配的是 Channel_ID，不受 Channel_Label 变化影响
+--         但事实表的 [channel] 字段若用 Channel_Label 关联，需确认值与此处一致
 --
 -- 输出字段说明:
---   Channel_PK        行唯一主键（自增序号）
---   Platform          平台：TM / JD
---   Platform_Sort     平台排序（TM=1, JD=2）
---   Channel           渠道名称（业务原始名称）
---   Channel_Sort      渠道在本平台内的排序（控制矩阵行顺序）
---   Channel_Label     渠道展示标签（Power BI 切片器 / 矩阵行头显示值）
+--   Channel_PK          行唯一主键（自增序号）
+--   Platform            平台：TM / JD
+--   Platform_Sort       平台排序（TM=1, JD=2）
+--   Channel             渠道名称（业务原始名称）
+--   Channel_Sort        渠道在本平台内的排序（控制矩阵行顺序）
+--   Channel_Label       渠道展示标签（Power BI 切片器 / 矩阵行头显示值）
 --   Channel_Description 渠道业务描述
---   Channel_Type      行类型：DETAIL=明细行 / SUMMARY=汇总行
---                     红框圈起来的（RTB Total、品销宝 Total、JCGP Total、Total、Total 不含JCGP 等）
---                     均为 SUMMARY，其余为 DETAIL
+--   Channel_Type        行类型：DETAIL=明细行 / SUMMARY=汇总行
+--   Channel_ID          渠道唯一标识
+--   Summary_Scope       当前行的聚合范围（| 分隔，无空格）：
+--                       DETAIL 行 = 自身 Channel_ID（如 "TM_ZTC"）
+--                       SUMMARY 行 = 底层 DETAIL Channel_ID 枚举（如 "TM_ZTC|TM_YLMF|..."）
+--                       ⚠️ DAX 统一用 CONTAINSSTRING("|" & Summary_Scope & "|", "|" & Channel_ID & "|")
+--                          + Channel_Type="DETAIL" 解析，无需 IF 判断 DETAIL/SUMMARY
+--   Parent_Channel_ID   Cost% 分母所属 SUMMARY 行的 Channel_ID：
+--                       DETAIL 行 → 所属最近上级 SUMMARY 的 Channel_ID
+--                       SUMMARY 行 → 自身 Channel_ID（Cost% = 自己/自己 = 100%）
+--                       DAX 端：通过 Parent_Channel_ID 找到分母行的 Summary_Scope，
+--                       再用 Summary_Scope 聚合出分母 cost
 --
 -- 扩展性说明:
---   1. 后续从事实表动态读取 Channel 时，将本 SELECT 替换为
---      JOIN dim_channel_config（或直接 DISTINCT channel FROM 事实表），
---      channel_id 字段与事实表 channel 字段值保持一致，可直接 JOIN。
---   2. SUMMARY 行的聚合逻辑由 summary_scope 字段描述，
---      DAX 端可据此在 CALCULATE + FILTER 中枚举对应明细 channel_id。
---   3. 新增渠道只需追加行，channel_sort 按间隔 10 预留空位。
---   4. Platform ALL 筛选遵循项目规范：
---      FILTER(platform IN {"TM","JD"})，禁止无条件不筛选。
+--   1. 新增渠道只需追加行，Channel_Sort 按间隔 10 预留空位。
+--   2. Platform ALL 筛选遵循项目规范：FILTER(platform IN {"TM","JD"})。
+--   3. Summary_Scope 只能包含底层 DETAIL Channel_ID，禁止引用 SUMMARY Channel_ID。
 -- ============================================================
 
 SELECT *
@@ -48,69 +62,70 @@ FROM (
            'TM平台-直通车：按点击计费的搜索/展示推广工具，适用于精准流量投放' AS Channel_Description,
            'DETAIL'        AS Channel_Type,
            'TM_ZTC'        AS Channel_ID,
-           NULL            AS Summary_Scope
+           'TM_ZTC'        AS Summary_Scope,
+           'TM_RTB_TOTAL'  AS Parent_Channel_ID
 
     UNION ALL SELECT 2, 'TM', 1,
            '引力魔方', 20, '引力魔方',
            'TM平台-引力魔方：智能展示广告，基于算法的定向推荐广告产品',
-           'DETAIL', 'TM_YLMF', NULL
+           'DETAIL', 'TM_YLMF', 'TM_YLMF', 'TM_RTB_TOTAL'
 
     UNION ALL SELECT 3, 'TM', 1,
            '全站推/万象台', 30, '全站推/万象台',
            'TM平台-全站推/万象台：全域流量整合投放，涵盖站内外多场景曝光',
-           'DETAIL', 'TM_QZT', NULL
+           'DETAIL', 'TM_QZT', 'TM_QZT', 'TM_RTB_TOTAL'
 
     UNION ALL SELECT 4, 'TM', 1,
            '超级短视频', 40, '超级短视频',
            'TM平台-超级短视频：短视频形式的品效合一广告产品',
-           'DETAIL', 'TM_DSP', NULL
+           'DETAIL', 'TM_DSP', 'TM_DSP', 'TM_RTB_TOTAL'
 
-    -- TM 汇总行：RTB Total（图一红框，聚合上方4个明细）
+    -- TM 汇总行：RTB Total
     UNION ALL SELECT 5, 'TM', 1,
            'RTB Total', 50, 'RTB Total',
            'TM平台-RTB合计：直通车 + 引力魔方 + 全站推/万象台 + 超级短视频 之和',
            'SUMMARY', 'TM_RTB_TOTAL',
-           'TM_ZTC + TM_YLMF + TM_QZT + TM_DSP'
+           'TM_ZTC|TM_YLMF|TM_QZT|TM_DSP', 'TM_RTB_TOTAL'
 
     -- TM 明细行：品牌专区
     UNION ALL SELECT 6, 'TM', 1,
            '品牌专区', 60, '品牌专区',
            'TM平台-品牌专区：品牌展示广告位，强化品牌曝光与认知',
-           'DETAIL', 'TM_PPZQ', NULL
+           'DETAIL', 'TM_PPZQ', 'TM_PPZQ', 'TM_PXB_TOTAL'
 
-    -- TM 汇总行：品销宝 Total（图一红框）
+    -- TM 汇总行：品销宝 Total
     UNION ALL SELECT 7, 'TM', 1,
            '品销宝 Total', 70, '品销宝 Total',
            'TM平台-品销宝合计：品牌专区相关渠道汇总（品销宝产品线整体）',
            'SUMMARY', 'TM_PXB_TOTAL',
-           'TM_PPZQ'
+           'TM_PPZQ', 'TM_PXB_TOTAL'
 
     -- TM 明细行：品牌特秀
     UNION ALL SELECT 8, 'TM', 1,
            '品牌特秀', 80, '品牌特秀',
            'TM平台-品牌特秀：高端品牌定制广告形式，强曝光强互动的品牌营销产品',
-           'DETAIL', 'TM_PPTX', NULL
+           'DETAIL', 'TM_PPTX', 'TM_PPTX', 'TM_JCGP_TOTAL'
 
-    -- TM 汇总行：JCGP Total（图一红框，品销宝 Total + 品牌特秀）
+    -- TM 汇总行：JCGP Total
     UNION ALL SELECT 9, 'TM', 1,
            'JCGP Total', 90, 'JCGP Total',
            'TM平台-JCGP合计：品销宝 Total + 品牌特秀（品牌类渠道整体汇总）',
            'SUMMARY', 'TM_JCGP_TOTAL',
-           'TM_PXB_TOTAL + TM_PPTX'
+           'TM_PPZQ|TM_PPTX', 'TM_JCGP_TOTAL'
 
-    -- TM 汇总行：Total（图一红框，全部 TM 渠道合计）
+    -- TM 汇总行：Total
     UNION ALL SELECT 10, 'TM', 1,
            'Total', 100, 'Total',
            'TM平台-全渠道合计：RTB Total + JCGP Total，即 TM 平台所有渠道总和',
            'SUMMARY', 'TM_TOTAL',
-           'TM_RTB_TOTAL + TM_JCGP_TOTAL'
+           'TM_ZTC|TM_YLMF|TM_QZT|TM_DSP|TM_PPZQ|TM_PPTX', 'TM_TOTAL'
 
-    -- TM 汇总行：Total 不含JCGP（图一红框，Total - JCGP Total）
+    -- TM 汇总行：Total 不含JCGP
     UNION ALL SELECT 11, 'TM', 1,
            'Total 不含JCGP', 110, 'Total 不含JCGP',
            'TM平台-全渠道合计（剔除JCGP）：Total - JCGP Total，即纯效果类渠道（RTB类）合计',
            'SUMMARY', 'TM_TOTAL_EX_JCGP',
-           'TM_TOTAL - TM_JCGP_TOTAL'
+           'TM_ZTC|TM_YLMF|TM_QZT|TM_DSP', 'TM_TOTAL_EX_JCGP'
 
 
     -- ================================================================
@@ -132,115 +147,119 @@ FROM (
     UNION ALL SELECT 12, 'JD', 2,
            '快车', 10, '快车',
            'JD平台-快车：京东搜索广告，按点击计费的竞价排名产品，对标TM直通车',
-           'DETAIL', 'JD_QC', NULL
+           'DETAIL', 'JD_QC', 'JD_QC', 'JD_RTB_TOTAL'
 
     UNION ALL SELECT 13, 'JD', 2,
            '触点', 20, '触点',
            'JD平台-触点：基于用户行为的智能定向展示广告，多触点渠道覆盖',
-           'DETAIL', 'JD_CD', NULL
+           'DETAIL', 'JD_CD', 'JD_CD', 'JD_RTB_TOTAL'
 
     UNION ALL SELECT 14, 'JD', 2,
            '海投', 30, '海投',
            'JD平台-海投：海量智投，程序化展示广告，宽泛流量覆盖',
-           'DETAIL', 'JD_HT', NULL
+           'DETAIL', 'JD_HT', 'JD_HT', 'JD_RTB_TOTAL'
 
     UNION ALL SELECT 15, 'JD', 2,
            '直投', 40, '直投',
            'JD平台-直投：直接投放合约广告，固定资源位曝光',
-           'DETAIL', 'JD_ZT', NULL
+           'DETAIL', 'JD_ZT', 'JD_ZT', 'JD_RTB_TOTAL'
 
-    -- JD 汇总行：RTB Total（图二红框，快车 + 触点 + 海投 + 直投）
+    -- JD 汇总行：RTB Total
+    -- ⚠️ Channel_Label 末尾加全角空格，与 TM 的 'RTB Total' 区分，避免 Sort-by-Column 冲突
     UNION ALL SELECT 16, 'JD', 2,
-           'RTB Total', 50, 'RTB Total',
+           'RTB Total', 50, 'RTB Total　',
            'JD平台-RTB合计：快车 + 触点 + 海投 + 直投 之和',
            'SUMMARY', 'JD_RTB_TOTAL',
-           'JD_QC + JD_CD + JD_HT + JD_ZT'
+           'JD_QC|JD_CD|JD_HT|JD_ZT', 'JD_RTB_TOTAL'
 
-    -- JD 汇总行：RTB Total + 京选店铺（图二红框）
+    -- JD 汇总行：RTB Total + 京选店铺
     UNION ALL SELECT 17, 'JD', 2,
            'RTB Total + 京选店铺', 60, 'RTB Total + 京选店铺',
            'JD平台-RTB合计（含京选店铺）：RTB Total + 京选店铺，含京选店铺口径的效果类汇总',
            'SUMMARY', 'JD_RTB_TOTAL_INC_JXMP',
-           'JD_RTB_TOTAL + JD_JXMP'
+           'JD_QC|JD_CD|JD_HT|JD_ZT|JD_JXMP', 'JD_RTB_TOTAL_INC_JXMP'
 
     -- JD 明细行
     UNION ALL SELECT 18, 'JD', 2,
            '京选店铺', 70, '京选店铺',
            'JD平台-京选店铺：基于店铺精选的推荐流量产品，定向高意向用户',
-           'DETAIL', 'JD_JXMP', NULL
+           'DETAIL', 'JD_JXMP', 'JD_JXMP', 'JD_RTB_TOTAL_INC_JXMP'
 
     UNION ALL SELECT 19, 'JD', 2,
            '搜索品专', 80, '搜索品专',
            'JD平台-搜索品专：搜索场景下的品牌专区资源，强化搜索场景品牌曝光',
-           'DETAIL', 'JD_SSPPZQ', NULL
+           'DETAIL', 'JD_SSPPZQ', 'JD_SSPPZQ', 'JD_JCGP_TOTAL'
 
     UNION ALL SELECT 20, 'JD', 2,
            'Branzone', 90, 'Branzone',
            'JD平台-Branzone：品牌专区（品牌旗舰展示区），强化品牌形象与认知',
-           'DETAIL', 'JD_BRANZONE', NULL
+           'DETAIL', 'JD_BRANZONE', 'JD_BRANZONE', 'JD_JCGP_TOTAL'
 
     UNION ALL SELECT 21, 'JD', 2,
            '联合活动', 100, '联合活动',
            'JD平台-联合活动：品牌与京东联合营销活动资源，节点大促常见形式',
-           'DETAIL', 'JD_LHHD', NULL
+           'DETAIL', 'JD_LHHD', 'JD_LHHD', 'JD_JCGP_TOTAL'
 
     UNION ALL SELECT 22, 'JD', 2,
            '开屏', 110, '开屏',
            'JD平台-开屏：京东App开屏广告，首屏强曝光品牌广告位',
-           'DETAIL', 'JD_KP', NULL
+           'DETAIL', 'JD_KP', 'JD_KP', 'JD_JCGP_TOTAL'
 
     UNION ALL SELECT 23, 'JD', 2,
            '吸顶通栏', 120, '吸顶通栏',
            'JD平台-吸顶通栏：页面顶部固定展示的通栏品牌广告位',
-           'DETAIL', 'JD_XDTL', NULL
+           'DETAIL', 'JD_XDTL', 'JD_XDTL', 'JD_JCGP_TOTAL'
 
     UNION ALL SELECT 24, 'JD', 2,
            '营销阵地', 130, '营销阵地',
            'JD平台-营销阵地：综合营销场景资源，支持品效一体化投放',
-           'DETAIL', 'JD_YXZD', NULL
+           'DETAIL', 'JD_YXZD', 'JD_YXZD', 'JD_JCGP_TOTAL'
 
+    -- ⚠️ JD 内两个同名渠道"品牌动态秀"：第二个 Channel_Label 末尾加全角空格以区分，
+    --    视觉上无差异，但 Power BI 排序字段可唯一对应
     UNION ALL SELECT 25, 'JD', 2,
            '品牌动态秀', 140, '品牌动态秀',
            'JD平台-品牌动态秀（一）：动态创意品牌展示广告，增强品牌互动体验',
-           'DETAIL', 'JD_PPDTX_1', NULL
+           'DETAIL', 'JD_PPDTX_1', 'JD_PPDTX_1', 'JD_JCGP_TOTAL'
 
     UNION ALL SELECT 26, 'JD', 2,
            '首焦', 150, '首焦',
            'JD平台-首焦：京东首页焦点图广告位，高曝光高品质品牌资源',
-           'DETAIL', 'JD_SJ', NULL
+           'DETAIL', 'JD_SJ', 'JD_SJ', 'JD_JCGP_TOTAL'
 
     UNION ALL SELECT 27, 'JD', 2,
            '京腾-腾讯闪屏', 160, '京腾-腾讯闪屏',
            'JD平台-京腾联合腾讯闪屏：京腾合作投放，通过腾讯系App闪屏触达目标用户',
-           'DETAIL', 'JD_JTSS', NULL
+           'DETAIL', 'JD_JTSS', 'JD_JTSS', 'JD_JCGP_TOTAL'
 
     UNION ALL SELECT 28, 'JD', 2,
-           '品牌动态秀', 170, '品牌动态秀',
+           '品牌动态秀', 170, '品牌动态秀　',
            'JD平台-品牌动态秀（二）：与品牌动态秀（一）为同名渠道，如业务上为同一产品请确认是否合并',
-           'DETAIL', 'JD_PPDTX_2', NULL
+           'DETAIL', 'JD_PPDTX_2', 'JD_PPDTX_2', 'JD_JCGP_TOTAL'
 
-    -- JD 汇总行：JCGP Total（图二红框）
-    -- 聚合范围：京选店铺 + 搜索品专 + Branzone + 联合活动 + 开屏 + 吸顶通栏
-    --         + 营销阵地 + 品牌动态秀(1) + 首焦 + 京腾-腾讯闪屏 + 品牌动态秀(2)
+    -- JD 汇总行：JCGP Total
+    -- ⚠️ Channel_Label 末尾加全角空格，与 TM 的 'JCGP Total' 区分
     UNION ALL SELECT 29, 'JD', 2,
-           'JCGP Total', 180, 'JCGP Total',
+           'JCGP Total', 180, 'JCGP Total　',
            'JD平台-JCGP合计：京选店铺+搜索品专+Branzone+联合活动+开屏+吸顶通栏+营销阵地+品牌动态秀×2+首焦+京腾-腾讯闪屏',
            'SUMMARY', 'JD_JCGP_TOTAL',
-           'JD_JXMP + JD_SSPPZQ + JD_BRANZONE + JD_LHHD + JD_KP + JD_XDTL + JD_YXZD + JD_PPDTX_1 + JD_SJ + JD_JTSS + JD_PPDTX_2'
+           'JD_JXMP|JD_SSPPZQ|JD_BRANZONE|JD_LHHD|JD_KP|JD_XDTL|JD_YXZD|JD_PPDTX_1|JD_SJ|JD_JTSS|JD_PPDTX_2', 'JD_JCGP_TOTAL'
 
-    -- JD 汇总行：Total（图二红框，全部 JD 渠道合计）
+    -- JD 汇总行：Total
+    -- ⚠️ Channel_Label 末尾加全角空格，与 TM 的 'Total' 区分
     UNION ALL SELECT 30, 'JD', 2,
-           'Total', 190, 'Total',
+           'Total', 190, 'Total　',
            'JD平台-全渠道合计：RTB Total + JCGP Total，即 JD 平台所有渠道总和',
            'SUMMARY', 'JD_TOTAL',
-           'JD_RTB_TOTAL + JD_JCGP_TOTAL'
+           'JD_QC|JD_CD|JD_HT|JD_ZT|JD_JXMP|JD_SSPPZQ|JD_BRANZONE|JD_LHHD|JD_KP|JD_XDTL|JD_YXZD|JD_PPDTX_1|JD_SJ|JD_JTSS|JD_PPDTX_2', 'JD_TOTAL'
 
-    -- JD 汇总行：Total 不含JCGP（图二红框，Total - JCGP Total）
+    -- JD 汇总行：Total 不含JCGP
+    -- ⚠️ Channel_Label 末尾加全角空格，与 TM 的 'Total 不含JCGP' 区分
     UNION ALL SELECT 31, 'JD', 2,
-           'Total 不含JCGP', 200, 'Total 不含JCGP',
+           'Total 不含JCGP', 200, 'Total 不含JCGP　',
            'JD平台-全渠道合计（剔除JCGP）：Total - JCGP Total，纯效果类渠道（RTB类）合计',
            'SUMMARY', 'JD_TOTAL_EX_JCGP',
-           'JD_TOTAL - JD_JCGP_TOTAL'
+           'JD_QC|JD_CD|JD_HT|JD_ZT', 'JD_TOTAL_EX_JCGP'
 
 ) AS dim_channel_config
 ORDER BY Platform_Sort, Channel_Sort;
@@ -269,8 +288,9 @@ ORDER BY Platform_Sort, Channel_Sort;
 --   将本 SELECT 写入 dim_channel_config 表后，
 --   后续新增渠道只需 INSERT 行，DAX 端无需改动。
 --
--- 汇总行 DAX 判断示例（Channel_Type = 'SUMMARY' 时）：
---   VAR __IsSummary = SELECTEDVALUE(dim_channel_config[Channel_Type]) = "SUMMARY"
---   VAR __SummaryScope = SELECTEDVALUE(dim_channel_config[Summary_Scope])
---   -- 根据 Summary_Scope 中的 Channel_ID 列表 FILTER 事实表对应明细行聚合
+-- Summary_Scope 维护规则（重要）：
+--   新增/修改 SUMMARY 行时，Summary_Scope 必须满足：
+--   1. 格式：Channel_ID 以 | 分隔，无空格（如 'JD_QC|JD_CD|JD_HT'）
+--   2. 内容：只能包含底层 DETAIL 的 Channel_ID，禁止引用其他 SUMMARY Channel_ID
+--      → 嵌套层级必须展开到最底层 DETAIL，DAX 侧 CONTAINSSTRING + Channel_Type="DETAIL" 才能正确命中
 -- ============================================================

@@ -125,6 +125,133 @@
 
 ---
 
+## [⚠️ 请补填具体时间 2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.8.2 冗余变量清除 + 关联字段规范修正
+
+- **模块**: Media Mix
+- **任务**: 三项修正：删除未使用 DAX 变量 / 关联事实表字段从 Channel_Label 改为 Channel / 更新相关注释与架构说明
+- **操作**: 修改
+- **变更内容**:
+  - `Media Mix Base Value`（DAX 代码精简）：
+    - **删除冗余变量** `__ChannelLabel` 和 `__ChannelType`：这两个变量在 v1.8 统一 SELECTCOLUMNS 路径后
+      已无任何引用，属于死代码，予以删除
+    - **关联字段修正**：`__Labels` / `__ParentLabels` 的 `SELECTCOLUMNS` 中，
+      取值字段从 `Dim_Media_Mix_Channel[Channel_Label]` 改为 `Dim_Media_Mix_Channel[Channel]`；
+      列别名从 `"@Label"` 改为 `"@Channel"`  
+      **根本原因**：`Channel_Label` 是展示标签（v1.8.1 中 JD 重名行已加全角空格后缀），
+      与事实表 `[channel]` 字段不一致，导致 `channel IN __Labels` 筛选失败，
+      绝大多数 DETAIL 行 Cost 返回空值，仅个别行因偶然一致而有值（如超级短视频）；
+      `Channel` 字段存储原始渠道名，与事实表保持一致，是正确的关联键
+  - `Media_Mix_matrix_solution` 文档（注释/说明全面更新）：
+    - Section 3 变更记录：更新条目 3/4，去除旧 `__ChannelLabel`/`__ChannelType` 引用
+    - Section 4.3 联动方式：移除旧变量列表，新增 Channel vs Channel_Label 使用规范说明
+    - Section 4.4 字段映射：标题/内容从 `Channel_Label` 改为 `Channel`，补充禁止使用 Channel_Label 关联的警告
+    - Section 5.1 头部注释：更新条目 3/4，依赖字段列表更新为 `Channel/Parent_Channel_ID`
+    - Section 9.1 聚合机制：架构版本更新为 v1.8，`__Labels` 描述改为 Channel 字段，补充约束 d
+    - Section 9.5 诊断：标注原因 A 已修复，更新排查步骤用 `Channel` 而非 `Channel_Label` 对比
+    - Section 11 血缘图：更新 FILTER 描述从旧双路径改为统一 `__Labels` 路径
+- **关联文件**: `Media Mix/Media_Mix_matrix_solution`
+- **备注**:
+  - Power BI 中需重新加载 `Dim_Media_Mix_Channel`（确保含 `Channel`、`Summary_Scope`、`Parent_Channel_ID` 字段）
+  - 事实表 `[channel]` 字段应存储原始中文渠道名（无全角空格），与 `Dim_Media_Mix_Channel[Channel]` 完全一致
+
+---
+
+## [⚠️ 请补填具体时间 2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.8.1 Background Color 刻度修正 + SQL 排序冲突修复 + 数据诊断
+
+- **模块**: Media Mix
+- **任务**: 三项独立修复：交替行背景色计算错误 / Channel_Label 重名导致排序冲突 / 仅超级短视频有cost值的原因诊断
+- **操作**: 修改
+- **变更内容**:
+  - `Media Mix Cell Background Color`（DAX 修复）：
+    - Indicator Order 刻度从 1/2/3 升级为 10/20/30 后，`MOD(__EffRowID, 2)` 失效  
+      修复：新增 `VAR __RowPos = INT(__EffRowID / 10)` 还原行位次，改用 `MOD(__RowPos, 2)` 判断  
+      10→1（This Year=白）、20→2（Last Year=灰）、30→3（YOY=白）
+  - `Media_Mix_SQL`（排序冲突修复，v1.8.1）：
+    - Power BI Sort-by-Column 要求 Channel_Label 与 Platform_Sort 1:1 映射  
+      "RTB Total" / "JCGP Total" / "Total" / "Total 不含JCGP" 同时出现在 TM（Sort=1）和 JD（Sort=2）导致报错  
+      JD 内两个"品牌动态秀"（JD_PPDTX_1 / JD_PPDTX_2）也重名  
+      修复：JD 侧重名 Channel_Label 末尾追加全角空格（U+3000），视觉无差异但字符串唯一：  
+      `'RTB Total　'` / `'JCGP Total　'` / `'Total　'` / `'Total 不含JCGP　'` / `'品牌动态秀　'`（第二个）  
+    - ⚠️ DAX __Labels 用 Channel_ID 匹配（不受 Channel_Label 变化影响），但事实表 channel 字段  
+      若依赖 Channel_Label 关联则需同步更新（见备注）
+  - `Media_Mix_matrix_solution` Section 9.5（新增常见问题排查）：
+    - 记录"仅超级短视频有值"问题的三种可能原因及 DAX 查询排查步骤  
+      原因A：事实表 channel 字段值与 Channel_Label 不一致（最高概率）  
+      原因B：Dim_Media_Mix_Channel 未刷新，其他 DETAIL 行 Summary_Scope 仍为 NULL  
+      原因C：Parent_Channel_ID 字段未加载（仅影响 Cost%，不影响 Cost 绝对值）
+  - Checklist 中 Cost% 验证项更新为正确口径（直通车 / RTB Total，非平台 Total）
+- **关联文件**: `Media Mix/Media_Mix_matrix_solution`, `Media Mix/Media_Mix_SQL`
+- **备注**:
+  - JD Channel_Label 加全角空格后，若事实表 channel 字段存的是 Channel_Label 原值（无后缀），  
+    则 `channel IN __Labels` 仍能正常匹配（因为 __Labels 来自 Dim_Media_Mix_Channel，会随维度表刷新而更新）  
+    但需确认：事实表 [channel] 的值 **不包含** 全角空格后缀（即仍为原始中文名）  
+    → 若事实表数据是原始渠道名，则无需改事实表；若事实表数据和维度表同源，需排查
+  - 诊断步骤详见 `Media_Mix_matrix_solution` Section 9.5
+
+---
+
+## [⚠️ 请补填具体时间 2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.8 DAX 语法修复 + Cost% 口径修正 + SQL 结构升级
+
+- **模块**: Media Mix
+- **任务**: v1.7 遗留问题修复 — IF()无法返回表 + DETAIL行Summary_Scope为空 + Cost%分母口径错误
+- **操作**: 修改
+- **变更内容**:
+  - `Media_Mix_SQL`（结构升级）：
+    - **DETAIL 行 Summary_Scope**：从 `NULL` 改为自身 `Channel_ID`（如 `'TM_ZTC'`）  
+      使 DAX 中 CONTAINSSTRING 在 DETAIL 行也能命中自己，无需 IF 分支
+    - **新增 `Parent_Channel_ID` 字段**：标识每行 Cost% 分母所属的 SUMMARY 行  
+      DETAIL 行 → 所属最近上级 SUMMARY（如 TM_ZTC → TM_RTB_TOTAL）  
+      SUMMARY 行 → 自身（如 TM_RTB_TOTAL → TM_RTB_TOTAL，Cost%=100%）
+    - 全部 31 行数据已同步更新
+  - `Media Mix Base Value`（DAX 语法修复 + 口径重写）：
+    - **__Labels 变量**：去掉 `IF()` 包裹（DAX 中 IF 无法返回表），改为统一 `SELECTCOLUMNS(FILTER(...))`  
+      因 DETAIL 行 Summary_Scope 现为自身 Channel_ID，CONTAINSSTRING 自然命中
+    - **Cost% 口径修正**：  
+      旧口径：当前行 cost / 平台所有 DETAIL channel cost 之和（= Total）  
+      新口径：当前行 cost / `Parent_Channel_ID` 对应 SUMMARY 行的 cost  
+      新增 `__ParentID` / `__ParentScope` / `__ParentLabels` / `__TotalCost` 变量链实现  
+      SUMMARY 行分母 = 自身（Parent 自指）→ Cost% 恒为 100%
+  - `Media_Mix_matrix_solution` 文件头：版本号 v1.7 → v1.8，变更摘要补充
+- **关联文件**: `Media Mix/Media_Mix_SQL`, `Media Mix/Media_Mix_matrix_solution`
+- **备注**:
+  - Dim_Media_Mix_Channel 在 Power BI 中需重新加载以获取新字段 `Parent_Channel_ID` 和更新的 `Summary_Scope`
+  - 下游度量值（Cell Value / Cell Display / Font Color 等）无需修改，仅依赖 Base Value 返回值
+  - v1.7 的修复（去 ALL、边界包裹、列级条件）保持有效，v1.8 在其基础上进一步修正
+
+---
+
+## [⚠️ 请补填具体时间 2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.7 架构重大修复
+
+- **模块**: Media Mix
+- **任务**: Media Mix Base Value 架构重大问题修复 — ALL(事实表) 日期筛选失效 + DETAIL/SUMMARY路径合并 + CONTAINSSTRING 精确匹配
+- **操作**: 修改
+- **变更内容**:
+  - `Media Mix Base Value`（架构重写）：
+    - **[致命修复]** 移除 `FILTER(ALL(a05_e2e_paid_media_channel_data_d), ...)` 滥用  
+      原方案 `ALL(事实表)` 清空了通过 `Dim_Date_Current` 关系传递的 `data_date` 筛选，  
+      导致：① 用户切换日期切片器时矩阵数据不变；  
+      ② Cell Value 层 LP 日期覆盖失效 → Last Year ≡ This Year → YOY ≡ 0  
+      修正为 CALCULATE + 列级条件过滤（`[channel] IN __Labels, [platform]=..., [trans_cycle]=...`），  
+      日期上下文由 `Dim_Date_Current` 关系自然传递，不在度量值中显式管理
+    - **[设计加固]** CONTAINSSTRING 边界包裹：  
+      `CONTAINSSTRING("|" & __SummaryScope & "|", "|" & Channel_ID & "|")`  
+      防止子串误匹配（如 Channel_ID="TM_Z" 误命中 "TM_ZTC|TM_YLMF"）
+    - **[架构精简]** DETAIL / SUMMARY 路径合并为统一 `channel IN __Labels`：  
+      DETAIL 行 `__Labels = ROW("@Label", __ChannelLabel)`（单元素）  
+      SUMMARY 行 `__Labels = SELECTCOLUMNS(FILTER(...))`（多元素）  
+      13 个指标共用同一 `__Labels`，代码量减半；废弃 `__IsDetail`/`__IsSummary`/`__Cost_Detail`/`__Cost_Summary` 分支
+    - **[性能优化]** `__Labels` 用 `IF(__ChannelType = "SUMMARY", ...)` 延迟计算，  
+      DETAIL 行直接 ROW 构造，不扫描 `Dim_Media_Mix_Channel`
+    - **[新增]** Section 5.1 末尾追加"后续指标口径填充模板"，规定统一聚合模式
+  - `Section 9.1`（重写）：SUMMARY 行聚合机制更新为 v1.7 架构（4步说明 + 3条约束）
+- **关联文件**: `Media Mix/Media_Mix_matrix_solution`
+- **备注**:
+  - Cell Value / Cell Display / Cell Font Color 等下游度量值无需修改（仅依赖 `[Media Mix Base Value]` 返回值）
+  - SWITCH 部分口径不变（ID 1=__Cost, ID 2=__CostPct, ID 3-13=占位1）
+  - 此修复为 v1.6（Summary_Scope 格式修复）的后续，两者组合才能使矩阵完整正常工作
+
+---
+
 ## [2026-05-29 10:00] 新建 — Media Mix Channel 维度配置 SQL（写死结构，保留扩展性）
 
 - **模块**: Media Mix
@@ -265,6 +392,51 @@
   - `Media_Mix_matrix_solution` 文件头版本摘要更新至 v1.5
 - **关联文件**: `Media Mix/Media_Mix_matrix_solution`, `powerbi_code_copilot/rules/domain-rules.md`
 - **备注**: 同步清理 memory 中旧的"起始值7"规范条目，保留最新的"起始10步长10"规范
+
+---
+
+## [⚠️ 请补填具体时间 2026-06-01 13:30] 修改 — powerbi_code_copilot 规范文件更新
+
+- **模块**: 项目配置
+- **任务**: powerbi_code_copilot 规范同步 — domain-rules.md 与 slicer-tips.md 内容更新
+- **操作**: 修改
+- **变更内容**:
+  - `powerbi_code_copilot/rules/domain-rules.md`（修改）：
+    排序字段规范由「起始值从7开始」修订为「起始值从10开始，步长用 10，便于后续插入」
+  - `powerbi_code_copilot/knowledge/slicer-tips.md`（修改）：
+    - 参数表通用字段模板 `{Entity}_Sort` 说明补充：步长不能为1，步长用 10
+    - 平台切片器示例 `Platform_Sort` 值从 `{2, 3}` 更新为 `{50, 60}`
+    - `DIM_ColMetric_Overview` 示例 `Metric_Sort` 从连续 `{1,2,...,12}` 更新为 `{20,30,40,...,130}`
+    - `Metric_ColorDefault` 示例值从 `#5f6165`（深灰）更新为 `#212121`（近黑）
+- **关联文件**: `powerbi_code_copilot/rules/domain-rules.md`, `powerbi_code_copilot/knowledge/slicer-tips.md`
+- **备注**: 规范变更影响所有新建/存量方案中的排序字段值，存量方案（含 Media Mix v1.5）的 Metric_Sort / Indicator_Order 均已遵循新规（起始10，步长10），Metric_ColorDefault 待各方案下次迭代时同步更新为 #212121
+
+---
+
+## [⚠️ 请补填具体时间 2026-06-01 14:30] 修改 — Media Mix 矩阵方案 v1.6 Summary_Scope Bug 修复
+
+- **模块**: Media Mix
+- **任务**: Summary_Scope 格式 Bug 修复 — 统一 | 分隔符 + 嵌套 SUMMARY 展开为底层 DETAIL
+- **操作**: 修改
+- **变更内容**:
+  - `Media_Mix_SQL`（修改）：所有 SUMMARY 行 Summary_Scope 字段修正，共两类问题：
+    - **格式问题**：分隔符从 ` + `（含空格）统一改为 `|`（无空格），与文档注释保持一致
+    - **嵌套展开问题**：以下行原引用中间层 SUMMARY Channel_ID，改为直接枚举底层 DETAIL Channel_ID：
+      - `TM_JCGP_TOTAL`：`TM_PXB_TOTAL + TM_PPTX` → `TM_PPZQ|TM_PPTX`
+      - `TM_TOTAL`：`TM_RTB_TOTAL + TM_JCGP_TOTAL` → `TM_ZTC|TM_YLMF|TM_QZT|TM_DSP|TM_PPZQ|TM_PPTX`
+      - `TM_TOTAL_EX_JCGP`：`TM_TOTAL - TM_JCGP_TOTAL` → `TM_ZTC|TM_YLMF|TM_QZT|TM_DSP`
+      - `JD_RTB_TOTAL_INC_JXMP`：`JD_RTB_TOTAL + JD_JXMP` → `JD_QC|JD_CD|JD_HT|JD_ZT|JD_JXMP`
+      - `JD_TOTAL`：`JD_RTB_TOTAL + JD_JCGP_TOTAL` → 15个底层DETAIL全枚举
+      - `JD_TOTAL_EX_JCGP`：`JD_TOTAL - JD_JCGP_TOTAL` → `JD_QC|JD_CD|JD_HT|JD_ZT`
+    - 文件头部注释补充 `Summary_Scope` 维护规则（格式要求 + 禁止引用 SUMMARY Channel_ID）
+  - `Media_Mix_matrix_solution`（修改）：
+    - 版本号 v1.5 → v1.6，变更摘要补充 Bug 修复说明
+    - Section 1 字段说明：`Summary_Scope` 行补充展开规则和嵌套禁止说明，示例新增 JCGP Total / Total 的展开示例
+    - Section 4.3 / 4.4：更新 SUMMARY 聚合描述，明确底层 DETAIL 限制
+    - Section 5.1 度量值注释：`__ScopeIDs` 变量块补充 `⚠️` 约束说明
+    - Section 9.1 SUMMARY 行聚合机制：补充三个展开示例（RTB Total / JCGP Total / Total）及 Bug 根因说明
+- **关联文件**: `Media Mix/Media_Mix_SQL`, `Media Mix/Media_Mix_matrix_solution`
+- **备注**: Bug 根因：DAX 中 `CONTAINSSTRING(__SummaryScope, Channel_ID) && Channel_Type="DETAIL"` 过滤逻辑正确，但 Summary_Scope 含 SUMMARY Channel_ID（如 `TM_RTB_TOTAL`）时，`Channel_Type="DETAIL"` 过滤器会将其排除，导致该 SUMMARY 行无法找到任何明细行，计算结果为 BLANK/0；修复方案：SQL 层将所有嵌套 SUMMARY 展开为底层 DETAIL，DAX 无需改动
 
 ---
 
