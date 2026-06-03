@@ -419,7 +419,7 @@ Media Mix Base Value =
 //       Dim_Date_Current（关系传递 data_date 筛选，本度量值不直接引用）
 // ========================================
 
-    // ── 列上下文 ──
+        // ── 列上下文 ──
     VAR __MetricID      = SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ID])
 
     // ── 行上下文（来自 Dim_Media_Mix_Channel 断开维度）──
@@ -430,14 +430,11 @@ Media Mix Base Value =
     VAR __TransCycle    = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
 
     // ── 当前行需聚合的 Channel 集合（DETAIL/SUMMARY 路径统一）──
-    // Summary_Scope 规则：DETAIL 行 = 自身 Channel_ID；SUMMARY 行 = 底层 DETAIL 枚举
-    // | 边界包裹 + CONTAINSSTRING 精确匹配，无需 IF 判断 Channel_Type
-    // ⚠️ 取 Channel 字段（原始渠道名，与事实表 [channel] 一致）而非 Channel_Label（展示用，含全角空格后缀）
     VAR __ScopedSummary = "|" & __SummaryScope & "|"
     VAR __Labels =
         SELECTCOLUMNS(
             FILTER(
-                Dim_Media_Mix_Channel,
+                ALL(Dim_Media_Mix_Channel), // ⭐ 关键修复 1：添加 ALL 清除外部行筛选上下文
                 Dim_Media_Mix_Channel[Channel_Type] = "DETAIL"
                     && Dim_Media_Mix_Channel[Platform] = __RowPlatform
                     && CONTAINSSTRING(
@@ -448,15 +445,15 @@ Media Mix Base Value =
             "@Channel", Dim_Media_Mix_Channel[Channel]
         )
 
-    // ── Cost%：分母 = 当前行所属上级 SUMMARY 的 cost（通过 Parent_Channel_ID 定位）──
-    // Parent_Channel_ID 规则：DETAIL → 所属最近上级 SUMMARY；SUMMARY → 自身（Cost%=100%）
-    // 步骤：通过 Parent_Channel_ID 找到分母行的 Summary_Scope → 解析为 channel 集合 → 聚合 cost
+    // ── Cost%：分母 = 当前行所属上级 SUMMARY 的 cost ──
     VAR __ParentID = SELECTEDVALUE(Dim_Media_Mix_Channel[Parent_Channel_ID])
     VAR __ParentScope =
         CALCULATE(
             SELECTEDVALUE(Dim_Media_Mix_Channel[Summary_Scope]),
             FILTER(
                 ALL(Dim_Media_Mix_Channel),
+                // 这个过滤条件只会命中上面表格中的最后一行（即 RTB Total 这一行本身）。 它绝对不会命中前四行（快车、触点等），
+                // 因为前四行的 Channel_ID 分别是 JD_快车、JD_触点 等，它们 不等于 "JD_RTB Total"！
                 Dim_Media_Mix_Channel[Channel_ID] = __ParentID
                     && Dim_Media_Mix_Channel[Platform] = __RowPlatform
             )
@@ -465,7 +462,7 @@ Media Mix Base Value =
     VAR __ParentLabels =
         SELECTCOLUMNS(
             FILTER(
-                Dim_Media_Mix_Channel,
+                ALL(Dim_Media_Mix_Channel), // ⭐ 关键修复 2：添加 ALL 清除外部行筛选上下文
                 Dim_Media_Mix_Channel[Channel_Type] = "DETAIL"
                     && Dim_Media_Mix_Channel[Platform] = __RowPlatform
                     && CONTAINSSTRING(
@@ -486,6 +483,7 @@ Media Mix Base Value =
             a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
             a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
         )
+        
     VAR __TotalCost =
         CALCULATE(
             SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
@@ -493,8 +491,9 @@ Media Mix Base Value =
             a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
             a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
         )
+        
     VAR __CostPct = DIVIDE(__Cost, __TotalCost)
-
+    
     RETURN
     SWITCH(
         __MetricID,
@@ -762,22 +761,35 @@ Media Mix Cell Font Color =
 //       DIM_RowKPIs_Media_Mix[Indicator Type],
 //       DIM_ColMetric_Media_Mix[Metric_Color*]
 // ========================================
+// ── 1. 获取当前上下文 ──
+VAR __Indicator   = SELECTEDVALUE(DIM_RowKPIs_Media_Mix[Indicator Type]) // 行维度指标（This Year / Last Year / YOY）
+VAR __ChannelType = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Type]) // 渠道类型（DETAIL / SUMMARY）
+VAR __CellValue   = [Media Mix Cell Value] // 当前单元格的数值
+VAR __IsSummary   = (__ChannelType = "SUMMARY") // 判断是否为汇总行
 
-    VAR __Value     = [Media Mix Cell Value]
-    VAR __Indicator = SELECTEDVALUE(DIM_RowKPIs_Media_Mix[Indicator Type])
-    RETURN
-        SWITCH(
-            TRUE(),
-            ISBLANK(__Value),
-                SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ColorDefault], "#5f6165"),
-            __Indicator = "YOY" && __Value > 0,
-                SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ColorPositive], "#1A9018"),
-            __Indicator = "YOY" && __Value < 0,
-                SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ColorNegative], "#D64550"),
-            __Indicator = "YOY" && __Value = 0,
-                SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ColorZero], "#E1C233"),
-            SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ColorDefault], "#5f6165")
+// ── 2. YOY 且为 DETAIL 行时的颜色逻辑（正绿、负红、零黄） ──
+VAR __YOY_Detail_Color = 
+    SWITCH(
+        TRUE(),
+        ISBLANK(__CellValue), "#5f6165", // 空值保持默认灰色
+        __CellValue > 0, "#1A9018",      // 正值：绿色
+        __CellValue < 0, "#D64550",      // 负值：红色
+        __CellValue = 0, "#E1C233",      // 零值：黄色
+        "#5f6165"                        // 兜底默认色
+    )
+
+// ── 3. 最终路由返回 ──
+RETURN
+    IF(
+        __IsSummary, 
+        "#000000",  // ⭐ 优先级最高：只要是 SUMMARY 行（无论 YOY 还是非 YOY），统一为纯黑色
+        IF(
+            __Indicator = "YOY",
+            __YOY_Detail_Color, // DETAIL 行 + YOY：走红绿黄条件格式
+            "#5f6165"           // DETAIL 行 + 非 YOY (This Year/Last Year)：默认灰色
         )
+    )
+
 
 ================================================================================
 5.5 条件格式度量值 — SVG 图标
@@ -819,16 +831,15 @@ Media Mix Cell Background Color =
 // ========================================
 // 度量值: Media Mix Cell Background Color
 // Display Folder: Media Mix > Formatting
-// 用途: 根据 Indicator Order 返回交替行背景色
-//       This Year(10)=白色, Last Year(20)=浅灰, YOY(30)=白色
-// 依赖: DIM_RowKPIs_Media_Mix[Indicator Order]
-// ⚠️ v1.8 调整：Indicator Order 从 1/2/3 改为 10/20/30，
+// 用途: 根据 Channel_Sort 返回交替行背景色
+// 依赖: Dim_Media_Mix_Channel[Channel_Sort]
+// ⚠️ v1.8 调整：Channel_Sort 从 1/2/3 改为 10/20/30，
 //    需用 INT(__EffRowID / 10) 还原行位次后再做 MOD 判断
 // ========================================
 
-    VAR __RowID     = SELECTEDVALUE(DIM_RowKPIs_Media_Mix[Indicator Order])
+    VAR __RowID     = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Sort])
     VAR __EffRowID  =
-        IF(NOT ISBLANK(__RowID), __RowID, SUM(DIM_RowKPIs_Media_Mix[Indicator Order]))
+        IF(NOT ISBLANK(__RowID), __RowID, SUM(Dim_Media_Mix_Channel[Channel_Sort]))
     VAR __RowPos    = INT(__EffRowID / 10)  // 还原行位次：10→1, 20→2, 30→3
     RETURN
         IF(

@@ -61,71 +61,71 @@ FROM (
            '直通车'        AS Channel_Label,
            'TM平台-直通车：按点击计费的搜索/展示推广工具，适用于精准流量投放' AS Channel_Description,
            'DETAIL'        AS Channel_Type,
-           'TM_ZTC'        AS Channel_ID,
-           'TM_ZTC'        AS Summary_Scope,
-           'TM_RTB_TOTAL'  AS Parent_Channel_ID
+           'TM_直通车'     AS Channel_ID,
+           'TM_直通车'     AS Summary_Scope,
+           'TM_RTB Total'  AS Parent_Channel_ID
 
     UNION ALL SELECT 2, 'TM', 1,
            '引力魔方', 20, '引力魔方',
            'TM平台-引力魔方：智能展示广告，基于算法的定向推荐广告产品',
-           'DETAIL', 'TM_YLMF', 'TM_YLMF', 'TM_RTB_TOTAL'
+           'DETAIL', 'TM_引力魔方', 'TM_引力魔方', 'TM_RTB Total'
 
     UNION ALL SELECT 3, 'TM', 1,
            '全站推/万象台', 30, '全站推/万象台',
            'TM平台-全站推/万象台：全域流量整合投放，涵盖站内外多场景曝光',
-           'DETAIL', 'TM_QZT', 'TM_QZT', 'TM_RTB_TOTAL'
+           'DETAIL', 'TM_全站推/万象台', 'TM_全站推/万象台', 'TM_RTB Total'
 
     UNION ALL SELECT 4, 'TM', 1,
            '超级短视频', 40, '超级短视频',
            'TM平台-超级短视频：短视频形式的品效合一广告产品',
-           'DETAIL', 'TM_DSP', 'TM_DSP', 'TM_RTB_TOTAL'
+           'DETAIL', 'TM_超级短视频', 'TM_超级短视频', 'TM_RTB Total'
 
     -- TM 汇总行：RTB Total
     UNION ALL SELECT 5, 'TM', 1,
            'RTB Total', 50, 'RTB Total',
            'TM平台-RTB合计：直通车 + 引力魔方 + 全站推/万象台 + 超级短视频 之和',
-           'SUMMARY', 'TM_RTB_TOTAL',
-           'TM_ZTC|TM_YLMF|TM_QZT|TM_DSP', 'TM_RTB_TOTAL'
+           'SUMMARY', 'TM_RTB Total',
+           'TM_直通车|TM_引力魔方|TM_全站推/万象台|TM_超级短视频', 'TM_RTB Total'
 
     -- TM 明细行：品牌专区
     UNION ALL SELECT 6, 'TM', 1,
            '品牌专区', 60, '品牌专区',
            'TM平台-品牌专区：品牌展示广告位，强化品牌曝光与认知',
-           'DETAIL', 'TM_PPZQ', 'TM_PPZQ', 'TM_PXB_TOTAL'
+           'DETAIL', 'TM_品牌专区', 'TM_品牌专区', 'TM_品销宝 Total'
 
     -- TM 汇总行：品销宝 Total
     UNION ALL SELECT 7, 'TM', 1,
            '品销宝 Total', 70, '品销宝 Total',
            'TM平台-品销宝合计：品牌专区相关渠道汇总（品销宝产品线整体）',
-           'SUMMARY', 'TM_PXB_TOTAL',
-           'TM_PPZQ', 'TM_PXB_TOTAL'
+           'SUMMARY', 'TM_品销宝 Total',
+           'TM_品牌专区', 'TM_品销宝 Total'
 
     -- TM 明细行：品牌特秀
     UNION ALL SELECT 8, 'TM', 1,
            '品牌特秀', 80, '品牌特秀',
            'TM平台-品牌特秀：高端品牌定制广告形式，强曝光强互动的品牌营销产品',
-           'DETAIL', 'TM_PPTX', 'TM_PPTX', 'TM_JCGP_TOTAL'
+           'DETAIL', 'TM_品牌特秀', 'TM_品牌特秀', 'TM_JCGP Total'
 
     -- TM 汇总行：JCGP Total
     UNION ALL SELECT 9, 'TM', 1,
            'JCGP Total', 90, 'JCGP Total',
            'TM平台-JCGP合计：品销宝 Total + 品牌特秀（品牌类渠道整体汇总）',
-           'SUMMARY', 'TM_JCGP_TOTAL',
-           'TM_PPZQ|TM_PPTX', 'TM_JCGP_TOTAL'
+           'SUMMARY', 'TM_JCGP Total',
+           'TM_品牌专区|TM_品牌特秀', 'TM_JCGP Total'
 
     -- TM 汇总行：Total
     UNION ALL SELECT 10, 'TM', 1,
            'Total', 100, 'Total',
            'TM平台-全渠道合计：RTB Total + JCGP Total，即 TM 平台所有渠道总和',
-           'SUMMARY', 'TM_TOTAL',
-           'TM_ZTC|TM_YLMF|TM_QZT|TM_DSP|TM_PPZQ|TM_PPTX', 'TM_TOTAL'
+           'SUMMARY', 'TM_Total',
+           'TM_直通车|TM_引力魔方|TM_全站推/万象台|TM_超级短视频|TM_品牌专区|TM_品牌特秀', 'TM_Total'
 
     -- TM 汇总行：Total 不含JCGP
     UNION ALL SELECT 11, 'TM', 1,
            'Total 不含JCGP', 110, 'Total 不含JCGP',
            'TM平台-全渠道合计（剔除JCGP）：Total - JCGP Total，即纯效果类渠道（RTB类）合计',
-           'SUMMARY', 'TM_TOTAL_EX_JCGP',
-           'TM_ZTC|TM_YLMF|TM_QZT|TM_DSP', 'TM_TOTAL_EX_JCGP'
+           'SUMMARY', 'TM_Total 不含JCGP',
+           'TM_直通车|TM_引力魔方|TM_全站推/万象台|TM_超级短视频', 'TM_Total 不含JCGP'
 
 
     -- ================================================================
@@ -147,119 +147,113 @@ FROM (
     UNION ALL SELECT 12, 'JD', 2,
            '快车', 10, '快车',
            'JD平台-快车：京东搜索广告，按点击计费的竞价排名产品，对标TM直通车',
-           'DETAIL', 'JD_QC', 'JD_QC', 'JD_RTB_TOTAL'
+           'DETAIL', 'JD_快车', 'JD_快车', 'JD_RTB Total'
 
     UNION ALL SELECT 13, 'JD', 2,
            '触点', 20, '触点',
            'JD平台-触点：基于用户行为的智能定向展示广告，多触点渠道覆盖',
-           'DETAIL', 'JD_CD', 'JD_CD', 'JD_RTB_TOTAL'
+           'DETAIL', 'JD_触点', 'JD_触点', 'JD_RTB Total'
 
     UNION ALL SELECT 14, 'JD', 2,
            '海投', 30, '海投',
            'JD平台-海投：海量智投，程序化展示广告，宽泛流量覆盖',
-           'DETAIL', 'JD_HT', 'JD_HT', 'JD_RTB_TOTAL'
+           'DETAIL', 'JD_海投', 'JD_海投', 'JD_RTB Total'
 
     UNION ALL SELECT 15, 'JD', 2,
            '直投', 40, '直投',
            'JD平台-直投：直接投放合约广告，固定资源位曝光',
-           'DETAIL', 'JD_ZT', 'JD_ZT', 'JD_RTB_TOTAL'
+           'DETAIL', 'JD_直投', 'JD_直投', 'JD_RTB Total'
 
     -- JD 汇总行：RTB Total
     -- ⚠️ Channel_Label 末尾加全角空格，与 TM 的 'RTB Total' 区分，避免 Sort-by-Column 冲突
     UNION ALL SELECT 16, 'JD', 2,
-           'RTB Total', 50, 'RTB Total　',
+           'RTB Total', 50, 'RTB Total ',
            'JD平台-RTB合计：快车 + 触点 + 海投 + 直投 之和',
-           'SUMMARY', 'JD_RTB_TOTAL',
-           'JD_QC|JD_CD|JD_HT|JD_ZT', 'JD_RTB_TOTAL'
+           'SUMMARY', 'JD_RTB Total',
+           'JD_快车|JD_触点|JD_海投|JD_直投', 'JD_RTB Total'
 
     -- JD 汇总行：RTB Total + 京选店铺
     UNION ALL SELECT 17, 'JD', 2,
            'RTB Total + 京选店铺', 60, 'RTB Total + 京选店铺',
            'JD平台-RTB合计（含京选店铺）：RTB Total + 京选店铺，含京选店铺口径的效果类汇总',
-           'SUMMARY', 'JD_RTB_TOTAL_INC_JXMP',
-           'JD_QC|JD_CD|JD_HT|JD_ZT|JD_JXMP', 'JD_RTB_TOTAL_INC_JXMP'
+           'SUMMARY', 'JD_RTB Total + 京选店铺',
+           'JD_快车|JD_触点|JD_海投|JD_直投|JD_京选店铺', 'JD_RTB Total + 京选店铺'
 
     -- JD 明细行
     UNION ALL SELECT 18, 'JD', 2,
            '京选店铺', 70, '京选店铺',
            'JD平台-京选店铺：基于店铺精选的推荐流量产品，定向高意向用户',
-           'DETAIL', 'JD_JXMP', 'JD_JXMP', 'JD_RTB_TOTAL_INC_JXMP'
+           'DETAIL', 'JD_京选店铺', 'JD_京选店铺', 'JD_RTB Total + 京选店铺'
 
     UNION ALL SELECT 19, 'JD', 2,
            '搜索品专', 80, '搜索品专',
            'JD平台-搜索品专：搜索场景下的品牌专区资源，强化搜索场景品牌曝光',
-           'DETAIL', 'JD_SSPPZQ', 'JD_SSPPZQ', 'JD_JCGP_TOTAL'
+           'DETAIL', 'JD_搜索品专', 'JD_搜索品专', 'JD_JCGP Total'
 
     UNION ALL SELECT 20, 'JD', 2,
            'Branzone', 90, 'Branzone',
            'JD平台-Branzone：品牌专区（品牌旗舰展示区），强化品牌形象与认知',
-           'DETAIL', 'JD_BRANZONE', 'JD_BRANZONE', 'JD_JCGP_TOTAL'
+           'DETAIL', 'JD_Branzone', 'JD_Branzone', 'JD_JCGP Total'
 
     UNION ALL SELECT 21, 'JD', 2,
            '联合活动', 100, '联合活动',
            'JD平台-联合活动：品牌与京东联合营销活动资源，节点大促常见形式',
-           'DETAIL', 'JD_LHHD', 'JD_LHHD', 'JD_JCGP_TOTAL'
+           'DETAIL', 'JD_联合活动', 'JD_联合活动', 'JD_JCGP Total'
 
     UNION ALL SELECT 22, 'JD', 2,
            '开屏', 110, '开屏',
            'JD平台-开屏：京东App开屏广告，首屏强曝光品牌广告位',
-           'DETAIL', 'JD_KP', 'JD_KP', 'JD_JCGP_TOTAL'
+           'DETAIL', 'JD_开屏', 'JD_开屏', 'JD_JCGP Total'
 
     UNION ALL SELECT 23, 'JD', 2,
            '吸顶通栏', 120, '吸顶通栏',
            'JD平台-吸顶通栏：页面顶部固定展示的通栏品牌广告位',
-           'DETAIL', 'JD_XDTL', 'JD_XDTL', 'JD_JCGP_TOTAL'
+           'DETAIL', 'JD_吸顶通栏', 'JD_吸顶通栏', 'JD_JCGP Total'
 
     UNION ALL SELECT 24, 'JD', 2,
            '营销阵地', 130, '营销阵地',
            'JD平台-营销阵地：综合营销场景资源，支持品效一体化投放',
-           'DETAIL', 'JD_YXZD', 'JD_YXZD', 'JD_JCGP_TOTAL'
+           'DETAIL', 'JD_营销阵地', 'JD_营销阵地', 'JD_JCGP Total'
 
-    -- ⚠️ JD 内两个同名渠道"品牌动态秀"：第二个 Channel_Label 末尾加全角空格以区分，
-    --    视觉上无差异，但 Power BI 排序字段可唯一对应
+    -- JD 明细行：品牌动态秀（已删除冗余的第二个）
     UNION ALL SELECT 25, 'JD', 2,
            '品牌动态秀', 140, '品牌动态秀',
-           'JD平台-品牌动态秀（一）：动态创意品牌展示广告，增强品牌互动体验',
-           'DETAIL', 'JD_PPDTX_1', 'JD_PPDTX_1', 'JD_JCGP_TOTAL'
+           'JD平台-品牌动态秀：动态创意品牌展示广告，增强品牌互动体验',
+           'DETAIL', 'JD_品牌动态秀', 'JD_品牌动态秀', 'JD_JCGP Total'
 
     UNION ALL SELECT 26, 'JD', 2,
            '首焦', 150, '首焦',
            'JD平台-首焦：京东首页焦点图广告位，高曝光高品质品牌资源',
-           'DETAIL', 'JD_SJ', 'JD_SJ', 'JD_JCGP_TOTAL'
+           'DETAIL', 'JD_首焦', 'JD_首焦', 'JD_JCGP Total'
 
     UNION ALL SELECT 27, 'JD', 2,
            '京腾-腾讯闪屏', 160, '京腾-腾讯闪屏',
            'JD平台-京腾联合腾讯闪屏：京腾合作投放，通过腾讯系App闪屏触达目标用户',
-           'DETAIL', 'JD_JTSS', 'JD_JTSS', 'JD_JCGP_TOTAL'
-
-    UNION ALL SELECT 28, 'JD', 2,
-           '品牌动态秀', 170, '品牌动态秀　',
-           'JD平台-品牌动态秀（二）：与品牌动态秀（一）为同名渠道，如业务上为同一产品请确认是否合并',
-           'DETAIL', 'JD_PPDTX_2', 'JD_PPDTX_2', 'JD_JCGP_TOTAL'
+           'DETAIL', 'JD_京腾-腾讯闪屏', 'JD_京腾-腾讯闪屏', 'JD_JCGP Total'
 
     -- JD 汇总行：JCGP Total
     -- ⚠️ Channel_Label 末尾加全角空格，与 TM 的 'JCGP Total' 区分
-    UNION ALL SELECT 29, 'JD', 2,
-           'JCGP Total', 180, 'JCGP Total　',
-           'JD平台-JCGP合计：京选店铺+搜索品专+Branzone+联合活动+开屏+吸顶通栏+营销阵地+品牌动态秀×2+首焦+京腾-腾讯闪屏',
-           'SUMMARY', 'JD_JCGP_TOTAL',
-           'JD_JXMP|JD_SSPPZQ|JD_BRANZONE|JD_LHHD|JD_KP|JD_XDTL|JD_YXZD|JD_PPDTX_1|JD_SJ|JD_JTSS|JD_PPDTX_2', 'JD_JCGP_TOTAL'
+    UNION ALL SELECT 28, 'JD', 2,
+           'JCGP Total', 170, 'JCGP Total ',
+           'JD平台-JCGP合计：京选店铺+搜索品专+Branzone+联合活动+开屏+吸顶通栏+营销阵地+品牌动态秀+首焦+京腾-腾讯闪屏',
+           'SUMMARY', 'JD_JCGP Total',
+           'JD_京选店铺|JD_搜索品专|JD_Branzone|JD_联合活动|JD_开屏|JD_吸顶通栏|JD_营销阵地|JD_品牌动态秀|JD_首焦|JD_京腾-腾讯闪屏', 'JD_JCGP Total'
 
     -- JD 汇总行：Total
     -- ⚠️ Channel_Label 末尾加全角空格，与 TM 的 'Total' 区分
-    UNION ALL SELECT 30, 'JD', 2,
-           'Total', 190, 'Total　',
+    UNION ALL SELECT 29, 'JD', 2,
+           'Total', 180, 'Total ',
            'JD平台-全渠道合计：RTB Total + JCGP Total，即 JD 平台所有渠道总和',
-           'SUMMARY', 'JD_TOTAL',
-           'JD_QC|JD_CD|JD_HT|JD_ZT|JD_JXMP|JD_SSPPZQ|JD_BRANZONE|JD_LHHD|JD_KP|JD_XDTL|JD_YXZD|JD_PPDTX_1|JD_SJ|JD_JTSS|JD_PPDTX_2', 'JD_TOTAL'
+           'SUMMARY', 'JD_Total',
+           'JD_快车|JD_触点|JD_海投|JD_直投|JD_京选店铺|JD_搜索品专|JD_Branzone|JD_联合活动|JD_开屏|JD_吸顶通栏|JD_营销阵地|JD_品牌动态秀|JD_首焦|JD_京腾-腾讯闪屏', 'JD_Total'
 
     -- JD 汇总行：Total 不含JCGP
     -- ⚠️ Channel_Label 末尾加全角空格，与 TM 的 'Total 不含JCGP' 区分
-    UNION ALL SELECT 31, 'JD', 2,
-           'Total 不含JCGP', 200, 'Total 不含JCGP　',
+    UNION ALL SELECT 30, 'JD', 2,
+           'Total 不含JCGP', 190, 'Total 不含JCGP ',
            'JD平台-全渠道合计（剔除JCGP）：Total - JCGP Total，纯效果类渠道（RTB类）合计',
-           'SUMMARY', 'JD_TOTAL_EX_JCGP',
-           'JD_QC|JD_CD|JD_HT|JD_ZT', 'JD_TOTAL_EX_JCGP'
+           'SUMMARY', 'JD_Total 不含JCGP',
+           'JD_快车|JD_触点|JD_海投|JD_直投', 'JD_Total 不含JCGP'
 
 ) AS dim_channel_config
 ORDER BY Platform_Sort, Channel_Sort;
