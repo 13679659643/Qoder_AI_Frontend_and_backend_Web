@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: powerbi_code_copilot
+title: Power BI 智能协作与规范治理
+scope:
+    - powerbi_code_copilot/
+source_files: []
+depends_on: []
+related_to:
+    - path: code_copilot
+    - path: rl_e2e

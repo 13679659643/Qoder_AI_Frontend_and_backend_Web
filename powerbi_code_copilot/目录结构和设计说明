@@ -3,7 +3,8 @@ powerbi_code_copilot/
 │   ├── copilot-prompt.md            # 主 Copilot 系统提示词（核心入口）
 │   ├── model-reviewer.md            # 数据模型合规审查 Agent
 │   ├── dax-reviewer.md              # DAX 代码质量审查 Agent
-│   └── performance-reviewer.md      # 性能诊断审查 Agent
+│   ├── performance-reviewer.md      # 性能诊断审查 Agent
+│   └── version-tracker.md           # 版本变更追踪 Agent（自动记录结构化变更日志）
 ├── rules/                           # 项目约束与规范
 │   ├── project-context.md           # 项目上下文（数据源、模型结构、度量值分组）
 │   ├── dax-style.md                 # DAX 编码规范（命名、格式、原则）
@@ -15,10 +16,80 @@ powerbi_code_copilot/
 │   ├── index.md                     # 知识索引（轻量入口）
 │   ├── dax-patterns.md              # DAX 常用模式库（6大模式，可直接复用）
 │   ├── power-query-patterns.md      # Power Query 常用模式库（6大模式）
-│   └── performance-tips.md          # 性能优化知识库（4大层级优化策略）
+│   ├── performance-tips.md          # 性能优化知识库（4大层级优化策略）
+│   └── slicer-tips.md               # 切片器知识库（参数表规范、断开维度、格式类型）
 └── changes/                         # 变更管理
     └── templates/
         ├── spec.md                  # 变更提案模板（16个章节的完整 Spec）
         ├── tasks.md                 # 任务拆分模板
         ├── validation-spec.md       # 验证 Spec 模板（替代原 test-spec）
         └── log.md                   # 变更日志模板
+
+---
+
+## Qoder AI Agent 部署结构
+
+本项目的 Markdown 文件已部署为 Qoder 原生 AI Agent 系统，通过 `/pbi` 命令触发。
+源文件（上述目录）作为开发/维护的主源，部署后的文件为运行时副本。
+
+### Skill（全局安装）
+
+```
+~/.qoder/skills/pbi/
+├── SKILL.md                         # 主 Skill 定义（入口 + 编排器）
+│                                     # - 意图路由（自然语言 → 命令映射）
+│                                     # - 两级上下文加载（Tier1 常载 + Tier2 按需）
+│                                     # - 10 个子命令实现
+│                                     # - 版本追踪内嵌后置钩子
+└── assets/                          # 运行时规则和知识库（从源文件复制）
+    ├── rules/                       # 5 个规范文件（dax-style, modeling, etc.）
+    ├── knowledge/                   # 5 个知识文件（dax-patterns, slicer-tips, etc.）
+    └── templates/                   # 5 个模板文件（spec, tasks, log, etc. + project-context）
+```
+
+### Subagent（全局安装）
+
+```
+~/.qoder/agents/
+├── pbi-model-reviewer.md            # 模型合规审查（Spec 合规 + 结构质量，只读）
+├── pbi-dax-reviewer.md              # DAX 质量审查（代码质量 + 性能，只读，内嵌 dax-style 规则）
+└── pbi-perf-reviewer.md             # 性能诊断（四层诊断框架，只读，内嵌优化知识库）
+```
+
+### 架构关系
+
+```
+用户输入 /pbi 或自然语言
+        │
+  ┌─────▼──────────────────────┐
+  │  /pbi SKILL（主编排器）     │
+  │  SKILL.md                  │
+  │                            │
+  │  意图路由 → 上下文加载     │
+  │  → 命令执行 → 版本追踪    │
+  └─────┬───────┬───────┬──────┘
+        │       │       │
+  ┌─────▼──┐ ┌──▼────┐ ┌▼──────────┐
+  │model-  │ │dax-   │ │perf-      │
+  │reviewer│ │reviewer│ │reviewer  │
+  └────────┘ └───────┘ └───────────┘
+```
+
+### 源文件与部署文件的对应关系
+
+| 源文件 | 部署位置 | 说明 |
+|--------|---------|------|
+| agents/copilot-prompt.md | SKILL.md | 主 Skill 的主要素材来源 |
+| agents/version-tracker.md | SKILL.md（内嵌） | 版本追踪逻辑内嵌到主 Skill |
+| agents/model-reviewer.md | pbi-model-reviewer.md | 模型审查 Subagent |
+| agents/dax-reviewer.md | pbi-dax-reviewer.md | DAX 审查 Subagent（内嵌规则） |
+| agents/performance-reviewer.md | pbi-perf-reviewer.md | 性能诊断 Subagent（内嵌知识库） |
+| rules/*.md | assets/rules/*.md | 规范文件运行时副本 |
+| knowledge/*.md | assets/knowledge/*.md | 知识文件运行时副本 |
+| changes/templates/*.md | assets/templates/*.md | 模板文件运行时副本 |
+
+### 更新维护
+
+- 修改源文件后，需重新复制对应文件到 `~/.qoder/skills/pbi/assets/` 才能生效
+- Subagent 的更新直接编辑 `~/.qoder/agents/pbi-*.md`
+- SKILL.md 的更新直接编辑 `~/.qoder/skills/pbi/SKILL.md`

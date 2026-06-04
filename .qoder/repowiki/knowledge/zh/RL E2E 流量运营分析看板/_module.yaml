@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: rl_e2e
+title: RL E2E 流量运营分析看板
+scope:
+    - RL E2E/
+source_files: []
+depends_on: []
+related_to:
+    - path: powerbi_code_copilot

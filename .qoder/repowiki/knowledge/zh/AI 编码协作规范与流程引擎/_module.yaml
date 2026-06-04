@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: code_copilot
+title: AI 编码协作规范与流程引擎
+scope:
+    - code_copilot/
+source_files: []
+depends_on: []
+related_to:
+    - path: powerbi_code_copilot

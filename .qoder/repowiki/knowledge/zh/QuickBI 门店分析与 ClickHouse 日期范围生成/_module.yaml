@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: quickbi_sql
+title: QuickBI 门店分析与 ClickHouse 日期范围生成
+scope:
+    - Quickbi_sql/
+source_files: []
+depends_on: []
+related_to: []

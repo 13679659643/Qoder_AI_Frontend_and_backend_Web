@@ -1,0 +1,109 @@
+schema_version: 1
+module_path: ""
+title: 多域智能协作与规范治理平台
+scope:
+    - .qoder\agents\pbi-dax-reviewer.md
+    - .qoder\agents\pbi-model-reviewer.md
+    - .qoder\agents\pbi-perf-reviewer.md
+    - .qoder\skills\pbi\SKILL.md
+    - .qoder\skills\pbi\assets\knowledge\dax-patterns.md
+    - .qoder\skills\pbi\assets\knowledge\index.md
+    - .qoder\skills\pbi\assets\knowledge\performance-tips.md
+    - .qoder\skills\pbi\assets\knowledge\power-query-patterns.md
+    - .qoder\skills\pbi\assets\knowledge\slicer-tips.md
+    - .qoder\skills\pbi\assets\rules\dax-style.md
+    - .qoder\skills\pbi\assets\rules\domain-rules.md
+    - .qoder\skills\pbi\assets\rules\modeling-standards.md
+    - .qoder\skills\pbi\assets\rules\security.md
+    - .qoder\skills\pbi\assets\rules\visualization-standards.md
+    - .qoder\skills\pbi\assets\templates\log.md
+    - .qoder\skills\pbi\assets\templates\project-context-template.md
+    - .qoder\skills\pbi\assets\templates\spec.md
+    - .qoder\skills\pbi\assets\templates\tasks.md
+    - .qoder\skills\pbi\assets\templates\validation-spec.md
+    - .qoder\specs\powerbi-copilot-to-agent.md
+    - Quickbi_sql\MAP\我的门店\SQL_优化方案.md
+    - Quickbi_sql\MAP\我的门店\SQL：我的门店_门店分析
+    - Quickbi_sql\周大福\周大福_日期范围生成_ARRAY JOIN_Clickhou\monthly.sql
+    - Quickbi_sql\周大福\周大福_日期范围生成_ARRAY JOIN_Clickhou\monthly_cumulative_weekly.sql
+    - Quickbi_sql\周大福\周大福_日期范围生成_ARRAY JOIN_Clickhou\weekly.sql
+    - Quickbi_sql\周大福\周大福_日期范围生成_ARRAY JOIN_Clickhou\wiki\monthly_cumulative_weekly_wiki.md
+    - Quickbi_sql\周大福\周大福_日期范围生成_ARRAY JOIN_Clickhou\yearly_cumulative_monthly.sql
+    - Quickbi_sql\周大福\周大福_日期范围生成_demo\clickhouse_date_ranges.sql
+    - Quickbi_sql\周大福\周大福_日期范围生成_demo\clickhouse_date_ranges_wiki.md
+    - RL E2E\Dcom Platform_Demo\Dcom Platform_Demo中国式报表_自定义矩阵案例
+    - RL E2E\RL E2E Traffic_Dashboard\KPI Breakdown\Dim_ColMetric_KpiBreakdown
+    - RL E2E\RL E2E Traffic_Dashboard\KPI Breakdown\Dim_RowKPI_KpiBreakdown
+    - RL E2E\RL E2E Traffic_Dashboard\KPI Breakdown\KPI Breakdown Cell Display
+    - RL E2E\RL E2E Traffic_Dashboard\KPI Breakdown\KPI Breakdown Cell Font Color
+    - RL E2E\RL E2E Traffic_Dashboard\KPI Breakdown\KPI Breakdown Cell SVG Icon
+    - RL E2E\RL E2E Traffic_Dashboard\KPI Breakdown\KPI Breakdown Cell Value
+    - RL E2E\RL E2E Traffic_Dashboard\KPI Breakdown\Slicer_Dimensions_KpiBreakdown
+    - RL E2E\RL E2E Traffic_Dashboard\KPI Breakdown\kpi_breakdown_matrix_solution.md
+    - RL E2E\RL E2E Traffic_Dashboard\KPI By Platform\KPI By Platform_matrix_solution.md
+    - RL E2E\RL E2E Traffic_Dashboard\Slicer_Platform_Selection
+    - RL E2E\RL E2E Traffic_Dashboard\Slicer_Store_Name
+    - RL E2E\RL E2E Traffic_Dashboard\Slicer_Time_Frame
+    - RL E2E\RL E2E Traffic_Dashboard\kPIs\Dim_Metric_KPIs
+    - RL E2E\RL E2E Traffic_Dashboard\kPIs\KPIs_TimeFrame_solution.md
+    - RL E2E\RL E2E Traffic_Dashboard\kPIs\KPIs_TimeFrame_solution_TestSQL
+    - RL E2E\RL E2E Traffic_Operation\Media Mix\Media_Mix_SQL
+    - RL E2E\RL E2E Traffic_Operation\Media Mix\Media_Mix_matrix_solution
+    - RL E2E\RL E2E Traffic_Operation\Overview\TTL汇总\KPIs Overview_Channel_TTL_solution
+    - RL E2E\RL E2E Traffic_Operation\Overview\TTL汇总\KPIs Overview_matrix_solution
+    - RL E2E\RL E2E Traffic_Operation\Overview\TTL汇总\KPIs Overview_matrix_solution_TestSQL
+    - RL E2E\RL E2E Traffic_Operation\Overview\TTL汇总\KPIs Overview_matrix_solution_sql
+    - RL E2E\RL E2E Traffic_Operation\Overview\目标达成\KPIs Overview_Target_matrix_solution
+    - RL E2E\RL E2E Traffic_Operation\Overview\目标达成\KPIs Overview_Target_matrix_solution_TestSQL
+    - RL E2E\RL E2E Traffic_Operation\changelog.md
+    - RL E2E\分析模型\帕累托模型
+    - RL E2E\数据demo\powerbi_data\01_Overview_KPI.csv
+    - RL E2E\数据demo\powerbi_data\02_Media_Matrix.csv
+    - RL E2E\数据demo\powerbi_data\03_Keywords.csv
+    - RL E2E\数据demo\powerbi_data\04_Crowd.csv
+    - RL E2E\数据demo\powerbi_data\05_Category_Breakthrough.csv
+    - RL E2E\数据demo\powerbi_data\06_Fee_Detail.csv
+    - RL E2E\数据demo\powerbi_data\generate_data.js
+    - RL E2E\数据demo\powerbi_data\powerbi_traffic\Dim_Date_sample.csv
+    - RL E2E\数据demo\powerbi_data\powerbi_traffic\KP_KPIs_sample - 副本.csv
+    - RL E2E\数据demo\powerbi_data\powerbi_traffic\KP_KPIs_sample.csv
+    - RL E2E\数据demo\powerbi_data\powerbi_traffic\generate_sample_data.ps1
+    - code_copilot\agents\code-quality-reviewer.md
+    - code_copilot\agents\copilot-prompt.md
+    - code_copilot\agents\spec-reviewer.md
+    - code_copilot\changes\templates\log.md
+    - code_copilot\changes\templates\spec.md
+    - code_copilot\changes\templates\tasks.md
+    - code_copilot\changes\templates\test-spec.md
+    - code_copilot\knowledge\index.md
+    - code_copilot\rules\coding-style.md
+    - code_copilot\rules\domain-rules.md
+    - code_copilot\rules\project-context.md
+    - code_copilot\rules\security.md
+    - powerbi_code_copilot\agents\copilot-prompt.md
+    - powerbi_code_copilot\agents\dax-reviewer.md
+    - powerbi_code_copilot\agents\model-reviewer.md
+    - powerbi_code_copilot\agents\performance-reviewer.md
+    - powerbi_code_copilot\agents\version-tracker.md
+    - powerbi_code_copilot\changes\templates\log.md
+    - powerbi_code_copilot\changes\templates\spec.md
+    - powerbi_code_copilot\changes\templates\tasks.md
+    - powerbi_code_copilot\changes\templates\validation-spec.md
+    - powerbi_code_copilot\knowledge\dax-patterns.md
+    - powerbi_code_copilot\knowledge\index.md
+    - powerbi_code_copilot\knowledge\performance-tips.md
+    - powerbi_code_copilot\knowledge\power-query-patterns.md
+    - powerbi_code_copilot\knowledge\slicer-tips.md
+    - powerbi_code_copilot\rules\dax-style.md
+    - powerbi_code_copilot\rules\domain-rules.md
+    - powerbi_code_copilot\rules\modeling-standards.md
+    - powerbi_code_copilot\rules\project-context.md
+    - powerbi_code_copilot\rules\security.md
+    - powerbi_code_copilot\rules\visualization-standards.md
+    - powerbi_code_copilot\目录结构和设计说明
+    - powerbi_拓展知识\DAX 命名规范详解
+    - powerbi_拓展知识\powerbi需要具备的核心能力
+    - powerbi_拓展知识\切片器所使用表的分类与命名规则
+source_files: []
+depends_on: []
+related_to: []
