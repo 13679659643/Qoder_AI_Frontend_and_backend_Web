@@ -7,13 +7,13 @@
 
 ## 模块索引
 
-| 模块 | 说明 | 子页面 |
-|------|------|--------|
-| **Overview** | KPIs 总览矩阵看板 | TTL汇总 · 目标达成 |
-| **Media Mix** | 媒体组合分析 | — |
-| **Category Growth** | 品类增长分析 | — |
-| **Keyword** | 关键词分析 | — |
-| **Crowd** | 人群分析 | — |
+| 模块                      | 说明              | 子页面              |
+| ------------------------- | ----------------- | ------------------- |
+| **Overview**        | KPIs 总览矩阵看板 | TTL汇总 · 目标达成 |
+| **Media Mix**       | 媒体组合分析      | —                  |
+| **Category Growth** | 品类增长分析      | —                  |
+| **Keyword**         | 关键词分析        | —                  |
+| **Crowd**           | 人群分析          | —                  |
 
 ---
 
@@ -125,7 +125,7 @@
 
 ---
 
-## [⚠️ 请补填具体时间 2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.8.2 冗余变量清除 + 关联字段规范修正
+## [2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.8.2 冗余变量清除 + 关联字段规范修正
 
 - **模块**: Media Mix
 - **任务**: 三项修正：删除未使用 DAX 变量 / 关联事实表字段从 Channel_Label 改为 Channel / 更新相关注释与架构说明
@@ -136,7 +136,7 @@
       已无任何引用，属于死代码，予以删除
     - **关联字段修正**：`__Labels` / `__ParentLabels` 的 `SELECTCOLUMNS` 中，
       取值字段从 `Dim_Media_Mix_Channel[Channel_Label]` 改为 `Dim_Media_Mix_Channel[Channel]`；
-      列别名从 `"@Label"` 改为 `"@Channel"`  
+      列别名从 `"@Label"` 改为 `"@Channel"`
       **根本原因**：`Channel_Label` 是展示标签（v1.8.1 中 JD 重名行已加全角空格后缀），
       与事实表 `[channel]` 字段不一致，导致 `channel IN __Labels` 筛选失败，
       绝大多数 DETAIL 行 Cost 返回空值，仅个别行因偶然一致而有值（如超级短视频）；
@@ -156,60 +156,49 @@
 
 ---
 
-## [⚠️ 请补填具体时间 2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.8.1 Background Color 刻度修正 + SQL 排序冲突修复 + 数据诊断
+## [2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.8.1 Background Color 刻度修正 + SQL 排序冲突修复 + 数据诊断
 
 - **模块**: Media Mix
 - **任务**: 三项独立修复：交替行背景色计算错误 / Channel_Label 重名导致排序冲突 / 仅超级短视频有cost值的原因诊断
 - **操作**: 修改
 - **变更内容**:
   - `Media Mix Cell Background Color`（DAX 修复）：
-    - Indicator Order 刻度从 1/2/3 升级为 10/20/30 后，`MOD(__EffRowID, 2)` 失效  
-      修复：新增 `VAR __RowPos = INT(__EffRowID / 10)` 还原行位次，改用 `MOD(__RowPos, 2)` 判断  
+    - Indicator Order 刻度从 1/2/3 升级为 10/20/30 后，`MOD(__EffRowID, 2)` 失效
+      修复：新增 `VAR __RowPos = INT(__EffRowID / 10)` 还原行位次，改用 `MOD(__RowPos, 2)` 判断
       10→1（This Year=白）、20→2（Last Year=灰）、30→3（YOY=白）
   - `Media_Mix_SQL`（排序冲突修复，v1.8.1）：
-    - Power BI Sort-by-Column 要求 Channel_Label 与 Platform_Sort 1:1 映射  
-      "RTB Total" / "JCGP Total" / "Total" / "Total 不含JCGP" 同时出现在 TM（Sort=1）和 JD（Sort=2）导致报错  
-      JD 内两个"品牌动态秀"（JD_PPDTX_1 / JD_PPDTX_2）也重名  
-      修复：JD 侧重名 Channel_Label 末尾追加全角空格（U+3000），视觉无差异但字符串唯一：  
-      `'RTB Total　'` / `'JCGP Total　'` / `'Total　'` / `'Total 不含JCGP　'` / `'品牌动态秀　'`（第二个）  
-    - ⚠️ DAX __Labels 用 Channel_ID 匹配（不受 Channel_Label 变化影响），但事实表 channel 字段  
+    - Power BI Sort-by-Column 要求 Channel_Label 与 Platform_Sort 1:1 映射"RTB Total" / "JCGP Total" / "Total" / "Total 不含JCGP" 同时出现在 TM（Sort=1）和 JD（Sort=2）导致报错JD 内两个"品牌动态秀"（JD_PPDTX_1 / JD_PPDTX_2）也重名修复：JD 侧重名 Channel_Label 末尾追加全角空格（U+3000），视觉无差异但字符串唯一：`'RTB Total　'` / `'JCGP Total　'` / `'Total　'` / `'Total 不含JCGP　'` / `'品牌动态秀　'`（第二个）
+    - ⚠️ DAX __Labels 用 Channel_ID 匹配（不受 Channel_Label 变化影响），但事实表 channel 字段
       若依赖 Channel_Label 关联则需同步更新（见备注）
   - `Media_Mix_matrix_solution` Section 9.5（新增常见问题排查）：
-    - 记录"仅超级短视频有值"问题的三种可能原因及 DAX 查询排查步骤  
-      原因A：事实表 channel 字段值与 Channel_Label 不一致（最高概率）  
-      原因B：Dim_Media_Mix_Channel 未刷新，其他 DETAIL 行 Summary_Scope 仍为 NULL  
+    - 记录"仅超级短视频有值"问题的三种可能原因及 DAX 查询排查步骤
+      原因A：事实表 channel 字段值与 Channel_Label 不一致（最高概率）
+      原因B：Dim_Media_Mix_Channel 未刷新，其他 DETAIL 行 Summary_Scope 仍为 NULL
       原因C：Parent_Channel_ID 字段未加载（仅影响 Cost%，不影响 Cost 绝对值）
   - Checklist 中 Cost% 验证项更新为正确口径（直通车 / RTB Total，非平台 Total）
 - **关联文件**: `Media Mix/Media_Mix_matrix_solution`, `Media Mix/Media_Mix_SQL`
 - **备注**:
-  - JD Channel_Label 加全角空格后，若事实表 channel 字段存的是 Channel_Label 原值（无后缀），  
-    则 `channel IN __Labels` 仍能正常匹配（因为 __Labels 来自 Dim_Media_Mix_Channel，会随维度表刷新而更新）  
-    但需确认：事实表 [channel] 的值 **不包含** 全角空格后缀（即仍为原始中文名）  
-    → 若事实表数据是原始渠道名，则无需改事实表；若事实表数据和维度表同源，需排查
+  - JD Channel_Label 加全角空格后，若事实表 channel 字段存的是 Channel_Label 原值（无后缀），则 `channel IN __Labels` 仍能正常匹配（因为 __Labels 来自 Dim_Media_Mix_Channel，会随维度表刷新而更新）但需确认：事实表 [channel] 的值 **不包含** 全角空格后缀（即仍为原始中文名）→ 若事实表数据是原始渠道名，则无需改事实表；若事实表数据和维度表同源，需排查
   - 诊断步骤详见 `Media_Mix_matrix_solution` Section 9.5
 
 ---
 
-## [⚠️ 请补填具体时间 2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.8 DAX 语法修复 + Cost% 口径修正 + SQL 结构升级
+## [2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.8 DAX 语法修复 + Cost% 口径修正 + SQL 结构升级
 
 - **模块**: Media Mix
 - **任务**: v1.7 遗留问题修复 — IF()无法返回表 + DETAIL行Summary_Scope为空 + Cost%分母口径错误
 - **操作**: 修改
 - **变更内容**:
   - `Media_Mix_SQL`（结构升级）：
-    - **DETAIL 行 Summary_Scope**：从 `NULL` 改为自身 `Channel_ID`（如 `'TM_ZTC'`）  
-      使 DAX 中 CONTAINSSTRING 在 DETAIL 行也能命中自己，无需 IF 分支
-    - **新增 `Parent_Channel_ID` 字段**：标识每行 Cost% 分母所属的 SUMMARY 行  
-      DETAIL 行 → 所属最近上级 SUMMARY（如 TM_ZTC → TM_RTB_TOTAL）  
-      SUMMARY 行 → 自身（如 TM_RTB_TOTAL → TM_RTB_TOTAL，Cost%=100%）
+    - **DETAIL 行 Summary_Scope**：从 `NULL` 改为自身 `Channel_ID`（如 `'TM_ZTC'`）使 DAX 中 CONTAINSSTRING 在 DETAIL 行也能命中自己，无需 IF 分支
+    - **新增 `Parent_Channel_ID` 字段**：标识每行 Cost% 分母所属的 SUMMARY 行DETAIL 行 → 所属最近上级 SUMMARY（如 TM_ZTC → TM_RTB_TOTAL）SUMMARY 行 → 自身（如 TM_RTB_TOTAL → TM_RTB_TOTAL，Cost%=100%）
     - 全部 31 行数据已同步更新
   - `Media Mix Base Value`（DAX 语法修复 + 口径重写）：
-    - **__Labels 变量**：去掉 `IF()` 包裹（DAX 中 IF 无法返回表），改为统一 `SELECTCOLUMNS(FILTER(...))`  
-      因 DETAIL 行 Summary_Scope 现为自身 Channel_ID，CONTAINSSTRING 自然命中
-    - **Cost% 口径修正**：  
-      旧口径：当前行 cost / 平台所有 DETAIL channel cost 之和（= Total）  
-      新口径：当前行 cost / `Parent_Channel_ID` 对应 SUMMARY 行的 cost  
-      新增 `__ParentID` / `__ParentScope` / `__ParentLabels` / `__TotalCost` 变量链实现  
+    - **__Labels 变量**：去掉 `IF()` 包裹（DAX 中 IF 无法返回表），改为统一 `SELECTCOLUMNS(FILTER(...))`因 DETAIL 行 Summary_Scope 现为自身 Channel_ID，CONTAINSSTRING 自然命中
+    - **Cost% 口径修正**：
+      旧口径：当前行 cost / 平台所有 DETAIL channel cost 之和（= Total）
+      新口径：当前行 cost / `Parent_Channel_ID` 对应 SUMMARY 行的 cost
+      新增 `__ParentID` / `__ParentScope` / `__ParentLabels` / `__TotalCost` 变量链实现
       SUMMARY 行分母 = 自身（Parent 自指）→ Cost% 恒为 100%
   - `Media_Mix_matrix_solution` 文件头：版本号 v1.7 → v1.8，变更摘要补充
 - **关联文件**: `Media Mix/Media_Mix_SQL`, `Media Mix/Media_Mix_matrix_solution`
@@ -220,28 +209,17 @@
 
 ---
 
-## [⚠️ 请补填具体时间 2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.7 架构重大修复
+## [2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.7 架构重大修复
 
 - **模块**: Media Mix
 - **任务**: Media Mix Base Value 架构重大问题修复 — ALL(事实表) 日期筛选失效 + DETAIL/SUMMARY路径合并 + CONTAINSSTRING 精确匹配
 - **操作**: 修改
 - **变更内容**:
   - `Media Mix Base Value`（架构重写）：
-    - **[致命修复]** 移除 `FILTER(ALL(a05_e2e_paid_media_channel_data_d), ...)` 滥用  
-      原方案 `ALL(事实表)` 清空了通过 `Dim_Date_Current` 关系传递的 `data_date` 筛选，  
-      导致：① 用户切换日期切片器时矩阵数据不变；  
-      ② Cell Value 层 LP 日期覆盖失效 → Last Year ≡ This Year → YOY ≡ 0  
-      修正为 CALCULATE + 列级条件过滤（`[channel] IN __Labels, [platform]=..., [trans_cycle]=...`），  
-      日期上下文由 `Dim_Date_Current` 关系自然传递，不在度量值中显式管理
-    - **[设计加固]** CONTAINSSTRING 边界包裹：  
-      `CONTAINSSTRING("|" & __SummaryScope & "|", "|" & Channel_ID & "|")`  
-      防止子串误匹配（如 Channel_ID="TM_Z" 误命中 "TM_ZTC|TM_YLMF"）
-    - **[架构精简]** DETAIL / SUMMARY 路径合并为统一 `channel IN __Labels`：  
-      DETAIL 行 `__Labels = ROW("@Label", __ChannelLabel)`（单元素）  
-      SUMMARY 行 `__Labels = SELECTCOLUMNS(FILTER(...))`（多元素）  
-      13 个指标共用同一 `__Labels`，代码量减半；废弃 `__IsDetail`/`__IsSummary`/`__Cost_Detail`/`__Cost_Summary` 分支
-    - **[性能优化]** `__Labels` 用 `IF(__ChannelType = "SUMMARY", ...)` 延迟计算，  
-      DETAIL 行直接 ROW 构造，不扫描 `Dim_Media_Mix_Channel`
+    - **[致命修复]** 移除 `FILTER(ALL(a05_e2e_paid_media_channel_data_d), ...)` 滥用原方案 `ALL(事实表)` 清空了通过 `Dim_Date_Current` 关系传递的 `data_date` 筛选，导致：① 用户切换日期切片器时矩阵数据不变；② Cell Value 层 LP 日期覆盖失效 → Last Year ≡ This Year → YOY ≡ 0修正为 CALCULATE + 列级条件过滤（`[channel] IN __Labels, [platform]=..., [trans_cycle]=...`），日期上下文由 `Dim_Date_Current` 关系自然传递，不在度量值中显式管理
+    - **[设计加固]** CONTAINSSTRING 边界包裹：`CONTAINSSTRING("|" & __SummaryScope & "|", "|" & Channel_ID & "|")`防止子串误匹配（如 Channel_ID="TM_Z" 误命中 "TM_ZTC|TM_YLMF"）
+    - **[架构精简]** DETAIL / SUMMARY 路径合并为统一 `channel IN __Labels`：DETAIL 行 `__Labels = ROW("@Label", __ChannelLabel)`（单元素）SUMMARY 行 `__Labels = SELECTCOLUMNS(FILTER(...))`（多元素）13 个指标共用同一 `__Labels`，代码量减半；废弃 `__IsDetail`/`__IsSummary`/`__Cost_Detail`/`__Cost_Summary` 分支
+    - **[性能优化]** `__Labels` 用 `IF(__ChannelType = "SUMMARY", ...)` 延迟计算，DETAIL 行直接 ROW 构造，不扫描 `Dim_Media_Mix_Channel`
     - **[新增]** Section 5.1 末尾追加"后续指标口径填充模板"，规定统一聚合模式
   - `Section 9.1`（重写）：SUMMARY 行聚合机制更新为 v1.7 架构（4步说明 + 3条约束）
 - **关联文件**: `Media Mix/Media_Mix_matrix_solution`
@@ -320,18 +298,14 @@
 - **任务**: Media Mix 矩阵看板规范合规修订 — 修正 domain-rule 违规 + 消除 v1.1 后遗留的陈旧引用
 - **操作**: 修改
 - **变更内容**:
-  - `DIM_ColMetric_Media_Mix`（DATATABLE Metric_Sort 字段修正）：  
-    原值 `1,2,3...13` 违反 domain-rule「排序字段起始值从7开始」  
-    修正为 `7,8,9,10,11,12,13,14,15,16,17,18,19`（起始 7，步长 1）
-  - `Section 4.2 断开维度列表`（修正）：  
-    移除 `Slicer_Platform_Selection` 条目（v1.1 已废弃）；补充注释说明 Platform 筛选通过 `Dim_Media_Mix_Channel[Platform]` 直接切片器实现
-  - `Section 9.2 平台筛选技术说明`（修正）：  
-    移除旧方案描述（辅助度量值 + 视觉层筛选器）；改写为 v1.1 正确方案（直接切片器方案）
-  - `Section 11 血缘关系图`（修正）：  
+  - `DIM_ColMetric_Media_Mix`（DATATABLE Metric_Sort 字段修正）：原值 `1,2,3...13` 违反 domain-rule「排序字段起始值从7开始」修正为 `7,8,9,10,11,12,13,14,15,16,17,18,19`（起始 7，步长 1）
+  - `Section 4.2 断开维度列表`（修正）：移除 `Slicer_Platform_Selection` 条目（v1.1 已废弃）；补充注释说明 Platform 筛选通过 `Dim_Media_Mix_Channel[Platform]` 直接切片器实现
+  - `Section 9.2 平台筛选技术说明`（修正）：移除旧方案描述（辅助度量值 + 视觉层筛选器）；改写为 v1.1 正确方案（直接切片器方案）
+  - `Section 11 血缘关系图`（修正）：
     移除 `Slicer_Platform_Selection` 和 `[Channel Platform Filter]` 旧方框；补充 `Slicer_DataCaliber_Selection` 和 `Slicer_Currency_Selection` 方框
 - **关联文件**: `Media Mix/Media_Mix_matrix_solution`
-- **备注**:  
-  - Metric_ColorPositive/Negative 按指标差异化（成本类反转）属于有意的业务设计，非违规；domain-rule 颜色为 fallback 默认值，维度表驱动差异化颜色是断开维度模式标准做法  
+- **备注**:
+  - Metric_ColorPositive/Negative 按指标差异化（成本类反转）属于有意的业务设计，非违规；domain-rule 颜色为 fallback 默认值，维度表驱动差异化颜色是断开维度模式标准做法
   - 本次修订无 DAX 逻辑变更，仅修正排序字段值和陈旧文档内容
 
 ---
@@ -342,10 +316,7 @@
 - **任务**: DIM_ColMetric_Media_Mix 颜色规则修正 — 统一按数值正负判断，不区分指标业务性质
 - **操作**: 修改
 - **变更内容**:
-  - `DIM_ColMetric_Media_Mix`（DATATABLE 颜色列修正）：  
-    将 Cost / Cost% / CPC / CPATC 四个指标的 `Metric_ColorPositive` 从 `#D64550`（红）改回 `#1A9018`（绿），  
-    `Metric_ColorNegative` 从 `#1A9018`（绿）改回 `#D64550`（红）；  
-    所有 13 个指标颜色规则统一：正值（>0）= 绿色，负值（<0）= 红色，零值 = 黄色
+  - `DIM_ColMetric_Media_Mix`（DATATABLE 颜色列修正）：将 Cost / Cost% / CPC / CPATC 四个指标的 `Metric_ColorPositive` 从 `#D64550`（红）改回 `#1A9018`（绿），`Metric_ColorNegative` 从 `#1A9018`（绿）改回 `#D64550`（红）；所有 13 个指标颜色规则统一：正值（>0）= 绿色，负值（<0）= 红色，零值 = 黄色
   - Section 3 颜色约定注释（修正）：移除"Cost/Cost% 业务上正向不好，可在此反转"误导性描述
   - Section 8 YOY 颜色方向说明（修正）：改为"不区分指标业务性质，只看数值正负"
 - **关联文件**: `Media Mix/Media_Mix_matrix_solution`
@@ -359,19 +330,14 @@
 - **任务**: 排序字段步长规范修订 — slicer-tips.md 规则更新后对齐，步长改为 10 提升扩展性
 - **操作**: 修改
 - **变更内容**:
-  - `DIM_RowKPIs_Media_Mix`（Indicator Order 字段修正）：  
-    `1, 2, 3` → `7, 17, 27`（起始7，步长10，便于后续在行间插入新类型）
-  - `DIM_ColMetric_Media_Mix`（Metric_Sort 字段修正）：  
-    `7, 8, 9, ..., 19`（步长1）→ `7, 17, 27, 37, 47, 57, 67, 77, 87, 97, 107, 117, 127`（步长10）  
-    起始值 7 保持不变（符合 domain-rule），步长从 1 改为 10
-  - `Media_Mix_matrix_solution` 文件头部日志清理：  
-    移除文件内全量历史变更日志，只保留最新版本摘要（v1.4）；  
-    历史详细记录统一归档至 `changelog.md`
-  - Section 10 验证清单颜色描述（顺带修正）：  
+  - `DIM_RowKPIs_Media_Mix`（Indicator Order 字段修正）：`1, 2, 3` → `7, 17, 27`（起始7，步长10，便于后续在行间插入新类型）
+  - `DIM_ColMetric_Media_Mix`（Metric_Sort 字段修正）：`7, 8, 9, ..., 19`（步长1）→ `7, 17, 27, 37, 47, 57, 67, 77, 87, 97, 107, 117, 127`（步长10）起始值 7 保持不变（符合 domain-rule），步长从 1 改为 10
+  - `Media_Mix_matrix_solution` 文件头部日志清理：移除文件内全量历史变更日志，只保留最新版本摘要（v1.4）；历史详细记录统一归档至 `changelog.md`
+  - Section 10 验证清单颜色描述（顺带修正）：
     "Cost 正向=红色，ROI 正向=绿色" → "正值=绿色，负值=红色，零值=黄色，全指标统一"
 - **关联文件**: `Media Mix/Media_Mix_matrix_solution`
-- **备注**:  
-  - slicer-tips.md 规范：`_Sort` 字段尽量不从1开始，步长不能为1，便于后续新增字段扩展  
+- **备注**:
+  - slicer-tips.md 规范：`_Sort` 字段尽量不从1开始，步长不能为1，便于后续新增字段扩展
   - domain-rules.md 规范：排序字段起始值从7开始（⚠️ 已被 v1.5 修订为起始10）
   - 两条规则组合结果：起始7，步长10（7, 17, 27...）（⚠️ 已被 v1.5 修订为起始10，步长10）
 
@@ -383,19 +349,16 @@
 - **任务**: domain-rules.md 排序规范起始值修正后同步更新 — 起始值 7 → 10
 - **操作**: 修改
 - **变更内容**:
-  - `domain-rules.md`（用户已直接修改）：  
-    `起始值从7开始` → `起始值从10开始，步长用 10，便于后续插入`
-  - `DIM_RowKPIs_Media_Mix`（Indicator Order 修正）：  
-    `7, 17, 27` → `10, 20, 30`
-  - `DIM_ColMetric_Media_Mix`（Metric_Sort 修正）：  
-    `7, 17, 27, ..., 127` → `10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130`
+  - `domain-rules.md`（用户已直接修改）：`起始值从7开始` → `起始值从10开始，步长用 10，便于后续插入`
+  - `DIM_RowKPIs_Media_Mix`（Indicator Order 修正）：`7, 17, 27` → `10, 20, 30`
+  - `DIM_ColMetric_Media_Mix`（Metric_Sort 修正）：`7, 17, 27, ..., 127` → `10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130`
   - `Media_Mix_matrix_solution` 文件头版本摘要更新至 v1.5
 - **关联文件**: `Media Mix/Media_Mix_matrix_solution`, `powerbi_code_copilot/rules/domain-rules.md`
 - **备注**: 同步清理 memory 中旧的"起始值7"规范条目，保留最新的"起始10步长10"规范
 
 ---
 
-## [⚠️ 请补填具体时间 2026-06-01 13:30] 修改 — powerbi_code_copilot 规范文件更新
+## [2026-06-01 13:30] 修改 — powerbi_code_copilot 规范文件更新
 
 - **模块**: 项目配置
 - **任务**: powerbi_code_copilot 规范同步 — domain-rules.md 与 slicer-tips.md 内容更新
@@ -413,14 +376,14 @@
 
 ---
 
-## [⚠️ 请补填具体时间 2026-06-01 14:30] 修改 — Media Mix 矩阵方案 v1.6 Summary_Scope Bug 修复
+## [2026-06-01 14:30] 修改 — Media Mix 矩阵方案 v1.6 Summary_Scope Bug 修复
 
 - **模块**: Media Mix
 - **任务**: Summary_Scope 格式 Bug 修复 — 统一 | 分隔符 + 嵌套 SUMMARY 展开为底层 DETAIL
 - **操作**: 修改
 - **变更内容**:
   - `Media_Mix_SQL`（修改）：所有 SUMMARY 行 Summary_Scope 字段修正，共两类问题：
-    - **格式问题**：分隔符从 ` + `（含空格）统一改为 `|`（无空格），与文档注释保持一致
+    - **格式问题**：分隔符从 `+`（含空格）统一改为 `|`（无空格），与文档注释保持一致
     - **嵌套展开问题**：以下行原引用中间层 SUMMARY Channel_ID，改为直接枚举底层 DETAIL Channel_ID：
       - `TM_JCGP_TOTAL`：`TM_PXB_TOTAL + TM_PPTX` → `TM_PPZQ|TM_PPTX`
       - `TM_TOTAL`：`TM_RTB_TOTAL + TM_JCGP_TOTAL` → `TM_ZTC|TM_YLMF|TM_QZT|TM_DSP|TM_PPZQ|TM_PPTX`
@@ -453,5 +416,120 @@
 ---
 
 ## [Crowd] 模块
+
+---
+
+## [2026-06-12 15:35] 新建 — Crowd 人群粒度矩阵方案
+
+- **模块**: Crowd
+- **任务**: Crowd 人群粒度矩阵看板 — 初始架构搭建
+- **操作**: 新建
+- **变更内容**:
+  - `DIM_ColMetric_Crowd`：新建列维度表（断开维度），8 列指标（Cost / Cost% / ROI / Click / CPC / CTR / CVR / Add to Cart），内嵌格式与颜色定义；`Metric_Sort` 起始值 = 10，步长 = 10（遵循 domain-rules 规范）；`Metric_ColorDefault` = `#5f6165`
+  - `Slicer_Super_Season_Selection`：新建 Super Season 参数表（断开维度，单选含 ALL），基于事实表 `crowed_layer` 字段；ALL 选项表示全选（不施加 crowed_layer 筛选）；默认选中 ALL
+  - `Slicer_Category_Selection`：新建 Category 参数表（断开维度，单选含 ALL），基于事实表 `crowed_type` 字段；ALL 选项表示全选（不施加 crowed_type 筛选）；默认选中 ALL
+  - `Slicer_Label_Selection`：新建 Label 参数表（断开维度，单选含 ALL），基于事实表 `crowed_name` 字段；ALL 选项表示全选（不施加 crowed_name 筛选）；默认选中 ALL
+  - `Crowd Base Value`：新建纯指标 SWITCH 分发度量值（8 分支）
+    - ID 1 Cost：有口径，SUM(a05_e2e_paid_media_crowed_data_d[cost_amt])
+    - ID 2 Cost%：有口径，DIVIDE(SUM(cost_amt), SUM(sales_amt))
+    - ID 3~8：占位值 = 1，保留口径注释供后续填充
+    - 含 Platform 单选/ALL 筛选（复用 Slicer_Platform_Selection，ALL → FILTER platform IN {"TM","JD"}）
+    - 含 trans_cycle 筛选（复用 Slicer_DataCaliber_Selection）
+    - 含 crowed_layer / crowed_type / crowed_name 专属切片器筛选（ALL 时不施加对应字段筛选）
+  - `Crowd Cell Value`：新建单元格值度量值，无 This Year/Last Year/YOY 行路由（本模块无同比逻辑），金额类指标乘以 Currency_ExchangeRate 汇率
+  - `Crowd Cell Display`：新建格式化显示度量值，支持 currency / integer / decimal_2 / percent_1dp 四种格式
+  - `Crowd Cell Font Color`：新建字体颜色度量值，统一返回 `#5f6165` 深灰色（本模块无 YOY 条件色）
+  - `Crowd Cell Background Color`：新建行背景色度量值，channel 行/总计行 → `#f8f5f1`（浅米色），crowed_layer 明细行 → `#ffffff`（白色）；通过 `HASONEVALUE(crowed_layer)` 判断行类型
+- **关联文件**: `Crowd/Crowd_matrix_solution`
+- **备注**:
+  - 行维度直接来自事实表字段（channel + crowed_layer），无需构建断开维度表
+  - 三个专属切片器（Super Season / Category / Label）仅影响 Crowd 模块，不与其他模块共享
+  - 当前专属切片器参数表仅含 ALL + 一个占位值，建议后续通过 Power Query 动态提取 DISTINCT 值
+  - 无同比逻辑，不涉及 Dim_Date_Ly
+  - 复用切片器：Slicer_Platform_Selection / Slicer_DataCaliber_Selection / Slicer_Currency_Selection（复用 Overview 方案）
+
+---
+
+## [2026-06-12 16:20] 修改 — Crowd 方案 v2 架构调整（SWITCH→独立度量 + SQL动态切片器 + Table视觉对象）
+
+- **模块**: Crowd
+- **任务**: Crowd 方案架构调整 — 适配 Table 视觉对象
+- **操作**: 修改
+- **变更内容**:
+  - `Crowd_matrix_solution`（修改）：
+    - **架构调整**：度量值从 SWITCH 分发改为 8 个独立度量值（Crowd Cost / Crowd Cost% / Crowd ROI / Crowd Click / Crowd CPC / Crowd CTR / Crowd CVR / Crowd Add to Cart）
+      原因：行维度直接来自事实表字段，无自定义结构，不采用 Matrix，改用 Table 视觉对象
+    - **废弃**：Crowd Base Value / Crowd Cell Value / Crowd Cell Display / DIM_ColMetric_Crowd 列维度表
+    - **视觉对象**：从 Matrix 改为 Table，每列直接绑定一个独立度量值
+    - **专属切片器**：从 DAX DATATABLE 改为 SQL 动态查询，从数据源获取 DISTINCT 值并加入 ALL 行
+      - Slicer_Super_Season_Selection：SQL 基于 crowed_layer，ALL=10，其余按字母排序
+      - Slicer_Category_Selection：SQL 基于 crowed_type，排序 = SuperSeason_Sort*1000 + 字母序（体现层级分组）
+      - Slicer_Label_Selection：SQL 基于 crowed_name，排序 = Category_Sort*1000 + 字母序（体现层级分组）
+    - **指标口径更新**：Click / CPC / CTR / CVR / Add to Cart 从占位值=1 更新为实际口径（基于数据字典字段）
+    - 版本号 v1 → v2
+- **关联文件**: `Crowd/Crowd_matrix_solution`
+- **备注**:
+  - SQL 切片器字段命名为 Super Season / Category / Label，便于后续直接替换表字段上线
+  - 层级排序规则：Super Season 按字母；Category = SuperSeason_Sort*1000 + 字母序；Label = Category_Sort*1000 + 字母序
+  - ROI 指标仍为占位值=1，待确认口径
+
+---
+
+## [2026-06-12 16:50] 修改 — Crowd 方案 v4（专属切片器改为多选，移除 ALL 逻辑）
+
+- **模块**: Crowd
+- **任务**: Crowd 方案 v4 — 专属切片器多选化 + 多列 TREATAS + 表名修正
+- **操作**: 修改
+- **变更内容**:
+  - `Crowd_matrix_solution`（修改）：
+    - **切片器多选化**：Slicer_Crowd_Selection 三个切片器从单选改为多选
+      - SQL 移除所有 ALL 相关 UNION ALL 行，简化为纯 DISTINCT 查询
+      - DAX 废弃 SELECTEDVALUE + IF(<> "ALL") 模式，改用多列 TREATAS(VALUES(表)) 元组筛选
+      - 多选模式下"全选"= 选中所有项，无需 ALL 占位值
+    - **多列 TREATAS**：三个独立 TREATAS 合并为一个多列 TREATAS
+      - TREATAS(VALUES(Slicer_Crowd_Selection), 事实表[crowed_layer], 事实表[crowed_name], 事实表[crowed_type])
+      - 按元组组合筛选，不产生幽灵组合，语义与同源级联切片器天然对齐
+      - 代码更简洁（一行替代三行）
+    - **表名修正**：Slicer_Crowd_Selection → Dim_Crowd_Season_C_Label（与实际 Power BI 表名一致）
+    - **Platform 筛选修正**：IF 直接返回列筛选表达式改为 FILTER(ALL(table[platform]), IF(...)) 模式
+      解决 DAX 中 IF 返回列筛选表达式时无法解析列名的问题
+    - 版本号 v3 → v4
+- **关联文件**: `Crowd/Crowd_matrix_solution`
+- **备注**:
+  - 多列 TREATAS 是 Power BI 推荐的同源多列断开维度筛选模式
+  - 全选时 VALUES 返回全部行，等价于不筛选
+
+---
+
+## [2026-06-12 17:00] 修改 — Crowd 方案 v3（级联切片器 + CPC逻辑修正 + Display度量值）
+
+- **模块**: Crowd
+- **任务**: Crowd 方案 v3 — 切片器级联 + 度量值逻辑修正 + Display 格式化
+- **操作**: 修改
+- **变更内容**:
+  - `Crowd_matrix_solution`（修改）：
+    - **切片器重构**：3 个独立 SQL 表合并为单一 Slicer_Crowd_Selection（三列同源），Power BI 同表列自动交叉筛选实现级联
+      - 废弃 Slicer_Super_Season_Selection / Slicer_Category_Selection / Slicer_Label_Selection 三表
+      - 废弃排序字段（筛选器不关注排序）
+      - SQL 补充 ALL 行：每列 ALL 值关联所有其他列组合，确保选 ALL 时子级切片器显示全部值
+    - **CPC 逻辑修正**：移除汇率乘法，CPC = DIVIDE(cost_amt, click) 为比率型指标，不乘汇率
+      仅 Cost（纯金额）需要乘汇率
+    - **新增 8 个 Display 格式化显示度量值**：FORMAT 函数输出文本，明确数据类型与格式字符串
+      - Cost: "#,##0.00;(#,##0.00);0.00"（金额，负数括号）
+      - Cost%: "0.0%;-0.0%;0.0%"（百分比一位小数）
+      - ROI: "#,##0.00;-#,##0.00;0.00"（小数两位，正负号）
+      - Click: "#,##0;(#,##0);0"（整数）
+      - CPC: "#,##0.00;-#,##0.00;0.00"（小数两位）
+      - CTR: "0.0%;-0.0%;0.0%"（百分比一位小数）
+      - CVR: "0.0%;-0.0%;0.0%"（百分比一位小数）
+      - Add to Cart: "#,##0;(#,##0);0"（整数）
+    - **HASONEVALUE 函数说明**：5.2 节补充函数语法、行为详解、等价写法、本场景应用
+    - 版本号 v2 → v3
+- **关联文件**: `Crowd/Crowd_matrix_solution`
+- **备注**:
+  - Display 度量值返回文本类型，用于需要格式化文本输出的场景；Table 视觉对象中可直接在度量值属性设置格式字符串
+  - CPC 不乘汇率的理由：分子分母同币种，比值无币种维度，除完再乘汇率会改变比率数值
+
+---
 
 > 暂无变更记录
