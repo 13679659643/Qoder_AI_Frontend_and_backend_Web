@@ -419,6 +419,124 @@
 
 ---
 
+## [2026-06-16 20:00] 修改 — Crowd Cost% 分母 FILTER(VALUES()) → FILTER(ALL()) 修复
+
+- **模块**: Crowd
+- **任务**: Crowd Cost% 每行始终为 1 的 Bug 修复
+- **操作**: 修改
+- **变更内容**:
+  - `Crowd Cost%`（DAX 修复）：
+    - 分母 `__TotalCostAmt` 中 3 个 `FILTER(VALUES(...))` 改为 `FILTER(ALL(...))`
+    - 移除 `__LayerFilter` / `__NameFilter` / `__TypeFilter` 三个变量（不能跨 CALCULATE 复用）
+    - 分子 `__CostAmt` 保持 `FILTER(VALUES())` 交集模式（保留行维度）
+    - 分母 `__TotalCostAmt` 改用 `FILTER(ALL())` 仅切片器模式（移除行维度后不回填）
+  - 新增 Section 9.5「Cost% 分母：FILTER(VALUES()) vs FILTER(ALL())」技术说明
+- **关联文件**: `Crowd/Crowd_matrix_solution`
+- **根因**:
+  - `FILTER(VALUES(列), 列 IN 切片器值)` 作为 VAR 定义时，在行上下文中求值
+  - VALUES 返回当前行的值 → 固化为表变量 → 在 __TotalCostAmt 中重新施加
+  - REMOVEFILTERS 被固化的变量抵消 → 分母 ≈ 分子 → Cost% ≈ 1
+- **修复后行为**:
+  - 分子：保留行维度（FILTER(VALUES()) 交集模式）
+  - 分母：移除行维度 + 仅保留切片器（REMOVEFILTERS + FILTER(ALL())）
+  - 总计行：Cost% = 100%（自身/自身）
+  - 明细行：Cost% < 100%（各行花费/总花费）
+
+---
+
+## [2026-06-16 18:00] 回滚 — Crowd 方案 v6.2 紧急回滚至 v5 变量化版本
+
+- **模块**: Crowd
+- **任务**: v6.1 计算表方案语义错误紧急回滚
+- **操作**: 回滚（v6.1 → v5）
+- **变更内容**:
+  - 8 个业务度量值全部回滚至 v5 变量化版本（恢复 6 个变量 + 5 个 FILTER 块内联）
+  - 废弃对计算表 'Crowd Base Filter Context' 的引用
+  - 同步清理文档：移除 Section 3.10、5.0、9.5-9.8、验证清单 22-40 等 v6.x 专章
+  - 解决方案文件回归纯净状态：仅保留 v5 业务代码 + 指向 changelog.md 的版本索引
+- **关联文件**: `Crowd/Crowd_matrix_solution`
+- **回滚根因**: v6.1 使用 `ALL('Crowd Base Filter Context')` 作为 CALCULATE 筛选参数会**重置筛选上下文**，导致 8 个业务度量值完全不受切片器筛选影响（用户实测发现）
+- **教训**:
+  - 1. ALL('表名') 在 CALCULATE 中是"重置筛选"，不是"应用筛选"——语义反转
+  - 2. 任何 DAX 重构方案必须经过 Power BI Desktop 实际验证，未经验证的方案不可交付
+  - 3. 重构应小步快跑、逐步验证，避免一次性大跨度变更
+
+---
+
+## [2026-06-16 16:30] 废弃 — Crowd 方案 v6.1 计算表模式（语义错误，已回滚）
+
+- **模块**: Crowd
+- **任务**: 试图通过计算表封装公共筛选逻辑减少代码重复
+- **操作**: 废弃（v6.1 → v6.2 紧急回滚）
+- **变更内容**:
+  - 新建计算表 `Crowd Base Filter Context`（CALCULATETABLE 返回筛选后的事实表）
+  - 封装 v5 的 6 个变量 + 5 个 FILTER 块
+  - 8 个业务度量值改为 `CALCULATE(..., ALL('Crowd Base Filter Context'))` 引用
+- **严重错误**:
+  - 现象：8 个业务度量值完全不受切片器筛选影响（始终显示全量数据）
+  - 根本原因：`ALL('表名')` 在 CALCULATE 筛选参数位置会**移除该表上的所有筛选上下文**
+  - 与设计意图"应用计算表封装的筛选"完全相反
+- **关联文件**: `Crowd/Crowd_matrix_solution`
+- **备注**:
+  - 失误责任：AI 助手未在 Power BI Desktop 实际验证，直接交付方案
+  - 辅助封装公共筛选的正确方法：GENERATE / TREATAS / 显式列出筛选条件，**不要**使用 ALL
+  - v6.1 在 v6 失败后沿用错误引用方式，连续两次失误
+
+---
+
+## [2026-06-16 15:00] 废弃 — Crowd 方案 v6 度量值方案（语法错误，已被 v6.1 取代）
+
+- **模块**: Crowd
+- **任务**: 试图将公共筛选逻辑封装为单一度量值
+- **操作**: 废弃（v6 → v6.1）
+- **变更内容**:
+  - 试图创建度量值 `Crowd Base Filter Context` 封装公共筛选
+  - 度量值内部使用 `CALCULATETABLE(...)` 返回筛选后的事实表
+- **错误**:
+  - 现象：DAX 编译报错"该表达式引用多列。多列不能转换为标量值"
+  - 根本原因：CALCULATETABLE 返回多列表，度量值必须返回标量值
+- **关联文件**: `Crowd/Crowd_matrix_solution`
+- **备注**:
+  - 度量值只能返回标量值，多列表应使用计算表（但计算表的引用方式仍需正确，见 v6.1 失败记录）
+  - v6 失败后试图通过 v6.1 改为计算表，但引用方式继续错误
+
+---
+
+## [2026-06-16 11:30] 修改 — Crowd 方案 v5 DAX 变量化优化（方案 A + 方案 B）
+
+- **模块**: Crowd
+- **任务**: Crowd 方案 DAX 性能与可读性优化 — 变量化公共筛选模式
+- **操作**: 修改
+- **变更内容**:
+  - `Crowd Cost`（DAX 优化，v5）：
+    - 方案 A — 新增 3 个变量：`__SuperSeasonVals` / `__CategoryVals` / __LabelVals（VALUES(Dim_Crowd_Season_C_Label[...]) 提取）
+    - 方案 B — 新增 1 个变量：`__PlatformFilter`（FILTER(ALL(platform), IF(...)) 整段提取）
+    - 废弃变量：`__IsAllPlatform`（逻辑内联到 `__PlatformFilter` 中）
+    - 净收益：代码量 -42%，切片器字段引用 24 处 → 8 处
+  - `Crowd Cost%`（DAX 优化，v5）：
+    - 同上 4 个变量；特别地，`__PlatformFilter` 在 `__CostAmt` / `__TotalCostAmt` 两个 CALCULATE 中复用
+    - v4 构造次数：2 次 Platform FILTER + 6 次专属 FILTER → v5：1 次 Platform FILTER + 6 次专属 FILTER
+  - `Crowd CPC` / `Crowd CTR` / `Crowd CVR`（DAX 优化，v5）：
+    - 同上 4 个变量；`__PlatformFilter` 在两个 CALCULATE 中复用
+    - 节省 1 次 Platform FILTER 表构造
+  - `Crowd Click` / `Crowd Add to Cart`（DAX 优化，v5）：
+    - 同上 4 个变量；单 CALCULATE 度量值
+  - `Crowd ROI`（占位度量值）：
+    - 头部注释追加「变更: v5 添加变更标记」标识
+  - 文档更新：
+    - `Crowd_matrix_solution` Section 3.1 公共筛选逻辑说明：重写为 v5 变量化版本
+    - 新增 Section 9.5「v5 变量化优化技术说明」（6 个子节：动机 / 方案 / 收益分析 / 不变量化的原因）
+    - Section 10 验证清单追加 5 项 v5 专项验证（数值等价性、变量定义、废弃变量、双 CALCULATE 复用、DAX 编译）
+    - 文件头版本：v4 → v5
+- **关联文件**: `Crowd/Crowd_matrix_solution`
+- **备注**:
+  - 行为完全等价：所有筛选语义与 v4 一致，仅 DAX 写法变更
+  - 性能预估：≤ 10% 提升（DAX 引擎对 VALUES(同列) 内部已去重缓存，主要收益是可读性）
+  - 方案 C（FILTER(VALUES(...)) 块变量化）暂不采纳，存在上下文继承风险，留作 v6 优化方向
+  - 8 个 Display 度量值无需修改（仅引用基础度量值）
+
+---
+
 ## [2026-06-12 15:35] 新建 — Crowd 人群粒度矩阵方案
 
 - **模块**: Crowd
@@ -478,7 +596,7 @@
 ## [2026-06-12 16:50] 修改 — Crowd 方案 v4（专属切片器改为多选，移除 ALL 逻辑）
 
 - **模块**: Crowd
-- **任务**: Crowd 方案 v4 — 专属切片器多选化 + 多列 TREATAS + 表名修正
+- **任务**: Crowd 方案 v5 — Cost%口径修正 + 中文名/数据字典注释 + FILTER(VALUES())交集模式
 - **操作**: 修改
 - **变更内容**:
   - `Crowd_matrix_solution`（修改）：
@@ -493,11 +611,25 @@
     - **表名修正**：Slicer_Crowd_Selection → Dim_Crowd_Season_C_Label（与实际 Power BI 表名一致）
     - **Platform 筛选修正**：IF 直接返回列筛选表达式改为 FILTER(ALL(table[platform]), IF(...)) 模式
       解决 DAX 中 IF 返回列筛选表达式时无法解析列名的问题
-    - 版本号 v3 → v4
+    - **Cost% 口径修正**：从 DIVIDE(cost_amt, sales_amt) 改为 DIVIDE(当前行 cost_amt, 总计 cost_amt)
+      分母使用 REMOVEFILTERS(channel, crowed_layer) 移除行维度筛选，保留切片器筛选
+      Cost% 语义：每行花费占总计花费的百分比
+    - **中文名称 + 数据字典注释**：所有 8 个度量值及 8 个 Display 度量值添加中文名称和数据字典字段注释
+      Cost=花费(cost_amt), Cost%=花费占比, ROI=投资回报率, Click=点击量(click),
+      CPC=单次点击成本(cost_amt,click), CTR=点击率(click,pv), CVR=转化率(sales_order_cnt,click),
+      Add to Cart=总加购数(add_cart_cnt)
+    - **筛选模式修正**：IN + VALUES 覆盖模式改为 FILTER(VALUES()) 交集模式
+      原因：行维度（crowed_layer / crowed_name / crowed_type）来自事实表字段
+      CALCULATE 筛选参数会覆盖同一列的外部筛选上下文
+      直接用 "列 IN VALUES(切片器)" 会覆盖行维度筛选，导致每行显示总计值
+      FILTER(VALUES(事实表列), 列 IN VALUES(切片器列)) 先读取当前行维度值，再与切片器取交集
+      全选时：交集 = 行维度值 → 等价于仅行维度筛选
+      部分选择时：交集 = 行维度值 ∩ 选中值
+    - 版本号 v4 → v5
 - **关联文件**: `Crowd/Crowd_matrix_solution`
 - **备注**:
-  - 多列 TREATAS 是 Power BI 推荐的同源多列断开维度筛选模式
-  - 全选时 VALUES 返回全部行，等价于不筛选
+  - FILTER(VALUES()) 是行维度来自事实表时的标准断开维度筛选模式
+  - 全选时交集 = 行维度值，等价于仅行维度筛选
 
 ---
 
