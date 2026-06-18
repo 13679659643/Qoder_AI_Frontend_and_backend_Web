@@ -1,0 +1,850 @@
+-- ================================================================================
+-- Crowd Matrix — 数据验证测试 SQL
+-- ================================================================================
+--
+-- 用途：在火山引擎 ByteHouse / MySQL 中执行，验证数据库数据与 Power BI Crowd 表一致性
+-- 对标：Crowd_matrix_solution 中 Crowd Cost / Crowd Cost% 的 DAX 计算口径
+-- 数据库：indep_rl_ads
+-- 事实表：a05_e2e_paid_media_crowed_data_d（人群粒度）
+--
+-- 使用说明：
+--   1. 修改下方 ★参数区★ 中的日期范围、平台、数据口径、人群筛选条件
+--   2. 将参数值替换到各查询中对应的占位处
+--   3. 逐段执行，将结果与 Power BI Table 中对应行/列比对
+--   4. 本文件所有金额为 RMB 原始值（不含汇率转换）
+--      Power BI 选择 RMB 时应与此一致；选择 USD 时 Cost = 此值 × 汇率乘数
+--
+-- ★参数区★（修改这里的值来匹配 Power BI 切片器选择）：
+--   日期范围：     '2026-01-01' ~ '2026-06-17'
+--   平台：         'ALL'（代表 TM + JD 精确聚合）
+--   数据口径：     'T+1'
+--   Super Season：  全选（不施加 crowed_layer 筛选）
+--   Category：      全选（不施加 crowed_name 筛选）
+--   Label：         全选（不施加 crowed_type 筛选）
+--
+-- DAX 筛选逻辑摘要：
+--   Cost    = SUM(cost_amt) × ExchangeRate
+--             FILTER(VALUES()) 交集模式（保留行维度）
+--   Cost%   = DIVIDE(当前行 cost_amt, 总计 cost_amt)
+--             分子：FILTER(VALUES()) 交集模式（保留行维度）
+--             分母：REMOVEFILTERS(channel, crowed_layer) + FILTER(ALL()) 仅保留切片器
+--
+-- Table 视觉对象行维度：
+--   一级行头：channel（广告点位）
+--   二级行头：crowed_layer（人群分层）
+--   总计行：所有行聚合
+-- ================================================================================
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 0: 数据探查 — 确认表结构与数据可用性
+-- ████████████████████████████████████████████████████████████████████████████████
+
+-- 0.1 检查事实表可用的平台和数据口径
+SELECT
+    platform,
+    trans_cycle,
+    COUNT(*)                        AS row_cnt,
+    COUNT(DISTINCT data_date)       AS date_cnt,
+    MIN(data_date)                  AS min_date,
+    MAX(data_date)                  AS max_date
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+GROUP BY platform, trans_cycle
+ORDER BY platform, trans_cycle;
+
+
+-- 0.2 检查人群维度字段值分布（crowed_layer / crowed_type / crowed_name）
+-- 说明：这三个字段对应 Power BI 三个专属切片器
+--       Super Season ← crowed_layer
+--       Category     ← crowed_name
+--       Label        ← crowed_type
+SELECT
+    crowed_layer,
+    crowed_type,
+    crowed_name,
+    COUNT(*)        AS row_cnt,
+    SUM(cost_amt)   AS total_cost
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY crowed_layer, crowed_type, crowed_name
+ORDER BY crowed_layer, crowed_type, crowed_name;
+
+
+-- 0.3 检查 channel 字段值分布（一级行头维度）
+SELECT
+    platform                            AS channel,
+    COUNT(*)                            AS row_cnt,
+    COUNT(DISTINCT crowed_layer)        AS layer_cnt,
+    SUM(cost_amt)                       AS total_cost
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY platform
+ORDER BY platform;
+
+
+-- 0.4 检查 NULL 值分布（可能导致聚合差异）
+SELECT
+    SUM(CASE WHEN cost_amt IS NULL THEN 1 ELSE 0 END)          AS null_cost_amt,
+    SUM(CASE WHEN click IS NULL THEN 1 ELSE 0 END)             AS null_click,
+    SUM(CASE WHEN pv IS NULL THEN 1 ELSE 0 END)                AS null_pv,
+    SUM(CASE WHEN add_cart_cnt IS NULL THEN 1 ELSE 0 END)      AS null_add_cart,
+    SUM(CASE WHEN sales_order_cnt IS NULL THEN 1 ELSE 0 END)   AS null_orders,
+    SUM(CASE WHEN crowed_layer IS NULL THEN 1 ELSE 0 END)      AS null_layer,
+    SUM(CASE WHEN crowed_type IS NULL THEN 1 ELSE 0 END)       AS null_type,
+    SUM(CASE WHEN crowed_name IS NULL THEN 1 ELSE 0 END)       AS null_name,
+    SUM(CASE WHEN currency IS NULL THEN 1 ELSE 0 END)          AS null_currency,
+    COUNT(*)                                                    AS total_rows
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17';
+
+
+-- 0.5 检查 currency 字段值分布（影响 Power BI 中 IF(currency is null, 'RMB', currency) 逻辑）
+SELECT
+    IF(currency IS NULL, 'RMB', currency)   AS currency_display,
+    COUNT(*)                                 AS row_cnt,
+    SUM(cost_amt)                            AS total_cost
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY IF(currency IS NULL, 'RMB', currency);
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 1: 总计行验证 — Cost & Cost%（对标 Power BI Table 总计行）
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 对应 Power BI: Table 最底部的总计行
+-- DAX 行为：
+--   Cost  = SUM(cost_amt) × ExchangeRate（全量聚合，无行维度限制）
+--   Cost% = DIVIDE(总计cost, 总计cost) = 1.0（即 100%）
+
+-- 1.1 总计行 Cost（Platform = ALL → TM + JD）
+-- DAX 口径：
+--   CALCULATE(SUM(cost_amt),
+--     FILTER(ALL(platform), platform IN {"TM","JD"}),
+--     trans_cycle = "T+1",
+--     FILTER(VALUES(crowed_layer), crowed_layer IN 切片器值),   -- 全选时 = 全部
+--     FILTER(VALUES(crowed_name),  crowed_name  IN 切片器值),   -- 全选时 = 全部
+--     FILTER(VALUES(crowed_type),  crowed_type  IN 切片器值))   -- 全选时 = 全部
+SELECT
+    '总计行'                              AS row_type,
+    SUM(cost_amt)                         AS `Cost_RMB`,
+    SUM(cost_amt)                         AS `Cost_USD_待乘汇率`,
+    1.0                                   AS `Cost_Pct`,
+    COUNT(*)                              AS row_cnt,
+    COUNT(DISTINCT platform)              AS platform_cnt,
+    COUNT(DISTINCT crowed_layer)          AS layer_cnt,
+    COUNT(DISTINCT crowed_name)           AS name_cnt,
+    COUNT(DISTINCT crowed_type)           AS type_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17';
+-- 预期：Cost_Pct = 1.0（100%），总计行分子 = 分母
+
+
+-- 1.2 总计行 Cost — 按平台分别验证（排查平台聚合差异）
+SELECT
+    platform,
+    SUM(cost_amt)                         AS `Cost_RMB`,
+    COUNT(*)                              AS row_cnt,
+    COUNT(DISTINCT crowed_layer)          AS layer_cnt,
+    COUNT(DISTINCT data_date)             AS date_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY platform
+ORDER BY platform;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 2: channel 行（一级行头）验证 — Cost & Cost%
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 对应 Power BI: Table 中 channel 级别的行（如 TM / JD）
+-- DAX 行为：
+--   Cost  = SUM(cost_amt) WHERE platform = 当前行 channel（行维度筛选）
+--   Cost% = DIVIDE(channel行Cost, 总计Cost)
+--          分母 REMOVEFILTERS(channel, crowed_layer)，保留切片器筛选
+
+-- 2.1 按 channel 聚合 Cost + Cost%
+WITH
+-- ── 总计 Cost（分母，等价于 PART 1.1 的结果）──
+total_cost AS (
+    SELECT SUM(cost_amt) AS cost
+    FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+    WHERE platform IN ('TM', 'JD')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-17'
+)
+-- ── 按 channel 聚合 ──
+SELECT
+    platform                                AS `channel`,
+    SUM(cost_amt)                           AS `Cost_RMB`,
+    SUM(cost_amt) / NULLIF(tc.cost, 0)      AS `Cost_Pct`,
+    COUNT(*)                                AS row_cnt,
+    COUNT(DISTINCT crowed_layer)            AS layer_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+CROSS JOIN total_cost tc
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY platform, tc.cost
+ORDER BY platform;
+-- 预期：各 channel Cost_Pct 之和 = 1.0
+-- 验证：TM Cost_Pct + JD Cost_Pct = 1.0
+
+
+-- 2.2 按 channel 验证 — 单平台 TM（对标 Power BI Platform 切片器选 TM）
+-- DAX 口径：
+--   __ChannelID = "TM" → FILTER(ALL(platform), platform = "TM")
+SELECT
+    platform                                AS `channel`,
+    SUM(cost_amt)                           AS `Cost_RMB`,
+    COUNT(*)                                AS row_cnt,
+    COUNT(DISTINCT crowed_layer)            AS layer_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform = 'TM'
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY platform;
+
+
+-- 2.3 按 channel 验证 — 单平台 JD（对标 Power BI Platform 切片器选 JD）
+SELECT
+    platform                                AS `channel`,
+    SUM(cost_amt)                           AS `Cost_RMB`,
+    COUNT(*)                                AS row_cnt,
+    COUNT(DISTINCT crowed_layer)            AS layer_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform = 'JD'
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY platform;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 3: channel + crowed_layer 行（二级明细行）验证 — Cost & Cost%
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 对应 Power BI: Table 中 channel 展开后的 crowed_layer 明细行
+-- DAX 行为：
+--   Cost  = SUM(cost_amt) WHERE platform = 当前行 channel AND crowed_layer = 当前行值
+--   Cost% = DIVIDE(明细行Cost, 总计Cost)
+--          分母 REMOVEFILTERS(channel, crowed_layer)，保留切片器筛选
+
+-- 3.1 按 channel + crowed_layer 聚合 Cost + Cost%（全选切片器）
+WITH
+-- ── 总计 Cost（分母）──
+total_cost AS (
+    SELECT SUM(cost_amt) AS cost
+    FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+    WHERE platform IN ('TM', 'JD')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-17'
+)
+SELECT
+    platform                                AS `channel`,
+    crowed_layer                            AS `crowed_layer`,
+    SUM(cost_amt)                           AS `Cost_RMB`,
+    SUM(cost_amt) / NULLIF(tc.cost, 0)      AS `Cost_Pct`,
+    COUNT(*)                                AS row_cnt,
+    COUNT(DISTINCT crowed_name)             AS name_cnt,
+    COUNT(DISTINCT crowed_type)             AS type_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+CROSS JOIN total_cost tc
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY platform, crowed_layer, tc.cost
+ORDER BY platform, crowed_layer;
+-- 预期：所有明细行 Cost_Pct 之和 = 1.0
+-- 验证：SUM(Cost_Pct) = 1.0
+
+
+-- 3.2 按 channel + crowed_layer 聚合 Cost + Cost%（仅 TM 平台）
+WITH
+total_cost AS (
+    SELECT SUM(cost_amt) AS cost
+    FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+    WHERE platform = 'TM'
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-17'
+)
+SELECT
+    platform                                AS `channel`,
+    crowed_layer                            AS `crowed_layer`,
+    SUM(cost_amt)                           AS `Cost_RMB`,
+    SUM(cost_amt) / NULLIF(tc.cost, 0)      AS `Cost_Pct`,
+    COUNT(*)                                AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+CROSS JOIN total_cost tc
+WHERE platform = 'TM'
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY platform, crowed_layer, tc.cost
+ORDER BY platform, crowed_layer;
+
+
+-- 3.3 按 channel + crowed_layer 聚合 Cost + Cost%（仅 JD 平台）
+WITH
+total_cost AS (
+    SELECT SUM(cost_amt) AS cost
+    FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+    WHERE platform = 'JD'
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-17'
+)
+SELECT
+    platform                                AS `channel`,
+    crowed_layer                            AS `crowed_layer`,
+    SUM(cost_amt)                           AS `Cost_RMB`,
+    SUM(cost_amt) / NULLIF(tc.cost, 0)      AS `Cost_Pct`,
+    COUNT(*)                                AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+CROSS JOIN total_cost tc
+WHERE platform = 'JD'
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY platform, crowed_layer, tc.cost
+ORDER BY platform, crowed_layer;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 4: Cost% 分母验证 — 确认 REMOVEFILTERS + FILTER(ALL()) 语义
+-- ████████████████████████████████████████████████████████████████████████████████
+-- DAX 中 Cost% 分母使用 REMOVEFILTERS(channel, crowed_layer) + FILTER(ALL())
+-- 这意味着分母 = 全量聚合（忽略行维度 channel 和 crowed_layer），仅保留切片器筛选
+-- SQL 中等价于：不 GROUP BY channel/crowed_layer 的全表聚合
+-- 本部分验证：无论行维度如何，分母始终为总计 Cost
+
+-- 4.1 验证分母一致性 — 总计 Cost（切片器全选时）
+-- 预期：此值 = PART 1.1 的 Cost_RMB = PART 2/3 中所有 Cost_Pct 的分母
+SELECT
+    'Cost%分母_全选'                        AS check_item,
+    SUM(cost_amt)                           AS denominator_cost,
+    COUNT(*)                                AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17';
+
+
+-- 4.2 验证分母一致性 — 单平台 TM 时
+-- 预期：此值 = PART 2.2 的 Cost_RMB
+SELECT
+    'Cost%分母_TM'                          AS check_item,
+    SUM(cost_amt)                           AS denominator_cost,
+    COUNT(*)                                AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform = 'TM'
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17';
+
+
+-- 4.3 验证分母一致性 — 单平台 JD 时
+-- 预期：此值 = PART 2.3 的 Cost_RMB
+SELECT
+    'Cost%分母_JD'                          AS check_item,
+    SUM(cost_amt)                           AS denominator_cost,
+    COUNT(*)                                AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform = 'JD'
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17';
+
+
+-- 4.4 Cost% 加和校验 — 所有明细行 Cost% 之和应为 1.0
+-- 使用 PART 3.1 的结果进行验证
+WITH
+total_cost AS (
+    SELECT SUM(cost_amt) AS cost
+    FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+    WHERE platform IN ('TM', 'JD')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-17'
+),
+detail AS (
+    SELECT
+        platform,
+        crowed_layer,
+        SUM(cost_amt)                           AS row_cost,
+        SUM(cost_amt) / NULLIF(tc.cost, 0)      AS row_cost_pct
+    FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+    CROSS JOIN total_cost tc
+    WHERE platform IN ('TM', 'JD')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-17'
+    GROUP BY platform, crowed_layer, tc.cost
+)
+SELECT
+    'Cost%加和校验'                          AS check_item,
+    SUM(row_cost_pct)                        AS sum_cost_pct,
+    SUM(row_cost)                            AS sum_cost,
+    MAX(tc.cost)                             AS total_cost,
+    CASE
+        WHEN ABS(SUM(row_cost_pct) - 1.0) < 0.0001 THEN 'PASS (≈100%)'
+        ELSE 'FAIL (≠100%)'
+    END                                      AS check_result
+FROM detail
+CROSS JOIN total_cost tc;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 5: 专属切片器筛选模拟 — 模拟特定 Super Season / Category / Label 选择
+-- ████████████████████████████████████████████████████████████████████████████████
+-- DAX 中三个专属切片器使用 FILTER(VALUES()) 交集模式：
+--   FILTER(VALUES(crowed_layer), crowed_layer IN VALUES(Super Season))
+--   FILTER(VALUES(crowed_name),  crowed_name  IN VALUES(Category))
+--   FILTER(VALUES(crowed_type),  crowed_type  IN VALUES(Label))
+-- 全选时：交集 = 行维度值 → 等价于不筛选
+-- 部分选：交集 = 行维度值 ∩ 选中值 → 仅保留选中行
+-- SQL 中等价于：WHERE crowed_layer IN (...) AND crowed_name IN (...) AND crowed_type IN (...)
+
+-- 5.0 先查看当前可用的维度值（辅助确定筛选条件）
+SELECT DISTINCT crowed_layer AS `Super Season`
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+ORDER BY crowed_layer;
+
+SELECT DISTINCT crowed_name AS `Category`
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+ORDER BY crowed_name;
+
+SELECT DISTINCT crowed_type AS `Label`
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+ORDER BY crowed_type;
+
+
+-- 5.1 模拟 Super Season 筛选 — 选择某一个 crowed_layer 值
+-- ⚠️ 请将 '请替换为实际crowed_layer值' 替换为 5.0 查询返回的实际值
+-- 示例：假设可选值为 '核心人群'、'机会人群' 等
+WITH
+-- ── 筛选后的总计 Cost（分母）──
+filtered_total AS (
+    SELECT SUM(cost_amt) AS cost
+    FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+    WHERE platform IN ('TM', 'JD')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-17'
+      AND crowed_layer IN ('请替换为实际crowed_layer值')  -- ← Super Season 切片器选中值
+)
+SELECT
+    platform                                AS `channel`,
+    crowed_layer                            AS `crowed_layer`,
+    SUM(cost_amt)                           AS `Cost_RMB`,
+    SUM(cost_amt) / NULLIF(ft.cost, 0)      AS `Cost_Pct`,
+    COUNT(*)                                AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+CROSS JOIN filtered_total ft
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+  AND crowed_layer IN ('请替换为实际crowed_layer值')  -- ← 同上
+GROUP BY platform, crowed_layer, ft.cost
+ORDER BY platform, crowed_layer;
+-- 预期：只返回选中 Super Season 下的行，Cost_Pct 之和 = 1.0
+
+
+-- 5.2 模拟 Category 筛选 — 选择某一个 crowed_name 值
+WITH
+filtered_total AS (
+    SELECT SUM(cost_amt) AS cost
+    FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+    WHERE platform IN ('TM', 'JD')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-17'
+      AND crowed_name IN ('请替换为实际crowed_name值')  -- ← Category 切片器选中值
+)
+SELECT
+    platform                                AS `channel`,
+    crowed_layer                            AS `crowed_layer`,
+    SUM(cost_amt)                           AS `Cost_RMB`,
+    SUM(cost_amt) / NULLIF(ft.cost, 0)      AS `Cost_Pct`,
+    COUNT(*)                                AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+CROSS JOIN filtered_total ft
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+  AND crowed_name IN ('请替换为实际crowed_name值')  -- ← 同上
+GROUP BY platform, crowed_layer, ft.cost
+ORDER BY platform, crowed_layer;
+
+
+-- 5.3 模拟 Label 筛选 — 选择某一个 crowed_type 值
+WITH
+filtered_total AS (
+    SELECT SUM(cost_amt) AS cost
+    FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+    WHERE platform IN ('TM', 'JD')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-17'
+      AND crowed_type IN ('请替换为实际crowed_type值')  -- ← Label 切片器选中值
+)
+SELECT
+    platform                                AS `channel`,
+    crowed_layer                            AS `crowed_layer`,
+    SUM(cost_amt)                           AS `Cost_RMB`,
+    SUM(cost_amt) / NULLIF(ft.cost, 0)      AS `Cost_Pct`,
+    COUNT(*)                                AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+CROSS JOIN filtered_total ft
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+  AND crowed_type IN ('请替换为实际crowed_type值')  -- ← 同上
+GROUP BY platform, crowed_layer, ft.cost
+ORDER BY platform, crowed_layer;
+
+
+-- 5.4 模拟组合筛选 — Super Season + Category + Label 同时选择
+-- 三个切片器同时筛选时，DAX 中三个 FILTER(VALUES()) 取交集
+-- SQL 中等价于三个 WHERE 条件 AND
+WITH
+filtered_total AS (
+    SELECT SUM(cost_amt) AS cost
+    FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+    WHERE platform IN ('TM', 'JD')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-17'
+      AND crowed_layer IN ('请替换为实际crowed_layer值')   -- ← Super Season
+      AND crowed_name  IN ('请替换为实际crowed_name值')    -- ← Category
+      AND crowed_type  IN ('请替换为实际crowed_type值')    -- ← Label
+)
+SELECT
+    platform                                AS `channel`,
+    crowed_layer                            AS `crowed_layer`,
+    SUM(cost_amt)                           AS `Cost_RMB`,
+    SUM(cost_amt) / NULLIF(ft.cost, 0)      AS `Cost_Pct`,
+    COUNT(*)                                AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+CROSS JOIN filtered_total ft
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+  AND crowed_layer IN ('请替换为实际crowed_layer值')   -- ← Super Season
+  AND crowed_name  IN ('请替换为实际crowed_name值')    -- ← Category
+  AND crowed_type  IN ('请替换为实际crowed_type值')    -- ← Label
+GROUP BY platform, crowed_layer, ft.cost
+ORDER BY platform, crowed_layer;
+-- 预期：仅返回同时满足三个条件的行，Cost_Pct 之和 = 1.0
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 6: 日期粒度明细 — 按日展开验证（排查聚合差异时使用）
+-- ████████████████████████████████████████████████████████████████████████████████
+-- 如果 Power BI 总值与 SQL 不一致，通过日粒度对比定位差异日期
+
+-- 6.1 按日聚合 Cost（全平台）
+SELECT
+    data_date,
+    SUM(cost_amt)              AS cost,
+    COUNT(*)                   AS row_cnt,
+    COUNT(DISTINCT platform)   AS platform_cnt,
+    COUNT(DISTINCT crowed_layer) AS layer_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY data_date
+ORDER BY data_date;
+
+
+-- 6.2 按日 + 平台聚合 Cost
+SELECT
+    data_date,
+    platform,
+    SUM(cost_amt)              AS cost,
+    COUNT(*)                   AS row_cnt,
+    COUNT(DISTINCT crowed_layer) AS layer_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY data_date, platform
+ORDER BY data_date, platform;
+
+
+-- 6.3 按日 + 平台 + crowed_layer 聚合 Cost（最细粒度，用于定位具体差异行）
+SELECT
+    data_date,
+    platform,
+    crowed_layer,
+    SUM(cost_amt)              AS cost,
+    COUNT(*)                   AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY data_date, platform, crowed_layer
+ORDER BY data_date, platform, crowed_layer;
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 7: 汇率转换验证（可选 — 验证 USD 展示值）
+-- ████████████████████████████████████████████████████████████████████████████████
+-- Power BI 选择 USD 时：Cost × 汇率乘数（Slicer_Currency_Selection[Currency_ExchangeRate]）
+-- Cost% 不受汇率影响（分子分母同乘汇率后约掉）
+
+-- 7.1 全平台 Cost — USD（假设汇率乘数 = 7，以实际 Slicer_Currency_Selection 配置为准）
+SELECT
+    'USD_全平台'                            AS check_item,
+    SUM(cost_amt)                           AS cost_rmb,
+    SUM(cost_amt) * 7                       AS cost_usd,
+    COUNT(*)                                AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17';
+-- 注：Cost% 不受汇率影响，USD 时 Cost% 与 RMB 时完全一致
+
+
+-- 7.2 按 channel + crowed_layer 的 Cost — USD
+WITH
+total_cost_usd AS (
+    SELECT SUM(cost_amt) * 7 AS cost
+    FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+    WHERE platform IN ('TM', 'JD')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-17'
+)
+SELECT
+    platform                                AS `channel`,
+    crowed_layer                            AS `crowed_layer`,
+    SUM(cost_amt) * 7                       AS `Cost_USD`,
+    (SUM(cost_amt) * 7) / NULLIF(tc.cost, 0) AS `Cost_Pct`,
+    COUNT(*)                                AS row_cnt
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+CROSS JOIN total_cost_usd tc
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+GROUP BY platform, crowed_layer, tc.cost
+ORDER BY platform, crowed_layer;
+-- 预期：Cost_USD = Cost_RMB × 7，Cost_Pct 与 RMB 时完全一致
+
+
+-- ████████████████████████████████████████████████████████████████████████████████
+-- PART 8: 数据完整性检查
+-- ████████████████████████████████████████████████████████████████████████████████
+
+-- 8.1 检查日期范围是否有数据
+SELECT
+    'crowed_data_全平台'                    AS check_item,
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END AS data_check,
+    COUNT(DISTINCT data_date)               AS date_count,
+    COUNT(DISTINCT platform)                AS platform_count,
+    COUNT(*)                                AS row_count
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+
+UNION ALL
+
+SELECT
+    'crowed_data_TM'                        AS check_item,
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END AS data_check,
+    COUNT(DISTINCT data_date)               AS date_count,
+    1                                       AS platform_count,
+    COUNT(*)                                AS row_count
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform = 'TM'
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17'
+
+UNION ALL
+
+SELECT
+    'crowed_data_JD'                        AS check_item,
+    CASE WHEN COUNT(*) > 0 THEN 'OK' ELSE 'MISSING' END AS data_check,
+    COUNT(DISTINCT data_date)               AS date_count,
+    1                                       AS platform_count,
+    COUNT(*)                                AS row_count
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform = 'JD'
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17';
+
+
+-- 8.2 检查 trans_cycle 字段可用值
+SELECT
+    trans_cycle,
+    COUNT(*)                                AS row_cnt,
+    MIN(data_date)                          AS min_date,
+    MAX(data_date)                          AS max_date
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+GROUP BY trans_cycle
+ORDER BY trans_cycle;
+
+
+-- 8.3 检查 cost_amt = 0 或 NULL 的行占比（可能导致 Cost% 偏差）
+SELECT
+    SUM(CASE WHEN cost_amt = 0 THEN 1 ELSE 0 END)             AS zero_cost_rows,
+    SUM(CASE WHEN cost_amt IS NULL THEN 1 ELSE 0 END)         AS null_cost_rows,
+    SUM(CASE WHEN cost_amt > 0 THEN 1 ELSE 0 END)             AS positive_cost_rows,
+    SUM(CASE WHEN cost_amt < 0 THEN 1 ELSE 0 END)             AS negative_cost_rows,
+    COUNT(*)                                                    AS total_rows,
+    ROUND(SUM(CASE WHEN cost_amt = 0 OR cost_amt IS NULL THEN 1 ELSE 0 END)
+        * 100.0 / COUNT(*), 2)                                AS zero_or_null_pct
+FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('TM', 'JD')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-17';
+
+
+-- 8.4 Cost 一致性交叉校验 — PART 1 总计 vs PART 2 channel 之和 vs PART 3 明细之和
+WITH
+-- 总计
+total AS (
+    SELECT SUM(cost_amt) AS cost
+    FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+    WHERE platform IN ('TM', 'JD')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-17'
+),
+-- 按 channel 之和
+by_channel AS (
+    SELECT SUM(cost_amt) AS cost
+    FROM (
+        SELECT platform, SUM(cost_amt) AS cost_amt
+        FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+        WHERE platform IN ('TM', 'JD')
+          AND trans_cycle = 'T+1'
+          AND data_date >= '2026-01-01'
+          AND data_date <= '2026-06-17'
+        GROUP BY platform
+    ) sub
+),
+-- 按 channel + crowed_layer 之和
+by_detail AS (
+    SELECT SUM(cost_amt) AS cost
+    FROM (
+        SELECT platform, crowed_layer, SUM(cost_amt) AS cost_amt
+        FROM indep_rl_ads.a05_e2e_paid_media_crowed_data_d
+        WHERE platform IN ('TM', 'JD')
+          AND trans_cycle = 'T+1'
+          AND data_date >= '2026-01-01'
+          AND data_date <= '2026-06-17'
+        GROUP BY platform, crowed_layer
+    ) sub
+)
+SELECT
+    t.cost                                  AS `total_cost`,
+    c.cost                                  AS `channel_sum_cost`,
+    d.cost                                  AS `detail_sum_cost`,
+    CASE WHEN t.cost = c.cost AND c.cost = d.cost
+         THEN 'PASS (三层一致)'
+         ELSE 'FAIL (存在差异)'
+    END                                     AS check_result
+FROM total t, by_channel c, by_detail d;
+
+
+-- ================================================================================
+-- 比对方法说明
+-- ================================================================================
+--
+-- 1. 在 Power BI 中设置切片器：
+--    日期范围 = 2026-01-01 ~ 2026-06-17
+--    Channel = ALL，数据口径 = T+1，币种 = RMB
+--    Super Season / Category / Label = 全选
+--
+-- 2. 验证 Cost：
+--    a) 执行 PART 1.1 → 比对 Power BI Table 总计行的 Cost 值
+--    b) 执行 PART 2.1 → 比对 Power BI Table 中 channel 行（TM / JD）的 Cost 值
+--    c) 执行 PART 3.1 → 比对 Power BI Table 中 crowed_layer 明细行的 Cost 值
+--    d) 切换 Platform = TM → 执行 PART 2.2 + PART 3.2 比对
+--    e) 切换 Platform = JD → 执行 PART 2.3 + PART 3.3 比对
+--
+-- 3. 验证 Cost%：
+--    a) 总计行 Cost% 应 = 100%
+--    b) 执行 PART 2.1 / 3.1 → 比对 channel 行 / 明细行的 Cost%
+--    c) 所有明细行 Cost% 之和应 = 100%（PART 4.4 自动校验）
+--    d) 切换 Platform 后，Cost% 分母变为当前平台的总计（PART 4.2 / 4.3）
+--
+-- 4. 验证切片器筛选：
+--    a) 在 Power BI 中选中特定 Super Season → 执行 PART 5.1 比对
+--    b) 在 Power BI 中选中特定 Category → 执行 PART 5.2 比对
+--    c) 组合筛选 → 执行 PART 5.4 比对
+--
+-- 5. 如有差异，执行 PART 6 按日展开定位差异日期
+--    执行 PART 8 检查数据完整性
+--
+-- 6. 验证 USD 时，执行 PART 7 → 比对 Power BI 币种切换为 USD 后的值
+--    Cost 应 = RMB × 汇率乘数，Cost% 应不变
+--
+-- 7. 常见差异原因：
+--    a) currency 字段：Power BI SQL 加载时使用 IF(currency is null, 'RMB', currency)
+--       如数据库中存在非 RMB 的 currency 值，可能影响结果
+--    b) NULL 处理：DAX SUM 忽略 NULL，SQL SUM 同样忽略 NULL
+--       但 DIVIDE(x, 0) 在 DAX 返回 BLANK，SQL 中用 NULLIF 模拟
+--    c) 日期边界：确认 Power BI 日期切片器选择的是闭区间（>= AND <=）
+--    d) 浮点精度：比率类指标小数位可能有微小差异，属正常
+--    e) FILTER(VALUES()) 交集模式：SQL 中用 WHERE IN 等价
+--       但 DAX 中 VALUES 会先读取当前行维度值再取交集，SQL 无此语义差异
+--       因为 SQL 的 GROUP BY + WHERE IN 天然实现了交集
+--    f) Cost% 分母：分母始终为当前切片器条件下的总计 Cost
+--       不受 channel / crowed_layer 行维度影响（REMOVEFILTERS）
+--       如 Cost% 异常，先检查分母（PART 4）是否正确
+--    g) 专属切片器级联：Power BI 中三个切片器基于同一张表
+--       选 Super Season 后 Category/Label 自动过滤显示可选值
+--       SQL 中需手动指定筛选值（PART 5 的占位符需替换为实际值）
+-- ================================================================================

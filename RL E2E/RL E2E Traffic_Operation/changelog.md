@@ -419,6 +419,107 @@
 
 ---
 
+## [2026-06-17 18:00] 新建 — Crowd TA 方案（行维度重排 4 级 + 度量值重命名）
+
+- **模块**: Crowd
+- **任务**: 新建 Crowd_matrix_TA_solution — 基于 Crowd_matrix_solution v6 派生，行维度从 5 级调整为 4 级并重新排序，全部度量值重命名为 Crowd TA 前缀
+- **操作**: 新建
+- **变更内容**:
+  - `Crowd_matrix_TA_solution`（新建）：派生自 Crowd_matrix_solution，核心 DAX 调整如下
+  - **行维度变更**（Section 0 / 6.1）：
+    - 原：channel → crowed_layer → crowed_name → crowed_type → customer_type（5 级）
+    - 新：crowed_layer → channel → crowed_name → crowed_type（4 级）
+    - 移除 customer_type 维度，crowed_layer 提升为顶层维度
+  - **度量值命名重命名**：全部 20 个度量值前缀从 `Crowd` 改为 `Crowd TA`
+    - 核心：Crowd Cost → Crowd TA Cost（9 个）
+    - Display：Crowd Cost Display → Crowd TA Cost Display（9 个）
+    - 辅助：Crowd Cell Font Color → Crowd TA Cell Font Color / Background Color（2 个）
+    - Display Folder：Crowd → Crowd TA / Crowd > Display → Crowd TA > Display
+  - `Crowd TA Cost%` REMOVEFILTERS 调整（Section 3.3）：
+    - 移除 4 个行维度筛选（crowed_layer / channel / crowed_name / crowed_type）
+    - 移除 customer_type 对应的 REMOVEFILTERS
+  - `Crowd TA Cell Font Color`（Section 5.1）：
+    - ISINSCOPE 从 5 级减为 4 级（移除 __IsCustomerType）
+    - 总计行判断：NOT(Layer) && NOT(Channel) && NOT(Name) && NOT(Type)
+  - `Crowd TA Cell Background Color`（Section 5.2）：
+    - 从 5 级层次减为 4 级（移除 #FFFFFF 白色层）
+    - crowed_layer 行 + 总计行 → #DBC6A8 / channel 行 → #E6D9C7 / crowed_name → #F4ECE4 / crowed_type → #FAF6F1
+    - SWITCH 顺序调整：__IsType → __IsName → __IsChannel → default
+  - **文档同步更新**（Section 7-10）：度量值清单、指标口径表、技术说明、验证清单全部同步为 4 级维度 + TA 命名
+- **关联文件**: `Crowd/Crowd_matrix_TA_solution`
+- **备注**:
+  - 本方案为 Crowd_matrix_solution 的派生版本，适用于行维度以 crowed_layer 为顶层的业务场景
+  - 与现方案的核心差异：行维度顺序、维度数量（4 vs 5）、度量值命名前缀
+  - 切片器、筛选逻辑、汇率转换、Display 格式字符串等与现方案完全一致
+
+---
+
+## [2026-06-17 15:00] 修改 — Crowd 方案 v6 新增 CPATC 指标 + 行维度扩展 5 级 + 颜色体系重写
+
+- **模块**: Crowd
+- **任务**: Crowd_matrix_solution 五项重大变更：新增第 9 指标 CPATC / 行维度 2→5 / Cost% REMOVEFILTERS 扩展 / 字体颜色重写 / 背景颜色 5 级层次
+- **操作**: 修改
+- **变更内容**:
+  - `Crowd CPATC`（新增，Section 3.10）：
+    - 口径：DIVIDE(SUM(cost_amt), SUM(add_cart_cnt))，单次加购成本
+    - 类型：比率类，不乘汇率
+    - 格式字符串：`#,##0.00;-#,##0.00;0.00`
+  - `Crowd CPATC Display`（新增，Section 4.9）：
+    - FORMAT([Crowd CPATC], "#,##0.00;-#,##0.00;0.00")
+  - **行维度扩展 2→5**（Section 0 / 6.1）：
+    - 原：channel → crowed_layer（2 级）
+    - 新：channel → crowed_layer → crowed_name → crowed_type → customer_type（5 级）
+    - 行维度直接来自事实表字段，无需构建断开维度表
+  - `Crowd Cost%` REMOVEFILTERS 扩展（Section 3.3）：
+    - 分母移除全部 5 个行维度筛选（channel / crowed_layer / crowed_name / crowed_type / customer_type）
+    - 原仅移除 2 个（channel / crowed_layer）
+  - `Crowd Cell Font Color`（重写，Section 5.1）：
+    - 总计行（所有 ISINSCOPE = FALSE）→ #252423（近黑，强调）
+    - 所有小计行和明细行 → #5F6165（深灰）
+    - 使用 ISINSCOPE 5 级判断（替代原 HASONEVALUE 2 级判断）
+  - `Crowd Cell Background Color`（重写，Section 5.2）：
+    - channel 行 + 总计行 → #dbc6a8（深米色）
+    - crowed_layer 小计行 → #e6d9c7（中米色）
+    - crowed_name 小计行 → #f4ece4（浅米色）
+    - crowed_type 小计行 → #faf6f1（淡米色）
+    - customer_type 明细行 → #ffffff（白色）
+    - SWITCH 从最深层级开始判断（自底向上），保证匹配到最具体层级
+  - **文档全面更新**（Section 7-10）：
+    - Section 7 度量值清单：18 个 → 20 个（新增 CPATC #9 + CPATC Display #18，重编号至 #20）
+    - Section 8 指标口径表：新增 #9 CPATC 行
+    - Section 9.3：HASONEVALUE → ISINSCOPE（5 级行维度）
+    - Section 9.5：Cost% 分母说明更新（REMOVEFILTERS 5 个行维度）
+    - Section 10 验证清单：多项更新（Cost% 5 维度 / CPATC / 9 Display / 5 级背景色 / 5 行 + 9 值 Table）
+- **关联文件**: `Crowd/Crowd_matrix_solution`
+- **备注**:
+  - 度量值总数：8 核心 + 9 Display + 2 辅助 + 1 字体颜色 = 20 个
+  - ISINSCOPE 替代 HASONEVALUE：支持 5 级行层级精确判断，HASONEVALUE 仅能判断单值/多值，无法区分层级
+  - CPATC 与 CPC 同类：比率型指标（分子分母同币种），不乘汇率
+  - Table 视觉对象配置：5 行维度 + 9 度量值，条件格式绑定字体颜色 + 背景颜色度量值
+
+---
+
+## [2026-06-17 10:00] 新建 — Crowd 数据验证测试 SQL（Cost + Cost%）
+
+- **模块**: Crowd
+- **任务**: 新建 Crowd_matrix_solution_TestSQL — 验证数据库数据与 Power BI Crowd 表一致性
+- **操作**: 新建
+- **变更内容**:
+  - `Crowd_matrix_solution_TestSQL`（新建）：数据验证测试 SQL 文件，对标 Crowd Cost / Crowd Cost% 的 DAX 计算口径
+  - PART 0 — 数据探查：检查事实表平台/口径/人群维度分布、NULL 值分布、currency 字段值
+  - PART 1 — 总计行验证：全平台 Cost 聚合 + Cost% = 100% 校验
+  - PART 2 — channel 行验证（一级行头）：按 channel 聚合 Cost + Cost%，含 ALL / TM / JD 三种平台场景
+  - PART 3 — channel + crowed_layer 明细行验证（二级行头）：最细粒度 Cost + Cost%，含 ALL / TM / JD 三种平台场景
+  - PART 4 — Cost% 分母验证：确认 REMOVEFILTERS + FILTER(ALL()) 语义，分母始终为总计 Cost；含 Cost% 加和校验（SUM ≈ 100%）
+  - PART 5 — 专属切片器筛选模拟：Super Season / Category / Label 单条件 + 组合条件筛选，含占位符供替换实际值
+  - PART 6 — 日期粒度明细：按日 / 按日+平台 / 按日+平台+crowed_layer 三级展开，用于定位差异日期
+  - PART 7 — 汇率转换验证：USD 场景 Cost × 汇率乘数，Cost% 不受汇率影响
+  - PART 8 — 数据完整性检查：日期范围、trans_cycle 值、零值/空值占比、三层 Cost 一致性交叉校验
+- **关联文件**: `Crowd/Crowd_matrix_solution_TestSQL`
+- **备注**: 当前仅覆盖 Cost 和 Cost% 两个指标；测试时间段 2026-01-01 ~ 2026-06-17；SQL 对标 Crowd_matrix_solution v5 的 FILTER(VALUES()) 交集模式 + Cost% 分母 FILTER(ALL()) 逻辑
+
+---
+
 ## [2026-06-16 20:00] 修改 — Crowd Cost% 分母 FILTER(VALUES()) → FILTER(ALL()) 修复
 
 - **模块**: Crowd

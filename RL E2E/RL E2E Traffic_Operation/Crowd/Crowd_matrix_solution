@@ -2,7 +2,7 @@
 
 > status: updated
 > created: 2026-06-12
-> updated: 2026-06-16
+> updated: 2026-06-17
 > complexity: 🟡中等
 > type: 度量值开发 + 可视化构建
 > naming: 遵循 powerbi_code_copilot/rules/dax-style.md 规范
@@ -14,10 +14,9 @@
 ================================================================================
 
 实现 Crowd 人群粒度看板：
-- 行：a05_e2e_paid_media_crowed_data_d[channel] + a05_e2e_paid_media_crowed_data_d[crowed_layer]
-      行维度直接来自事实表字段，无需构建断开维度表
-      channel 行（一级行头）和总计行背景色为 #f8f5f1，其余为 #ffffff
-- 列：8 个独立度量值，直接拖入 Table 视觉对象
+- 行：5 级行维度，直接来自事实表字段，无需构建断开维度表
+      channel → crowed_layer → crowed_name → crowed_type → customer_type
+- 列：9 个独立度量值，直接拖入 Table 视觉对象
 - 无同比逻辑：不涉及 Dim_Date_Ly，无 This Year / Last Year / YOY 行路由
 - 切片器：
   * Slicer_DataCaliber_Selection（trans_cycle 口径，单选，复用 Overview）
@@ -40,7 +39,7 @@
     ├── [Category] 列    → 切片器 2（多选）
     └── [Label] 列       → 切片器 3（多选）
 
-度量值（8 个核心 + 8 个 Display + 2 个辅助 = 18 个）
+度量值（9 个核心 + 9 个 Display + 2 个辅助 = 20 个）
 ├── Crowd Cost          — SUM(cost_amt) × ExchangeRate（金额类）
 ├── Crowd Cost%         — DIVIDE(当前行 cost_amt, 总计 cost_amt)（比率类）
 ├── Crowd ROI           — 占位=1
@@ -48,11 +47,12 @@
 ├── Crowd CPC           — DIVIDE(cost_amt, click)（比率类，不乘汇率）
 ├── Crowd CTR           — DIVIDE(click, pv)（比率类）
 ├── Crowd CVR           — DIVIDE(sales_order_cnt, click)（比率类）
-└── Crowd Add to Cart   — SUM(add_cart_cnt)（计数类）
+├── Crowd Add to Cart   — SUM(add_cart_cnt)（计数类）
+└── Crowd CPATC         — DIVIDE(cost_amt, add_cart_cnt)（比率类，不乘汇率）
 
 辅助度量值
-├── Crowd Cell Font Color       — 统一 #5f6165
-└── Crowd Cell Background Color — channel 行/总计行 #f8f5f1，明细行 #ffffff
+├── Crowd Cell Font Color       — 总计行 #252423（近黑），其余 #5F6165（深灰）
+└── Crowd Cell Background Color — 5 级层次背景色（#dbc6a8 / #e6d9c7 / #f4ece4 / #faf6f1 / #ffffff）
 ```
 
 ================================================================================
@@ -113,7 +113,7 @@ Dim_Crowd_Season_C_Label 为单表三列，Power BI 切片器基于同表列自�
 | Power BI 表名                        | 说明 |
 |--------------------------------------|------|
 | a05_e2e_paid_media_crowed_data_d     | 人群粒度事实表 |
-|                                      | 关键字段：channel / crowed_layer / crowed_type / crowed_name |
+|                                      | 关键字段：channel / crowed_layer / crowed_type / crowed_name / customer_type |
 |                                      | platform / trans_cycle / data_date |
 |                                      | 指标字段：cost_amt / sales_amt / click / pv / add_cart_cnt / sales_order_cnt |
 
@@ -131,7 +131,7 @@ Dim_Crowd_Season_C_Label 为单表三列，Power BI 切片器基于同表列自�
 ```
 
 ================================================================================
-3. 核心度量值（8 个独立度量）
+3. 核心度量值（9 个独立度量）
 ================================================================================
 
 3.1 公共筛选逻辑说明
@@ -218,8 +218,8 @@ Crowd Cost% =
 // Display Folder: Crowd
 // 用途: 每行花费占总计花费的百分比
 // 口径: DIVIDE(当前行 cost_amt, 总计 cost_amt)
-//       分母不受行维度（channel / crowed_layer）筛选上下文影响
-//       分母使用 REMOVEFILTERS 移除行维度 + FILTER(ALL()) 仅保留切片器筛选
+//       分母不受行维度（channel / crowed_layer / crowed_name / crowed_type / customer_type）筛选上下文影响
+//       分母使用 REMOVEFILTERS 移除全部 5 个行维度 + FILTER(ALL()) 仅保留切片器筛选
 //       注意：分母不能用 FILTER(VALUES()) 因为 VALUES 在行上下文中求值后
 //             会固化当前行的值，导致 REMOVEFILTERS 被抵消，Cost% 始终为 1
 // 类型: 比率类，不乘汇率
@@ -255,10 +255,15 @@ Crowd Cost% =
     VAR __TotalCostAmt =
         CALCULATE(
             SUM(a05_e2e_paid_media_crowed_data_d[cost_amt]),
+            // ── 移除全部 5 个行维度筛选（channel / crowed_layer / crowed_name / crowed_type / customer_type）──
             REMOVEFILTERS(a05_e2e_paid_media_crowed_data_d[channel]),
             REMOVEFILTERS(a05_e2e_paid_media_crowed_data_d[crowed_layer]),
+            REMOVEFILTERS(a05_e2e_paid_media_crowed_data_d[crowed_name]),
+            REMOVEFILTERS(a05_e2e_paid_media_crowed_data_d[crowed_type]),
+            REMOVEFILTERS(a05_e2e_paid_media_crowed_data_d[customer_type]),
             __PlatformFilter,
             a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
+            // ── 分母用 FILTER(ALL()) 仅保留切片器筛选（不用 FILTER(VALUES())）──
             FILTER(ALL(a05_e2e_paid_media_crowed_data_d[crowed_layer]),
                 a05_e2e_paid_media_crowed_data_d[crowed_layer] IN __SuperSeasonVals),
             FILTER(ALL(a05_e2e_paid_media_crowed_data_d[crowed_name]),
@@ -273,7 +278,7 @@ Crowd Cost% =
 3.4 Crowd ROI
 ─────────────
 
-Crowd ROI =
+Crowd ROI = 
 // ========================================
 // 度量值: Crowd ROI
 // 中文名: 投资回报率
@@ -283,7 +288,7 @@ Crowd ROI =
 // 类型: 比率类，不乘汇率
 // 当前返回占位值 1
 // ========================================
-    1
+    IF(ISBLANK([Crowd Cost]),BLANK(),1)
 
 3.5 Crowd Click
 ───────────────
@@ -529,8 +534,64 @@ Crowd Add to Cart =
                 a05_e2e_paid_media_crowed_data_d[crowed_type] IN __LabelVals)
         )
 
+3.10 Crowd CPATC
+────────────────
+
+Crowd CPATC =
+// ========================================
+// 度量值: Crowd CPATC
+// 中文名: 单次加购成本
+// Display Folder: Crowd
+// 用途: 单次加购成本（Cost Per Add To Cart）
+// 口径: DIVIDE(SUM(cost_amt), SUM(add_cart_cnt))
+// 类型: 比率类，不乘汇率
+// 说明: CPATC = cost_amt / add_cart_cnt，分子分母均为同币种原始值，
+//       比值本身无币种维度，无需乘汇率。
+// 数据字典: cost_amt = 花费, add_cart_cnt = 总加购数
+// ========================================
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_crowed_data_d[platform]),
+            IF(__ChannelID = "ALL",
+                a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_crowed_data_d[platform] = __ChannelID))
+
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[cost_amt]),
+            __PlatformFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[crowed_layer]),
+                a05_e2e_paid_media_crowed_data_d[crowed_layer] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[crowed_name]),
+                a05_e2e_paid_media_crowed_data_d[crowed_name] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[crowed_type]),
+                a05_e2e_paid_media_crowed_data_d[crowed_type] IN __LabelVals)
+        )
+    VAR __AddToCart =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[add_cart_cnt]),
+            __PlatformFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[crowed_layer]),
+                a05_e2e_paid_media_crowed_data_d[crowed_layer] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[crowed_name]),
+                a05_e2e_paid_media_crowed_data_d[crowed_name] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[crowed_type]),
+                a05_e2e_paid_media_crowed_data_d[crowed_type] IN __LabelVals)
+        )
+    RETURN
+        DIVIDE(__CostAmt, __AddToCart)
+
 ================================================================================
-4. Display 格式化显示度量值（8 个）
+4. Display 格式化显示度量值（9 个）
 ================================================================================
 
 格式字符串说明：
@@ -544,7 +605,7 @@ Crowd Add to Cart =
 4.1 Crowd Cost Display
 ───────────────────────
 
-Crowd Cost Display =
+Crowd Cost Display = 
 // ========================================
 // 度量值: Crowd Cost Display
 // 中文名: 花费（格式化）
@@ -554,22 +615,30 @@ Crowd Cost Display =
 // 格式字符串: "#,##0.00;(#,##0.00);0.00"
 // 示例: 1,234.56 / (1,234.56) / 0.00
 // ========================================
-    FORMAT([Crowd Cost], "#,##0.00;(#,##0.00);0.00")
+        // ── 货币符号（由币种切片器决定）──
+    VAR __CurrencySymbol =
+        SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        __CurrencySymbol & FORMAT([Crowd Cost], "#,##0.00;(#,##0.00);0.00")
 
 4.2 Crowd Cost% Display
 ────────────────────────
 
-Crowd Cost% Display =
+Crowd Cost Display = 
 // ========================================
-// 度量值: Crowd Cost% Display
-// 中文名: 花费占比（格式化）
+// 度量值: Crowd Cost Display
+// 中文名: 花费（格式化）
 // Display Folder: Crowd > Display
-// 用途: Crowd Cost% 的格式化显示
-// 数据类型: 百分比（保留一位小数，负数带负号）
-// 格式字符串: "0.0%;-0.0%;0.0%"
-// 示例: 45.6% / -12.3% / 0.0%
+// 用途: Crowd Cost 的格式化显示
+// 数据类型: 金额（带千分位、两位小数，负数用括号）
+// 格式字符串: "#,##0.00;(#,##0.00);0.00"
+// 示例: 1,234.56 / (1,234.56) / 0.00
 // ========================================
-    FORMAT([Crowd Cost%], "0.0%;-0.0%;0.0%")
+        // ── 货币符号（由币种切片器决定）──
+    VAR __CurrencySymbol =
+        SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        IF(ISBLANK([Crowd Cost]),BLANK(),__CurrencySymbol & FORMAT([Crowd Cost], "#,##0.00;(#,##0.00);0.00"))
 
 4.3 Crowd ROI Display
 ──────────────────────
@@ -661,6 +730,21 @@ Crowd Add to Cart Display =
 // ========================================
     FORMAT([Crowd Add to Cart], "#,##0;(#,##0);0")
 
+4.9 Crowd CPATC Display
+────────────────────
+
+Crowd CPATC Display =
+// ========================================
+// 度量值: Crowd CPATC Display
+// 中文名: 单次加购成本（格式化）
+// Display Folder: Crowd > Display
+// 用途: Crowd CPATC 的格式化显示
+// 数据类型: 小数（带千分位、两位小数，负数带负号）
+// 格式字符串: "#,##0.00;-#,##0.00;0.00"
+// 示例: 15.30 / -8.50 / 0.00
+// ========================================
+    FORMAT([Crowd CPATC], "#,##0.00;-#,##0.00;0.00")
+
 ================================================================================
 5. 辅助度量值
 ================================================================================
@@ -668,52 +752,86 @@ Crowd Add to Cart Display =
 5.1 字体颜色
 ────────────
 
-Crowd Cell Font Color =
+Crowd Cell Font Color = 
 // ========================================
 // 度量值: Crowd Cell Font Color
+// 中文名: 人群单元格字体颜色
 // Display Folder: Crowd > Formatting
-// 用途: 返回字体颜色，统一 #5f6165 深灰色
+// 用途: 根据矩阵视觉层级返回字体颜色
+//       用于条件格式 → 字体颜色
+// 矩阵结构: 行维度 = channel -> crowed_layer -> crowed_name -> crowed_type -> customer_type (五级)
+// 颜色规则:
+//   - 总计行 (Grand Total) -> #252423 (近黑，强调)
+//   - 所有小计行和明细行     -> #5F6165 (深灰)
 // ========================================
-    "#5f6165"
+    VAR __IsCustomerType = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[customer_type])
+    VAR __IsType = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[crowed_type])
+    VAR __IsName = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[crowed_name])
+    VAR __IsLayer = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[crowed_layer])
+    VAR __IsChannel = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[channel])
+
+    RETURN
+        SWITCH(
+            TRUE(),
+            NOT(__IsChannel) && NOT(__IsLayer) && NOT(__IsName) && NOT(__IsType) && NOT(__IsCustomerType),
+                "#252423",
+            "#5F6165"
+        )
 
 5.2 行背景色
 ────────────
 
-Crowd Cell Background Color =
+Crowd Cell Background Color = 
 // ========================================
 // 度量值: Crowd Cell Background Color
 // Display Folder: Crowd > Formatting
-// 用途: 根据行类型返回背景色
-//       channel 行（一级行头）和总计行 → #f8f5f1（浅米色）
-//       crowed_layer 明细行 → #ffffff（白色）
+// 用途: 根据矩阵行层级返回背景色（5 级层次）
+// 注意: 当 channel 下只有一个子级时（如 A2），ISINSCOPE(Layer) 也会返回 TRUE，
+//       此时该行会被染成 crowed_layer 颜色（中米色），无法染成 channel 颜色（深米色）。
+//       这是 Power BI 矩阵阶梯式布局的已知限制，非代码问题。
 // ========================================
-    VAR __HasCrowedLayer = HASONEVALUE(a05_e2e_paid_media_crowed_data_d[crowed_layer])
-    RETURN
-        IF(__HasCrowedLayer, "#FFFFFF", "#F8F5F1")
+    VAR __IsCustomerType = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[customer_type])
+    VAR __IsType = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[crowed_type])
+    VAR __IsName = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[crowed_name])
+    VAR __IsLayer = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[crowed_layer])
+    VAR __IsChannel = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[channel])
 
-// ────────────────────────────────────────
-// HASONEVALUE 函数说明
-// ────────────────────────────────────────
-// 语法: HASONEVALUE(<列>)
-// 返回: BOOLEAN（TRUE / FALSE）
-// 功能: 判断当前筛选上下文中，指定列是否恰好只有一个不重复值
-//
-// 行为详解：
-//   在 Table 视觉对象中，每一行对应一个筛选上下文：
-//   - channel 行（如 "TM"）：crowed_layer 列在该行上下文中可能有多个值
-//     （TM 下有多个 crowed_layer），HASONEVALUE(crowed_layer) = FALSE
-//   - crowed_layer 明细行（如 "核心人群"）：crowed_layer 列只有一个值
-//     HASONEVALUE(crowed_layer) = TRUE
-//   - 总计行：crowed_layer 列有所有值，HASONEVALUE(crowed_layer) = FALSE
-//
-// 等价写法：
-//   HASONEVALUE(表[列]) ≡ COUNTROWS(VALUES(表[列])) = 1
-//   但 HASONEVALUE 更简洁，且在无数据时返回 FALSE（COUNTROWS=0 ≠ 1）
-//
-// 本场景应用：
-//   HASONEVALUE = TRUE  → 当前行为 crowed_layer 明细行 → 白色 #ffffff
-//   HASONEVALUE = FALSE → 当前行为 channel 行或总计行 → 浅米色 #f8f5f1
-// ────────────────────────────────────────
+    RETURN
+        SWITCH(
+            TRUE(),
+            // ── 第5层：customer_type 明细行 ────────
+            // 特征：5 个 ISINSCOPE 全部 = TRUE
+            // 代表行：New
+            __IsCustomerType, "#FFFFFF",
+            
+            // ── 第4层：crowed_type 小计行 ─────────
+            // 特征：Type=T, Customer=F
+            __IsType, "#FAF6F1",
+            
+            // ── 第3层：crowed_name 小计行 ─────────
+            // 特征：Name=T, Type=F
+            // 代表行：A2人群、RL店铺会员人群、店铺人群_粉丝会员人群、关注RL...
+            __IsName, "#F4ECE4",
+            
+            // ── 第2层：crowed_layer 小计行 ────────
+            // 特征：Layer=T, Name=F
+            // 代表行：A2、A3/A4、QA1（注意：这些是单值子级的 channel 行，会被误判到此层）
+            __IsLayer, "#E6D9C7",
+            
+            // ── 第1层：channel 行 + 总计行 ────────
+            // channel 行特征：Channel=T, Layer=F（仅多子级 channel 能落到此处，如触点、人群推广）
+            // 总计行特征：全部 = FALSE
+            "#DBC6A8"
+        )
+
+// ISINSCOPE 函数说明（5 级行维度）：
+//   总计行：所有 ISINSCOPE = FALSE
+//   channel 行：仅 ISINSCOPE(channel) = TRUE
+//   crowed_layer 小计行：ISINSCOPE(channel) + ISINSCOPE(crowed_layer) = TRUE
+//   crowed_name 小计行：前 3 个 = TRUE
+//   crowed_type 小计行：前 4 个 = TRUE
+//   customer_type 明细行：全部 5 个 = TRUE
+//   SWITCH 从最深层级开始判断（自底向上），保证匹配到最具体层级
 
 ================================================================================
 6. 视觉对象配置说明
@@ -722,9 +840,12 @@ Crowd Cell Background Color =
 6.1 表（Table）配置
 ─────────────────────
 - 行（Rows）：
-  * a05_e2e_paid_media_crowed_data_d[channel]（广告点位）
+  * a05_e2e_paid_media_crowed_data_d[channel]（广告点位/平台）
   * a05_e2e_paid_media_crowed_data_d[crowed_layer]（人群分层）
-- 值（Values）：8 个独立度量值
+  * a05_e2e_paid_media_crowed_data_d[crowed_name]（人群名称）
+  * a05_e2e_paid_media_crowed_data_d[crowed_type]（人群类型）
+  * a05_e2e_paid_media_crowed_data_d[customer_type]（客户类型）
+- 值（Values）：9 个独立度量值
   * [Crowd Cost]       — 格式字符串: "#,##0.00;(#,##0.00);0.00"
   * [Crowd Cost%]      — 格式字符串: "0.0%;-0.0%;0.0%"
   * [Crowd ROI]        — 格式字符串: "#,##0.00;-#,##0.00;0.00"
@@ -733,13 +854,14 @@ Crowd Cell Background Color =
   * [Crowd CTR]        — 格式字符串: "0.0%;-0.0%;0.0%"
   * [Crowd CVR]        — 格式字符串: "0.0%;-0.0%;0.0%"
   * [Crowd Add to Cart]— 格式字符串: "#,##0;(#,##0);0"
+  * [Crowd CPATC]      — 格式字符串: "#,##0.00;-#,##0.00;0.00"
 
 6.2 条件格式配置
 ──────────────────
 | 格式类型     | 基于字段                              | 说明 |
 |-------------|---------------------------------------|------|
-| 字体颜色     | [Crowd Cell Font Color]               | 统一 #5f6165 |
-| 背景颜色     | [Crowd Cell Background Color]         | channel 行 #f8f5f1，明细行 #ffffff |
+| 字体颜色     | [Crowd Cell Font Color]               | 总计行 #252423，其余 #5F6165 |
+| 背景颜色     | [Crowd Cell Background Color]         | 5级层次(#dbc6a8/#e6d9c7/#f4ece4/#faf6f1/#ffffff) |
 
 6.3 切片器配置
 ───────────────────────────────────────────────────────────────────────────────
@@ -767,16 +889,18 @@ Crowd Cell Background Color =
 | 6  | Crowd CTR                          | Crowd                       | 点击率 | 数值 |
 | 7  | Crowd CVR                          | Crowd                       | 转化率 | 数值 |
 | 8  | Crowd Add to Cart                  | Crowd                       | 加购量 | 数值 |
-| 9  | Crowd Cost Display                 | Crowd > Display             | Cost 格式化显示 | 文本 |
-| 10 | Crowd Cost% Display                | Crowd > Display             | Cost% 格式化显示 | 文本 |
-| 11 | Crowd ROI Display                  | Crowd > Display             | ROI 格式化显示 | 文本 |
-| 12 | Crowd Click Display                | Crowd > Display             | Click 格式化显示 | 文本 |
-| 13 | Crowd CPC Display                  | Crowd > Display             | CPC 格式化显示 | 文本 |
-| 14 | Crowd CTR Display                  | Crowd > Display             | CTR 格式化显示 | 文本 |
-| 15 | Crowd CVR Display                  | Crowd > Display             | CVR 格式化显示 | 文本 |
-| 16 | Crowd Add to Cart Display          | Crowd > Display             | Add to Cart 格式化显示 | 文本 |
-| 17 | Crowd Cell Font Color              | Crowd > Formatting          | 字体颜色 | 颜色代码 |
-| 18 | Crowd Cell Background Color        | Crowd > Formatting          | 行背景色 | 颜色代码 |
+| 9  | Crowd CPATC                        | Crowd                       | 单次加购成本 | 数值 |
+| 10 | Crowd Cost Display                 | Crowd > Display             | Cost 格式化显示 | 文本 |
+| 11 | Crowd Cost% Display                | Crowd > Display             | Cost% 格式化显示 | 文本 |
+| 12 | Crowd ROI Display                  | Crowd > Display             | ROI 格式化显示 | 文本 |
+| 13 | Crowd Click Display                | Crowd > Display             | Click 格式化显示 | 文本 |
+| 14 | Crowd CPC Display                  | Crowd > Display             | CPC 格式化显示 | 文本 |
+| 15 | Crowd CTR Display                  | Crowd > Display             | CTR 格式化显示 | 文本 |
+| 16 | Crowd CVR Display                  | Crowd > Display             | CVR 格式化显示 | 文本 |
+| 17 | Crowd Add to Cart Display          | Crowd > Display             | Add to Cart 格式化显示 | 文本 |
+| 18 | Crowd CPATC Display                | Crowd > Display             | CPATC 格式化显示 | 文本 |
+| 19 | Crowd Cell Font Color              | Crowd > Formatting          | 字体颜色 | 颜色代码 |
+| 20 | Crowd Cell Background Color        | Crowd > Formatting          | 行背景色 | 颜色代码 |
 
 ================================================================================
 8. 指标口径与格式汇总
@@ -792,6 +916,7 @@ Crowd Cell Background Color =
 | 6 | CTR         | 有口径   | DIVIDE(click, pv)                      | ❌   | 百分比   | 0.0%;-0.0%;0.0%              |
 | 7 | CVR         | 有口径   | DIVIDE(sales_order_cnt, click)         | ❌   | 百分比   | 0.0%;-0.0%;0.0%              |
 | 8 | Add to Cart | 有口径   | SUM(add_cart_cnt)                      | ❌   | 整数     | #,##0;(#,##0);0              |
+| 9 | CPATC       | 有口径   | DIVIDE(cost_amt, add_cart_cnt)         | ❌   | 小数     | #,##0.00;-#,##0.00;0.00      |
 
 ================================================================================
 9. 关键技术说明
@@ -840,10 +965,11 @@ CPC = DIVIDE(cost_amt, click)，分子分母均为同币种原始值（RMB），
 若需展示为特定币种金额，应在分子 cost_amt 上先换算再除（数学等价但不改变比率含义），
 而非除完再乘汇率——除完再乘会引入汇率因子，使比率数值失真。
 
-9.3 HASONEVALUE 函数
-─────────────────────
-详见 5.2 节注释。核心功能：判断当前筛选上下文中指定列是否恰好只有一个不重复值。
-本场景用于区分 channel 行/总计行（FALSE）与 crowed_layer 明细行（TRUE）。
+9.3 ISINSCOPE 函数（5 级行维度）
+─────────────────────────────
+详见 5.1 / 5.2 节注释。ISINSCOPE 判断当前筛选上下文中指定列是否处于作用域内。
+本场景用于区分 5 级行层级：
+  总计行（全 FALSE）/ channel 行 / crowed_layer 小计 / crowed_name 小计 / crowed_type 小计 / customer_type 明细（全 TRUE）
 
 9.4 Table 视觉对象 vs Matrix
 ─────────────────────────────
@@ -852,9 +978,10 @@ CPC = DIVIDE(cost_amt, click)，分子分母均为同币种原始值（RMB），
 - 无需 DIM_ColMetric_Crowd 列维度表
 - 格式字符串直接在度量值属性中设置，Display 度量值用于需要文本输出的场景
 
-9.5 Cost% 分母：FILTER(VALUES()) vs FILTER(ALL())
-─────────────────────────────────────────────────
-Cost% = DIVIDE(当前行 cost, 总计 cost)，分母需要移除行维度但保留切片器筛选。
+9.5 Cost% 分母：REMOVEFILTERS（5 个行维度）+ FILTER(ALL()) 仅保留切片器筛选
+─────────────────────────────────────────────────────────────────────────────
+Cost% = DIVIDE(当前行 cost, 总计 cost)，分母需要移除全部 5 个行维度
+（channel / crowed_layer / crowed_name / crowed_type / customer_type）但保留切片器筛选。
 
 关键区别：
   FILTER(VALUES(列), 列 IN 切片器值) → 行维度 ∩ 切片器（保留行维度）
@@ -879,14 +1006,14 @@ Cost% = DIVIDE(当前行 cost, 总计 cost)，分母需要移除行维度但保�
 □ 4.  复用切片器（Platform / DataCaliber / Currency）已正确引用
 □ 5.  关系配置：Dim_Date_Current → a05_e2e_paid_media_crowed_data_d 1:*
 □ 6.  Crowd Cost 口径正确：SUM(cost_amt) * ExchangeRate
-□ 7.  Crowd Cost% 口径正确：DIVIDE(当前行 cost_amt, 总计 cost_amt)，分母 REMOVEFILTERS 行维度，不乘汇率
-□ 8.  Crowd Click / CPC / CTR / CVR / Add to Cart 口径正确
+□ 7.  Crowd Cost% 口径正确：DIVIDE(当前行 cost_amt, 总计 cost_amt)，分母 REMOVEFILTERS 全部 5 个行维度，不乘汇率
+□ 8.  Crowd Click / CPC / CTR / CVR / Add to Cart / CPATC 口径正确
 □ 9.  Platform ALL 筛选逻辑正确：FILTER platform IN {"TM","JD"}
 □ 10. FILTER(VALUES(事实表列), 列 IN VALUES(Dim[列])) 交集筛选正确，保留行维度
 □ 11. 仅 Cost 乘汇率，其余指标均不乘
-□ 12. 8 个 Display 度量值格式字符串正确
-□ 13. Crowd Cell Background Color：channel 行 #f8f5f1，明细行 #ffffff
-□ 14. Table 配置：行 = channel + crowed_layer，值 = 8 个度量值
+□ 12. 9 个 Display 度量值格式字符串正确
+□ 13. Crowd Cell Background Color：5 级层次（#dbc6a8 / #e6d9c7 / #f4ece4 / #faf6f1 / #ffffff）
+□ 14. Table 配置：行 = channel + crowed_layer + crowed_name + crowed_type + customer_type，值 = 9 个度量值
 □ 15. 条件格式：字体颜色 + 背景颜色已绑定对应度量值
 □ 16. 切片器布局：7 个切片器位置正确，默认全选
 □ 17. Display Folder 结构正确（Crowd / Crowd > Display / Crowd > Formatting）
