@@ -1,0 +1,1014 @@
+Keyword_X_matrix_solution 解决方案：
+
+> status: created
+> created: 2026-06-22
+> updated: 2026-06-22
+> complexity: 🟡中等
+> type: 度量值开发 + 可视化构建
+> naming: 遵循 powerbi_code_copilot/rules/dax-style.md 规范
+>
+> 版本变更记录：见同目录 changelog.md
+
+================================================================================
+0. 需求概述与架构总览
+================================================================================
+
+实现 Keyword X 关键词粒度看板：
+- 行：5 级行维度，直接来自事实表字段，无需构建断开维度表
+      channel → brand → framework → category → customer_type
+- 列：9 个独立度量值，直接拖入 Table 视觉对象
+- 无同比逻辑：不涉及 Dim_Date_Ly，无 This Year / Last Year / YOY 行路由
+- 切片器：
+  * Slicer_DataCaliber_Selection（trans_cycle 口径，单选，复用 Overview）
+  * Slicer_Currency_Selection（币种，单选，复用 Overview）
+  * Slicer_Platform_Selection（平台，单选含 ALL，复用 Overview）
+  * Dim_Crowd_Season_C_Label（复用 Crowd，三列同源，多选级联）
+    - [Super Season] 列 → 事实表字段 season
+    - [Category]   列 → 事实表字段 category
+    - [Label]      列 → 事实表字段 brand
+
+整体架构：
+```
+筛选器层
+├── Dim_Date_Current ─── 1:* ──→ a05_e2e_paid_media_keyword_data_d[data_date]
+├── Slicer_Platform_Selection（断开，单选含 ALL，复用 Overview）
+├── Slicer_DataCaliber_Selection（断开，单选，复用 Overview）
+├── Slicer_Currency_Selection（断开，单选，复用 Overview）
+└── Dim_Crowd_Season_C_Label（断开，复用 Crowd，三列同源，多选级联）
+    ├── [Super Season]   列 → 切片器 1（多选）
+    ├── [Category]  列 → 切片器 2（多选）
+    └── [Label]     列 → 切片器 3（多选）
+
+度量值（9 个核心 + 9 个 Display + 2 个辅助 = 20 个）
+├── Keyword X Cost          — SUM(cost_amt) × ExchangeRate（金额类）
+├── Keyword X Cost%         — DIVIDE(当前行 cost_amt, 总计 cost_amt)（比率类）
+├── Keyword X ROI           — 占位=1
+├── Keyword X Click         — SUM(click)（计数类）
+├── Keyword X CPC           — DIVIDE(cost_amt, click)（比率类，不乘汇率）
+├── Keyword X CTR           — DIVIDE(click, pv)（比率类）
+├── Keyword X CVR           — DIVIDE(sales_order_cnt, click)（比率类）
+├── Keyword X Add to Cart   — SUM(add_cart_cnt)（计数类）
+└── Keyword X CPATC         — DIVIDE(cost_amt, add_cart_cnt)（比率类，不乘汇率）
+
+辅助度量值
+├── Keyword X Cell Font Color       — 总计行 #252423（近黑），其余 #5F6165（深灰）
+└── Keyword X Cell Background Color — 5 级层次背景色（#dbc6a8 / #e6d9c7 / #f4ece4 / #faf6f1 / #ffffff）
+```
+
+================================================================================
+1. 复用切片器 SQL（单表三列，同源级联，多选，与 Crowd 共享）
+================================================================================
+
+1.1 Dim_Crowd_Season_C_Label — 共享 SQL
+───────────────────────────────────────
+
+-- ========================================
+-- 表: Dim_Crowd_Season_C_Label
+-- 类型: 断开维度参数表（SQL 查询加载）
+-- 用途: Crowd / Keyword X 模块共享 — Super Season / Category / Label 三级级联筛选（多选）
+--       三列同源（同一张 Crowd 事实表），Power BI 切片器自动交叉筛选实现级联
+--       多选模式：全选 = 选中所有项，无需 ALL 占位值
+-- 字段映射（便于后续替换表字段直接上线）：
+--   Super Season ← crowed_layer（Crowd 模块）/ season（Keyword X 模块）
+--   Category     ← crowed_name（Crowd 模块）/ category（Keyword X 模块）
+--   Label        ← crowed_type（Crowd 模块）/ brand（Keyword X 模块）
+-- ========================================
+
+SELECT DISTINCT
+    crowed_layer AS `Super Season`,
+    crowed_name  AS `Category`,
+    crowed_type  AS `Label`
+FROM `indep_rl_ads`.a05_e2e_paid_media_crowed_data_d
+WHERE platform IN ('JD', 'TM')
+ORDER BY `Super Season`, `Category`, `Label`
+
+1.2 多选级联效果说明
+─────────────────────
+
+Dim_Crowd_Season_C_Label 为单表三列，Power BI 切片器基于同表列自动交叉筛选实现级联：
+- 选 Super Season = "A", "B" → Category 切片器仅显示 "A" 和 "B" 对应的 Category 值
+- 全选 Super Season → Category 切片器显示全部 Category 值
+- 同理 Category → Label 级联
+
+多选模式下无需 ALL 占位值：
+  单选模式需要 ALL 占位值来表示"全选"，
+  多选模式下"全选"= 选中所有项，Power BI 原生支持。
+
+度量值中的多选筛选实现：
+  使用 FILTER(VALUES()) 交集模式（保留行维度筛选上下文）：
+    FILTER(VALUES(事实表[season]),   事实表[season]   IN VALUES(Dim[Super Season]))
+    FILTER(VALUES(事实表[category]), 事实表[category] IN VALUES(Dim[Category]))
+    FILTER(VALUES(事实表[brand]),    事实表[brand]    IN VALUES(Dim[Label]))
+  VALUES(事实表列) 先在当前筛选上下文中求值 → 返回当前行的值，
+  FILTER 进一步限制为同时满足切片器的值 → 行维度 ∩ 切片器 = 交集，
+  全选时 VALUES 返回全部值 → 交集 = 行维度值 → 等价于仅行维度筛选。
+  直接用 "列 IN VALUES(切片器)" 会覆盖行维度筛选，导致每行显示总计值。
+
+================================================================================
+2. 关系与数据模型说明
+================================================================================
+
+2.1 事实表
+──────────
+| Power BI 表名                          | 说明 |
+|----------------------------------------|------|
+| a05_e2e_paid_media_keyword_data_d      | 关键词粒度事实表 |
+|                                        | 关键字段：channel / brand / framework / category / customer_type |
+|                                        | platform / trans_cycle / data_date |
+|                                        | 指标字段：cost_amt / sales_amt / click / pv / add_cart_cnt / sales_order_cnt |
+
+2.2 关系配置
+────────────
+```
+已连接关系（Active）：
+    Dim_Date_Current[数据日期] ──── 1:* ────→ a05_e2e_paid_media_keyword_data_d[data_date]
+
+断开维度（无关系）：
+    Slicer_Platform_Selection     ← SELECTEDVALUE → Platform_ID（复用 Overview，单选含 ALL）
+    Slicer_DataCaliber_Selection  ← SELECTEDVALUE → DataCaliber_ID（复用 Overview，单选）
+    Slicer_Currency_Selection     ← SELECTEDVALUE → Currency_ExchangeRate（复用 Overview，单选）
+    Dim_Crowd_Season_C_Label  ← FILTER(VALUES()) 交集筛选（Keyword X 专属，同源断开维度）
+```
+
+================================================================================
+3. 核心度量值（9 个独立度量）
+================================================================================
+
+3.1 公共筛选逻辑说明
+────────────────────
+
+所有度量值共享相同的筛选变量模式：
+
+// ── 复用切片器（单选）──
+VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+// ── 切片器值（提前变量化，集中管理字段引用）──
+VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+
+// ── Platform FILTER 块（提前变量化，4 个双 CALCULATE 度量值复用）──
+VAR __PlatformFilter =
+    FILTER(
+        ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+        IF(__ChannelID = "ALL",
+            a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+            a05_e2e_paid_media_keyword_data_d[platform] = __ChannelID))
+
+// ── Platform 筛选语义 ──
+// __ChannelID = "ALL" → platform IN {"TM","JD"}（精确圈定 TM+JD）
+// __ChannelID = "TM"/"JD" → platform = __ChannelID（单平台精确筛选）
+
+// ── 三个专属切片器 FILTER 块 ──
+// FILTER(VALUES(事实表[season]),   事实表[season]   IN __SuperSeasonVals)
+// FILTER(VALUES(事实表[category]), 事实表[category] IN __CategoryVals)
+// FILTER(VALUES(事实表[brand]),    事实表[brand]    IN __LabelVals)
+
+3.2 Keyword X Cost
+──────────────
+
+Keyword X Cost =
+// ========================================
+// 度量值: Keyword X Cost
+// 中文名: 花费
+// Display Folder: Keyword
+// 用途: 花费金额
+// 口径: SUM(cost_amt) × ExchangeRate
+// 类型: 金额类（唯一需要汇率换算的指标）
+// 数据字典: cost_amt = 花费
+// ========================================
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
+
+    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__ChannelID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __ChannelID))
+
+    VAR __BaseValue =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+    RETURN
+        __BaseValue * __ExchangeRate
+
+3.3 Keyword X Cost%
+────────────────
+
+Keyword X Cost% =
+// ========================================
+// 度量值: Keyword X Cost%
+// 中文名: 花费占比
+// Display Folder: Keyword
+// 用途: 每行花费占总计花费的百分比
+// 口径: DIVIDE(当前行 cost_amt, 总计 cost_amt)
+//       分母不受行维度（channel / brand / framework / category / customer_type）筛选上下文影响
+//       分母使用 REMOVEFILTERS 移除全部 5 个行维度 + FILTER(ALL()) 仅保留切片器筛选
+//       注意：分母不能用 FILTER(VALUES()) 因为 VALUES 在行上下文中求值后
+//             会固化当前行的值，导致 REMOVEFILTERS 被抵消，Cost% 始终为 1
+// 类型: 比率类，不乘汇率
+// 数据字典: cost_amt = 花费
+// ========================================
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__ChannelID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __ChannelID))
+
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+
+    VAR __TotalCostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
+            // ── 移除全部 5 个行维度筛选（channel / brand / framework / category / customer_type）──
+            REMOVEFILTERS(a05_e2e_paid_media_keyword_data_d[channel]),
+            REMOVEFILTERS(a05_e2e_paid_media_keyword_data_d[brand]),
+            REMOVEFILTERS(a05_e2e_paid_media_keyword_data_d[framework]),
+            REMOVEFILTERS(a05_e2e_paid_media_keyword_data_d[category]),
+            REMOVEFILTERS(a05_e2e_paid_media_keyword_data_d[customer_type]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            // ── 分母用 FILTER(ALL()) 仅保留切片器筛选（不用 FILTER(VALUES())）──
+            FILTER(ALL(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(ALL(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(ALL(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+
+    RETURN
+        DIVIDE(__CostAmt, __TotalCostAmt)
+
+3.4 Keyword X ROI
+─────────────
+
+Keyword X ROI = 
+// ========================================
+// 度量值: Keyword X ROI
+// 中文名: 投资回报率
+// Display Folder: Keyword
+// 用途: 投资回报率
+// 口径（待确认）: 待确认具体计算逻辑
+// 类型: 比率类，不乘汇率
+// 当前返回占位值 1
+// ========================================
+    IF(ISBLANK([Keyword X Cost]),BLANK(),1)
+
+3.5 Keyword X Click
+───────────────
+
+Keyword X Click =
+// ========================================
+// 度量值: Keyword X Click
+// 中文名: 点击量
+// Display Folder: Keyword
+// 用途: 点击量
+// 口径: SUM(click)
+// 类型: 计数类，不乘汇率
+// 数据字典: click = 点击量
+// ========================================
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__ChannelID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __ChannelID))
+
+    RETURN
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[click]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+
+3.6 Keyword X CPC
+─────────────
+
+Keyword X CPC =
+// ========================================
+// 度量值: Keyword X CPC
+// 中文名: 单次点击成本
+// Display Folder: Keyword
+// 用途: 单次点击成本（Cost Per Click）
+// 口径: DIVIDE(SUM(cost_amt), SUM(click))
+// 类型: 比率类，不乘汇率
+// 说明: CPC = cost_amt / click，分子分母均为同币种原始值，
+//       比值本身无币种维度，无需乘汇率。
+// 数据字典: cost_amt = 花费, click = 点击量
+// ========================================
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__ChannelID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __ChannelID))
+
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+    VAR __Click =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[click]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+    RETURN
+        DIVIDE(__CostAmt, __Click)
+
+3.7 Keyword X CTR
+─────────────
+
+Keyword X CTR =
+// ========================================
+// 度量值: Keyword X CTR
+// 中文名: 点击率
+// Display Folder: Keyword
+// 用途: 点击率（Click Through Rate）
+// 口径: DIVIDE(SUM(click), SUM(pv))
+// 类型: 比率类，不乘汇率
+// 数据字典: click = 点击量, pv = 展现量
+// ========================================
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__ChannelID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __ChannelID))
+
+    VAR __Click =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[click]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+    VAR __PV =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[pv]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+    RETURN
+        DIVIDE(__Click, __PV)
+
+3.8 Keyword X CVR
+─────────────
+
+Keyword X CVR =
+// ========================================
+// 度量值: Keyword X CVR
+// 中文名: 转化率
+// Display Folder: Keyword
+// 用途: 转化率（Conversion Rate）
+// 口径: DIVIDE(SUM(sales_order_cnt), SUM(click))
+// 类型: 比率类，不乘汇率
+// 数据字典: sales_order_cnt = 总成交笔数(投放带来), click = 点击量
+// ========================================
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__ChannelID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __ChannelID))
+
+    VAR __Orders =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[sales_order_cnt]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+    VAR __Click =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[click]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+    RETURN
+        DIVIDE(__Orders, __Click)
+
+3.9 Keyword X Add to Cart
+──────────────────────
+
+Keyword X Add to Cart =
+// ========================================
+// 度量值: Keyword X Add to Cart
+// 中文名: 总加购数
+// Display Folder: Keyword
+// 用途: 加购数
+// 口径: SUM(add_cart_cnt)
+// 类型: 计数类，不乘汇率
+// 数据字典: add_cart_cnt = 总加购数
+// ========================================
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__ChannelID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __ChannelID))
+
+    RETURN
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[add_cart_cnt]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+
+3.10 Keyword X CPATC
+────────────────
+
+Keyword X CPATC =
+// ========================================
+// 度量值: Keyword X CPATC
+// 中文名: 单次加购成本
+// Display Folder: Keyword
+// 用途: 单次加购成本（Cost Per Add To Cart）
+// 口径: DIVIDE(SUM(cost_amt), SUM(add_cart_cnt))
+// 类型: 比率类，不乘汇率
+// 说明: CPATC = cost_amt / add_cart_cnt，分子分母均为同币种原始值，
+//       比值本身无币种维度，无需乘汇率。
+// 数据字典: cost_amt = 花费, add_cart_cnt = 总加购数
+// ========================================
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__ChannelID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __ChannelID))
+
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+    VAR __AddToCart =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[add_cart_cnt]),
+            __PlatformFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+        )
+    RETURN
+        DIVIDE(__CostAmt, __AddToCart)
+
+================================================================================
+4. Display 格式化显示度量值（9 个）
+================================================================================
+
+格式字符串说明：
+  Power BI 自定义格式字符串由 1~3 节组成，以分号分隔：
+    正数格式;负数格式;零值格式
+  示例：
+    "#,##0.00%;(#,##0.00%);0.00%"  → 只带负号（括号）的百分比，保留两位小数
+    "+#,##0.00%;-#,##0.00%;0.00%"  → 带正负号的百分比，保留两位小数
+    "#,##0.00;(#,##0.00);0.00"     → 只带负号（括号）的数值，保留两位小数
+
+4.1 Keyword X Cost Display
+───────────────────────
+
+Keyword X Cost Display = 
+// ========================================
+// 度量值: Keyword X Cost Display
+// 中文名: 花费（格式化）
+// Display Folder: Keyword X > Display
+// 用途: Keyword X Cost 的格式化显示
+// 数据类型: 金额（带千分位、两位小数，负数用括号）
+// 格式字符串: "#,##0.00;(#,##0.00);0.00"
+// 示例: 1,234.56 / (1,234.56) / 0.00
+// ========================================
+        // ── 货币符号（由币种切片器决定）──
+    VAR __CurrencySymbol =
+        SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        IF(ISBLANK([Keyword X Cost]),BLANK(),__CurrencySymbol & FORMAT([Keyword X Cost], "#,##0.00;(#,##0.00);0.00"))
+
+4.2 Keyword X Cost% Display
+────────────────────────
+
+Keyword X Cost% Display = 
+// ========================================
+// 度量值: Keyword X Cost% Display
+// 中文名: 花费占比（格式化）
+// Display Folder: Keyword X > Display
+// 用途: Keyword X Cost% 的格式化显示
+// 数据类型: 百分比（保留一位小数，负数带负号）
+// 格式字符串: "0.0%;-0.0%;0.0%"
+// 示例: 12.5% / -3.2% / 0.0%
+// ========================================
+    FORMAT([Keyword X Cost%], "0.0%;-0.0%;0.0%")
+
+4.3 Keyword X ROI Display
+──────────────────────
+
+Keyword X ROI Display =
+// ========================================
+// 度量值: Keyword X ROI Display
+// 中文名: 投资回报率（格式化）
+// Display Folder: Keyword X > Display
+// 用途: Keyword X ROI 的格式化显示
+// 数据类型: 小数（带千分位、两位小数，负数带负号）
+// 格式字符串: "#,##0.00;-#,##0.00;0.00"
+// 示例: 1.50 / -0.75 / 0.00
+// ========================================
+    FORMAT([Keyword X ROI], "#,##0.00;-#,##0.00;0.00")
+
+4.4 Keyword X Click Display
+────────────────────────
+
+Keyword X Click Display =
+// ========================================
+// 度量值: Keyword X Click Display
+// 中文名: 点击量（格式化）
+// Display Folder: Keyword X > Display
+// 用途: Keyword X Click 的格式化显示
+// 数据类型: 整数（带千分位，无小数）
+// 格式字符串: "#,##0;(#,##0);0"
+// 示例: 12,345 / (12,345) / 0
+// ========================================
+    FORMAT([Keyword X Click], "#,##0;(#,##0);0")
+
+4.5 Keyword X CPC Display
+──────────────────────
+
+Keyword X CPC Display =
+// ========================================
+// 度量值: Keyword X CPC Display
+// 中文名: 单次点击成本（格式化）
+// Display Folder: Keyword X > Display
+// 用途: Keyword X CPC 的格式化显示
+// 数据类型: 小数（带千分位、两位小数，负数带负号）
+// 格式字符串: "#,##0.00;-#,##0.00;0.00"
+// 示例: 3.45 / -1.20 / 0.00
+// ========================================
+    FORMAT([Keyword X CPC], "#,##0.00;-#,##0.00;0.00")
+
+4.6 Keyword X CTR Display
+──────────────────────
+
+Keyword X CTR Display =
+// ========================================
+// 度量值: Keyword X CTR Display
+// 中文名: 点击率（格式化）
+// Display Folder: Keyword X > Display
+// 用途: Keyword X CTR 的格式化显示
+// 数据类型: 百分比（保留一位小数，负数带负号）
+// 格式字符串: "0.0%;-0.0%;0.0%"
+// 示例: 8.5% / -2.1% / 0.0%
+// ========================================
+    FORMAT([Keyword X CTR], "0.0%;-0.0%;0.0%")
+
+4.7 Keyword X CVR Display
+──────────────────────
+
+Keyword X CVR Display =
+// ========================================
+// 度量值: Keyword X CVR Display
+// 中文名: 转化率（格式化）
+// Display Folder: Keyword X > Display
+// 用途: Keyword X CVR 的格式化显示
+// 数据类型: 百分比（保留一位小数，负数带负号）
+// 格式字符串: "0.0%;-0.0%;0.0%"
+// 示例: 5.2% / -0.8% / 0.0%
+// ========================================
+    FORMAT([Keyword X CVR], "0.0%;-0.0%;0.0%")
+
+4.8 Keyword X Add to Cart Display
+──────────────────────────────
+
+Keyword X Add to Cart Display =
+// ========================================
+// 度量值: Keyword X Add to Cart Display
+// 中文名: 总加购数（格式化）
+// Display Folder: Keyword X > Display
+// 用途: Keyword X Add to Cart 的格式化显示
+// 数据类型: 整数（带千分位，无小数）
+// 格式字符串: "#,##0;(#,##0);0"
+// 示例: 8,901 / (8,901) / 0
+// ========================================
+    FORMAT([Keyword X Add to Cart], "#,##0;(#,##0);0")
+
+4.9 Keyword X CPATC Display
+────────────────────
+
+Keyword X CPATC Display =
+// ========================================
+// 度量值: Keyword X CPATC Display
+// 中文名: 单次加购成本（格式化）
+// Display Folder: Keyword X > Display
+// 用途: Keyword X CPATC 的格式化显示
+// 数据类型: 小数（带千分位、两位小数，负数带负号）
+// 格式字符串: "#,##0.00;-#,##0.00;0.00"
+// 示例: 15.30 / -8.50 / 0.00
+// ========================================
+    FORMAT([Keyword X CPATC], "#,##0.00;-#,##0.00;0.00")
+
+================================================================================
+5. 辅助度量值
+================================================================================
+
+5.1 字体颜色
+────────────
+
+Keyword X Cell Font Color = 
+// ========================================
+// 度量值: Keyword X Cell Font Color
+// 中文名: 关键词单元格字体颜色
+// Display Folder: Keyword X > Formatting
+// 用途: 根据矩阵视觉层级返回字体颜色
+//       用于条件格式 → 字体颜色
+// 矩阵结构: 行维度 = channel -> brand -> framework -> category -> customer_type (五级)
+// 颜色规则:
+//   - 总计行 (Grand Total) -> #252423 (近黑，强调)
+//   - 所有小计行和明细行     -> #5F6165 (深灰)
+// ========================================
+    VAR __IsCustomerType = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[customer_type])
+    VAR __IsCategory = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[category])
+    VAR __IsFramework = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[framework])
+    VAR __IsBrand = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[brand])
+    VAR __IsChannel = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[channel])
+
+    RETURN
+        SWITCH(
+            TRUE(),
+            NOT(__IsChannel) && NOT(__IsBrand) && NOT(__IsFramework) && NOT(__IsCategory) && NOT(__IsCustomerType),
+                "#252423",
+            "#5F6165"
+        )
+
+5.2 行背景色
+────────────
+
+Keyword X Cell Background Color = 
+// ========================================
+// 度量值: Keyword X Cell Background Color
+// Display Folder: Keyword X > Formatting
+// 用途: 根据矩阵行层级返回背景色（5 级层次）
+// 注意: 当 channel 下只有一个子级时，ISINSCOPE(Brand) 也会返回 TRUE，
+//       此时该行会被染成 brand 颜色（中米色），无法染成 channel 颜色（深米色）。
+//       这是 Power BI 矩阵阶梯式布局的已知限制，非代码问题。
+// ========================================
+    VAR __IsCustomerType = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[customer_type])
+    VAR __IsCategory = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[category])
+    VAR __IsFramework = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[framework])
+    VAR __IsBrand = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[brand])
+    VAR __IsChannel = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[channel])
+
+    RETURN
+        SWITCH(
+            TRUE(),
+            // ── 第5层：customer_type 明细行 ────────
+            // 特征：5 个 ISINSCOPE 全部 = TRUE
+            __IsCustomerType, "#FFFFFF",
+            
+            // ── 第4层：category 小计行 ─────────
+            // 特征：Category=T, CustomerType=F
+            __IsCategory, "#FAF6F1",
+            
+            // ── 第3层：framework 小计行 ─────────
+            // 特征：Framework=T, Category=F
+            __IsFramework, "#F4ECE4",
+            
+            // ── 第2层：brand 小计行 ────────
+            // 特征：Brand=T, Framework=F
+            __IsBrand, "#E6D9C7",
+            
+            // ── 第1层：channel 行 + 总计行 ────────
+            // channel 行特征：Channel=T, Brand=F
+            // 总计行特征：全部 = FALSE
+            "#DBC6A8"
+        )
+
+// ISINSCOPE 函数说明（5 级行维度）：
+//   总计行：所有 ISINSCOPE = FALSE
+//   channel 行：仅 ISINSCOPE(channel) = TRUE
+//   brand 小计行：ISINSCOPE(channel) + ISINSCOPE(brand) = TRUE
+//   framework 小计行：前 3 个 = TRUE
+//   category 小计行：前 4 个 = TRUE
+//   customer_type 明细行：全部 5 个 = TRUE
+//   SWITCH 从最深层级开始判断（自底向上），保证匹配到最具体层级
+
+================================================================================
+6. 视觉对象配置说明
+================================================================================
+
+6.1 表（Table）配置
+─────────────────────
+- 行（Rows）：
+  * a05_e2e_paid_media_keyword_data_d[channel]（广告点位/平台）
+  * a05_e2e_paid_media_keyword_data_d[brand]（品牌名称）
+  * a05_e2e_paid_media_keyword_data_d[framework]（framework）
+  * a05_e2e_paid_media_keyword_data_d[category]（category）
+  * a05_e2e_paid_media_keyword_data_d[customer_type]（客户类型）
+- 值（Values）：9 个独立度量值
+  * [Keyword X Cost]       — 格式字符串: "#,##0.00;(#,##0.00);0.00"
+  * [Keyword X Cost%]      — 格式字符串: "0.0%;-0.0%;0.0%"
+  * [Keyword X ROI]        — 格式字符串: "#,##0.00;-#,##0.00;0.00"
+  * [Keyword X Click]      — 格式字符串: "#,##0;(#,##0);0"
+  * [Keyword X CPC]        — 格式字符串: "#,##0.00;-#,##0.00;0.00"
+  * [Keyword X CTR]        — 格式字符串: "0.0%;-0.0%;0.0%"
+  * [Keyword X CVR]        — 格式字符串: "0.0%;-0.0%;0.0%"
+  * [Keyword X Add to Cart]— 格式字符串: "#,##0;(#,##0);0"
+  * [Keyword X CPATC]      — 格式字符串: "#,##0.00;-#,##0.00;0.00"
+
+6.2 条件格式配置
+──────────────────
+| 格式类型     | 基于字段                              | 说明 |
+|-------------|---------------------------------------|------|
+| 字体颜色     | [Keyword X Cell Font Color]             | 总计行 #252423，其余 #5F6165 |
+| 背景颜色     | [Keyword X Cell Background Color]       | 5级层次(#dbc6a8/#e6d9c7/#f4ece4/#faf6f1/#ffffff) |
+
+6.3 切片器配置
+───────────────────────────────────────────────────────────────────────────────
+| 切片器          | 类型   | 字段                                               | 默认值 |
+|----------------|--------|----------------------------------------------------|--------|
+| 本期日期范围    | Between| Dim_Date_Current[数据日期]                         | —      |
+| Channel        | 单选   | Slicer_Platform_Selection[Platform_Label]          | ALL    |
+| 数据口径       | 单选   | Slicer_DataCaliber_Selection[DataCaliber_Label]    | T+1    |
+| 币种           | 单选   | Slicer_Currency_Selection[Currency_Label]          | RMB    |
+| Super Season   | 多选   | Dim_Crowd_Season_C_Label[Super Season]              | 全选   |
+| Category       | 多选   | Dim_Crowd_Season_C_Label[Category]                  | 全选   |
+| Label          | 多选   | Dim_Crowd_Season_C_Label[Label]                     | 全选   |
+
+================================================================================
+7. 度量值清单与 Display Folder
+================================================================================
+
+| #  | 度量值名称                          | Display Folder              | 用途 | 返回类型 |
+|----|------------------------------------|-----------------------------|------|----------|
+| 1  | Keyword X Cost                       | Keyword X                     | 花费金额 | 数值 |
+| 2  | Keyword X Cost%                      | Keyword X                     | 花费占总计比 | 数值 |
+| 3  | Keyword X ROI                        | Keyword X                     | 投资回报率（占位=1） | 数值 |
+| 4  | Keyword X Click                      | Keyword X                     | 点击量 | 数值 |
+| 5  | Keyword X CPC                        | Keyword X                     | 单次点击成本 | 数值 |
+| 6  | Keyword X CTR                        | Keyword X                     | 点击率 | 数值 |
+| 7  | Keyword X CVR                        | Keyword X                     | 转化率 | 数值 |
+| 8  | Keyword X Add to Cart                | Keyword X                     | 加购量 | 数值 |
+| 9  | Keyword X CPATC                      | Keyword X                     | 单次加购成本 | 数值 |
+| 10 | Keyword X Cost Display               | Keyword X > Display           | Cost 格式化显示 | 文本 |
+| 11 | Keyword X Cost% Display              | Keyword X > Display           | Cost% 格式化显示 | 文本 |
+| 12 | Keyword X ROI Display                | Keyword X > Display           | ROI 格式化显示 | 文本 |
+| 13 | Keyword X Click Display              | Keyword X > Display           | Click 格式化显示 | 文本 |
+| 14 | Keyword X CPC Display                | Keyword X > Display           | CPC 格式化显示 | 文本 |
+| 15 | Keyword X CTR Display                | Keyword X > Display           | CTR 格式化显示 | 文本 |
+| 16 | Keyword X CVR Display                | Keyword X > Display           | CVR 格式化显示 | 文本 |
+| 17 | Keyword X Add to Cart Display        | Keyword X > Display           | Add to Cart 格式化显示 | 文本 |
+| 18 | Keyword X CPATC Display              | Keyword X > Display           | CPATC 格式化显示 | 文本 |
+| 19 | Keyword X Cell Font Color            | Keyword X > Formatting        | 字体颜色 | 颜色代码 |
+| 20 | Keyword X Cell Background Color      | Keyword X > Formatting        | 行背景色 | 颜色代码 |
+
+================================================================================
+8. 指标口径与格式汇总
+================================================================================
+
+| # | 指标名       | 状态     | 口径                                   | 汇率 | 数据类型 | 格式字符串                    |
+|---|-------------|----------|----------------------------------------|------|----------|-------------------------------|
+| 1 | Cost        | 有口径   | SUM(cost_amt)                          | ✅乘 | 金额     | #,##0.00;(#,##0.00);0.00      |
+| 2 | Cost%       | 有口径   | DIVIDE(当前行 cost_amt, 总计 cost_amt)  | ❌   | 百分比   | 0.0%;-0.0%;0.0%              |
+| 3 | ROI         | 占位=1   | 待确认                                 | ❌   | 小数     | #,##0.00;-#,##0.00;0.00      |
+| 4 | Click       | 有口径   | SUM(click)                             | ❌   | 整数     | #,##0;(#,##0);0              |
+| 5 | CPC         | 有口径   | DIVIDE(cost_amt, click)                | ❌   | 小数     | #,##0.00;-#,##0.00;0.00      |
+| 6 | CTR         | 有口径   | DIVIDE(click, pv)                      | ❌   | 百分比   | 0.0%;-0.0%;0.0%              |
+| 7 | CVR         | 有口径   | DIVIDE(sales_order_cnt, click)         | ❌   | 百分比   | 0.0%;-0.0%;0.0%              |
+| 8 | Add to Cart | 有口径   | SUM(add_cart_cnt)                      | ❌   | 整数     | #,##0;(#,##0);0              |
+| 9 | CPATC       | 有口径   | DIVIDE(cost_amt, add_cart_cnt)         | ❌   | 小数     | #,##0.00;-#,##0.00;0.00      |
+
+================================================================================
+9. 关键技术说明
+================================================================================
+
+9.1 多选切片器 + FILTER(VALUES()) 交集模式
+──────────────────────────────────────────
+Dim_Crowd_Season_C_Label 为单表三列，Power BI 切片器基于同表列自动交叉筛选实现级联：
+  选 Super Season = "A", "B" → Category 切片器仅显示 "A" 和 "B" 对应的 Category 值
+  全选 Super Season → Category 切片器显示全部 Category 值
+
+FILTER(VALUES()) 交集模式原理：
+  FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+      a05_e2e_paid_media_keyword_data_d[season] IN VALUES(Dim_Crowd_Season_C_Label[Super Season]))
+  FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+      a05_e2e_paid_media_keyword_data_d[category] IN VALUES(Dim_Crowd_Season_C_Label[Category]))
+  FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+      a05_e2e_paid_media_keyword_data_d[brand] IN VALUES(Dim_Crowd_Season_C_Label[Label]))
+
+  - VALUES(事实表列) 先在当前筛选上下文中求值 → 返回当前行的值
+  - FILTER 进一步限制为同时满足切片器的值 → 行维度 ∩ 切片器 = 交集
+  - 全选时：VALUES 返回全部值 → 交集 = 行维度值 → 等价于仅行维度筛选
+  - 部分选择时：VALUES 返回选中值 → 交集 = 行维度值 ∩ 选中值
+
+为什么不能用 "列 IN VALUES(切片器)" 直接筛选：
+  CALCULATE 的筛选参数会覆盖同一列的外部筛选上下文，
+  行维度（brand / framework / category）来自事实表字段，
+  直接用 "列 IN VALUES(切片器)" 会覆盖行维度筛选，导致每行显示总计值。
+  FILTER(VALUES()) 交集模式先读取当前行维度值，再与切片器取交集，保留行维度筛选。
+
+FILTER(VALUES()) vs IN + VALUES vs TREATAS：
+  FILTER(VALUES())：交集模式，保留行维度筛选，适合行维度来自事实表的场景
+  IN + VALUES：覆盖模式，会覆盖行维度筛选，仅适合行维度来自维度表的场景
+  多列 TREATAS：元组覆盖模式，同样会覆盖行维度筛选，适合异源数据
+
+相比单选 + ALL 模式的优势：
+  - 无需在 SQL 中构造 ALL 行（SQL 更简洁）
+  - 无需在 DAX 中判断 IF(<> "ALL")（DAX 更简洁）
+  - 多选更符合用户操作习惯（Ctrl/Cmd 多选）
+  - FILTER(VALUES()) 是行维度来自事实表时的标准断开维度筛选模式
+
+9.2 CPC 为何不乘汇率
+─────────────────────
+CPC = DIVIDE(cost_amt, click)，分子分母均为同币种原始值（RMB），
+比值本身无币种维度，无需乘汇率。
+若需展示为特定币种金额，应在分子 cost_amt 上先换算再除（数学等价但不改变比率含义），
+而非除完再乘汇率——除完再乘会引入汇率因子，使比率数值失真。
+
+9.3 ISINSCOPE 函数（5 级行维度）
+─────────────────────────────
+详见 5.1 / 5.2 节注释。ISINSCOPE 判断当前筛选上下文中指定列是否处于作用域内。
+本场景用于区分 5 级行层级：
+  总计行（全 FALSE）/ channel 行 / brand 小计 / framework 小计 / category 小计 / customer_type 明细（全 TRUE）
+
+9.4 Table 视觉对象 vs Matrix
+─────────────────────────────
+行维度直接来自事实表字段，无自定义结构，采用 Table 视觉对象：
+- 每列直接绑定一个独立度量值，无需 SWITCH 路由
+- 无需 DIM_ColMetric_Keyword_X 列维度表
+- 格式字符串直接在度量值属性中设置，Display 度量值用于需要文本输出的场景
+
+9.5 Cost% 分母：REMOVEFILTERS（5 个行维度）+ FILTER(ALL()) 仅保留切片器筛选
+─────────────────────────────────────────────────────────────────────────────
+Cost% = DIVIDE(当前行 cost, 总计 cost)，分母需要移除全部 5 个行维度
+（channel / brand / framework / category / customer_type）但保留切片器筛选。
+
+关键区别：
+  FILTER(VALUES(列), 列 IN 切片器值) → 行维度 ∩ 切片器（保留行维度）
+  FILTER(ALL(列), 列 IN 切片器值)    → 仅切片器（忽略行维度）
+
+分母必须用 FILTER(ALL())，原因：
+  1. REMOVEFILTERS 移除了行维度筛选
+  2. 如果用 FILTER(VALUES())，VALUES 在行上下文中求值后固化了当前行的值
+  3. 固化的值作为 CALCULATE 筛选参数重新施加，抵消了 REMOVEFILTERS
+  4. 结果：分母 ≈ 分子，Cost% 始终为 1
+
+同理，FILTER(VALUES()) 不能提取为 VAR 在分子分母间复用——
+  VAR 在定义时求值，跨 CALCULATE 复用时会携带定义时的上下文快照。
+
+================================================================================
+10. 验证清单
+================================================================================
+
+□ 1.  Dim_Crowd_Season_C_Label SQL 已执行，数据正确（纯 DISTINCT，无 ALL 行）
+□ 2.  三个切片器多选级联正确：Super Season → Category → Label
+□ 3.  全选时等价于仅行维度筛选（FILTER(VALUES()) 交集模式）
+□ 4.  复用切片器（Platform / DataCaliber / Currency）已正确引用
+□ 5.  关系配置：Dim_Date_Current → a05_e2e_paid_media_keyword_data_d 1:*
+□ 6.  Keyword X Cost 口径正确：SUM(cost_amt) * ExchangeRate
+□ 7.  Keyword X Cost% 口径正确：DIVIDE(当前行 cost_amt, 总计 cost_amt)，分母 REMOVEFILTERS 全部 5 个行维度，不乘汇率
+□ 8.  Keyword X Click / CPC / CTR / CVR / Add to Cart / CPATC 口径正确
+□ 9.  Platform ALL 筛选逻辑正确：FILTER platform IN {"TM","JD"}
+□ 10. FILTER(VALUES(事实表列), 列 IN VALUES(Dim[列])) 交集筛选正确，保留行维度
+□ 11. 仅 Cost 乘汇率，其余指标均不乘
+□ 12. 9 个 Display 度量值格式字符串正确
+□ 13. Keyword X Cell Background Color：5 级层次（#dbc6a8 / #e6d9c7 / #f4ece4 / #faf6f1 / #ffffff）
+□ 14. Table 配置：行 = channel + brand + framework + category + customer_type，值 = 9 个度量值
+□ 15. 条件格式：字体颜色 + 背景颜色已绑定对应度量值
+□ 16. 切片器布局：7 个切片器位置正确，默认全选
+□ 17. Display Folder 结构正确（Keyword X / Keyword X > Display / Keyword X > Formatting）
+
+================================================================================

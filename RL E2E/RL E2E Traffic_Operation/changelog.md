@@ -411,7 +411,86 @@
 
 ## [Keyword] 模块
 
-> 暂无变更记录
+---
+
+## [2026-06-22 16:30] 修改 — Keyword 方案字段映射修正（crowed_* → season/category/brand）
+
+- **模块**: Keyword
+- **任务**: 三个 Keyword 方案文件字段映射全面修正 — DAX FILTER 块、SQL 注释、文档说明、TestSQL 切片器引用
+- **操作**: 修改
+- **变更内容**:
+  - `Keyword_X_matrix_solution`（修改）：
+    - **DAX FILTER 块**：`crowed_layer` → `season`、`crowed_name` → `category`、`crowed_type` → `brand`（全量替换，覆盖 9 个核心度量值 + Cost% 分母）
+    - **架构图切片器描述**：从"基于 crowed_*"改为"事实表字段 season/category/brand"
+    - **SQL 字段映射注释**：增加双模块映射说明（Crowd 模块用 crowed_*，Keyword X 模块用 season/category/brand）
+    - **FILTER(VALUES()) 交集模式说明**：伪代码从 crowed_* 更新为 season/category/brand
+    - **公共筛选逻辑注释**：同步更新
+  - `Keyword_matrix_solution`（修改）：
+    - **DAX FILTER 块**：`crowed_layer` → `season`、`crowed_type` → `brand`（分子 FILTER(VALUES()) + 分母 FILTER(ALL())）
+    - **Table 行配置**：`crowed_name` → `keyword_type`
+    - **Cost% 分母逻辑修正**：`FILTER(ALL(keyword_type))` 改为 `FILTER(ALL(category))`，因为 category 才是同时在行维度和切片器中的字段
+    - **注释修正**：season 仅在切片器中、category 同时在行维度和切片器中、brand 仅在切片器中
+  - `Keyword_X_matrix_solution_TestSQL`（修改）：
+    - **参数区**：`KW Type/Plan` → `Category/Label`
+    - **0.2 探查 SQL**：`keyword_type/plan_name` → `category/brand`
+    - **PART 5 切片器模拟**：全部 `keyword_type` → `category`、`plan_name` → `brand`
+    - **底部比对说明**：更新引用为 Category/Label
+- **关联文件**: `Keyword/Keyword_X_matrix_solution`, `Keyword/Keyword_matrix_solution`, `Keyword/Keyword_X_matrix_solution_TestSQL`
+- **备注**:
+  - 字段映射规则：Super Season ← season、Category ← category、Label ← brand
+  - Dim_Crowd_Season_C_Label SQL 保持不变（仍从 crowd 事实表 a05_e2e_paid_media_crowed_data_d 读取 crowed_layer/crowed_name/crowed_type）
+  - Keyword 模块 DAX 中引用 keyword 事实表 a05_e2e_paid_media_keyword_data_d 时使用 season/category/brand
+  - Keyword_matrix_solution Cost% 分母中发现并修复了逻辑错误：keyword_type 不是切片器维度，不应用 FILTER(ALL())
+
+---
+
+## [2026-06-22 14:30] 修改 — Keyword 方案切片器共享 + 命名前缀修正
+
+- **模块**: Keyword
+- **任务**: 三个专属切片器与 Crowd 模块共享 Dim_Crowd_Season_C_Label + 命名前缀规范化
+- **操作**: 修改
+- **变更内容**:
+  - `Keyword_X_matrix_solution`（修改）：
+    - **切片器引用**：从 Dim_Keyword_Season_Type_Plan 改为 Dim_Crowd_Season_C_Label（复用 Crowd）
+    - **变量名**：`__SuperSeasonVals` / `__CategoryVals` / `__LabelVals`（与 Crowd 一致）
+    - **命名前缀**：全部 20 个度量值前缀统一为 `Keyword X`
+    - **Display Folder**：Keyword X / Keyword X > Display / Keyword X > Formatting
+  - `Keyword_matrix_solution`（修改）：
+    - **切片器引用**：同步改为 Dim_Crowd_Season_C_Label
+    - **命名前缀**：从 `Keyword TA` 改为 `Keyword`
+    - **Display Folder**：Keyword / Keyword > Display / Keyword > Formatting
+  - `Keyword_X_matrix_solution_TestSQL`（新建）：
+    - 数据验证测试 SQL，9 个 PART：数据探查 / 总计行 / channel 行 / channel+brand 行 / Cost%分母 / 切片器模拟 / 日期粒度 / 汇率转换 / 数据完整性
+- **关联文件**: `Keyword/Keyword_X_matrix_solution`, `Keyword/Keyword_matrix_solution`, `Keyword/Keyword_X_matrix_solution_TestSQL`
+- **备注**:
+  - 切片器共享策略：Crowd 和 Keyword 两个模块共用同一张 Dim_Crowd_Season_C_Label 断开维度表
+  - DAX 中 FILTER(VALUES()) 交集模式的字段名在两个模块中不同：Crowd 用 crowed_layer/crowed_name/crowed_type，Keyword 用 season/category/brand
+
+---
+
+## [2026-06-22 09:30] 新建 — Keyword X 完整方案 + Keyword 差异补丁方案
+
+- **模块**: Keyword
+- **任务**: 参考 Crowd_matrix_solution 和 Crowd_matrix_TA_solution，新建 Keyword 模块两个解决方案文件
+- **操作**: 新建
+- **变更内容**:
+  - `Keyword_X_matrix_solution`（新建）：完整方案，10 个章节
+    - **行维度**：5 级 channel → brand → framework → category → customer_type
+    - **度量值**：20 个（9 核心 + 9 Display + 2 辅助）
+    - **核心度量值**：Keyword X Cost（金额类×汇率）/ Cost%（REMOVEFILTERS 5 行维度 + FILTER(ALL())）/ ROI（占位=1）/ Click / CPC / CTR / CVR / Add to Cart / CPATC
+    - **切片器**：复用 Overview 三个（Platform/DataCaliber/Currency）+ Dim_Crowd_Season_C_Label 三列同源多选级联
+    - **辅助度量值**：Cell Font Color（总计行 #252423，其余 #5F6165）/ Cell Background Color（5 级层次 #dbc6a8/#e6d9c7/#f4ece4/#faf6f1/#ffffff）
+    - **视觉对象**：Table（非 Matrix），5 行维度 + 9 度量值
+  - `Keyword_matrix_solution`（新建）：差异补丁文件，仅记录与 Keyword_X 的差异
+    - **行维度**：4 级 category → keyword_type → channel → keyword_name
+    - **5 个变更**：行维度 5→4 重排序 / Cost% REMOVEFILTERS 4 字段 / Cell Font Color 4 级 / Cell Background Color 4 级 / Cost% Display 引用名
+    - **其余 8 个核心度量值**：DAX 逻辑与 Keyword_X 完全一致（仅前缀不同）
+- **关联文件**: `Keyword/Keyword_X_matrix_solution`, `Keyword/Keyword_matrix_solution`
+- **备注**:
+  - 参考来源：Crowd_matrix_solution（5 级行维度完整方案）+ Crowd_matrix_TA_solution（4 级行维度差异补丁）
+  - 事实表：a05_e2e_paid_media_keyword_data_d（关键词粒度）
+  - 无同比逻辑，不涉及 Dim_Date_Ly
+  - Platform ALL 筛选遵循项目规范：FILTER platform IN {"TM","JD"}
 
 ---
 
@@ -764,5 +843,3 @@
   - CPC 不乘汇率的理由：分子分母同币种，比值无币种维度，除完再乘汇率会改变比率数值
 
 ---
-
-> 暂无变更记录
