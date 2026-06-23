@@ -405,7 +405,110 @@
 
 ## [Category Growth] 模块
 
-> 暂无变更记录
+---
+
+## [2026-06-23 16:30] 新建 — Category Growth 品类增长矩阵方案 v1（表结构 + 24 度量值）
+
+- **模块**: Category Growth
+- **任务**: Category Growth 品类增长矩阵看板 v1 — 初始架构搭建，表结构 + 24 个度量值
+- **操作**: 新建
+- **变更内容**:
+  - `Category_Growth_matrix_solution`（新建）：表结构方案，5 级行维度 + 11 列独立度量值
+  - **行维度**（5 级，直接来自事实表字段，无需构建断开维度表）：framework → brand → category → channel → season
+  - **视觉对象**：Table（非 Matrix），每列直接绑定一个独立度量值
+  - **切片器**：复用 Overview 三个切片器，无专属切片器
+    - Slicer_DataCaliber_Selection（trans_cycle 口径，单选）
+    - Slicer_Currency_Selection（币种，单选，含 ExchangeRate/Symbol）
+    - Slicer_Platform_Selection（平台，单选含 ALL，ALL → platform IN {"TM","JD"} 精确圈定）
+  - **核心度量值**（11 个，按页面展示顺序）：
+    - `Category Growth EOH(OMS)%`：占位=1（比率类，不乘汇率）
+    - `Category Growth Active IDs`：占位=1（计数类，不乘汇率）
+    - `Category Growth Active IDs VS LP`：占位=1（同比增长率，不乘汇率）
+    - `Category Growth Net Sales%`：占位=1（比率类，不乘汇率）
+    - `Category Growth SLS% VS LP`：占位=1（同比增长率，不乘汇率）
+    - `Category Growth Cost`：SUM(promotion_cost_amt) × ExchangeRate（金额类，乘汇率）
+    - `Category Growth Cost VS LP`：(本期 Cost - 同期 Cost) / 同期 Cost（同比增长率，不乘汇率）
+    - `Category Growth Cost%`：DIVIDE(当前行 promotion_cost_amt, 总计 promotion_cost_amt)（比率类，不乘汇率；分母 REMOVEFILTERS 全部 5 个行维度）
+    - `Category Growth Cost% VS LP`：(本期 Cost% - 同期 Cost%) / 同期 Cost%（同比增长率，不乘汇率）
+    - `Category Growth ROI`：占位=1（比率类，不乘汇率）
+    - `Category Growth ROI VS LP`：占位=1（同比增长率，不乘汇率）
+  - **Display 格式化显示度量值**（11 个）：FORMAT 函数输出文本，对应 11 个核心度量值
+    - 百分比类：0.0%;-0.0%;0.0%
+    - 增长率百分比（带正负号）：+0.0%;-0.0%;0.0%
+    - 金额类：#,##0.00;(#,##0.00);0.00（前置货币符号，由 Slicer_Currency_Selection[Currency_Symbol] 动态决定）
+    - 整数类：#,##0;(#,##0);0
+    - 小数类：#,##0.00;-#,##0.00;0.00
+  - **辅助度量值**（2 个）：
+    - `Category Growth Cell Font Color`：总计行 #252423（近黑，强调），其余 #5F6165（深灰）；ISINSCOPE 5 级判断
+    - `Category Growth Cell Background Color`：5 级层次背景色（framework 行 + 总计行 #DBC6A8 深米色 / brand 小计行 #E6D9C7 中米色 / category 小计行 #F4ECE4 浅米色 / channel 小计行 #FAF6F1 淡米色 / season 明细行 #FFFFFF 白色）；SWITCH 自底向上判断
+  - **同比机制**（5 个 VS LP 度量值）：
+    - 本期 = Dim_Date_Current 关系自然筛选
+    - 同期 = Dim_Date_Ly 断开维度，MIN/MAX 取范围，CALCULATE + REMOVEFILTERS(Dim_Date_Current) + FILTER(ALL(Dim_Date_Current)) 覆盖日期上下文
+    - 增长率 = (本期 - 同期) / 同期
+    - 边界：同期为 0/空 → BLANK；本期为 0/空且同期有值 → -1
+  - **Display Folder 结构**：Category Growth / Category Growth > Display / Category Growth > Formatting
+- **关联文件**: `Category Growth/Category_Growth_matrix_solution`
+- **备注**:
+  - 事实表：a05_e2e_paid_media_product_data_d（产品粒度）
+  - 度量值总数：11 核心 + 11 Display + 2 辅助 = 24 个
+  - 有口径指标 3 个（Cost / Cost VS LP / Cost% / Cost% VS LP），占位指标 7 个（EOH(OMS)% / Active IDs / Active IDs VS LP / Net Sales% / SLS% VS LP / ROI / ROI VS LP）
+  - 汇率转换：仅 Cost（金额类）乘汇率；Cost% / Cost VS LP / Cost% VS LP（比率/增长率类）不乘汇率
+  - Cost% 分母：REMOVEFILTERS 全部 5 个行维度（framework / brand / category / channel / season），保留切片器筛选
+  - 行维度直接来自事实表字段，无需构建断开维度表
+  - ISINSCOPE 替代 HASONEVALUE：支持 5 级行层级精确判断
+  - 当前仅输出度量值，架构、概述等文字信息待逻辑确认后补充
+
+---
+
+## [2026-06-23 17:00] 新建 — Category Growth Diff 方案（行维度重排序 5→5 + 字段替换 framework→gender，7 项变更）
+
+- **模块**: Category Growth
+- **任务**: 新建 Category_Growth_matrix_Diff_solution — 派生自 Category_Growth_matrix_solution，行维度顺序从 framework→brand→category→channel→season 调整为 season→brand→category→channel→gender（移除 framework、新增 gender），全部度量值重命名为 Category Growth Diff 前缀
+- **操作**: 新建
+- **变更内容**:
+  - `Category_Growth_matrix_Diff_solution`（新建）：派生自 Category_Growth_matrix_solution，7 项变更
+  - **行维度变更**（变更 1）：
+    - 原：framework → brand → category → channel → season（5 级）
+    - 新：season → brand → category → channel → gender（5 级）
+    - 移除 framework，新增 gender，season 由最深层提升为顶层
+    - 中间层 brand / category / channel 顺序保持不变
+  - **度量值命名重命名**：全部 24 个度量值前缀从 `Category Growth` 改为 `Category Growth Diff`
+    - 核心：Category Growth Cost → Category Growth Diff Cost（11 个）
+    - Display：Category Growth Cost Display → Category Growth Diff Cost Display（11 个）
+    - 辅助：Category Growth Cell Font Color → Category Growth Diff Cell Font Color / Background Color（2 个）
+    - Display Folder：Category Growth → Category Growth Diff / Category Growth > Display → Category Growth Diff > Display / Category Growth > Formatting → Category Growth Diff > Formatting
+  - `Category Growth Diff Cost%`（变更 2，REMOVEFILTERS 字段替换）：
+    - REMOVEFILTERS 字段集合变化：移除 framework，新增 gender
+    - 5 个 REMOVEFILTERS：season / brand / category / channel / gender
+  - `Category Growth Diff Cost% VS LP`（变更 3，引用名变更）：
+    - 内部引用名从 [Category Growth Cost%] 改为 [Category Growth Diff Cost%]（2 处：本期 VAR + 同期 CALCULATE）
+    - 原因：Cost% 的 REMOVEFILTERS 已从 framework 改为 gender（变更 2），Cost% VS LP 必须引用 Diff 版本的 Cost% 才能继承 gender 行维度逻辑，否则会引用原方案 Cost%（REMOVEFILTERS framework），导致 Cost% VS LP 计算错误
+  - `Category Growth Diff Cell Font Color`（变更 4，ISINSCOPE 字段替换）：
+    - ISINSCOPE 字段变化：移除 __IsFramework，新增 __IsGender
+    - 总计行判断：NOT(__IsSeason) && NOT(__IsBrand) && NOT(__IsCategory) && NOT(__IsChannel) && NOT(__IsGender)
+  - `Category Growth Diff Cell Background Color`（变更 5，层次映射调整）：
+    - 维度顺序变化导致层次映射调整：
+      - framework（原顶层 #DBC6A8 深米色）移除
+      - gender（新最深层 #FFFFFF 白色）新增
+      - season 由最深层（白色）提升为顶层（深米色）
+      - 中间层 brand / category / channel 颜色不变
+    - SWITCH 判断顺序：__IsGender（最深）→ __IsChannel → __IsCategory → __IsBrand → default（season + 总计行）
+  - `Category Growth Diff Cost% Display`（变更 6，引用名变更）：
+    - 引用名从 [Category Growth Cost%] 改为 [Category Growth Diff Cost%]
+  - `Category Growth Diff Cost% VS LP Display`（变更 7，引用名变更）：
+    - 引用名从 [Category Growth Cost% VS LP] 改为 [Category Growth Diff Cost% VS LP]
+    - 原因：Cost% VS LP 的内部引用已改为 Diff 版本 Cost%（变更 3），Display 必须引用 Diff 版本的 Cost% VS LP 才能显示正确数值
+  - **无差异度量值**（9 核心 + 9 Display + 0 辅助 = 18 个，仅命名前缀不同）：
+    - EOH(OMS)% / Active IDs / Active IDs VS LP / Net Sales% / SLS% VS LP / Cost / Cost VS LP / ROI / ROI VS LP（9 核心，DAX 逻辑无变化）
+    - 对应 9 个 Display 度量值（Cost% Display / Cost% VS LP Display 除外，已在变更 6/7 列出）
+    - 以上度量值 DAX 逻辑与原方案完全一致，仅命名前缀和 Display Folder 不同
+- **关联文件**: `Category Growth/Category_Growth_matrix_Diff_solution`
+- **备注**:
+  - 本方案为 Category_Growth_matrix_solution 的派生版本，适用于行维度以 season 为顶层、gender 为最深层、移除 framework 的业务场景
+  - 与原方案的核心差异：行维度顺序、framework→gender 字段替换、度量值命名前缀
+  - 切片器、筛选逻辑、汇率转换、同比机制、Display 格式字符串等与原方案完全一致
+  - 废弃 Category_Growth_matrix_TA_solution（原仅顺序调整、无字段替换的版本），已删除
+  - 引用链完整性：Cost% → Cost% VS LP → Cost% VS LP Display 三级引用链均已同步改为 Diff 版本，避免引用原方案度量值导致计算错误
 
 ---
 
