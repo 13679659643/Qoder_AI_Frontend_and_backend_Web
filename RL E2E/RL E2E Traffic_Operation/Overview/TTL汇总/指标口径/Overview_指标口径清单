@@ -1,0 +1,285 @@
+# Overview TTL汇总 — 指标口径清单
+
+> created: 2026-06-22
+> updated: 2026-06-23（依据口径文档 指标清单-for辜涛.xlsx → tab = Traffic指标清单，行 108-126 对齐；待确认事项已全部敲定）
+> source: 指标清单-for辜涛.xlsx → tab = Traffic指标清单
+> solution: KPIs Overview_matrix_solution
+> dashboard: DCom Performance Media Operation Dashboard
+
+================================================================================
+## 口径整理说明（必读）
+================================================================================
+
+1. **以原始指标清单为准**：本清单 9 个指标的名称、顺序、计算公式、统计字段、筛选条件
+   均以口径文档（指标清单-for辜涛.xlsx，Traffic指标清单 tab，行 108-126）为唯一基准。
+2. **table_source 属于筛选条件（口径），不是"原始数据来源"**：数据底表
+   a05_e2e_paid_media_summary_d 等汇总表中存在 table_source 字段，写 DAX 时需通过
+   table_source = xxx 过滤出对应原始表来源的数据。因此 table_source 统一归入"筛选条件"列，
+   不再单设"原始数据来源"列。
+3. **platform 口径修正**：Excel 原文为 plateform=TM/JD/RLE（含拼写错误 plateform），
+   本看板（Growth Overview-All/TM/JD）与 Solution 切片器（ALL/TM/JD）仅覆盖 TM/JD，
+   故统一修正为 platform = TM/JD。
+4. **trans_cycle 口径修正**：Excel 原文为 trans_cycle=T+1/T+15/T+30，本看板 Overview
+   仅取 T+1/T+15，故统一修正为 trans_cycle = T+1/T+15。
+5. **分子/分母结构**：Excel 中每个比率类指标下方以" └ 分子 / └ 分母"子行展开，
+   本清单将其合并到对应指标的"分子/分母"属性中，便于 DAX 编写。
+6. **Target Achievement 板块已移除**：经确认，Growth Overview-Target Achievement 板块
+   不纳入当前 Solution，本清单不再收录该板块指标。
+
+================================================================================
+## 一、Growth Overview-All/TM/JD（实际值看板）
+================================================================================
+
+本节包含 9 个指标，用于展示本期（This Year）/ 同期（Last Year）/ 同比（YOY）三行数据。
+适用平台：ALL / TM / JD（通过 Slicer_Platform_Selection 单选切换）
+
+────────────────────────────────────────────────────────────────────────────────
+### 1. Cost（花费）
+────────────────────────────────────────────────────────────────────────────────
+
+| 属性     | 内容                                                                 |
+|----------|----------------------------------------------------------------------|
+| 中文名称 | 花费                                                                 |
+| 业务定义 | 实际总媒体花费（默认含红包/返佣返货金）                              |
+| 计算公式 | cost_amt + red_packet                                                |
+| 数据底表 | a05_e2e_paid_media_summary_d                                         |
+| 统计字段 | cost_amt + red_packet                                                |
+| 筛选条件 | table_source：cost_amt 字段限定 t08_traffic_channel_detail_d；red_packet 限定红包表 |
+|          | platform = TM/JD，trans_cycle = T+1/T+15                             |
+| 平台口径 | TM: 万相台charge + 品销宝品专 + 明星店铺cost + JCGP                  |
+|          | JD: 推广表cost + 品专cost                                            |
+|          | DY: 推直播整体消耗 + 推商品整体消耗                                  |
+|          | RLE: 腾讯广告cost                                                    |
+| 金额/比率| 金额类（需汇率转换）                                                 |
+| 格式     | currency（¥1,000 / $1,000）                                          |
+| 备注     | 含红包/返佣返货金的总花费口径                                        |
+
+────────────────────────────────────────────────────────────────────────────────
+### 2. Cost Rate（花费占比）
+────────────────────────────────────────────────────────────────────────────────
+
+| 属性     | 内容                                                                 |
+|----------|----------------------------------------------------------------------|
+| 中文名称 | 花费占比                                                             |
+| 业务定义 | 实际总媒体花费占比退后金额的百分比（默认含红包/返佣返货金）          |
+| 计算公式 | Cost / Net Sales × 1.13 / 1.06                                      |
+| 分子     | 花费（含红包/返佣返货金）= cost_amt + red_packet（同指标 1）          |
+| 分子底表 | a05_e2e_paid_media_summary_d                                         |
+| 分子统计字段 | cost_amt + red_packet                                            |
+| 分子筛选条件 | table_source：cost_amt 限定 t08_traffic_channel_detail_d；red_packet 限定红包表 |
+|          | platform = TM/JD，trans_cycle = T+1/T+15                             |
+| 分母     | 退后销售额（Net Sales）= net_sales_amt（全店净销售额）                |
+| 分母底表 | a05_e2e_paid_media_summary_d                                         |
+| 分母统计字段 | net_sales_amt                                                    |
+| 分母筛选条件 | table_source = t01_trade_sales_order_detail_d                    |
+|          | platform = TM/JD，trans_cycle = T+1/T+15                             |
+| 金额/比率| 比率类（不受汇率影响）                                               |
+| 格式     | percent_1dp（40.5%）                                                 |
+| 备注     | Net sales 是全店净销售额，不涉及 T+1/T+15 转化；为防止重复计算可用 max 函数（仅作为参考意见）；× 1.13 / 1.06 为含税退后换算系数。口径以 Excel 为准（含红包） |
+
+────────────────────────────────────────────────────────────────────────────────
+### 3. Cost (Exclude Refund)（花费-剔除红包/返佣返货金）
+────────────────────────────────────────────────────────────────────────────────
+
+| 属性     | 内容                                                                 |
+|----------|----------------------------------------------------------------------|
+| 中文名称 | 花费（剔除红包/返佣返货金）                                          |
+| 业务定义 | 实际媒体花费，剔除红包/返佣返货金（纯媒体 charge，不含返还）         |
+| 计算公式 | 各投放表 cost 加总（不含红包/返佣返货金）= SUM(cost_amt)             |
+| 数据底表 | a05_e2e_paid_media_summary_d                                         |
+| 统计字段 | cost_amt                                                             |
+| 筛选条件 | table_source = t08_traffic_channel_detail_d                          |
+|          | platform = TM/JD，trans_cycle = T+1/T+15                             |
+| 金额/比率| 金额类（需汇率转换）                                                 |
+| 格式     | currency（¥1,000 / $1,000）                                          |
+| 备注     | 纯媒体 charge 口径，不含返还部分                                     |
+
+────────────────────────────────────────────────────────────────────────────────
+### 4. Cost Rate (Exclude Refund)（花费占比-剔除红包/返佣返货金）
+────────────────────────────────────────────────────────────────────────────────
+
+| 属性     | 内容                                                                 |
+|----------|----------------------------------------------------------------------|
+| 中文名称 | 花费占比（剔除红包/返佣返货金）                                      |
+| 业务定义 | 实际媒体花费（剔除红包/返佣返货金）占比退后金额的百分比              |
+| 计算公式 | Cost(Exclude Refund) / Net Sales × 1.13 / 1.06                      |
+| 分子     | 花费（剔除红包/返佣返货金）= SUM(cost_amt)（不含 red_packet）        |
+| 分子底表 | a05_e2e_paid_media_summary_d                                         |
+| 分子统计字段 | cost_amt                                                         |
+| 分子筛选条件 | table_source = t08_traffic_channel_detail_d                      |
+|          | platform = TM/JD，trans_cycle = T+1/T+15                             |
+| 分母     | 退后销售额（Net Sales）= net_sales_amt（全店净销售额）                |
+| 分母底表 | a05_e2e_paid_media_summary_d                                         |
+| 分母统计字段 | net_sales_amt                                                    |
+| 分母筛选条件 | table_source = t01_trade_sales_order_detail_d                    |
+|          | platform = TM/JD，trans_cycle = T+1/T+15                             |
+| 金额/比率| 比率类（不受汇率影响）                                               |
+| 格式     | percent_1dp（40.5%）                                                 |
+| 备注     | Net sales 是全店净销售额，不涉及 T+1/T+15 转化；为防止重复计算可用 max 函数（仅作为参考意见）。本指标为 Excel 清单新增项，Solution 需新增对应列 |
+
+────────────────────────────────────────────────────────────────────────────────
+### 5. Net Sales（退后销售额）
+────────────────────────────────────────────────────────────────────────────────
+
+| 属性     | 内容                                                                 |
+|----------|----------------------------------------------------------------------|
+| 中文名称 | 退后销售额                                                           |
+| 业务定义 | 全店净销售额（退后口径）                                             |
+| 计算公式 | SUM(media_sales_amt)                                                 |
+| 数据底表 | a05_e2e_paid_media_summary_d                                         |
+| 统计字段 | media_sales_amt                                                      |
+| 筛选条件 | table_source = t08_traffic_channel_detail_d                          |
+|          | platform = TM/JD，trans_cycle = T+1/T+15                             |
+| 金额/比率| 金额类（需汇率转换）                                                 |
+| 格式     | currency（¥1,000 / $7,000）                                          |
+| 备注     | 【已确认】Overview 中 Net Sales 使用 media_sales_amt（投放带来，来源 t08_traffic_channel_detail_d），以口径文档为准。Solution 需将原 net_sales_amt 口径调整为 media_sales_amt |
+
+────────────────────────────────────────────────────────────────────────────────
+### 6. ROI（媒体ROI）
+────────────────────────────────────────────────────────────────────────────────
+
+| 属性     | 内容                                                                 |
+|----------|----------------------------------------------------------------------|
+| 中文名称 | 媒体ROI                                                              |
+| 业务定义 | 成交金额/花费，计算出 ROI                                            |
+| 计算公式 | 成交金额(投放) / Cost                                                |
+| 分子     | 成交金额（投放带来）= media_sales_amt                                |
+| 分子底表 | a05_e2e_paid_media_summary_d                                         |
+| 分子统计字段 | media_sales_amt                                                  |
+| 分子筛选条件 | Excel 分子行留空，无 table_source 限定；platform = TM/JD，trans_cycle = T+1/T+15 |
+| 分母     | 花费（Cost）= cost_amt（不含红包金额）                               |
+| 分母底表 | a05_e2e_paid_media_summary_d                                         |
+| 分母统计字段 | cost_amt                                                         |
+| 分母筛选条件 | framework = Acceleration，table_source = t08_traffic_product_detail_d；platform = TM/JD，trans_cycle = T+1/T+15 |
+| 金额/比率| 比率类（不受汇率影响）                                               |
+| 格式     | decimal_2（1,000.00）                                                |
+| 备注     | 【已确认】分母不含红包金额（仅 cost_amt），且需附带 framework=Acceleration、table_source=t08_traffic_product_detail_d 筛选；分子无 table_source 限定（Excel 留空）。Solution 原使用 adj_cost_amt 作分母，需调整为 cost_amt 并追加 framework/table_source 筛选 |
+
+────────────────────────────────────────────────────────────────────────────────
+### 7. Acceleration Cost%（第二品类花费%）
+────────────────────────────────────────────────────────────────────────────────
+
+| 属性     | 内容                                                                 |
+|----------|----------------------------------------------------------------------|
+| 中文名称 | 第二品类花费%                                                        |
+| 业务定义 | 第二品类的花费占比总花费                                             |
+| 计算公式 | Acceleration Cost / TTL Cost                                         |
+| 分子     | Acceleration 商品花费 = SUM(cost_amt) WHERE framework = 'Acceleration' |
+| 分子底表 | a05_e2e_paid_media_summary_d                                         |
+| 分子统计字段 | cost_amt                                                         |
+| 分子筛选条件 | framework = Acceleration，table_source = t08_traffic_product_detail_d |
+| 分母     | 商品表 TTL 花费（所有 framework）= SUM(cost_amt) WHERE framework 不为空 |
+| 分母底表 | a05_e2e_paid_media_summary_d                                         |
+| 分母统计字段 | cost_amt                                                         |
+| 分母筛选条件 | framework 不为空，table_source = t08_traffic_product_detail_d    |
+| 金额/比率| 比率类（不受汇率影响）                                               |
+| 格式     | percent_1dp（40.5%）                                                 |
+| 备注     | 【已确认】以 Excel 为准，统计字段为 cost_amt（来源 t08_traffic_product_detail_d）。Solution 原使用 promotion_cost_amt，需调整为 cost_amt |
+
+────────────────────────────────────────────────────────────────────────────────
+### 8. ±Acceleration Cost% vs. Store SLS%（第二品类花费% vs 门店销售%）
+────────────────────────────────────────────────────────────────────────────────
+
+| 属性     | 内容                                                                 |
+|----------|----------------------------------------------------------------------|
+| 中文名称 | 第二品类花费% vs 门店销售%                                           |
+| 业务定义 | 第二品类的花费占比总花费 vs 零售净销售额占比（差值）                  |
+| 计算公式 | Acceleration Cost MOB% − Store SLS MOB%（×100 转为 bp）              |
+| 派生方式 | 派生差值，无独立底表                                                 |
+| 子项 A   | Acceleration Cost% = 指标 7 的计算结果                               |
+| 子项 B   | Store SLS MOB% = Acceleration Net Sales / TTL Net Sales              |
+| 子项 B 底表 | a05_e2e_paid_media_summary_d                                      |
+| 子项 B 统计字段 | cost_amt                                                      |
+| 子项 B 筛选条件 | customer_type = new，table_source = t08_traffic_crowd_data_d + t08_traffic_keyword_detail_d |
+|          | platform = TM/JD，trans_cycle = T+1/T+15                             |
+| 金额/比率| 比率类（不受汇率影响）                                               |
+| 格式     | percent_1dp（展示为差值 pt 或 bp）                                   |
+| 备注     | 【已确认】计算方式为派生差值（Acceleration Cost MOB% − Store SLS MOB%，×100 转 bp），无独立底表 |
+
+────────────────────────────────────────────────────────────────────────────────
+### 9. New Customer Cost%（招募新客花费占比）
+────────────────────────────────────────────────────────────────────────────────
+
+| 属性     | 内容                                                                 |
+|----------|----------------------------------------------------------------------|
+| 中文名称 | 招募新客花费占比                                                     |
+| 业务定义 | New Customer Investment / NEW+EXISTING Total 花费                    |
+| 计算公式 | New Cost / (New Cost + Existing Cost) = New Cost / TTL Cost          |
+| 分子     | 新客花费（New Cost）= SUM(cost_amt) WHERE customer_type = new        |
+| 分子底表 | a05_e2e_paid_media_summary_d                                         |
+| 分子统计字段 | cost_amt                                                         |
+| 分子筛选条件 | customer_type = new，table_source = t08_traffic_crowd_data_d + t08_traffic_keyword_detail_d |
+| 分母     | 新客花费 + 老客花费（New + Existing Cost）= SUM(cost_amt) WHERE customer_type = new+Existing |
+| 分母底表 | a05_e2e_paid_media_summary_d                                         |
+| 分母统计字段 | cost_amt                                                         |
+| 分母筛选条件 | customer_type = new+Existing，table_source = t08_traffic_crowd_data_d + t08_traffic_keyword_detail_d |
+|          | platform = TM/JD，trans_cycle = T+1/T+15                             |
+| 金额/比率| 比率类（不受汇率影响）                                               |
+| 格式     | percent_1dp（40.5%）                                                 |
+
+================================================================================
+## 二、Solution 目标映射（以口径文档敲定）
+================================================================================
+
+以口径文档为准，Solution 需调整为 9 个指标，按 Excel 顺序对齐。下表为敲定后的目标
+映射，作为后续调整 KPIs Overview_matrix_solution 的依据。
+
+| 序号 | Excel 指标名（目标顺序）           | 统计字段              | 关键筛选条件                                                                 | Solution 现状                  | 调整动作 |
+|------|-------------------------------------|-----------------------|------------------------------------------------------------------------------|--------------------------------|----------|
+| 1    | Cost                                | cost_amt + red_packet | table_source：cost_amt→t08_traffic_channel_detail_d；red_packet→红包表       | Metric_ID=1，一致              | 保持     |
+| 2    | Cost Rate                           | 分子 cost_amt+red_packet / 分母 net_sales_amt | 分子 table_source 同上；分母 table_source=t01_trade_sales_order_detail_d | Metric_ID=2，原剔除红包 | 改为含红包口径（以 Excel 为准） |
+| 3    | Cost (Exclude Refund)               | cost_amt              | table_source=t08_traffic_channel_detail_d                                    | Metric_ID=3 原为 Cost Rate(include Refund) | 替换为 Cost(Exclude Refund) 金额指标 |
+| 4    | Cost Rate (Exclude Refund)          | 分子 cost_amt / 分母 net_sales_amt | 分子 table_source=t08_traffic_channel_detail_d；分母 table_source=t01_trade_sales_order_detail_d | 无对应列 | 新增列 |
+| 5    | Net Sales                           | media_sales_amt       | table_source=t08_traffic_channel_detail_d                                    | Metric_ID=4 原用 net_sales_amt | 改为 media_sales_amt |
+| 6    | ROI                                 | 分子 media_sales_amt / 分母 cost_amt | 分子无 table_source 限定；分母 framework=Acceleration，table_source=t08_traffic_product_detail_d | Metric_ID=5 原用 adj_cost_amt | 分母改为 cost_amt（不含红包）并追加 framework/table_source 筛选 |
+| 7    | Acceleration Cost%                  | cost_amt              | 分子 framework=Acceleration；分母 framework 不为空；table_source=t08_traffic_product_detail_d | Metric_ID=7 原用 promotion_cost_amt | 改为 cost_amt |
+| 8    | ±Acceleration Cost% vs. Store SLS%  | 派生差值（无独立底表） | Acceleration Cost MOB% − Store SLS MOB%（×100 转 bp）                        | Metric_ID=8                    | 保持（派生差值口径） |
+| 9    | New Customer Cost%                  | cost_amt              | 分子 customer_type=new；分母 customer_type=new+Existing；table_source=t08_traffic_crowd_data_d + t08_traffic_keyword_detail_d | Metric_ID=6，一致 | 保持 |
+
+### 2.1 口径确认结论（已全部敲定）
+
+| # | 确认事项                                                                                          | 结论 |
+|---|---------------------------------------------------------------------------------------------------|------|
+| 1 | Net Sales 字段                                                                                    | 使用 media_sales_amt（投放带来，来源 t08_traffic_channel_detail_d），以口径文档为准 |
+| 2 | ROI 分母                                                                                          | 不含红包金额（仅 cost_amt），需附带 framework=Acceleration、table_source=t08_traffic_product_detail_d 筛选；分子无 table_source 限定（Excel 留空） |
+| 3 | Cost Rate 口径                                                                                    | 以 Excel 为准（含红包口径） |
+| 4 | Solution Metric_ID=3 对应                                                                         | 替换为 Cost (Exclude Refund) 金额指标 |
+| 5 | Cost Rate (Exclude Refund)                                                                        | 新增为独立列 |
+| 6 | ±Acceleration Cost% vs. Store SLS% 计算方式                                                       | 派生差值：Acceleration Cost MOB% − Store SLS MOB%（×100 转 bp），无独立底表 |
+| 7 | Acceleration Cost% 字段                                                                           | 以 Excel 为准，使用 cost_amt（来源 t08_traffic_product_detail_d） |
+| 8 | Target Achievement 板块                                                                           | 不纳入当前 Solution，已从清单移除 |
+
+================================================================================
+## 三、通用筛选条件说明
+================================================================================
+
+所有 Overview 指标共享以下筛选维度：
+
+| 维度           | 切片器                              | 可选值                        | 默认值 | 说明 |
+|----------------|--------------------------------------|-------------------------------|--------|------|
+| 本期日期       | Dim_Date_Current[数据日期]          | 日期范围                      | —      | 通过关系自动筛选事实表 |
+| 同期日期       | Dim_Date_Ly[LY_数据日期]            | 日期范围                      | —      | 断开维度，MIN/MAX 获取范围 |
+| 平台           | Slicer_Platform_Selection[Platform_ID] | ALL / TM / JD（单选）        | ALL    | ALL = FILTER platform IN {"TM","JD"} |
+| 数据口径       | Slicer_DataCaliber_Selection[DataCaliber_ID] | T+1 / T+15（单选）    | T+1    | 对应事实表 trans_cycle 字段 |
+| 币种           | Slicer_Currency_Selection[Currency_ID] | RMB / USD（单选）            | RMB    | RMB=1（原值），USD=7（汇率转换） |
+
+================================================================================
+## 四、事实表与关键字段清单
+================================================================================
+
+| 事实表                                    | 粒度   | 关键字段                                                                                       |
+|-------------------------------------------|--------|------------------------------------------------------------------------------------------------|
+| a05_e2e_paid_media_summary_d              | 汇总   | cost_amt, red_packet, net_sales_amt, media_sales_amt, adj_cost_amt, media_member_cnt, member_cnt, media_cost_amt, platform, trans_cycle, table_source, data_date |
+| a05_e2e_paid_media_channel_data_d         | 渠道   | cost_amt, red_packet, rebate, nc_cost_amt, ec_cost_amt, platform, trans_cycle, table_source, data_date       |
+| a05_e2e_paid_media_product_data_d         | 产品   | promotion_cost_amt, promotion_sales_amt, framework, platform, trans_cycle, table_source, data_date            |
+
+table_source 字段取值对照（用于 DAX 筛选）：
+
+| table_source 取值                       | 用途                       |
+|-----------------------------------------|----------------------------|
+| t08_traffic_channel_detail_d            | cost_amt / media_sales_amt 花费与投放销售额来源 |
+| t01_trade_sales_order_detail_d          | net_sales_amt 全店净销售额来源 |
+| t08_traffic_product_detail_d            | cost_amt 商品花费来源（framework 维度） |
+| t08_traffic_crowd_data_d                | customer_type 新老客维度   |
+| t08_traffic_keyword_detail_d            | customer_type 新老客维度   |
+| 红包表（待提供）                         | red_packet 红包字段来源    |

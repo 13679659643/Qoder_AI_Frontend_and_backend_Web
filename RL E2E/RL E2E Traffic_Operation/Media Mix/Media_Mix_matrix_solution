@@ -830,22 +830,28 @@ Media Mix Cell SVG Icon =
 Media Mix Cell Background Color = 
 // ========================================
 // 度量值: Media Mix Cell Background Color
+// 中文名: 媒体组合单元格背景色
 // Display Folder: Media Mix > Formatting
-// 用途: 根据 Channel_Sort 返回交替行背景色
-// 依赖: Dim_Media_Mix_Channel[Channel_Sort]
-// ⚠️ v1.8 调整：Channel_Sort 从 1/2/3 改为 10/20/30，
-//    需用 INT(__EffRowID / 10) 还原行位次后再做 MOD 判断
+// 用途: 根据 Channel_Type 返回背景色
+// 规则: 
+//   - Channel_Type = "SUMMARY" → #F5F1EA（浅米色，汇总行）
+//   - Channel_Type = "DETAIL"  → #FFFFFF（白色，明细行）
+//   - 总计行（BLANK）          → #F5F1EA（浅米色，与 SUMMARY 统一）
+// 依赖字段: Dim_Media_Mix_Channel[Channel_Type]
+// v1.9 改为按 Channel_Type 区分
 // ========================================
 
-    VAR __RowID     = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Sort])
-    VAR __EffRowID  =
-        IF(NOT ISBLANK(__RowID), __RowID, SUM(Dim_Media_Mix_Channel[Channel_Sort]))
-    VAR __RowPos    = INT(__EffRowID / 10)  // 还原行位次：10→1, 20→2, 30→3
+    VAR __ChannelType = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Type])
+
     RETURN
-        IF(
-            MOD(__RowPos, 2) = 0,
-            "#F5F5F5",      // 偶数位次（Last Year = 20）：浅灰色
-            "#FFFFFF"       // 奇数位次（This Year = 10 / YOY = 30）：白色
+        SWITCH(
+            TRUE(),
+            // SUMMARY 汇总行：浅米色
+            __ChannelType = "SUMMARY", "#F5F1EA",
+            // 总计行：也染浅米色（可选，与 SUMMARY 视觉统一）
+            ISBLANK(__ChannelType), "#F5F1EA",
+            // DETAIL 明细行：白色
+            "#FFFFFF"
         )
 
 ================================================================================
