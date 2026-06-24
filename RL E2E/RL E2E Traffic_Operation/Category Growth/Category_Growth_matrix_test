@@ -1,0 +1,213 @@
+Category_Growth_matrix_test — Power BI 数据库对账测试案例
+
+> 行维度: framework → brand → category → channel → season
+> 测试指标: Cost / Cost VS LP / Cost% / Cost% VS LP（4 个）
+> 币种: RMB（ExchangeRate = 1）
+> 数据库表: `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+> 测试场景: 总计行 + 四级小计行（2 个）
+
+================================================================================
+一、测试环境与筛选条件
+================================================================================
+
+-- Power BI 切片器等效筛选:
+--   平台切片器 Slicer_Platform_Selection = ALL → platform IN ('JD', 'TM')
+--   数据口径切片器 Slicer_DataCaliber_Selection = T+1 → trans_cycle = 'T+1'
+--   币种切片器 Slicer_Currency_Selection = RMB → ExchangeRate = 1
+
+-- 本期时间筛选（对标 Power BI Dim_Date_Current 关系自然筛选）:
+--   platform IN ('JD', 'TM')
+--   AND trans_cycle = 'T+1'
+--   AND data_date >= '2026-01-01'
+--   AND data_date <= '2026-06-09'
+
+-- 同期时间筛选（对标 Power BI Dim_Date_Ly 断开维度，CALCULATE 覆盖日期上下文）:
+--   platform IN ('JD', 'TM')
+--   AND trans_cycle = 'T+1'
+--   AND data_date >= '2025-01-01'
+--   AND data_date <= '2025-06-09'
+
+================================================================================
+二、指标口径与边界条件
+================================================================================
+
+-- Cost = SUM(promotion_cost_amt) × ExchangeRate
+--   RMB: ExchangeRate = 1, 所以 Cost = SUM(promotion_cost_amt)
+--   金额类，乘汇率
+
+-- Cost VS LP = (本期 Cost - 同期 Cost) / 同期 Cost
+--   同比增长率，不乘汇率（本期与同期乘相同汇率，约分抵消）
+--   边界: 同期 Cost 为 0/NULL → BLANK
+--         本期 Cost 为 0/NULL 且同期 Cost 有值 → -1
+
+-- Cost% = DIVIDE(当前行 promotion_cost_amt, 总计 promotion_cost_amt)
+--   分母 REMOVEFILTERS 全部 5 个行维度（framework / brand / category / channel / season）
+--   保留切片器筛选（platform / trans_cycle / 日期）
+--   比率类，不乘汇率
+
+-- Cost% VS LP = (本期 Cost% - 同期 Cost%) / 同期 Cost%
+--   本期 Cost% = 本期当前行 Cost / 本期总计 Cost
+--   同期 Cost% = 同期当前行 Cost / 同期总计 Cost
+--   同比增长率，不乘汇率
+--   边界: 同期 Cost% 为 0/NULL → BLANK
+--         本期 Cost% 为 0/NULL 且同期 Cost% 有值 → -1
+
+================================================================================
+三、场景 1: 总计行验证（对标 Power BI Table 总计行）
+================================================================================
+
+-- 总计行: 无维度筛选，仅切片器筛选
+-- 总计行 Cost% = 总计行 Cost / 总计行 Cost = 100%
+-- 总计行 Cost% VS LP = (100% - 100%) / 100% = 0
+
+-- ── Step 1: 本期总计 Cost（总计行 Cost = Cost% 分子 = Cost% 分母）──
+SELECT SUM(promotion_cost_amt) AS current_total_cost
+FROM `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+WHERE platform IN ('JD', 'TM')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-09';
+
+-- ── Step 2: 同期总计 Cost（总计行）──
+SELECT SUM(promotion_cost_amt) AS lp_total_cost
+FROM `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+WHERE platform IN ('JD', 'TM')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2025-01-01'
+  AND data_date <= '2025-06-09';
+
+-- ── Step 3: 手动计算 4 个指标 ──
+-- Cost        = Step 1 × 1 (RMB) = Step 1
+-- Cost VS LP  = IF(Step 2 为 0/NULL, BLANK, IF(Step 1 为 0/NULL, -1, (Step 1 - Step 2) / Step 2))
+-- Cost%       = Step 1 / Step 1 = 100%
+-- Cost% VS LP = (100% - 100%) / 100% = 0
+
+================================================================================
+四、场景 2: 四级小计行验证（framework → brand → category → channel 小计行）
+================================================================================
+
+-- 四级小计行维度筛选:
+--   framework = 'Acceleration'
+--   AND brand = 'M Polo'
+--   AND category = 'Outerwear'
+--   AND channel = '触点'
+-- 该行聚合 season 维度的所有值（不筛选 season）
+-- Cost% 分母 = 总计行 Cost（REMOVEFILTERS 全部 5 个行维度）
+
+-- ── Step 1: 本期当前行 Cost（四级小计行 = Cost 分子 = Cost% 分子）──
+SELECT SUM(promotion_cost_amt) AS current_row_cost
+FROM `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+WHERE platform IN ('JD', 'TM')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-09'
+  AND framework = 'Acceleration'
+  AND brand = 'M Polo'
+  AND category = 'Outerwear'
+  AND channel = '触点';
+
+-- ── Step 2: 本期总计 Cost（Cost% 分母，REMOVEFILTERS 全部 5 个行维度）──
+SELECT SUM(promotion_cost_amt) AS current_total_cost
+FROM `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+WHERE platform IN ('JD', 'TM')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2026-01-01'
+  AND data_date <= '2026-06-09';
+
+-- ── Step 3: 同期当前行 Cost（Cost VS LP 分子 / LP Cost% 分子）──
+SELECT SUM(promotion_cost_amt) AS lp_row_cost
+FROM `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+WHERE platform IN ('JD', 'TM')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2025-01-01'
+  AND data_date <= '2025-06-09'
+  AND framework = 'Acceleration'
+  AND brand = 'M Polo'
+  AND category = 'Outerwear'
+  AND channel = '触点';
+
+-- ── Step 4: 同期总计 Cost（LP Cost% 分母，REMOVEFILTERS 全部 5 个行维度）──
+SELECT SUM(promotion_cost_amt) AS lp_total_cost
+FROM `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+WHERE platform IN ('JD', 'TM')
+  AND trans_cycle = 'T+1'
+  AND data_date >= '2025-01-01'
+  AND data_date <= '2025-06-09';
+
+-- ── Step 5: 手动计算 4 个指标 ──
+-- Cost        = Step 1 × 1 (RMB) = Step 1
+-- Cost VS LP  = IF(Step 3 为 0/NULL, BLANK, IF(Step 1 为 0/NULL, -1, (Step 1 - Step 3) / Step 3))
+-- Cost%       = DIVIDE(Step 1, Step 2)
+-- Cost% VS LP = IF(DIVIDE(Step 3, Step 4) 为 0/NULL, BLANK,
+--                  IF(DIVIDE(Step 1, Step 2) 为 0/NULL, -1,
+--                     (DIVIDE(Step 1, Step 2) - DIVIDE(Step 3, Step 4)) / DIVIDE(Step 3, Step 4)))
+
+-- ── Step 6: 合并查询（一次性输出 4 个指标最终值，免去手动除法）──
+-- 边界条件与 DAX 口径一致:
+--   Cost VS LP : 同期 Cost 为 0/NULL → NULL；本期 Cost 为 0/NULL 且同期有值 → -1
+--   Cost%      : 分母(总计)为 0/NULL → NULL（DIVIDE 语义）
+--   Cost% VS LP: 同期 Cost% 为 0/NULL → NULL；本期 Cost% 为 0/NULL 且同期有值 → -1
+WITH
+curr_row AS (        -- 本期当前行 Cost（Cost 分子 / Cost% 分子）
+    SELECT SUM(promotion_cost_amt) AS v
+    FROM `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+    WHERE platform IN ('JD', 'TM')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-09'
+      AND framework = 'Acceleration'
+      AND brand = 'M Polo'
+      AND category = 'Outerwear'
+      AND channel = '触点'
+),
+curr_total AS (      -- 本期总计 Cost（Cost% 分母，REMOVEFILTERS 全部 5 个行维度）
+    SELECT SUM(promotion_cost_amt) AS v
+    FROM `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+    WHERE platform IN ('JD', 'TM')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2026-01-01'
+      AND data_date <= '2026-06-09'
+),
+lp_row AS (          -- 同期当前行 Cost（Cost VS LP 分子 / LP Cost% 分子）
+    SELECT SUM(promotion_cost_amt) AS v
+    FROM `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+    WHERE platform IN ('JD', 'TM')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2025-01-01'
+      AND data_date <= '2025-06-09'
+      AND framework = 'Acceleration'
+      AND brand = 'M Polo'
+      AND category = 'Outerwear'
+      AND channel = '触点'
+),
+lp_total AS (        -- 同期总计 Cost（LP Cost% 分母，REMOVEFILTERS 全部 5 个行维度）
+    SELECT SUM(promotion_cost_amt) AS v
+    FROM `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+    WHERE platform IN ('JD', 'TM')
+      AND trans_cycle = 'T+1'
+      AND data_date >= '2025-01-01'
+      AND data_date <= '2025-06-09'
+)
+SELECT
+    -- Cost（金额类，RMB 下 ExchangeRate=1，= 本期当前行 Cost）
+    curr_row.v AS `Cost`,
+    -- Cost VS LP（同比增长率）
+    CASE
+        WHEN lp_row.v IS NULL OR lp_row.v = 0 THEN NULL
+        WHEN curr_row.v IS NULL OR curr_row.v = 0 THEN -1
+        ELSE (curr_row.v - lp_row.v) / lp_row.v
+    END AS `Cost VS LP`,
+    -- Cost%（DIVIDE 语义：分母为 0/NULL → NULL）
+    CASE
+        WHEN curr_total.v IS NULL OR curr_total.v = 0 THEN NULL
+        ELSE curr_row.v / curr_total.v
+    END AS `Cost%`,
+    -- Cost% VS LP（基于 Cost% 的同比增长率）
+    CASE
+        WHEN lp_total.v IS NULL OR lp_total.v = 0 THEN NULL
+        WHEN lp_row.v IS NULL OR lp_row.v = 0 THEN NULL
+        WHEN curr_total.v IS NULL OR curr_total.v = 0 THEN -1
+        WHEN curr_row.v IS NULL OR curr_row.v = 0 THEN -1
+        ELSE ((curr_row.v / curr_total.v) - (lp_row.v / lp_total.v)) / (lp_row.v / lp_total.v)
+    END AS `Cost% VS LP`
+FROM curr_row, curr_total, lp_row, lp_total;

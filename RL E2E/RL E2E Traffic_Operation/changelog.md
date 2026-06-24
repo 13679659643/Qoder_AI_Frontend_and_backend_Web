@@ -512,6 +512,69 @@
 
 ---
 
+## [2026-06-24 09:30] 新建 — Category Growth 数据库对账测试案例（framework→...→season + season→...→gender，4 指标 × 3 场景）
+
+- **模块**: Category Growth
+- **任务**: 新建两个测试文件，针对 Cost / Cost VS LP / Cost% / Cost% VS LP 四个指标，验证 Power BI 页面数据与数据库一致性
+- **操作**: 新建
+- **变更内容**:
+  - `Category_Growth_matrix_test`（新建）：framework → brand → category → channel → season 方案的数据库对账测试案例
+    - 测试指标：Cost / Cost VS LP / Cost% / Cost% VS LP（4 个）
+    - 测试场景（2 个）：
+      - 场景 1：总计行验证（对标 Power BI Table 总计行），2 步 SQL（本期总计 Cost + 同期总计 Cost）
+      - 场景 2：四级小计行验证（framework='Acceleration' AND brand='M Polo' AND category='Outerwear' AND channel='触点'），4 步 SQL（本期当前行 Cost + 本期总计 Cost + 同期当前行 Cost + 同期总计 Cost）
+    - SQL 风格：MySQL 分步查询，每个场景拆分为独立 SQL，不冗余合并
+  - `Category_Growth_matrix_Diff_test`（新建）：season → brand → category → channel → gender 方案的数据库对账测试案例
+    - 测试指标：Cost / Cost VS LP / Cost% / Cost% VS LP（4 个）
+    - 测试场景（2 个）：
+      - 场景 1：总计行验证（对标 Power BI Table 总计行），2 步 SQL（本期总计 Cost + 同期总计 Cost）
+      - 场景 2：明细行验证（season IS NULL AND brand='M Polo' AND category='Outerwear' AND channel='关键词推广' AND gender='MN'），4 步 SQL（本期当前行 Cost + 本期总计 Cost + 同期当前行 Cost + 同期总计 Cost）
+    - SQL 风格：MySQL 分步查询，每个场景拆分为独立 SQL，不冗余合并
+  - **统一筛选条件**（两个文件共享）：
+    - 本期时间：platform IN ('JD','TM') AND trans_cycle = 'T+1' AND data_date >= '2026-01-01' AND data_date <= '2026-06-09'
+    - 同期时间：platform IN ('JD','TM') AND trans_cycle = 'T+1' AND data_date >= '2025-01-01' AND data_date <= '2025-06-09'
+    - 数据库表：`indep_rl_ads`.a05_e2e_paid_media_product_data_d
+    - 币种：RMB（ExchangeRate = 1）
+  - **指标口径说明**（文件内注释）：
+    - Cost = SUM(promotion_cost_amt) × ExchangeRate（金额类，乘汇率；RMB 下 = SUM 原始值）
+    - Cost VS LP = (本期 Cost - 同期 Cost) / 同期 Cost（增长率，不乘汇率；边界：同期 0/NULL→BLANK，本期 0/NULL 且同期有值→-1）
+    - Cost% = DIVIDE(当前行 promotion_cost_amt, 总计 promotion_cost_amt)（比率类，不乘汇率；分母 REMOVEFILTERS 全部 5 个行维度）
+    - Cost% VS LP = (本期 Cost% - 同期 Cost%) / 同期 Cost%（增长率，不乘汇率；边界同 Cost VS LP）
+  - **场景分配**（3 种场景对应 2 个文件）：
+    - 总计行验证：两个文件均包含（共享场景）
+    - 四级小计行验证：仅 Category_Growth_matrix_test（framework→...→season 方案）
+    - 明细行验证：仅 Category_Growth_matrix_Diff_test（season→...→gender 方案）
+- **关联文件**: `Category Growth/Category_Growth_matrix_test`, `Category Growth/Category_Growth_matrix_Diff_test`
+- **备注**:
+  - 仅测试 4 个指标（Cost / Cost VS LP / Cost% / Cost% VS LP），不涉及占位指标
+  - SQL 采用分步查询设计，每个场景拆分为 2~4 个独立 SQL，便于手动逐步验证
+  - 需求中"season→ brand→ category→ channel→ framework 明细行验证"的 framework 为 gender 笔误（验证条件使用 gender='MN'），实际为 season→ brand→ category→ channel→ gender
+  - Cost% 分母验证：通过独立的"总计 Cost"SQL 查询实现 REMOVEFILTERS 语义（移除全部行维度，保留切片器筛选）
+  - 手动计算公式在文件末尾 Step 中给出，可直接套用 SQL 结果计算 4 个指标值
+
+---
+
+## [2026-06-24 10:15] 修改 — Category Growth 测试案例场景2追加合并查询SQL
+
+- **模块**: Category Growth
+- **任务**: 两个测试文件场景2末尾追加合并后的 SQL，一次性输出 4 个指标最终值，免去手动除法
+- **操作**: 修改
+- **变更内容**:
+  - `Category_Growth_matrix_test`（修改）：场景2（四级小计行验证）末尾新增 Step 6 合并查询
+  - `Category_Growth_matrix_Diff_test`（修改）：场景2（明细行验证）末尾新增 Step 6 合并查询
+  - 合并查询结构：WITH CTE（curr_row / curr_total / lp_row / lp_total 4 个子查询）+ SELECT 输出 4 列（Cost / Cost VS LP / Cost% / Cost% VS LP）
+  - 边界条件用 CASE WHEN 实现，与 DAX 口径一致：
+    - Cost VS LP：同期 Cost 为 0/NULL → NULL；本期 Cost 为 0/NULL 且同期有值 → -1
+    - Cost%：分母(总计)为 0/NULL → NULL（DIVIDE 语义）
+    - Cost% VS LP：同期 Cost% 为 0/NULL → NULL；本期 Cost% 为 0/NULL 且同期有值 → -1
+- **关联文件**: `Category Growth/Category_Growth_matrix_test`, `Category Growth/Category_Growth_matrix_Diff_test`
+- **备注**:
+  - 合并查询直接输出 4 个指标的最终计算结果，无需手动套用除法公式
+  - 4 个 CTE 分别对应 Step 1~4 的分步查询，逻辑完全等价，仅合并为单条 SQL 执行
+  - 原 Step 1~5 分步查询保留，便于逐步排查；Step 6 合并查询用于一次性获取最终值
+
+---
+
 ## [Keyword] 模块
 
 ---
