@@ -21,6 +21,33 @@
 
 ---
 
+## [2026-06-24 11:05] 修改 — KPIs Overview 目标达成矩阵列维度重构为 10 指标 + Cost Rate 口径填充
+
+- **模块**: Overview > 目标达成
+- **任务**: KPIs Overview 目标达成矩阵 v4 — 列维度重构为 10 个指标并补充 Cost Rate 口径
+- **操作**: 修改
+- **变更内容**:
+  - `DIM_ColMetric_Target`：列维度从 9 个指标重构为 10 个指标，严格按以下顺序：Cost Rate / RTB Cost ACH% / Cost ACH% / Cost ACH%(Exclude Refund) / Net Sales ACH% / Demand Sales ACH% / Acceleration Cost% / Acceleration Net Sales% / Media Contribution to New Customer Acquisition% / Cost Per New Acquisition；新增 Cost ACH%(Exclude Refund)（ID 4）、Acceleration Net Sales%（ID 8）、Media Contribution to New Customer Acquisition%（ID 9）；移除 Media New Customer Coverage%（原 ID 6）、Net Sales%（原 ID 9）；Acceleration Cost% 由原 ID 8 调整至 ID 7；Cost Per New Acquisition 由原 ID 7 调整至 ID 10（列尾，保留 currency 格式与 Metric_IsCurrencyAmount=TRUE）；Metric_Sort 步长 10（10~100）
+  - `KPIs Overview Target Actual Base Value`：SWITCH 分发器从 9 分支扩展为 10 分支；ID 1 Cost Rate 填充真实口径 `DIVIDE(SUM(a05_e2e_paid_media_summary_d[cost_amt]), SUM(a05_e2e_paid_media_summary_d[net_sales_amt]))`，含 Platform 单选/ALL 精确筛选（TTL → IN {"TM","JD"}，单平台 → = __ChannelID）与 trans_cycle 单选筛选；其余 9 个分支（ID 2~10）保留占位值 1 与口径注释框架
+  - `KPIs Overview Target Target Base Value`：SWITCH 分发器从 9 分支扩展为 10 分支；所有分支（ID 1~10）保留 TargetPeriod 粒度路由占位值，待目标表就绪后填充
+- **关联文件**: `Overview/目标达成/KPIs Overview_Target_matrix_solution`
+- **备注**: 其余架构（行维度 Actual/Target/±Actual vs Target、断开维度、汇率转换、Platform 单选+ALL 精确筛选、TargetPeriod 粒度路由、行路由、格式化、条件颜色、SVG 图标、交替行背景色）保持不变；Cost ACH%(Exclude Refund) / Acceleration Net Sales% / Media Contribution to New Customer Acquisition% 口径待业务确认后填充
+
+---
+
+## [2026-06-24 10:15] 修改 — KPIs Overview TTL汇总矩阵列维度重构为 9 指标 + Cost 口径填充
+
+- **模块**: Overview > TTL汇总
+- **任务**: KPIs Overview TTL汇总矩阵 v3 — 列维度重构为 9 个指标并补充 Cost 口径
+- **操作**: 修改
+- **变更内容**:
+  - `DIM_ColMetric_Overview`：列维度从 8 个指标重构为 9 个指标，严格按以下顺序：Cost / Cost Rate / Cost (Exclude Refund) / Cost Rate (Exclude Refund) / Net Sales / ROI / Acceleration Cost% / ±Acceleration Cost% vs Net Sales% / New Customer Cost%；新增 Cost (Exclude Refund)（ID 3）、Cost Rate (Exclude Refund)（ID 4）；移除 Cost Rate (include Refund)（原 ID 3）；New Customer Cost% 由原 ID 6 调整至 ID 9（列尾）；Metric_Sort 步长 10（10~90）
+  - `KPIs Overview Base Value`：SWITCH 分发器从 8 分支扩展为 9 分支；ID 1 Cost 填充真实口径 `SUM(a05_e2e_paid_media_summary_d[cost_amt])`，含 Platform 单选/ALL 精确筛选（TTL → IN {"TM","JD"}，单平台 → = __ChannelID）与 trans_cycle 单选筛选；其余 8 个分支（ID 2~9）保留占位值 1 与口径注释框架
+- **关联文件**: `Overview/TTL汇总/KPIs Overview_matrix_solution`
+- **备注**: 其余架构（断开维度、日期覆盖机制、汇率转换、Platform 单选+ALL 精确筛选、行路由、格式化、条件颜色、SVG 图标、交替行背景色）保持不变；Cost (Exclude Refund) / Cost Rate (Exclude Refund) 口径待业务确认后填充
+
+---
+
 ## [2026-05-28 09:32] 修改 — KPIs Overview TTL汇总矩阵 Platform ALL 筛选逻辑修复
 
 - **模块**: Overview > TTL汇总

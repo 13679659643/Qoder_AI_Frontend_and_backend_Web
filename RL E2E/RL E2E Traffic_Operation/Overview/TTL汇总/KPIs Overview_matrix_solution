@@ -2,10 +2,28 @@ KPIs Overview_matrix_solution 解决方案：
 
 > status: updated
 > created: 2026-04-21
-> updated: 2026-05-27
+> updated: 2026-06-24
 > complexity: 🔴复杂
 > type: 度量值开发 + 可视化构建
 > naming: 遵循 powerbi_code_copilot/rules/dax-style.md 规范
+
+================================================================================
+变更日志（2026-06-24）
+================================================================================
+
+本次变更基于上一版本（2026-05-27）调整如下：
+
+1. 列维度从 8 个指标重构为 9 个指标，严格按以下顺序：
+   Cost / Cost Rate / Cost (Exclude Refund) / Cost Rate (Exclude Refund) /
+   Net Sales / ROI / Acceleration Cost% / ±Acceleration Cost% vs Net Sales% /
+   New Customer Cost%
+2. 新增指标：Cost (Exclude Refund)（ID 3）、Cost Rate (Exclude Refund)（ID 4）
+3. 移除指标：Cost Rate (include Refund)（原 ID 3）
+4. New Customer Cost% 位置由原 ID 6 调整至 ID 9（列尾）
+5. 补充 Cost 口径：SUM(a05_e2e_paid_media_summary_d[cost_amt])，
+   含 Platform 单选/ALL 精确筛选与 trans_cycle 单选筛选
+6. 其余 8 个指标暂无口径，保留原始占位值 1 逻辑与口径注释框架
+7. 其余架构（断开维度、日期覆盖机制、汇率转换、Platform 单选+ALL）保持不变
 
 ================================================================================
 变更日志（2026-05-27）
@@ -35,9 +53,9 @@ KPIs Overview_matrix_solution 解决方案：
 
 实现 KPIs Overview TTL汇总 矩阵看板：
 - 行：This Year / Last Year / YOY（3 行）
-- 列：Cost / Cost Rate / Cost Rate (include Refund) / Net Sales /
-      ROI / New Customer Cost% / Acceleration Cost% /
-      ±Acceleration Cost% vs Net Sales%（8 列）
+- 列：Cost / Cost Rate / Cost (Exclude Refund) / Cost Rate (Exclude Refund) /
+      Net Sales / ROI / Acceleration Cost% /
+      ±Acceleration Cost% vs Net Sales% / New Customer Cost%（9 列）
 - 筛选器：本期日期(Dim_Date_Current) / 同期日期(Dim_Date_Ly) /
           Channel(Platform, 单选，含 ALL) / 数据口径(trans_cycle, 单选) / 币种(currency, 单选)
 
@@ -56,10 +74,10 @@ KPIs Overview_matrix_solution 解决方案：
 
 维度层（断开维度）
 ├── DIM_RowKPIs_Overview（行维度：This Year / Last Year / YOY）
-└── DIM_ColMetric_Overview（列维度：8 个指标，含格式、颜色、汇率转换标记）
+└── DIM_ColMetric_Overview（列维度：9 个指标，含格式、颜色、汇率转换标记）
 
 度量值链
-KPIs Overview Base Value ── 纯指标 SWITCH 分发（8 分支，当前值均为 1，保留口径注释）
+KPIs Overview Base Value ── 纯指标 SWITCH 分发（9 分支，Cost 已填充真实口径，其余占位值 1）
         │                   含维度筛选（platform 单选/ALL 聚合, trans_cycle 单选）
         │                   返回 RMB 原始值，不含币种筛选
         ▼
@@ -79,7 +97,7 @@ KPIs Overview Cell Value ── 行路由（This Year / Last Year / YOY）
 ```
 
 关键技术点：
-1. Metric_ID 路由：列指标通过 Metric_ID（1~8）SWITCH 分发
+1. Metric_ID 路由：列指标通过 Metric_ID（1~9）SWITCH 分发
 2. 行路由：This Year 直接调用 Base Value；Last Year 通过 CALCULATE 覆盖日期上下文；
    YOY = (This Year - Last Year) / Last Year（即 This Year/Last Year - 1）
 3. 格式与颜色驱动：DIM_ColMetric_Overview 内嵌 3 套格式列 + 4 色列，
@@ -94,19 +112,21 @@ KPIs Overview Cell Value ── 行路由（This Year / Last Year / YOY）
      精确圈定 TM + JD，避免数据源新增其他 platform 时被误聚合
    - 选择具体平台（TM/JD）→ __ChannelID = "TM"/"JD"，施加 platform = __ChannelID 精确筛选
    - 统一通过 __PlatformFilter 变量传递，SWITCH 分支无需重复写条件判断
-7. 当前 Base Value 所有分支均返回 1（占位值），保留口径注释，后续填充真实 DAX
+7. 当前 Base Value 中 Cost（ID 1）已填充真实口径 SUM(summary_d[cost_amt])，
+   其余 8 个分支均返回 1（占位值），保留口径注释供后续填充
 
-指标口径来源对照（暂无口径，值填充为 1，注释保留供后续参考）：
+指标口径来源对照（Cost 已填充口径，其余暂无口径值填充为 1，注释保留供后续参考）：
 | # | 指标名（英文）                       | 行维度名称 | 主要事实表（待确认） | 关键字段（待确认）    |
 |---|--------------------------------------|-----------|---------------------|----------------------|
-| 1 | Cost                                 | 金额类    | summary_d           | cost_amt             |
+| 1 | Cost                                 | 金额类    | summary_d           | cost_amt（已填充）   |
 | 2 | Cost Rate                            | 比率类    | channel_data_d / summary_d | (cost_amt-red_packet-rebate) / (net_sales_amt*1.13/1.06) |
-| 3 | Cost Rate (include Refund)           | 比率类    | summary_d           | cost_amt / (net_sales_amt*1.13/1.06) |
-| 4 | Net Sales                            | 金额类    | summary_d           | net_sales_amt        |
-| 5 | ROI                                  | 比率/整数 | summary_d           | media_sales_amt / adj_cost_amt |
-| 6 | New Customer Cost%                   | 比率类    | channel_data_d      | nc_cost_amt / (nc_cost_amt + ec_cost_amt) |
+| 3 | Cost (Exclude Refund)                | 金额类    | channel_data_d / summary_d | cost_amt - red_packet - rebate（待确认） |
+| 4 | Cost Rate (Exclude Refund)           | 比率类    | channel_data_d / summary_d | (cost_amt-red_packet-rebate) / (net_sales_amt*1.13/1.06)（待确认） |
+| 5 | Net Sales                            | 金额类    | summary_d           | net_sales_amt        |
+| 6 | ROI                                  | 比率/整数 | summary_d           | media_sales_amt / adj_cost_amt |
 | 7 | Acceleration Cost%                   | 比率类    | product_data_d      | promotion_cost_amt(Acc) / promotion_cost_amt(All) |
 | 8 | ±Acceleration Cost% vs Net Sales%    | 比率类    | product_data_d + summary_d | 待确认口径      |
+| 9 | New Customer Cost%                   | 比率类    | channel_data_d      | nc_cost_amt / (nc_cost_amt + ec_cost_amt) |
 
 ================================================================================
 1. 构建行维度字段 DIM_RowKPIs_Overview
@@ -137,8 +157,10 @@ DIM_ColMetric_Overview =
 // ========================================
 // 表: DIM_ColMetric_Overview
 // 类型: 断开维度
-// 用途: KPIs Overview 矩阵列维度（8 个指标）
-// 变更: 2026-05-27 列结构从 12 列重构为 8 列，指标名称改为英文
+// 用途: KPIs Overview 矩阵列维度（9 个指标）
+// 变更: 2026-06-24 列结构从 8 列重构为 9 列，新增 Cost (Exclude Refund) /
+//       Cost Rate (Exclude Refund)，移除 Cost Rate (include Refund)，
+//       New Customer Cost% 调整至列尾（ID 9）
 //
 // 格式类型清单：
 //   currency      → ¥1,000 / $1,000（货币符号由币种切片器决定）
@@ -156,7 +178,7 @@ DIM_ColMetric_Overview =
 //   Metric_IsCurrencyAmount = FALSE → 比率/计数类指标，不受汇率影响
 // ========================================
 DATATABLE(
-    "Metric_ID",              INTEGER,    // 主键 1~8
+    "Metric_ID",              INTEGER,    // 主键 1~9
     "Metric_Name",            STRING,     // 列标题显示名称（英文）
     "Metric_Sort",            INTEGER,    // 排序值（起始10，步长10，便于插入）
     "Metric_Format_Current",  STRING,     // This Year 行格式
@@ -171,12 +193,13 @@ DATATABLE(
         // ID  Name                                  Sort  Fmt_Current    Fmt_LP         Fmt_VsLP          IsCurAmt  Pos        Neg        Zero       Default
         { 1,  "Cost",                                10,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 2,  "Cost Rate",                           20,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 3,  "Cost Rate (include Refund)",          30,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 4,  "Net Sales",                           40,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 5,  "ROI",                                 50,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 6,  "New Customer Cost%",                  60,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 3,  "Cost (Exclude Refund)",               30,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 4,  "Cost Rate (Exclude Refund)",          40,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 5,  "Net Sales",                           50,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 6,  "ROI",                                 60,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 7,  "Acceleration Cost%",                  70,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 8,  "±Acceleration Cost% vs Net Sales%",   80,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+        { 8,  "±Acceleration Cost% vs Net Sales%",   80,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 9,  "New Customer Cost%",                  90,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" }
     }
 )
 
@@ -427,8 +450,9 @@ KPIs Overview Base Value =
 // 度量值: KPIs Overview Base Value
 // Display Folder: KPIs Overview
 // 用途: 纯指标 SWITCH 分发器
-//       根据 DIM_ColMetric_Overview[Metric_ID] 路由到 8 个指标计算逻辑
-//       当前所有分支均返回 1（占位值），保留口径注释供后续填充
+//       根据 DIM_ColMetric_Overview[Metric_ID] 路由到 9 个指标计算逻辑
+//       Cost（ID 1）已填充真实口径 SUM(summary_d[cost_amt])，
+//       其余分支返回 1（占位值），保留口径注释供后续填充
 //
 // Platform 筛选模式（单选切片器）：
 //   TTL 行（ALL）→ FILTER platform IN {"TM","JD"}（精确圈定，避免误聚合）
@@ -455,7 +479,7 @@ KPIs Overview Base Value =
     // TTL（ALL）：FILTER platform IN {"TM","JD"}，精确圈定两个平台
     // 单平台：   FILTER platform = __ChannelID，精确单选
     // 注意：__PlatformFilter 作为 CALCULATE 的筛选参数传入各分支
-    //       避免在 8 个 SWITCH 分支中重复写 IF(__ChannelID="ALL",...) 判断
+    //       避免在 9 个 SWITCH 分支中重复写 IF(__ChannelID="ALL",...) 判断
     VAR __IsAllPlatform = (__ChannelID = "ALL")
 
     RETURN
@@ -464,25 +488,23 @@ KPIs Overview Base Value =
 
         // ═══════════════════════════════════════════════════════
         // ID 1: Cost — 花费金额
-        // 口径（待填充）: SUM(a05_e2e_paid_media_summary_d[cost_amt])
+        // 口径（已填充）: SUM(a05_e2e_paid_media_summary_d[cost_amt])
         // 来源: 汇总粒度事实表
         // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
         // ═══════════════════════════════════════════════════════
-        1, 1,
-        // 待填充真实口径：
-        // 1, IF(
-        //         __IsAllPlatform,
-        //         CALCULATE(
-        //             SUM(a05_e2e_paid_media_summary_d[cost_amt]),
-        //             a05_e2e_paid_media_summary_d[platform] IN {"TM", "JD"},
-        //             a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-        //         ),
-        //         CALCULATE(
-        //             SUM(a05_e2e_paid_media_summary_d[cost_amt]),
-        //             a05_e2e_paid_media_summary_d[platform] = __ChannelID,
-        //             a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
-        //         )
-        //    ),
+        1, IF(
+                __IsAllPlatform,
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_summary_d[cost_amt]),
+                    a05_e2e_paid_media_summary_d[platform] IN {"TM", "JD"},
+                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+                ),
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_summary_d[cost_amt]),
+                    a05_e2e_paid_media_summary_d[platform] = __ChannelID,
+                    a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+                )
+           ),
 
         // ═══════════════════════════════════════════════════════
         // ID 2: Cost Rate — 费比（不含红包）
@@ -524,39 +546,55 @@ KPIs Overview Base Value =
         //    RETURN DIVIDE(__ChannelCost - __RedPacket - __Rebate, __NetSales * 1.13 / 1.06),
 
         // ═══════════════════════════════════════════════════════
-        // ID 3: Cost Rate (include Refund) — 含红包费比
-        // 口径（待填充）: SUM(summary_d[cost_amt])
-        //               / (SUM(summary_d[net_sales_amt]) * 1.13 / 1.06)
-        // 注意: 分子分母均来自 summary_d
+        // ID 3: Cost (Exclude Refund) — 扣除红包返现后的花费金额
+        // 口径（待填充）: channel.cost_amt - channel.red_packet - channel.rebate
+        //               （或 summary_d 口径，待业务确认）
+        // 来源: 待确认（channel_data_d 或 summary_d）
         // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
         // ═══════════════════════════════════════════════════════
         3, 1,
-        // 待填充真实口径：
-        // 3, VAR __SummaryCost   = IF(__IsAllPlatform,
-        //                             CALCULATE(SUM(a05_e2e_paid_media_summary_d[cost_amt]),
-        //                                 a05_e2e_paid_media_summary_d[platform] IN {"TM","JD"},
-        //                                 a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle),
-        //                             CALCULATE(SUM(a05_e2e_paid_media_summary_d[cost_amt]),
-        //                                 a05_e2e_paid_media_summary_d[platform] = __ChannelID,
-        //                                 a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle))
-        //    VAR __NetSalesRatio = IF(__IsAllPlatform,
-        //                             CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
-        //                                 a05_e2e_paid_media_summary_d[platform] IN {"TM","JD"},
-        //                                 a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle),
-        //                             CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
-        //                                 a05_e2e_paid_media_summary_d[platform] = __ChannelID,
-        //                                 a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle))
-        //    RETURN DIVIDE(__SummaryCost, __NetSalesRatio * 1.13 / 1.06),
+        // 待填充真实口径（示例框架）：
+        // 3, VAR __ChannelCost = IF(__IsAllPlatform,
+        //                           CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+        //                               a05_e2e_paid_media_channel_data_d[platform] IN {"TM","JD"},
+        //                               a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle),
+        //                           CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+        //                               a05_e2e_paid_media_channel_data_d[platform] = __ChannelID,
+        //                               a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle))
+        //    VAR __RedPacket  = IF(__IsAllPlatform,
+        //                          CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[red_packet]), ...), ...)
+        //    VAR __Rebate     = IF(__IsAllPlatform,
+        //                          CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[rebate]), ...), ...)
+        //    RETURN __ChannelCost - __RedPacket - __Rebate,
 
         // ═══════════════════════════════════════════════════════
-        // ID 4: Net Sales — Net 销售额
+        // ID 4: Cost Rate (Exclude Refund) — 扣除红包返现后的费比
+        // 口径（待填充）: (channel.cost_amt - channel.red_packet - channel.rebate)
+        //               / (summary.net_sales_amt * 1.13 / 1.06)
+        // 注意: 分子来自 channel_data_d，分母来自 summary_d
+        // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
+        // ═══════════════════════════════════════════════════════
+        4, 1,
+        // 待填充真实口径（示例框架）：
+        // 4, VAR __ChannelCost = ...（同 ID 3 分子逻辑）
+        //    VAR __NetSales   = IF(__IsAllPlatform,
+        //                          CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
+        //                              a05_e2e_paid_media_summary_d[platform] IN {"TM","JD"},
+        //                              a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle),
+        //                          CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
+        //                              a05_e2e_paid_media_summary_d[platform] = __ChannelID,
+        //                              a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle))
+        //    RETURN DIVIDE(__ChannelCost - __RedPacket - __Rebate, __NetSales * 1.13 / 1.06),
+
+        // ═══════════════════════════════════════════════════════
+        // ID 5: Net Sales — Net 销售额
         // 口径（待填充）: SUM(a05_e2e_paid_media_summary_d[net_sales_amt])
         // 来源: 汇总粒度事实表
         // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
         // ═══════════════════════════════════════════════════════
-        4, 1,
+        5, 1,
         // 待填充真实口径：
-        // 4, IF(
+        // 5, IF(
         //         __IsAllPlatform,
         //         CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
         //             a05_e2e_paid_media_summary_d[platform] IN {"TM", "JD"},
@@ -567,13 +605,13 @@ KPIs Overview Base Value =
         //    ),
 
         // ═══════════════════════════════════════════════════════
-        // ID 5: ROI — 媒体投资回报率
+        // ID 6: ROI — 媒体投资回报率
         // 口径（待填充）: SUM(summary_d[media_sales_amt]) / SUM(summary_d[adj_cost_amt])
         // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
         // ═══════════════════════════════════════════════════════
-        5, 1,
+        6, 1,
         // 待填充真实口径：
-        // 5, VAR __MediaSales = IF(__IsAllPlatform,
+        // 6, VAR __MediaSales = IF(__IsAllPlatform,
         //                          CALCULATE(SUM(a05_e2e_paid_media_summary_d[media_sales_amt]),
         //                              a05_e2e_paid_media_summary_d[platform] IN {"TM","JD"},
         //                              a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle),
@@ -588,30 +626,6 @@ KPIs Overview Base Value =
         //                              a05_e2e_paid_media_summary_d[platform] = __ChannelID,
         //                              a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle))
         //    RETURN DIVIDE(__MediaSales, __AdjCost),
-
-        // ═══════════════════════════════════════════════════════
-        // ID 6: New Customer Cost% — 新客花费占比
-        // 口径（待填充）: nc_cost_amt / (nc_cost_amt + ec_cost_amt)
-        // 来源: 渠道粒度事实表
-        // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
-        // ═══════════════════════════════════════════════════════
-        6, 1,
-        // 待填充真实口径：
-        // 6, VAR __NC_Cost = IF(__IsAllPlatform,
-        //                        CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[nc_cost_amt]),
-        //                            a05_e2e_paid_media_channel_data_d[platform] IN {"TM","JD"},
-        //                            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle),
-        //                        CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[nc_cost_amt]),
-        //                            a05_e2e_paid_media_channel_data_d[platform] = __ChannelID,
-        //                            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle))
-        //    VAR __EC_Cost = IF(__IsAllPlatform,
-        //                        CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[ec_cost_amt]),
-        //                            a05_e2e_paid_media_channel_data_d[platform] IN {"TM","JD"},
-        //                            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle),
-        //                        CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[ec_cost_amt]),
-        //                            a05_e2e_paid_media_channel_data_d[platform] = __ChannelID,
-        //                            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle))
-        //    RETURN DIVIDE(__NC_Cost, __NC_Cost + __EC_Cost),
 
         // ═══════════════════════════════════════════════════════
         // ID 7: Acceleration Cost% — Acc 花费占比
@@ -652,6 +666,30 @@ KPIs Overview Base Value =
         //    VAR __NetSalesPct = IF(__IsAllPlatform, ...)
         //    RETURN DIVIDE(__AccCostPct - __NetSalesPct, __NetSalesPct),
         //    // 或者：RETURN __AccCostPct - __NetSalesPct（差值而非增长率，视业务而定）
+
+        // ═══════════════════════════════════════════════════════
+        // ID 9: New Customer Cost% — 新客花费占比
+        // 口径（待填充）: nc_cost_amt / (nc_cost_amt + ec_cost_amt)
+        // 来源: 渠道粒度事实表
+        // Platform 筛选: TTL → IN {"TM","JD"}；单平台 → = __ChannelID
+        // ═══════════════════════════════════════════════════════
+        9, 1,
+        // 待填充真实口径：
+        // 9, VAR __NC_Cost = IF(__IsAllPlatform,
+        //                        CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[nc_cost_amt]),
+        //                            a05_e2e_paid_media_channel_data_d[platform] IN {"TM","JD"},
+        //                            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle),
+        //                        CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[nc_cost_amt]),
+        //                            a05_e2e_paid_media_channel_data_d[platform] = __ChannelID,
+        //                            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle))
+        //    VAR __EC_Cost = IF(__IsAllPlatform,
+        //                        CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[ec_cost_amt]),
+        //                            a05_e2e_paid_media_channel_data_d[platform] IN {"TM","JD"},
+        //                            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle),
+        //                        CALCULATE(SUM(a05_e2e_paid_media_channel_data_d[ec_cost_amt]),
+        //                            a05_e2e_paid_media_channel_data_d[platform] = __ChannelID,
+        //                            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle))
+        //    RETURN DIVIDE(__NC_Cost, __NC_Cost + __EC_Cost),
 
         // ─── 默认 ──────────────────────────────────────────
         BLANK()
@@ -976,7 +1014,7 @@ Channel 单选切片器配置说明：
 
 | # | 度量值名称                          | Display Folder              | 用途 | 返回类型 |
 |---|------------------------------------|-----------------------------|------|----------|
-| 1 | KPIs Overview Base Value           | KPIs Overview               | 纯指标 SWITCH 分发（8 分支，当前值=1） | 数值 |
+| 1 | KPIs Overview Base Value           | KPIs Overview               | 纯指标 SWITCH 分发（9 分支，Cost 已填充口径，其余=1） | 数值 |
 | 2 | KPIs Overview Cell Value           | KPIs Overview               | 行路由（This Year / Last Year / YOY） | 数值 |
 | 3 | KPIs Overview Cell Display         | KPIs Overview > Formatting  | 格式化显示文本 | 文本 |
 | 4 | KPIs Overview Cell Font Color      | KPIs Overview > Formatting  | 字体颜色条件格式 | 颜色代码 |
@@ -1054,7 +1092,7 @@ _Measures
        │              │
 ┌──────┴──────────────┴──────────────────────────┐
 │           DIM_ColMetric_Overview               │
-│  Metric_ID(1~8) │ Metric_Name │ Metric_Sort   │
+│  Metric_ID(1~9) │ Metric_Name │ Metric_Sort   │
 │  Metric_Format_Current/LP/VsLP                │
 │  Metric_Color* (4 列)                         │
 │  Metric_IsCurrencyAmount                      │
@@ -1071,21 +1109,24 @@ _Measures
 将注释中的口径代码取消注释并启用即可。其余度量值（Cell Value、Cell Display、
 Font Color、SVG Icon、Background Color）无需任何改动。
 
-示例（填充 ID 1 Cost 口径）：
+当前进度：ID 1 Cost 已填充真实口径，ID 2~9 仍为占位值 1。
+
+示例（填充 ID 5 Net Sales 口径）：
 ```dax
 // 填充前
-1, 1,
+5, 1,
 
 // 填充后
-1, IF(
+5, IF(
         __IsAllPlatform,
         CALCULATE(
-            SUM(a05_e2e_paid_media_summary_d[cost_amt]),
+            SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
+            a05_e2e_paid_media_summary_d[platform] IN {"TM", "JD"},
             a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
         ),
         CALCULATE(
-            SUM(a05_e2e_paid_media_summary_d[cost_amt]),
-            a05_e2e_paid_media_summary_d[platform] = __SelPlatform,
+            SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
+            a05_e2e_paid_media_summary_d[platform] = __ChannelID,
             a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
         )
    ),
@@ -1095,11 +1136,11 @@ Font Color、SVG Icon、Background Color）无需任何改动。
 ──────────────────
 步骤 1：在 DIM_ColMetric_Overview 新增一行
 ```dax
-{ 9, "New Metric", 9, "decimal_2", "decimal_2", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#212121" }
+{ 10, "New Metric", 100, "decimal_2", "decimal_2", "delta_pct_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" }
 ```
 步骤 2：在 KPIs Overview Base Value 的 SWITCH 中新增分支
 ```dax
-9, 1,  // 初始占位值，后续填充真实口径
+10, 1,  // 初始占位值，后续填充真实口径
 ```
 其余度量值无需修改。
 
@@ -1122,11 +1163,13 @@ Font Color、SVG Icon、Background Color）无需任何改动。
 
 14.1 Base Value 占位值说明（重要）
 ────────────────────────────────────
-- 当前所有 8 个 SWITCH 分支均返回 1（占位值）
-- 这意味着 This Year 和 Last Year 均为 1，YOY = (1-1)/1 = 0
+- 当前 9 个 SWITCH 分支中，ID 1 Cost 已填充真实口径 SUM(summary_d[cost_amt])，
+  其余 8 个分支（ID 2~9）返回 1（占位值）
+- 占位值指标：This Year 和 Last Year 均为 1，YOY = (1-1)/1 = 0
 - 格式化后：金额类显示 ¥1，比率类显示 100.0%（percent_1dp 格式），decimal_2 显示 1.00
 - YOY 行显示 0.0%，字体颜色为黄色（零值）
-- 此为预期行为，用于验证格式化逻辑是否正确，待口径确认后替换
+- Cost（ID 1）已为真实值，This Year/Last Year 显示实际花费金额，YOY 显示真实同比
+- 此为预期行为，用于验证格式化逻辑是否正确，待口径确认后替换其余分支
 
 14.2 Platform 单选 + ALL 精确筛选机制
 ──────────────────────────────────────
@@ -1176,14 +1219,14 @@ Font Color、SVG Icon、Background Color）无需任何改动。
 
 维度表与切片器：
 - [ ] 创建/更新 DIM_RowKPIs_Overview（This Year / Last Year / YOY）
-- [ ] 创建/更新 DIM_ColMetric_Overview（8 行 × 11 列，英文列名）
+- [ ] 创建/更新 DIM_ColMetric_Overview（9 行 × 11 列，英文列名）
 - [ ] 创建/更新 Slicer_Platform_Selection（含 ALL / TM / JD，单选）
 - [ ] 创建 Slicer_DataCaliber_Selection 计算表
 - [ ] 创建 Slicer_Currency_Selection 计算表（含 Currency_ExchangeRate 汇率字段）
 - [ ] 配置 Sort by Column（见 4.3 节）
 
 度量值：
-- [ ] 创建/更新 KPIs Overview Base Value（8 分支，当前值=1，保留口径注释）
+- [ ] 创建/更新 KPIs Overview Base Value（9 分支，Cost 已填充口径，其余=1，保留口径注释）
 - [ ] 创建/更新 KPIs Overview Cell Value（行路由改为 This Year/Last Year/YOY + 汇率转换）
 - [ ] 创建/更新 KPIs Overview Cell Display（格式化显示，行标识改为英文）
 - [ ] 创建/更新 KPIs Overview Cell Font Color（仅 YOY 行条件色）
@@ -1205,7 +1248,10 @@ Font Color、SVG Icon、Background Color）无需任何改动。
 - [ ] 验证：切换 Channel（ALL/TM/JD），格式正常，无报错
 - [ ] 验证：交替行背景色正确（This Year 白色，Last Year 灰色，YOY 白色）
 - [ ] 验证：YOY 行 SVG 箭头图标为黄色横线（零值）
-- [ ] 验证：8 列均正常显示，列顺序与 Metric_Sort 一致
+- [ ] 验证：9 列均正常显示，列顺序与 Metric_Sort 一致
+- [ ] 验证：Cost（ID 1）列显示真实花费金额，This Year/Last Year 为实际值，YOY 为真实同比
+- [ ] 验证：Cost 列切换 Channel（ALL/TM/JD），数值正确切换（ALL = TM + JD）
+- [ ] 验证：Cost 列切换币种（RMB→USD），This Year/Last Year 金额 ×7，YOY 不变
 
 验证（真实口径填充后）：
 - [ ] 验证：各指标口径与业务需求对齐
