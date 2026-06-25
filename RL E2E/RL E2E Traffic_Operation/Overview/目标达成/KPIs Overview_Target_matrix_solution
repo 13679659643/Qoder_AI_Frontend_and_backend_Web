@@ -1320,11 +1320,26 @@ KPIs Overview Target Cell SVG Icon =
 
     // ── SVG 图标定义 ──
     VAR __GreenArrowUp =
-        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%231A9018' d='M6 2L10 8H2z'/></svg>"
+            "data:image/svg+xml;utf8," &
+"<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
+"<circle cx='8' cy='8' r='7' fill='%231A9018'/>" &
+"<path d='M8 12 L8 5 M5 7 L8 4 L11 7' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/>" &
+"</svg>"
+        // "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%231A9018' d='M6 2L10 8H2z'/></svg>"
     VAR __RedArrowDown =
-        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23D64550' d='M6 10L2 4h8z'/></svg>"
+        "data:image/svg+xml;utf8," &
+"<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
+"<circle cx='8' cy='8' r='7' fill='%23D64550'/>" &
+"<path d='M8 4 L8 11 M5 9 L8 12 L11 9' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/>" &
+"</svg>"
+        // "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23D64550' d='M6 10L2 4h8z'/></svg>"
     VAR __YellowDash =
-        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><line x1='2' y1='6' x2='10' y2='6' stroke='%23E1C233' stroke-width='2'/></svg>"
+        "data:image/svg+xml;utf8," &
+"<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
+"<circle cx='8' cy='8' r='7' fill='%23E1C233'/>" &
+"<path d='M4.5 8 L11.5 8' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/>" &
+"</svg>"
+        // "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><line x1='2' y1='6' x2='10' y2='6' stroke='%23E1C233' stroke-width='2'/></svg>"
 
     RETURN
         SWITCH(
