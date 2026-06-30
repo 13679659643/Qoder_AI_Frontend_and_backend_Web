@@ -1,0 +1,61 @@
+ProductID,ProductName,ProductImageURL,Class,Label,Tier
+CWPO2STF8520001,Oxford Cotton Shirt,https://example.com/img/shirt_01.jpg,Shirt,CLASSIC,A
+CWPO2STF8520002,Slim Fit Poplin,https://example.com/img/shirt_02.jpg,Shirt,ESSENTIALS,B
+CWPO2STF8520003,Flannel Plaid Shirt,https://example.com/img/shirt_03.jpg,Shirt,SPORT,C
+CWPO2STF8520004,Linen Button-Down,https://example.com/img/shirt_04.jpg,Shirt,LUXE,A
+CWPO2STF8520005,Denim Casual Shirt,https://example.com/img/shirt_05.jpg,Shirt,ESSENTIALS,B
+CWPO2STF8520006,Silk Wrap Dress,https://example.com/img/dress_01.jpg,Dresses,LUXE,A
+CWPO2STF8520007,Floral Maxi Dress,https://example.com/img/dress_02.jpg,Dresses,CLASSIC,B
+CWPO2STF8520008,Cocktail Mini Dress,https://example.com/img/dress_03.jpg,Dresses,SPORT,C
+CWPO2STF8520009,Midi Wrap Dress,https://example.com/img/dress_04.jpg,Dresses,ESSENTIALS,A
+CWPO2STF8520010,Evening Gown,https://example.com/img/dress_05.jpg,Dresses,LUXE,B
+CWPO2STF8520011,Classic Polo,https://example.com/img/polo_01.jpg,Polo Shirt,POLO,A
+CWPO2STF8520012,Striped Polo,https://example.com/img/polo_02.jpg,Polo Shirt,POLO,B
+CWPO2STF8520013,Sport Performance Polo,https://example.com/img/polo_03.jpg,Polo Shirt,POLO,A
+CWPO2STF8520014,Pique Cotton Polo,https://example.com/img/polo_04.jpg,Polo Shirt,POLO,C
+CWPO2STF8520015,Merino Wool Sweater,https://example.com/img/sweater_01.jpg,Sweater,CLASSIC,A
+CWPO2STF8520016,Cashmere V-Neck,https://example.com/img/sweater_02.jpg,Sweater,LUXE,A
+CWPO2STF8520017,Cable Knit Pullover,https://example.com/img/sweater_03.jpg,Sweater,ESSENTIALS,B
+CWPO2STF8520018,Crewneck Wool Sweater,https://example.com/img/sweater_04.jpg,Sweater,CLASSIC,B
+CWPO2STF8520019,Hand-Knit Cardigan,https://example.com/img/knit_01.jpg,Knit,CLASSIC,A
+CWPO2STF8520020,Mohair Blend Knit,https://example.com/img/knit_02.jpg,Knit,LUXE,B
+CWPO2STF8520021,Cropped Knit Top,https://example.com/img/knit_03.jpg,Knit,SPORT,C
+CWPO2STF8520022,Leather Tote Bag,https://example.com/img/bag_01.jpg,Handbags,LUXE,A
+CWPO2STF8520023,Canvas Crossbody,https://example.com/img/bag_02.jpg,Handbags,ESSENTIALS,B
+CWPO2STF8520024,Mini Clutch,https://example.com/img/bag_03.jpg,Handbags,SPORT,C
+CWPO2STF8520025,Tailored Wool Trouser,https://example.com/img/pant_01.jpg,Pant,CLASSIC,A
+CWPO2STF8520026,Slim Chino Pant,https://example.com/img/pant_02.jpg,Pant,ESSENTIALS,B
+CWPO2STF8520027,Cargo Utility Pant,https://example.com/img/pant_03.jpg,Pant,SPORT,C
+CWPO2STF8520028,Wool Overcoat,https://example.com/img/outer_01.jpg,Outerwear,LUXE,A
+CWPO2STF8520029,Puffer Jacket,https://example.com/img/outer_02.jpg,Outerwear,SPORT,B
+CWPO2STF8520030,Pleated Midi Skirt,https://example.com/img/skirt_01.jpg,Skirt,CLASSIC,A
+CWPO2STF8520031,Turtleneck Cashmere,https://example.com/img/sweater_05.jpg,Sweater,LUXE,A
+CWPO2STF8520032,Angora Knit Vest,https://example.com/img/knit_04.jpg,Knit,CLASSIC,B
+CWPO2STF8520033,Belted Trench Coat,https://example.com/img/outer_03.jpg,Outerwear,LUXE,A
+CWPO2STF8520034,Broadcloth Dress Shirt,https://example.com/img/shirt_06.jpg,Shirt,ESSENTIALS,A
+CWPO2STF8520035,Wrap Midi Skirt,https://example.com/img/skirt_02.jpg,Skirt,CLASSIC,B
+CWPO2STF8520036,Sequin Evening Dress,https://example.com/img/dress_06.jpg,Dresses,LUXE,A
+CWPO2STF8520037,Zip-Up Polo,https://example.com/img/polo_05.jpg,Polo Shirt,SPORT,B
+CWPO2STF8520038,Alpaca Pullover,https://example.com/img/sweater_06.jpg,Sweater,CLASSIC,B
+CWPO2STF8520039,Croc-Emboss Tote,https://example.com/img/bag_04.jpg,Handbags,LUXE,A
+CWPO2STF8520040,High-Waist Wide Pant,https://example.com/img/pant_04.jpg,Pant,LUXE,A
+CWPO2STF8520041,Down Vest,https://example.com/img/outer_04.jpg,Outerwear,SPORT,B
+CWPO2STF8520042,Ribbed Turtleneck,https://example.com/img/knit_05.jpg,Knit,ESSENTIALS,C
+CWPO2STF8520043,Satin Camisole Top,https://example.com/img/shirt_07.jpg,Shirt,LUXE,A
+CWPO2STF8520044,Tiered Ruffle Dress,https://example.com/img/dress_07.jpg,Dresses,CLASSIC,B
+CWPO2STF8520045,Mesh Insert Polo,https://example.com/img/polo_06.jpg,Polo Shirt,POLO,C
+CWPO2STF8520046,Cotton Jogger,https://example.com/img/pant_05.jpg,Pant,SPORT,B
+CWPO2STF8520047,Chain Strap Clutch,https://example.com/img/bag_05.jpg,Handbags,ESSENTIALS,B
+CWPO2STF8520048,Tennis Skirt,https://example.com/img/skirt_03.jpg,Skirt,SPORT,C
+CWPO2STF8520049,Quilted Jacket,https://example.com/img/outer_05.jpg,Outerwear,CLASSIC,A
+CWPO2STF8520050,Painter Jean,https://example.com/img/pant_06.jpg,Pant,ESSENTIALS,C
+CWPO2STF8520051,Cable Knit Beanie,https://example.com/img/knit_06.jpg,Knit,SPORT,C
+CWPO2STF8520052,Oversized Blazer Dress,https://example.com/img/dress_08.jpg,Dresses,ESSENTIALS,A
+CWPO2STF8520053,Lambswool Cardigan,https://example.com/img/sweater_07.jpg,Sweater,ESSENTIALS,B
+CWPO2STF8520054,Monogram Weekender,https://example.com/img/bag_06.jpg,Handbags,LUXE,A
+CWPO2STF8520055,Tapered Trouser,https://example.com/img/pant_07.jpg,Pant,CLASSIC,A
+CWPO2STF8520056,Windbreaker,https://example.com/img/outer_06.jpg,Outerwear,SPORT,C
+CWPO2STF8520057,Intarsia Knit Top,https://example.com/img/knit_07.jpg,Knit,LUXE,A
+CWPO2STF8520058,Print Scarf Dress,https://example.com/img/dress_09.jpg,Dresses,SPORT,C
+CWPO2STF8520059,Performance Polo,https://example.com/img/polo_07.jpg,Polo Shirt,POLO,A
+CWPO2STF8520060,Pencil Skirt,https://example.com/img/skirt_04.jpg,Skirt,LUXE,A
