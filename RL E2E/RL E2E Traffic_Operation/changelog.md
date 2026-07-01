@@ -21,6 +21,110 @@
 
 ---
 
+## [2026-07-01 00:00] 修改 — KPIs Overview 目标达成矩阵 v4 全面升级（Target 同源化 + 移除 TargetPeriod + 补满月规则 + 真实口径填充）
+
+- **模块**: Overview > 目标达成
+- **任务**: 根据《口径文档 Overview.md》"板块二：Growth Overview-Target Achievement" 完善目标达成矩阵解决方案 v4
+- **操作**: 修改
+- **变更内容**:
+  - **架构层变更**：
+    - Target 数据源同源化：Target 目标值与 Actual 实际值统一使用 `a05_e2e_paid_media_summary_d` 表，Actual 用实际字段（如 `cost_amt`），Target 用 `fcst_` 前缀字段（如 `fcst_cost_amt`）
+    - 移除 TargetPeriod 路由切片器：废弃 `Slicer_TargetPeriod_Selection` 表与 `SWITCH(__TargetPeriodID)` 分支，Target 日期范围改由"日期切片器选区补满月"规则统一确定
+    - Target 日期补满月规则：在 `KPIs Overview Target Target Base Value` 中通过 `REMOVEFILTERS(Dim_Date_Current)` + 重施加 `__MonthStart~__MonthEnd` 日期范围实现；示例：日期切片器选 2026-05-05~2026-06-19 → Target 范围 2026-05-01~2026-06-30
+    - 保持 Actual/Target Base Value 拆分：因 Actual 用本期日期范围、Target 用补满月日期范围，拆分更清晰且性能更优
+  - `KPIs Overview Target Actual Base Value`（重写）：10 个指标全部填充真实口径（基于 `a05_e2e_paid_media_summary_d` 实际字段），含 Platform 单选/ALL 精确筛选与 trans_cycle 单选筛选
+  - `KPIs Overview Target Target Base Value`（重写）：10 个指标全部填充真实口径（使用 `fcst_` 前缀字段），含 `__TargetDateFilter` 和 `__TargetDateFilter_Product` 变量实现补满月日期范围覆盖
+  - `KPIs Overview Target Cell Value`（重写）：新增 `__IsACHMetric` 分支逻辑（`__MetricID >= 2 && __MetricID <= 6`）
+    - ACH% 类指标（ID 2-6）±delta 行 = Actual/Target（达成率）
+    - 非 ACH% 类指标（ID 1, 7-10）±delta 行 = (Actual-Target)/Target（偏差率）
+  - `DIM_ColMetric_Target`：10 个 ROW 定义全部更新口径注释，以口径文档为准
+  - **文档全面更新**：
+    - 文件头部版本信息升级至 v4（2026-07-01）
+    - 第 0 节"需求概述与架构总览"全面重写（含补满月规则说明 + 新架构图 + 11 条关键技术点）
+    - 第 3.4 节 `Slicer_TargetPeriod_Selection` 替换为"v4 已移除"说明
+    - 第 4.1/4.2/4.3 节事实表/关系/Sort by Column 配置更新（移除 channel_data_d 和 TargetPeriod）
+    - 第 5 节架构变更说明更新（v3 历史说明 + v4 沿用拆分架构）
+    - 第 10.3 节切片器配置移除时间粒度行
+    - 第 11 节度量值清单更新 v4 描述
+    - 第 12 节血缘关系图重画（移除 channel_data_d、Slicer_TargetPeriod，添加 Actual/Target Base Value 分离）
+    - 第 13.1 节改为"v4 已完成口径填充"说明
+    - 第 13.4 节改为"v4 已移除：时间粒度扩展"
+    - 第 13.5 节颜色反转示例 ID 修正（ID 7 → ID 10）并补充 ACH% 类颜色不反转说明
+    - 第 14.1 节更新行维度路由说明（Base Value 不再返回 BLANK，Actual/Target 分别独立取数）
+    - 第 14.3 节改为"v4 已移除"说明
+    - 第 14.6 节移除 Slicer_TargetPeriod_Selection 的 Sort 规范
+    - 第 15 节操作清单更新（移除 TargetPeriod 相关 checklist 项，添加补满月日期验证、ACH% 与非 ACH% 口径验证）
+- **关联文件**: `Overview/目标达成/KPIs Overview_Target_matrix_solution`, `口径文档/Overview.md`
+- **备注**:
+  - v4 的核心改变：Target 数据源从"独立目标表 + TargetPeriod 粒度路由"改为"同表同源（fcst_ 前缀字段）+ 日期补满月规则"
+  - ACH% 类指标的 ±delta 口径从偏差率改为达成率（Actual/Target），这是与 v3 的关键差异
+  - 字段命名约定：Actual 字段无前缀（如 `cost_amt`），Target 字段 `fcst_` 前缀（如 `fcst_cost_amt`）
+  - 移除 `channel_data_d` 表依赖，全部指标统一使用 `a05_e2e_paid_media_summary_d` 表
+
+---
+
+## [2026-06-30 12:00] 修改 — ID8 YOY 口径调整 + page_type 字符串化
+
+- **模块**: Overview > TTL汇总
+- **任务**: 口径文档微调 — ID8 YOY 改为 bp 差值；page_type 统一为字符串类型
+- **操作**: 修改
+- **变更内容**:
+  - `KPIs Overview Cell Value`: YOY 行新增 ID8 特判，bp 指标 YOY = 本期bp - 去年bp（差值），其余指标沿用增长率
+  - `KPIs Overview Cell Value`: 新增 `__SelID` 变量读取列指标 ID，用于 YOY 分支判断
+  - `DIM_ColMetric_Overview`: ID8 的 Fmt_VsLP 由 `delta_pct_1dp` 改为 `delta_bp_1dp`（三列格式统一为 delta_bp_1dp）
+  - `KPIs Overview Base Value` / `Cell Value`: 全部 `page_type = 1` / `page_type = 2` 改为字符串比较 `page_type = "1"` / `page_type = "2"`（字段为字符类型）
+  - 口径文档 `Overview.md`: 全部 `page_type=1` / `page_type=2` 改为 `page_type="1"` / `page_type="2"`；ID9 补充 YOY 说明
+- **关联文件**: `Overview/TTL汇总/KPIs Overview_matrix_solution`, `口径文档/Overview.md`
+- **备注**: ID8 YOY 区别于传统 YOY，对比本期与去年 bp 变化而非百分比变化
+
+---
+
+## [2026-06-30 00:00] 修改 — KPIs Overview Base Value 全部 9 个指标填充真实口径
+
+- **模块**: Overview > TTL汇总
+- **任务**: 根据 Overview.md 口径文档完善 KPIs Overview_matrix_solution 解决方案
+- **操作**: 修改
+- **变更内容**:
+  - `KPIs Overview Base Value`: 全部 9 个 SWITCH 分支填充真实口径（此前仅 ID 1 Cost 填充，ID 2~9 为占位值 1）
+  - 底表统一为 `a05_e2e_paid_media_summary_d`（ID7 由 product_data_d 改为 summary_d，ID9 由 channel_data_d 改为 summary_d）
+  - ID2 Cost Rate 分子修正: 由 (cost_amt-red_packet-rebate) channel_data_d 改为 cost_amt summary_d（含红包口径）
+  - ID6 ROI 分母修正: 由 adj_cost_amt 改为 cost_amt（含红包/返佣返货金）
+  - ID7 Acceleration Cost%: 由 product_data_d[promotion_cost_amt] 改为 summary_d[cost_amt]，通过 framework='Acceleration' 筛选
+  - ID8 ±Acc Cost% vs Net Sales% 派生指标口径明确: (Acc Cost% - Acc SLS MOB%) × 100 转 bp，YOY 行用增长率（沿用 Cell Value 默认 YOY 逻辑）
+  - ID9 New Customer Cost%: 由 channel_data_d[nc_cost_amt/ec_cost_amt] 改为 summary_d[cost_amt]，分子 customer_type='NEW' AND page_type=2 AND channel IN {"直通车","引力魔方"}；分母 customer_type IN {"EXISTING","NEW"} AND page_type=2 AND channel IN {"直通车","引力魔方"}
+  - 新增 `__BaseFilter_ALL` 变量统一通用筛选条件（customer_type='ALL' AND page_type=1 + platform + trans_cycle）
+- **关联文件**: `Overview/TTL汇总/KPIs Overview_matrix_solution`
+- **备注**: 口径来源为 `口径文档/Overview.md`
+
+---
+
+## [2026-06-30 00:00] 修改 — DIM_ColMetric_Overview 格式类型调整
+
+- **模块**: Overview > TTL汇总
+- **任务**: 根据 Overview.md 口径文档调整格式类型
+- **操作**: 修改
+- **变更内容**:
+  - `DIM_ColMetric_Overview`: ID6 ROI 格式由 decimal_2 改为 decimal_1dp（口径文档要求保留一位小数）
+  - `DIM_ColMetric_Overview`: ID8 ±Acc Cost% vs Net Sales% 的 Fmt_Current/Fmt_LP 由 percent_1dp 改为 delta_bp_1dp
+  - 格式类型清单新增 decimal_1dp 和 delta_bp_1dp 定义
+- **关联文件**: `Overview/TTL汇总/KPIs Overview_matrix_solution`
+- **备注**: 无
+
+---
+
+## [2026-06-30 00:00] 修改 — KPIs Overview Cell Display 新增格式分支
+
+- **模块**: Overview > TTL汇总
+- **任务**: 支持新增的 delta_bp_1dp 和 decimal_1dp 格式类型
+- **操作**: 修改
+- **变更内容**:
+  - `KPIs Overview Cell Display`: 新增 decimal_1dp 格式分支（`#,##0.0`）
+  - `KPIs Overview Cell Display`: 新增 delta_bp_1dp 格式分支（`+#,##0.0bp / -#,##0.0bp`）
+- **关联文件**: `Overview/TTL汇总/KPIs Overview_matrix_solution`
+- **备注**: 无
+
+---
+
 ## [2026-06-24 11:05] 修改 — KPIs Overview 目标达成矩阵列维度重构为 10 指标 + Cost Rate 口径填充
 
 - **模块**: Overview > 目标达成

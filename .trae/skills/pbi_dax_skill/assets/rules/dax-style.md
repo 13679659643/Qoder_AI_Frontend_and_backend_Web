@@ -140,6 +140,14 @@ DAX本身也需要有必要的注释信息，如：
 MaxValue < 0, FORMAT(BasePoints, "0") & "bp",  // 负数自带负号
 ```
 
+### 文本常量Constraint (硬性约束)
+- 文本常量必须使用双引号 " "：在编写 DAX 或 Power Query 代码时，所有表示具体文本值（String Literal）的地方，必须且只能使用英文双引号（例如 "Active"、"Acceleration"），严禁使用单引号。
+- 单引号 ' '仅限表名：单引号仅用于包裹包含空格、特殊字符或保留字的表名（例如 'Sales Table'），绝对不能用于包裹文本值。
+- 列名使用方括号 [ ]：所有列引用必须使用方括号（例如 [framework]、'Table'[Column]）。
+- Example (示例纠正):
+- ❌ 错误写法 (SQL风格):​ FILTER('Table', 'Table'[framework] = **'Acceleration'**)
+- ✅ 正确写法 (DAX规范):​ FILTER('Table', 'Table'[framework] = **"Acceleration"**)
+
 ## 3. DAX 编写原则
 
 ### 性能优先
