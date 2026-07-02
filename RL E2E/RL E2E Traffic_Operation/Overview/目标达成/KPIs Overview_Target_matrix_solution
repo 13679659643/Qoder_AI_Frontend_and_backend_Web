@@ -1136,11 +1136,11 @@ KPIs Overview Target Cell Font Color =
                 SELECTEDVALUE(DIM_ColMetric_Target[Metric_ColorDefault], "#5f6165"),
 
             // ── 仅 ±Actual vs Target 行启用条件颜色 ──
-            __Indicator = "±Actual vs Target" && __Value > 0,
+            __Indicator = "±Actual vs Target-GT" && __Value > 0,
                 SELECTEDVALUE(DIM_ColMetric_Target[Metric_ColorPositive], "#1A9018"),
-            __Indicator = "±Actual vs Target" && __Value < 0,
+            __Indicator = "±Actual vs Target-GT" && __Value < 0,
                 SELECTEDVALUE(DIM_ColMetric_Target[Metric_ColorNegative], "#D64550"),
-            __Indicator = "±Actual vs Target" && __Value = 0,
+            __Indicator = "±Actual vs Target-GT" && __Value = 0,
                 SELECTEDVALUE(DIM_ColMetric_Target[Metric_ColorZero], "#E1C233"),
 
             // ── Actual / Target 行：统一默认色 #5f6165 ──

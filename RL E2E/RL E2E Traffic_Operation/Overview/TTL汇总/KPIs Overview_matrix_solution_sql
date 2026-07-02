@@ -67,12 +67,7 @@ SELECT * from `indep_rl_ads`.a05_e2e_paid_media_summary_d WHERE platform in ( 'J
 -- SQL: 获取powerbi中使用的数据
 -- 表: `indep_rl_ads`.a05_e2e_paid_media_channel_data_d
 -- ========================================
-select 
-IF(currency is null, 'RMB', currency) AS currency,
-0 AS rebate,
-* 
-from 
-`indep_rl_ads`.a05_e2e_paid_media_channel_data_d
+select * from `indep_rl_ads`.a05_e2e_paid_media_channel_data_d WHERE platform in ( 'JD','TM')
 
 
 -- ========================================
@@ -80,10 +75,10 @@ from
 -- 表: `indep_rl_ads`.a05_e2e_paid_media_product_data_d
 -- ========================================
 select 
-IF(currency is null, 'RMB', currency) AS currency,
 * 
 from 
 `indep_rl_ads`.a05_e2e_paid_media_product_data_d
+WHERE platform IN ('JD', 'TM')
 
 
 -- ========================================

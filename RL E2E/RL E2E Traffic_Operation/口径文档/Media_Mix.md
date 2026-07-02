@@ -219,5 +219,5 @@
 | **绝对值指标** | Cost、Impression、Click、Add to Cart、Orders、GMV 为直接 sum 的绝对值指标 |
 | **比率指标** | Cost%、ROI、CTR、CPC、CPATC、CVR、AOV 为派生比率指标，需分子分母分别计算后再相除 |
 | **同期对比** | 板块名称为 "This Period TM/JD（vs Last Period）"，表示本期 vs 同期对比 |
-| **数据格式规则** | 花费/金额类（Cost、GMV、CPC、CPATC、AOV）用 `currency`（`#,##0`，币种符号由切片器决定）；占比/率类（Cost%、CTR、CVR）用 `percent_1dp`（`#,##0.0%`，不含正号）；ROI 用 `decimal_1dp`（`#,##0.0`）；数量类（Impression、Click、Add to Cart、Orders）用 `integer`（`#,##0`）；所有小数均保留一位 |
+| **数据格式规则** | 以口径中的数据格式为准，不做特殊处理 |
 | **在生成 Power BI DAX/Power Query 代码时，严格遵循语法规范** | 文本常量（Text Values）必须使用双引号 " ",禁止使用单引号；单引号 ' '仅用于表名,列名使用方括号 [ ],例如：[framework] = "Acceleration" |

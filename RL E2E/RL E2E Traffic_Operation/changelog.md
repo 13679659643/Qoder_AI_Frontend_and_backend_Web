@@ -256,6 +256,51 @@
 
 ---
 
+## [2026-07-02 16:00] 修改 — Media Mix 矩阵方案 v2.0 口径填充 + Cost% 分母路由升级 + 格式修正
+
+- **模块**: Media Mix
+- **任务**: 根据《口径文档 Media_Mix.md》完成 Media_Mix_matrix_solution 终版本 — 11 个占位指标填充真实口径 + Cost% 分母逻辑升级 + 字段名修正 + 格式修正
+- **操作**: 修改
+- **变更内容**:
+  - **口径填充（ID 3~13，共 11 个指标）**：
+    - ID 3 ROI: `DIVIDE(media_sales_amt, cost_amt)` = GMV / Cost
+    - ID 4 Impression: `SUM(pv)`
+    - ID 5 Click: `SUM(click)`
+    - ID 6 Add to Cart: `SUM(add_cart_cnt)`
+    - ID 7 Orders: `SUM(media_sales_order_cnt)`
+    - ID 8 GMV: `SUM(media_sales_amt)`
+    - ID 9 CTR: `DIVIDE(SUM(click), SUM(pv))` = Click / Impression
+    - ID 10 CPC: `DIVIDE(SUM(cost_amt), SUM(click))` = Cost / Click
+    - ID 11 CPATC: `DIVIDE(SUM(cost_amt), SUM(add_cart_cnt))` = Cost / Add to Cart
+    - ID 12 CVR: `DIVIDE(SUM(media_sales_order_cnt), SUM(click))` = Orders / Click
+    - ID 13 AOV: `DIVIDE(SUM(media_sales_amt), SUM(media_sales_order_cnt))` = GMV / Orders
+  - **Cost%（ID 2）分母路由升级（v2.0 核心变更）**：
+    - 旧逻辑：DETAIL 行分母 = 所属上级 SUMMARY 的 cost（如直通车/RTB Total），SUMMARY 行分母 = 自身（Cost% 恒为 100%）
+    - 新逻辑：DETAIL 行分母 = 所属上级 SUMMARY 的 cost（不变）；SUMMARY 行分母 = 最大汇总行 Total 的 cost（始终为全平台汇总，非自身）；Total 行 Cost% = 100%（分母 = 自身）
+    - 新增 `__GrandTotalScope` / `__GrandTotalLabels` 变量链，通过 `{Platform}_Total` Channel_ID 定位全平台汇总行的 Summary_Scope
+    - `__CostDenominatorLabels` 变量按 `__ChannelType` 路由：DETAIL → `__ParentLabels`，SUMMARY/Total → `__GrandTotalLabels`
+  - **字段名修正（事实表字段对齐口径文档）**：
+    - Orders 字段：`sales_order_cnt` → `media_sales_order_cnt`
+    - GMV 字段：`sales_amt` → `media_sales_amt`
+    - 口径来源：Media_Mix.md 口径文档，事实表 `a05_e2e_paid_media_channel_data_d` 实际字段名带 `media_` 前缀
+  - **DIM 表格式修正（CPC / CPATC / AOV）**：
+    - Metric_Format（Metric_Format_Current）：`decimal_2` → `currency_decimal_1dp`（带币种符号 + 1 位小数）
+    - Metric_IsCurrencyAmount：保持 `FALSE`（不做汇率换算，但显示带币种符号）
+  - **Cell Display 新增格式分支**：
+    - 新增 `currency_decimal_1dp` 格式分支：`__CurrencySymbol & FORMAT(__Value, "#,##0.0")`
+    - 插入位置：`currency` 与 `currency_k` 之间
+  - **文档同步更新**：
+    - 第 5 节"核心度量值"指标口径说明表：13 个指标状态全部更新为"有口径"，口径说明以口径文档为准
+    - Cost% 注释更新为 v2.0 路由逻辑说明
+- **关联文件**: `Media Mix/Media_Mix_matrix_solution`, `口径文档/Media_Mix.md`
+- **备注**:
+  - 口径来源：`RL E2E/RL E2E Traffic_Operation/口径文档/Media_Mix.md`
+  - 比率指标分母规则：分母为绝对值（SUM）时，分子分母各自独立聚合后相除（如 ROI=GMV/Cost, CTR=Click/Impression）；分母为比率时（如 Cost%），使用路由分母逻辑
+  - CPC/CPATC/AOV 格式说明：`currency_decimal_1dp` 显示带币种符号（如 ¥、$）+ 1 位小数，但 `Metric_IsCurrencyAmount = FALSE` 不做汇率换算（分子分母同币种，比值无币种维度）
+  - 架构（断开维度 + SWITCH 分发 + 日期上下文传递 + 汇率转换 + 行路由）保持不变，仅填充路由口径
+
+---
+
 ## [2026-06-01 HH:MM] 修改 — Media Mix 矩阵方案 v1.8.2 冗余变量清除 + 关联字段规范修正
 
 - **模块**: Media Mix

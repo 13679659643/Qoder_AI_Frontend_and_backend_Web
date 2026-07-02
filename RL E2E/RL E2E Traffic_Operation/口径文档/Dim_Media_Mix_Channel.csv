@@ -1,0 +1,29 @@
+﻿Channel_PK,Platform,Platform_Sort,Channel,Channel_Sort,Channel_Label,Channel_Description,Channel_Type,Channel_ID,Summary_Scope,Parent_Channel_ID
+1,TM,1,店铺直达,10,店铺直达,undefined,DETAIL,TM_店铺直达,TM_店铺直达,TM_RTB Total
+2,TM,1,引力魔方,20,引力魔方,undefined,DETAIL,TM_引力魔方,TM_引力魔方,TM_RTB Total
+3,TM,1,直通车,30,直通车,undefined,DETAIL,TM_直通车,TM_直通车,TM_RTB Total
+4,TM,1,超级直播,40,超级直播,undefined,DETAIL,TM_超级直播,TM_超级直播,TM_RTB Total
+5,TM,1,超级短视频,50,超级短视频,undefined,DETAIL,TM_超级短视频,TM_超级短视频,TM_RTB Total
+6,TM,1,RTB Total,500,RTB Total,TM平台-RTB合计：直通车 + 引力魔方 + 全站推/万象台 + 超级短视频 之和,SUMMARY,TM_RTB Total,TM_超级直播|TM_超级短视频|TM_直通车|TM_店铺直达|TM_引力魔方,TM_RTB Total
+7,TM,1,品牌专区,510,品牌专区,undefined,DETAIL,TM_品牌专区,TM_品牌专区,TM_品销宝 Total
+8,TM,1,明星店铺,520,明星店铺,undefined,DETAIL,TM_明星店铺,TM_明星店铺,TM_品销宝 Total
+9,TM,1,品销宝 Total,1000,品销宝 Total,TM平台-品销宝合计：品牌专区相关渠道汇总（品销宝产品线整体）,SUMMARY,TM_品销宝 Total,TM_品牌专区|TM_明星店铺,TM_品销宝 Total
+10,TM,1,UD全域品牌营销,1010,UD全域品牌营销,undefined,DETAIL,TM_UD全域品牌营销,TM_UD全域品牌营销,TM_JCGP Total
+11,TM,1,淘内展示营销,1020,淘内展示营销,undefined,DETAIL,TM_淘内展示营销,TM_淘内展示营销,TM_JCGP Total
+12,TM,1,JCGP Total,1500,JCGP Total,TM平台-JCGP合计：品销宝 Total + 品牌特秀（品牌类渠道整体汇总）,SUMMARY,TM_JCGP Total,TM_淘内展示营销|TM_UD全域品牌营销,TM_JCGP Total
+13,TM,1,Total,2000,Total,TM平台-全渠道合计：RTB Total + JCGP Total，即 TM 平台所有渠道总和,SUMMARY,TM_Total,TM_引力魔方|TM_超级直播|TM_UD全域品牌营销|TM_品牌专区|TM_超级短视频|TM_直通车|TM_店铺直达|TM_淘内展示营销|TM_明星店铺,TM_Total
+14,TM,1,Total 不含JCGP,2500,Total 不含JCGP,TM平台-全渠道合计（剔除JCGP）：Total - JCGP Total，即纯效果类渠道（RTB类）合计,SUMMARY,TM_Total 不含JCGP,TM_引力魔方|TM_超级直播|TM_品牌专区|TM_超级短视频|TM_直通车|TM_店铺直达|TM_明星店铺,TM_Total 不含JCGP
+15,JD,2,快车,10,快车,undefined,DETAIL,JD_快车,JD_快车,JD_RTB Total
+16,JD,2,海投,20,海投,undefined,DETAIL,JD_海投,JD_海投,JD_RTB Total
+17,JD,2,直投,30,直投,undefined,DETAIL,JD_直投,JD_直投,JD_RTB Total
+18,JD,2,触点,40,触点,undefined,DETAIL,JD_触点,JD_触点,JD_RTB Total
+19,JD,2,RTB Total,500,RTB Total ,JD平台-RTB合计：快车 + 触点 + 海投 + 直投 之和,SUMMARY,JD_RTB Total,JD_触点|JD_海投|JD_直投|JD_快车,JD_RTB Total
+20,JD,2,RTB Total + 京选店铺,501,RTB Total + 京选店铺,JD平台-RTB合计（含京选店铺）：RTB Total + 京选店铺，含京选店铺口径的效果类汇总,SUMMARY,JD_RTB Total + 京选店铺,JD_京选店铺|JD_快车|JD_触点|JD_海投|JD_直投,JD_RTB Total + 京选店铺
+21,JD,2,京选店铺,510,京选店铺,undefined,DETAIL,JD_京选店铺,JD_京选店铺,JD_Brandzone
+22,JD,2,搜索品专,520,搜索品专,undefined,DETAIL,JD_搜索品专,JD_搜索品专,JD_Brandzone
+23,JD,2,Brandzone,1000,Brandzone,JD平台-Brandzone汇总：所有Brandzone类型的品牌展示广告渠道汇总,SUMMARY,JD_Brandzone,JD_京选店铺|JD_搜索品专,JD_Brandzone
+24,JD,2,站内资源,1010,站内资源,undefined,DETAIL,JD_站内资源,JD_站内资源,JD_JCGP Total
+25,JD,2,站外资源,1020,站外资源,undefined,DETAIL,JD_站外资源,JD_站外资源,JD_JCGP Total
+26,JD,2,JCGP Total,1500,JCGP Total ,JD平台-JCGP合计：品牌类渠道整体汇总（不含Brandzone）,SUMMARY,JD_JCGP Total,JD_站外资源|JD_站内资源,JD_JCGP Total
+27,JD,2,Total,2500,Total ,JD平台-全渠道合计：RTB Total + Brandzone + JCGP Total，即 JD 平台所有渠道总和,SUMMARY,JD_Total,JD_京选店铺|JD_搜索品专|JD_快车|JD_站内资源|JD_触点|JD_海投|JD_站外资源|JD_直投,JD_Total
+28,JD,2,Total 不含JCGP,3000,Total 不含JCGP ,JD平台-全渠道合计（剔除JCGP）：Total - JCGP Total，纯效果类渠道（RTB类）合计,SUMMARY,JD_Total 不含JCGP,JD_京选店铺|JD_搜索品专|JD_快车|JD_触点|JD_海投|JD_直投,JD_Total 不含JCGP

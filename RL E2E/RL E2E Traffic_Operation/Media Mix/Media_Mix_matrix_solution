@@ -23,58 +23,6 @@ Media Mix_matrix_solution 解决方案：
 3. [新增] SQL 新增 Parent_Channel_ID 字段
    标识每行的 Cost% 分母归属（DETAIL→上级SUMMARY，SUMMARY→自身）
 
-================================================================================
-最新变更摘要（v1.7 — 2026-06-01）
-================================================================================
-
-[架构修订] Media Mix Base Value 重大架构问题修复：
-
-1. [致命修复] 移除 FILTER(ALL(事实表), ...) 滥用
-   - 原方案：ALL(a05_e2e_paid_media_channel_data_d) 把整张事实表的所有
-     筛选上下文一并清空，包括通过 Dim_Date_Current 关系传递的 data_date
-   - 后果：用户切换日期切片器时数据不变；Cell Value 层 LP 日期覆盖失效，
-     导致 Last Year ≡ This Year，YOY 永远为 0
-   - 修复：改用列级条件过滤（CALCULATE + 列条件），日期上下文通过关系
-     自然传递，用户切换日期切片器时矩阵正确响应
-
-2. [设计加固] CONTAINSSTRING 边界包裹（防子串误匹配）
-   - 原方案：CONTAINSSTRING(__SummaryScope, Channel_ID) 存在子串误匹配风险
-     如 Channel_ID = "TM_Z" 会误匹配 Summary_Scope = "TM_ZTC|TM_YLMF"
-   - 修复：DAX 侧拼接 "|" 作为边界，
-     CONTAINSSTRING("|" & __SummaryScope & "|", "|" & Channel_ID & "|")
-     SQL 侧 Summary_Scope 字段无需调整
-
-3. [架构精简] DETAIL / SUMMARY 路径合并为统一 channel IN __Labels
-   - 原方案：两个 CALCULATE（__Cost_Detail / __Cost_Summary），代码冗余
-   - 修复：DETAIL 行 Summary_Scope = 自身 Channel_ID，统一 SELECTCOLUMNS 处理
-     DETAIL 行 __Labels = {自身 Channel}（单元素）
-     SUMMARY 行 __Labels = {底层多个 Channel}（多元素）
-     后续 13 个指标的 CALCULATE 均复用此 __Labels，代码量减半
-
-4. [关联字段规范] __Labels 取 Channel 字段（原始渠道名）用于事实表筛选
-   - Channel_Label 仅用于页面展示（矩阵行头），不参与 DAX 筛选/关联
-   - Channel 字段与事实表 [channel] 字段保持一致，是正确的关联键
-
-================================================================================
-最新变更摘要（v1.6 — 2026-06-01）
-================================================================================
-
-- [修复] Summary_Scope 格式 Bug：统一改为 | 分隔（无空格），修正注释中的 | 与 SQL 一致
-- [修复] 嵌套 SUMMARY 展开 Bug：所有 SUMMARY 行的 Summary_Scope 只允许引用底层 DETAIL
-  Channel_ID，禁止引用中间 SUMMARY Channel_ID（如 TM_RTB_TOTAL），避免
-  CONTAINSSTRING + Channel_Type="DETAIL" 过滤后找不到任何行导致结果为 0
-  受影响行：TM JCGP Total / TM Total / TM Total 不含JCGP /
-           JD RTB Total+京选店铺 / JD Total / JD Total 不含JCGP
-- [同步] Media_Mix_SQL 所有 SUMMARY 行 Summary_Scope 已同步更新
-
-================================================================================
-最新变更摘要（v1.5 — 2026-06-01）
-================================================================================
-
-- [修订] domain-rules.md 排序字段起始值：7 → 10（用户修改规范文件后同步）
-- [修订] DIM_RowKPIs_Media_Mix Indicator Order：7,17,27 → 10,20,30
-- [修订] DIM_ColMetric_Media_Mix Metric_Sort：7,17,...,127 → 10,20,...,130
-- 详细历史变更见 changelog.md → [Media Mix] 模块
 
 ================================================================================
 0. 需求概述与架构总览
@@ -248,20 +196,20 @@ DIM_ColMetric_Media_Mix =
 // 类型: 断开维度
 // 用途: Media Mix 矩阵列维度（13 个指标）
 //
-// 指标清单：
-//   1  Cost              花费金额（有口径: cost_amt）
-//   2  Cost%             花费占比（有口径: 当前行 cost / 对应平台 Total cost）
-//   3  ROI               投资回报率（暂无口径，返回 1）
-//   4  Impression        展现量（暂无口径，返回 1）
-//   5  Click             点击量（暂无口径，返回 1）
-//   6  Add to Cart       加购量（暂无口径，返回 1）
-//   7  Orders            成交笔数（暂无口径，返回 1）
-//   8  GMV               总成交金额（暂无口径，返回 1）
-//   9  CTR               点击率（暂无口径，返回 1）
-//   10 CPC               单次点击成本（暂无口径，返回 1）
-//   11 CPATC             加购成本（暂无口径，返回 1）
-//   12 CVR               转化率（暂无口径，返回 1）
-//   13 AOV               客单价（暂无口径，返回 1）
+// 指标清单（口径来源：Media_Mix.md 口径文档）：
+//   1  Cost              花费金额（有口径: SUM(cost_amt)）
+//   2  Cost%             花费占比（有口径: 当前行 cost / 分母 cost，分母路由：DETAIL→上级SUMMARY，SUMMARY→Total）
+//   3  ROI               投资回报率（有口径: GMV / Cost = media_sales_amt / cost_amt）
+//   4  Impression        展现量（有口径: SUM(pv)）
+//   5  Click             点击量（有口径: SUM(click)）
+//   6  Add to Cart       加购量（有口径: SUM(add_cart_cnt)）
+//   7  Orders            成交笔数（有口径: SUM(media_sales_order_cnt)）
+//   8  GMV               总成交金额（有口径: SUM(media_sales_amt)）
+//   9  CTR               点击率（有口径: Click / Impression = SUM(click) / SUM(pv)）
+//   10 CPC               单次点击成本（有口径: Cost / Click = SUM(cost_amt) / SUM(click)）
+//   11 CPATC             加购成本（有口径: Cost / Add to Cart = SUM(cost_amt) / SUM(add_cart_cnt)）
+//   12 CVR               转化率（有口径: Orders / Click = SUM(media_sales_order_cnt) / SUM(click)）
+//   13 AOV               客单价（有口径: GMV / Orders = SUM(media_sales_amt) / SUM(media_sales_order_cnt)）
 //
 // 格式类型：
 //   currency      → ¥1,000 / $1,000
@@ -295,19 +243,19 @@ DATATABLE(
         // ID  Name             Sort  Fmt_Current    Fmt_LP         Fmt_VsLP          IsCurAmt  Pos        Neg        Zero       Default
         // Metric_Sort：起始10，步长10（domain-rule：便于后续在指标间插入新列）
         // 颜色规则：正值一律绿色 #1A9018，负值一律红色 #D64550，零值黄色 #E1C233（不区分指标业务性质）
-        {  1, "Cost",            10,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  2, "Cost%",           20,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  3, "ROI",             30,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  4, "Impression",      40,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  5, "Click",           50,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  6, "Add to Cart",     60,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  7, "Orders",          70,  "integer",     "integer",     "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  8, "GMV",             80,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        {  9, "CTR",             90,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 10, "CPC",            100,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 11, "CPATC",          110,  "decimal_2",   "decimal_2",   "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 12, "CVR",            120,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 13, "AOV",            130,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+        {  1, "Cost",            10,  "currency",    "currency",    "percent_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  2, "Cost%",           20,  "percent_1dp", "percent_1dp", "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  3, "ROI",             30,  "decimal_1dp", "decimal_1dp", "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  4, "Impression",      40,  "integer",     "integer",     "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  5, "Click",           50,  "integer",     "integer",     "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  6, "Add to Cart",     60,  "integer",     "integer",     "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  7, "Orders",          70,  "integer",     "integer",     "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  8, "GMV",             80,  "currency",    "currency",    "percent_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  9, "CTR",             90,  "percent_1dp", "percent_1dp", "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 10, "CPC",            100,  "currency_decimal_1dp", "currency_decimal_1dp",   "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 11, "CPATC",          110,  "currency_decimal_1dp", "currency_decimal_1dp",   "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 12, "CVR",            120,  "percent_1dp", "percent_1dp", "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 13, "AOV",            130,  "currency_decimal_1dp", "currency_decimal_1dp", "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" }
     }
 )
 
@@ -408,9 +356,12 @@ Media Mix Base Value =
 //   __RowPlatform = SELECTEDVALUE(Dim_Media_Mix_Channel[Platform])
 //   由矩阵行上下文自然传入；无需读取外部切片器，无需 ALL/单平台分支判断
 //
-// Cost% 口径：当前行 cost / Parent_Channel_ID 对应 SUMMARY 行的 cost
-//   分母通过 Parent_Channel_ID → __ParentScope → __ParentLabels 链路获取
-//   SUMMARY 行 Parent 自指 → Cost% = 100%
+// Cost% 口径（v2.0 — 2026-07-02 修订）：
+//   DETAIL 行分母 = 所属上级 SUMMARY 的 cost（如 直通车/RTB Total）
+//   SUMMARY 行分母 = 最大汇总行 Total 的 cost（始终为全局汇总）
+//   DETAIL 行通过 Parent_Channel_ID → __ParentScope → __ParentLabels 链路获取
+//   SUMMARY 行通过 ALL(Dim_Media_Mix_Channel) 获取全平台 DETAIL → __GrandTotalLabels
+//   Total 行 Cost% = 100%（分母 = 自身）
 //
 // 依赖: DIM_ColMetric_Media_Mix[Metric_ID]
 //       Dim_Media_Mix_Channel[Channel_ID/Channel_Type/Channel/Summary_Scope/Parent_Channel_ID/Platform]
@@ -429,40 +380,133 @@ Media Mix Base Value =
     // ── 数据口径上下文 ──
     VAR __TransCycle    = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
 
-    // ── 当前行需聚合的 Channel 集合（DETAIL/SUMMARY 路径统一）──
+    // ══════════════════════════════════════════════════════════════════
+    // 第一部分：分子 — 当前行需聚合的 DETAIL Channel 名称集合
+    // ══════════════════════════════════════════════════════════════════
+    //
+    // 作用：确定当前矩阵行的 Cost/Click/GMV 等所有指标聚合哪些 DETAIL 行数据。
+    //
+    // 原理：
+    //   Dim_Media_Mix_Channel 每行有一个 Summary_Scope 字段（| 分隔的 Channel_ID 列表），
+    //   表示"该行聚合哪些 DETAIL 行"。
+    //     - DETAIL 行：Summary_Scope = 自身 Channel_ID（如 "TM_ZTC"）
+    //     - SUMMARY 行：Summary_Scope = 底层所有 DETAIL 的 | 拼接
+    //       （如 RTB Total = "TM_ZTC|TM_YLMF|TM_QZT|TM_DSP"）
+    //
+    // 示例（TM 平台）：
+    //   矩阵行 = "直通车"（DETAIL）→ __Labels = {"直通车"}（单元素）
+    //   矩阵行 = "RTB Total"（SUMMARY）→ __Labels = {"直通车","引力魔方","全站推/万象台","超级短视频"}
+    //   矩阵行 = "Total"（SUMMARY）→ __Labels = 全部 6 个 DETAIL 渠道名
+    //
+    // ⚠️ ALL(Dim_Media_Mix_Channel)：清除外部行筛选上下文，
+    //    否则在矩阵渲染时 Dim_Media_Mix_Channel 已被行上下文筛选，
+    //    导致 SUMMARY 行只能看到自己，无法展开为多个 DETAIL。
+    //
     VAR __ScopedSummary = "|" & __SummaryScope & "|"
     VAR __Labels =
         SELECTCOLUMNS(
             FILTER(
-                ALL(Dim_Media_Mix_Channel), // ⭐ 关键修复 1：添加 ALL 清除外部行筛选上下文
+                ALL(Dim_Media_Mix_Channel),
+                // 只取 DETAIL 行（SUMMARY 行的聚合结果就是这些 DETAIL 的合集）
                 Dim_Media_Mix_Channel[Channel_Type] = "DETAIL"
+                    // 同平台内操作（TM 的 Total 只聚合 TM 的 DETAIL，不会跨到 JD）
                     && Dim_Media_Mix_Channel[Platform] = __RowPlatform
+                    // ⚠️ 边界保护：用 | 包裹后精确匹配，防止子串误命中
+                    // 例如 Channel_ID="TM_Z" 不应命中 Summary_Scope="TM_ZTC|TM_YLMF"
+                    // 加了 | 包裹后："|TM_ZTC|TM_YLMF|" CONTAINS "|TM_Z|" → FALSE ✓
                     && CONTAINSSTRING(
                            __ScopedSummary,
                            "|" & Dim_Media_Mix_Channel[Channel_ID] & "|"
                        )
             ),
-            "@Channel", Dim_Media_Mix_Channel[Channel]
+            // 返回 Channel（原始渠道名，与事实表 [channel] 字段值一致）
+            // ⚠️ 不能用 Channel_Label（展示标签，可能有重名/全角空格后缀），否则关联事实表失败
+            // ⚠️ 列别名必须与事实表字段名完全一致（"channel"），否则 IN 运算符会报列名不匹配
+            "channel", Dim_Media_Mix_Channel[Channel]
         )
 
-    // ── Cost%：分母 = 当前行所属上级 SUMMARY 的 cost ──
+    // ══════════════════════════════════════════════════════════════════
+    // 第二部分：Cost% 分母路由（v2.0 — 2026-07-02）
+    // ══════════════════════════════════════════════════════════════════
+    //
+    // Cost% 口径：当前行 Cost / 分母 Cost
+    //   分母根据行类型不同而不同（三路路由）：
+    //
+    //   ┌─────────────────┬───────────────────────────────────────┬────────────┐
+    //   │ 行类型           │ 分母                                   │ 示例（TM） │
+    //   ├─────────────────┼───────────────────────────────────────┼────────────┤
+    //   │ DETAIL 行        │ 所属上级 SUMMARY 的 Cost              │ 直通车/RTB Total│
+    //   │ SUMMARY 行       │ 最大汇总行 Total 的 Cost（非自身!）    │ 直通车+.../Total │
+    //   │ Total 行         │ 自身 Cost → Cost% = 100%              │ Total/Total  │
+    //   └─────────────────┴───────────────────────────────────────┴────────────┘
+    //
+    // 设计意图：
+    //   - DETAIL 行看"我在上级分组中的占比"（如直通车占 RTB Total 的百分比）
+    //   - SUMMARY 行看"我在全平台的占比"（如 RTB Total 占 Total 的百分比）
+    //     → 这就是与 v1.8 的关键差异：v1.8 的 SUMMARY 行分母=自身（恒为100%），
+    //       v2.0 改为分母=Total（显示其在全平台中的真实占比）
+    //   - Total 行自身 = 100%（基准线）
+    //
+    // 技术实现：
+    //   分母 = CALCULATE(SUM(cost_amt), channel IN __CostDenominatorLabels, ...)
+    //   所以核心是构造 __CostDenominatorLabels（一组 DETAIL 渠道名列表），
+    //   不同行类型指向不同的 DETAIL 集合 → 聚合出不同的分母 Cost 值。
+    //
+
+    // ── 2.1 读取当前行类型和父级信息 ──
+    //
+    // __ChannelType: 当前行是 "DETAIL" 还是 "SUMMARY"
+    //   → 决定走哪条分母路由
+    VAR __ChannelType = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Type])
+    //
+    // __ParentID: 当前行的父级 Channel_ID
+    //   来自 Dim_Media_Mix_Channel SQL 中的 Parent_Channel_ID 字段：
+    //     DETAIL 行 → 所属最近上级 SUMMARY（如 TM_ZTC → TM_RTB_TOTAL）
+    //     SUMMARY 行 → 自身 Channel_ID（如 TM_RTB_TOTAL → TM_RTB_TOTAL）
+    //   → 用于查找父级 SUMMARY 行的 Summary_Scope
     VAR __ParentID = SELECTEDVALUE(Dim_Media_Mix_Channel[Parent_Channel_ID])
+
+    // ── 2.2 构造 DETAIL 行分母：__ParentLabels ──
+    //
+    // 目标：获取"当前行所属上级 SUMMARY"对应的全部 DETAIL Channel 名称
+    //
+    // 链路：
+    //   __ParentID（如 "TM_RTB_TOTAL"）
+    //     → 查 Dim_Media_Mix_Channel 找到该 Channel_ID 的 Summary_Scope
+    //       （如 "TM_ZTC|TM_YLMF|TM_QZT|TM_DSP"）
+    //         → 展开为 DETAIL Channel 名称列表 {"直通车","引力魔方","全站推/万象台","超级短视频"}
+    //           → 聚合这些 Channel 的 cost → 上级 SUMMARY 的 Cost 值
+    //
+    // 示例（TM 平台）：
+    //   矩阵行 = "直通车"（DETAIL）
+    //     → __ParentID = "TM_RTB_TOTAL"
+    //     → __ParentScope = "TM_ZTC|TM_YLMF|TM_QZT|TM_DSP"
+    //     → __ParentLabels = {"直通车","引力魔方","全站推/万象台","超级短视频"}
+    //     → Cost% = 直通车 Cost / (直通车+引力魔方+全站推+超级短视频) Cost
+    //
+    //   矩阵行 = "品销宝 Total"（SUMMARY）
+    //     → __ParentID = "TM_JCGP_TOTAL"
+    //     → __ParentScope = "TM_PPZQ|TM_PPTX"
+    //     → __ParentLabels = {"品牌专区","品牌特秀"}
+    //     → Cost% = 品销宝 Cost / (品牌专区+品牌特秀) Cost
+    //
     VAR __ParentScope =
         CALCULATE(
             SELECTEDVALUE(Dim_Media_Mix_Channel[Summary_Scope]),
             FILTER(
                 ALL(Dim_Media_Mix_Channel),
-                // 这个过滤条件只会命中上面表格中的最后一行（即 RTB Total 这一行本身）。 它绝对不会命中前四行（快车、触点等），
-                // 因为前四行的 Channel_ID 分别是 JD_快车、JD_触点 等，它们 不等于 "JD_RTB Total"！
+                // 在维度表中查找 ParentID 对应行的 Summary_Scope
+                // ⚠️ 必须用 ALL 清除行上下文，否则只能看到当前行的 Summary_Scope
                 Dim_Media_Mix_Channel[Channel_ID] = __ParentID
                     && Dim_Media_Mix_Channel[Platform] = __RowPlatform
             )
         )
-    VAR __ScopedParent = "|" & __ParentScope & "|"
+    VAR __ScopedParent = "|" & __ParentScope & "|"  // | 包裹，防止子串误匹配
     VAR __ParentLabels =
         SELECTCOLUMNS(
             FILTER(
-                ALL(Dim_Media_Mix_Channel), // ⭐ 关键修复 2：添加 ALL 清除外部行筛选上下文
+                ALL(Dim_Media_Mix_Channel),
+                // 只取 DETAIL 行（与 __Labels 同理，SUMMARY 聚合的是底层 DETAIL）
                 Dim_Media_Mix_Channel[Channel_Type] = "DETAIL"
                     && Dim_Media_Mix_Channel[Platform] = __RowPlatform
                     && CONTAINSSTRING(
@@ -470,9 +514,91 @@ Media Mix Base Value =
                            "|" & Dim_Media_Mix_Channel[Channel_ID] & "|"
                        )
             ),
-            "@Channel", Dim_Media_Mix_Channel[Channel]
+            // ⚠️ 列别名必须与事实表字段名完全一致（"channel"），否则 IN 运算符会报列名不匹配
+            "channel", Dim_Media_Mix_Channel[Channel]
         )
 
+    // ── 2.3 构造 SUMMARY/Total 行分母：__GrandTotalLabels ──
+    //
+    // 目标：获取"当前平台最大汇总行 Total"对应的全部 DETAIL Channel 名称
+    //
+    // 为什么需要独立构造（不复用 __Labels）？
+    //   - __Labels 是"当前行自身"的聚合范围（如 RTB Total → 4个 DETAIL）
+    //   - __GrandTotalLabels 是"全平台 Total"的聚合范围（如 TM Total → 全部 6 个 DETAIL）
+    //   - 两者在 RTB Total / 品销宝 Total / JCGP Total 等中间 SUMMARY 行上不同！
+    //
+    // 定位方式：
+    //   约定 Channel_ID = "{Platform}_Total"（如 "TM_Total"、"JD_Total"）
+    //   在 Dim_Media_Mix_Channel 中查找该行的 Summary_Scope → 得到全平台 DETAIL 列表
+    //
+    // 示例（TM 平台）：
+    //   矩阵行 = "RTB Total"（SUMMARY）
+    //     → __GrandTotalScope = "TM_ZTC|TM_YLMF|TM_QZT|TM_DSP|TM_PPZQ|TM_PPTX"（全部 6 个 DETAIL）
+    //     → __GrandTotalLabels = {"直通车","引力魔方","全站推/万象台","超级短视频","品牌专区","品牌特秀"}
+    //     → Cost% = RTB Total Cost / Total Cost（RTB 在全平台的真实占比）
+    //
+    //   矩阵行 = "Total"（SUMMARY / 最大汇总行）
+    //     → __GrandTotalScope = 同上（Total 自身的 Summary_Scope）
+    //     → __GrandTotalLabels = __Labels（Total 的聚合范围 = 全平台 DETAIL = Grand Total DETAIL）
+    //     → Cost% = Total Cost / Total Cost = 100% ✓
+    //
+    VAR __GrandTotalScope =
+        CALCULATE(
+            SELECTEDVALUE(Dim_Media_Mix_Channel[Summary_Scope]),
+            FILTER(
+                ALL(Dim_Media_Mix_Channel),
+                // 约定：Channel_ID = "{Platform}_Total" 是全平台最大汇总行
+                // ⚠️ 如果 SQL 中 Channel_ID 命名规则变了，这里也要同步改
+                Dim_Media_Mix_Channel[Channel_ID] = __RowPlatform & "_Total"
+                    && Dim_Media_Mix_Channel[Platform] = __RowPlatform
+            )
+        )
+    VAR __ScopedGrandTotal = "|" & __GrandTotalScope & "|"
+    VAR __GrandTotalLabels =
+        SELECTCOLUMNS(
+            FILTER(
+                ALL(Dim_Media_Mix_Channel),
+                Dim_Media_Mix_Channel[Channel_Type] = "DETAIL"
+                    && Dim_Media_Mix_Channel[Platform] = __RowPlatform
+                    && CONTAINSSTRING(
+                           __ScopedGrandTotal,
+                           "|" & Dim_Media_Mix_Channel[Channel_ID] & "|"
+                       )
+            ),
+            // ⚠️ 列别名必须与事实表字段名完全一致（"channel"），否则 IN 运算符会报列名不匹配
+            "channel", Dim_Media_Mix_Channel[Channel]
+        )
+
+    // ── 2.4 最终路由：按行类型选择分母聚合（修复 v2.0.1）──
+    //
+    // ⚠️ 关键修复：DAX 的 IF/SWITCH 只能返回标量值（数字、文本等），
+    //    不能返回表。如果写成 VAR x = IF(..., __ParentLabels, __GrandTotalLabels)，
+    //    IF 只会提取表的第一行第一列作为字符串，导致后续 channel IN __x 报错。
+    //
+    // 正确做法：把 IF 判断移到 CALCULATE 外面，让 IF 决定执行哪个 CALCULATE 分支。
+    // 两个分支的 CALCULATE 结构完全相同，仅 channel IN 后面的表变量不同：
+    //   - DETAIL 行：IN __ParentLabels（所属上级 SUMMARY 的 DETAIL 集合）
+    //   - SUMMARY 行（含 Total）：IN __GrandTotalLabels（全平台 Total 的 DETAIL 集合）
+    //
+    // ⚠️ Total 行也是 SUMMARY 类型（Channel_Type="SUMMARY"），
+    //    走 __GrandTotalLabels 分支 → 恰好等于自身的 __Labels → Cost% = 100%（正确）
+    //
+    VAR __TotalCost =
+        IF(
+            __ChannelType = "DETAIL",
+            CALCULATE(
+                SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+                a05_e2e_paid_media_channel_data_d[channel] IN __ParentLabels,
+                a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
+                a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+            ),
+            CALCULATE(
+                SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+                a05_e2e_paid_media_channel_data_d[channel] IN __GrandTotalLabels,
+                a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
+                a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+            )
+        )
     // ────────────────────────────────────────────────
     // 13 个指标的统一聚合（无 ALL，列级条件，日期通过关系传递）
     // ────────────────────────────────────────────────
@@ -483,105 +609,156 @@ Media Mix Base Value =
             a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
             a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
         )
-        
-    VAR __TotalCost =
+
+    VAR __CostPct = DIVIDE(__Cost, __TotalCost)
+
+    // ── ID 4: Impression — 展现量 ──
+    VAR __Impression =
         CALCULATE(
-            SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
-            a05_e2e_paid_media_channel_data_d[channel] IN __ParentLabels,
+            SUM(a05_e2e_paid_media_channel_data_d[pv]),
+            a05_e2e_paid_media_channel_data_d[channel] IN __Labels,
             a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
             a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
         )
-        
-    VAR __CostPct = DIVIDE(__Cost, __TotalCost)
-    
+
+    // ── ID 5: Click — 点击量 ──
+    VAR __Click =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_channel_data_d[click]),
+            a05_e2e_paid_media_channel_data_d[channel] IN __Labels,
+            a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
+            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+        )
+
+    // ── ID 6: Add to Cart — 加购数 ──
+    VAR __AddToCart =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_channel_data_d[add_cart_cnt]),
+            a05_e2e_paid_media_channel_data_d[channel] IN __Labels,
+            a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
+            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+        )
+
+    // ── ID 7: Orders — 成交订单数 ──
+    VAR __Orders =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_channel_data_d[media_sales_order_cnt]),
+            a05_e2e_paid_media_channel_data_d[channel] IN __Labels,
+            a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
+            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+        )
+
+    // ── ID 8: GMV — 成交金额 ──
+    VAR __GMV =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_channel_data_d[media_sales_amt]),
+            a05_e2e_paid_media_channel_data_d[channel] IN __Labels,
+            a05_e2e_paid_media_channel_data_d[platform]    = __RowPlatform,
+            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+        )
+
+    // ── ID 3: ROI — 成交金额 / 花费 ──
+    VAR __ROI = DIVIDE(__GMV, __Cost)
+
+    // ── ID 9: CTR — 点击率 = Click / Impression ──
+    VAR __CTR = DIVIDE(__Click, __Impression)
+
+    // ── ID 10: CPC — 平均点击花费 = Cost / Click ──
+    VAR __CPC = DIVIDE(__Cost, __Click)
+
+    // ── ID 11: CPATC — 加购成本 = Cost / Add to Cart ──
+    VAR __CPATC = DIVIDE(__Cost, __AddToCart)
+
+    // ── ID 12: CVR — 点击转化率 = Orders / Click ──
+    VAR __CVR = DIVIDE(__Orders, __Click)
+
+    // ── ID 13: AOV — 客单价 = GMV / Orders ──
+    VAR __AOV = DIVIDE(__GMV, __Orders)
+
     RETURN
     SWITCH(
         __MetricID,
 
         // ═══════════════════════════════════════════════════════
-        // ID 1: Cost — 花费金额（已有口径）
-        // 口径: SUM(a05_e2e_paid_media_channel_data_d[cost_amt])
-        //       channel IN __Labels（DETAIL=单元素 / SUMMARY=多元素），
-        //       platform = __RowPlatform，trans_cycle = __TransCycle
-        //       data_date 通过 Dim_Date_Current 关系自然传递（不在此处显式筛选）
+        // ID 1: Cost — 花费金额
+        // 口径: SUM(cost_amt)，按 channel + platform + trans_cycle 过滤
         // ═══════════════════════════════════════════════════════
         1, __Cost,
 
         // ═══════════════════════════════════════════════════════
-        // ID 2: Cost% — 花费占所属上级 SUMMARY 花费的百分比（已有口径）
-        // 口径: __Cost / __TotalCost
-        //       __TotalCost = Parent_Channel_ID 对应 SUMMARY 行的 cost 聚合值
-        //       DETAIL 行分母 = 所属上级 SUMMARY 的 cost（如 直通车/RTB Total）
-        //       SUMMARY 行分母 = 自身 cost（Parent 自指 → Cost% = 100%）
-        //       示例：直通车 Cost% = 直通车 cost / RTB Total cost
+        // ID 2: Cost% — 花费占比
+        // 口径: Cost / 分母
+        //   DETAIL 行分母 = 所属上级 SUMMARY 的 cost（如 直通车/RTB Total）
+        //   SUMMARY 行分母 = 最大汇总行 Total 的 cost（始终为全局汇总）
+        //   Total 行 Cost% = 100%（分母 = 自身）
         // ═══════════════════════════════════════════════════════
         2, __CostPct,
 
         // ═══════════════════════════════════════════════════════
-        // ID 3: ROI — 媒体投资回报率（暂无口径）
-        // 待填充口径: media_sales_amt / adj_cost_amt（来源待确认）
+        // ID 3: ROI — 媒体 ROI
+        // 口径: media_sales_amt / cost_amt = GMV / Cost
         // ═══════════════════════════════════════════════════════
-        3, 1,
+        3, __ROI,
 
         // ═══════════════════════════════════════════════════════
-        // ID 4: Impression — 展现量（暂无口径）
-        // 待填充口径: SUM(a05_e2e_paid_media_channel_data_d[pv])
+        // ID 4: Impression — 展现量
+        // 口径: SUM(pv)
         // ═══════════════════════════════════════════════════════
-        4, 1,
+        4, __Impression,
 
         // ═══════════════════════════════════════════════════════
-        // ID 5: Click — 点击量（暂无口径）
-        // 待填充口径: SUM(a05_e2e_paid_media_channel_data_d[click])
+        // ID 5: Click — 点击量
+        // 口径: SUM(click)
         // ═══════════════════════════════════════════════════════
-        5, 1,
+        5, __Click,
 
         // ═══════════════════════════════════════════════════════
-        // ID 6: Add to Cart — 加购量（暂无口径）
-        // 待填充口径: SUM(a05_e2e_paid_media_channel_data_d[add_cart_cnt])
+        // ID 6: Add to Cart — 加购数
+        // 口径: SUM(add_cart_cnt)
         // ═══════════════════════════════════════════════════════
-        6, 1,
+        6, __AddToCart,
 
         // ═══════════════════════════════════════════════════════
-        // ID 7: Orders — 成交笔数（暂无口径）
-        // 待填充口径: SUM(a05_e2e_paid_media_channel_data_d[sales_order_cnt])
+        // ID 7: Orders — 成交订单数
+        // 口径: SUM(media_sales_order_cnt)
         // ═══════════════════════════════════════════════════════
-        7, 1,
+        7, __Orders,
 
         // ═══════════════════════════════════════════════════════
-        // ID 8: GMV — 总成交金额（暂无口径）
-        // 待填充口径: SUM(a05_e2e_paid_media_channel_data_d[sales_amt])
+        // ID 8: GMV — 成交金额
+        // 口径: SUM(media_sales_amt)
         // ═══════════════════════════════════════════════════════
-        8, 1,
+        8, __GMV,
 
         // ═══════════════════════════════════════════════════════
-        // ID 9: CTR — 点击率（暂无口径）
-        // 待填充口径: DIVIDE(SUM([click]), SUM([pv]))
+        // ID 9: CTR — 点击率
+        // 口径: Click / Impression = DIVIDE(__Click, __Impression)
         // ═══════════════════════════════════════════════════════
-        9, 1,
+        9, __CTR,
 
         // ═══════════════════════════════════════════════════════
-        // ID 10: CPC — 单次点击成本（暂无口径）
-        // 待填充口径: DIVIDE(SUM([cost_amt]), SUM([click]))
+        // ID 10: CPC — 平均点击花费
+        // 口径: Cost / Click = DIVIDE(__Cost, __Click)
         // ═══════════════════════════════════════════════════════
-        10, 1,
+        10, __CPC,
 
         // ═══════════════════════════════════════════════════════
-        // ID 11: CPATC — 加购成本（暂无口径）
-        // 待填充口径: DIVIDE(SUM([cost_amt]), SUM([add_cart_cnt]))
+        // ID 11: CPATC — 加购成本
+        // 口径: Cost / Add to Cart = DIVIDE(__Cost, __AddToCart)
         // ═══════════════════════════════════════════════════════
-        11, 1,
+        11, __CPATC,
 
         // ═══════════════════════════════════════════════════════
-        // ID 12: CVR — 成交转化率（暂无口径）
-        // 待填充口径: DIVIDE(SUM([sales_order_cnt]), SUM([click]))
+        // ID 12: CVR — 点击转化率
+        // 口径: Orders / Click = DIVIDE(__Orders, __Click)
         // ═══════════════════════════════════════════════════════
-        12, 1,
+        12, __CVR,
 
         // ═══════════════════════════════════════════════════════
-        // ID 13: AOV — 客单价（暂无口径）
-        // 待填充口径: DIVIDE(SUM([sales_amt]), SUM([sales_order_cnt]))
+        // ID 13: AOV — 客单价
+        // 口径: GMV / Orders = DIVIDE(__GMV, __Orders)
         // ═══════════════════════════════════════════════════════
-        13, 1,
+        13, __AOV,
 
         // ─── 默认 ──────────────────────────────────────────────
         BLANK()
@@ -734,6 +911,8 @@ Media Mix Cell Display =
                     FORMAT(__Value, "0.0%"),
                 "delta_pct_1dp",
                     IF(__Value > 0, "+", "") & FORMAT(__Value, "0.0%"),
+                "currency_decimal_1dp",
+                    __CurrencySymbol & FORMAT(__Value, "#,##0.0"),
                 "currency_k",
                     __CurrencySymbol & FORMAT(__Value / 1000, "#,##0") & "k",
                 "percent_2dp",
@@ -754,40 +933,58 @@ Media Mix Cell Font Color =
 // ========================================
 // 度量值: Media Mix Cell Font Color
 // Display Folder: Media Mix > Formatting
-// 用途: 根据行类型和值的正负，返回字体颜色
-//       仅 YOY 行启用条件颜色（正/负/零）
-//       This Year 和 Last Year 行统一使用 Metric_ColorDefault（#5f6165 深灰色）
+// 用途: 根据行类型、指标列、YOY 值返回字体颜色
+//
+// 颜色规则（v2.0 — 2026-07-02）：
+//   1. This Year / Last Year 行：
+//      SUMMARY → "#000000"（纯黑），DETAIL → "#5f6165"（灰色）
+//   2. YOY 行：
+//      a) Cost / Cost% / ROI 三列（ID 1~3）启用阈值着色：
+//         - YOY ≥ +10% → "#1A9018"（绿色，显著增长）
+//         - YOY ≤ −10% → "#D64550"（红色，显著下降）
+//         - −10% < YOY < +10% → 走默认行颜色（SUMMARY 黑 / DETAIL 灰）
+//      b) 其他列：同规则 1（SUMMARY 黑 / DETAIL 灰）
+//   3. 兜底默认色："#5f6165"
+//
 // 依赖: [Media Mix Cell Value],
 //       DIM_RowKPIs_Media_Mix[Indicator Type],
-//       DIM_ColMetric_Media_Mix[Metric_Color*]
+//       DIM_ColMetric_Media_Mix[Metric_ID],
+//       Dim_Media_Mix_Channel[Channel_Type]
 // ========================================
-// ── 1. 获取当前上下文 ──
-VAR __Indicator   = SELECTEDVALUE(DIM_RowKPIs_Media_Mix[Indicator Type]) // 行维度指标（This Year / Last Year / YOY）
-VAR __ChannelType = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Type]) // 渠道类型（DETAIL / SUMMARY）
-VAR __CellValue   = [Media Mix Cell Value] // 当前单元格的数值
-VAR __IsSummary   = (__ChannelType = "SUMMARY") // 判断是否为汇总行
 
-// ── 2. YOY 且为 DETAIL 行时的颜色逻辑（正绿、负红、零黄） ──
-VAR __YOY_Detail_Color = 
+// ── 1. 获取当前上下文 ──
+VAR __Indicator   = SELECTEDVALUE(DIM_RowKPIs_Media_Mix[Indicator Type])  // This Year / Last Year / YOY
+VAR __ChannelType = SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_Type])    // DETAIL / SUMMARY
+VAR __CellValue   = [Media Mix Cell Value]                                 // 当前单元格数值（YOY 行时即 YOY 变化率）
+VAR __MetricID    = SELECTEDVALUE(DIM_ColMetric_Media_Mix[Metric_ID])     // 指标列 ID（1~13）
+VAR __IsSummary   = (__ChannelType = "SUMMARY")
+
+// ── 2. 默认行颜色（非阈值着色场景使用）──
+//    SUMMARY → 纯黑，DETAIL → 灰色
+VAR __DefaultColor = IF(__IsSummary, "#000000", "#5f6165")
+
+// ── 3. YOY 阈值着色（仅 Cost / Cost% / ROI 三列启用）──
+//    阈值：+10% / -10%
+//    __CellValue 在 YOY 行 = YOY 变化率（如 0.145 表示 +14.5%）
+VAR __YOY_Threshold_Color =
     SWITCH(
         TRUE(),
-        ISBLANK(__CellValue), "#5f6165", // 空值保持默认灰色
-        __CellValue > 0, "#1A9018",      // 正值：绿色
-        __CellValue < 0, "#D64550",      // 负值：红色
-        __CellValue = 0, "#E1C233",      // 零值：黄色
-        "#5f6165"                        // 兜底默认色
+        ISBLANK(__CellValue), __DefaultColor,   // 空值 → 走默认行颜色
+        __CellValue >= 0.10,  "#1A9018",        // YOY ≥ +10% → 绿色（显著增长）
+        __CellValue <= -0.10, "#D64550",        // YOY ≤ -10% → 红色（显著下降）
+        __DefaultColor                           // -10% < YOY < +10% → 走默认行颜色
     )
 
-// ── 3. 最终路由返回 ──
+// ── 4. 最终路由 ──
 RETURN
-    IF(
-        __IsSummary, 
-        "#000000",  // ⭐ 优先级最高：只要是 SUMMARY 行（无论 YOY 还是非 YOY），统一为纯黑色
-        IF(
-            __Indicator = "YOY",
-            __YOY_Detail_Color, // DETAIL 行 + YOY：走红绿黄条件格式
-            "#5f6165"           // DETAIL 行 + 非 YOY (This Year/Last Year)：默认灰色
-        )
+    SWITCH(
+        TRUE(),
+        // This Year / Last Year → 默认行颜色（SUMMARY 黑 / DETAIL 灰）
+        __Indicator <> "YOY", __DefaultColor,
+        // YOY + Cost/Cost%/ROI（ID 1~3）→ 阈值着色
+        __MetricID >= 1 && __MetricID <= 3, __YOY_Threshold_Color,
+        // YOY + 其他列 → 默认行颜色（SUMMARY 黑 / DETAIL 灰）
+        __DefaultColor
     )
 
 
@@ -963,21 +1160,21 @@ _Measures
 8. 指标口径说明
 ================================================================================
 
-| # | 指标名     | 状态   | 口径说明                                                    |
-|---|-----------|--------|-------------------------------------------------------------|
-| 1 | Cost      | 有口径 | SUM(a05_e2e_paid_media_channel_data_d[cost_amt])，按 channel+platform+trans_cycle 过滤 |
-| 2 | Cost%     | 有口径 | 当前行 cost_amt / 当前平台所有 DETAIL channel cost_amt 之和 |
-| 3 | ROI       | 占位=1 | 待确认：media_sales_amt / adj_cost_amt（来源待定） |
-| 4 | Impression| 占位=1 | 待填充：SUM(pv) |
-| 5 | Click     | 占位=1 | 待填充：SUM(click) |
-| 6 | Add to Cart| 占位=1 | 待填充：SUM(add_cart_cnt) |
-| 7 | Orders    | 占位=1 | 待填充：SUM(sales_order_cnt) |
-| 8 | GMV       | 占位=1 | 待填充：SUM(sales_amt) |
-| 9 | CTR       | 占位=1 | 待填充：DIVIDE(SUM(click), SUM(pv)) |
-|10 | CPC       | 占位=1 | 待填充：DIVIDE(SUM(cost_amt), SUM(click)) |
-|11 | CPATC     | 占位=1 | 待填充：DIVIDE(SUM(cost_amt), SUM(add_cart_cnt)) |
-|12 | CVR       | 占位=1 | 待填充：DIVIDE(SUM(sales_order_cnt), SUM(click)) |
-|13 | AOV       | 占位=1 | 待填充：DIVIDE(SUM(sales_amt), SUM(sales_order_cnt)) |
+| # | 指标名     | 状态   | 口径说明                                                                                         |
+|---|-----------|--------|-------------------------------------------------------------------------------------------------|
+| 1 | Cost      | 有口径 | SUM(cost_amt)，按 channel+platform+trans_cycle 过滤                                              |
+| 2 | Cost%     | 有口径 | DETAIL 行: Cost / 所属上级 SUMMARY 的 Cost；SUMMARY 行: Cost / 最大汇总行 Total 的 Cost；Total: 100% |
+| 3 | ROI       | 有口径 | media_sales_amt / cost_amt = GMV / Cost                                                          |
+| 4 | Impression| 有口径 | SUM(pv)                                                                                          |
+| 5 | Click     | 有口径 | SUM(click)                                                                                       |
+| 6 | Add to Cart| 有口径 | SUM(add_cart_cnt)                                                                                |
+| 7 | Orders    | 有口径 | SUM(media_sales_order_cnt)                                                                       |
+| 8 | GMV       | 有口径 | SUM(media_sales_amt)                                                                             |
+| 9 | CTR       | 有口径 | Click / Impression = DIVIDE(SUM(click), SUM(pv))                                                 |
+|10 | CPC       | 有口径 | Cost / Click = DIVIDE(SUM(cost_amt), SUM(click))，格式: currency_decimal_1dp                      |
+|11 | CPATC     | 有口径 | Cost / Add to Cart = DIVIDE(SUM(cost_amt), SUM(add_cart_cnt))，格式: currency_decimal_1dp         |
+|12 | CVR       | 有口径 | Orders / Click = DIVIDE(SUM(media_sales_order_cnt), SUM(click))                                   |
+|13 | AOV       | 有口径 | GMV / Orders = DIVIDE(SUM(media_sales_amt), SUM(media_sales_order_cnt))，格式: currency_decimal_1dp |
 
 YOY 颜色方向说明：
 - 所有指标统一规则：正值（>0）= #1A9018 绿色，负值（<0）= #D64550 红色，零值 = #E1C233 黄色
