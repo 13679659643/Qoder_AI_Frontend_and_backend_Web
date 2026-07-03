@@ -583,6 +583,42 @@
 
 ---
 
+## [2026-07-03 15:00] 修改 — Category Growth 品类增长矩阵方案 v2（口径文档对齐 + 7 个占位指标填充 + 字段名修正 + 格式修正）
+
+- **模块**: Category Growth
+- **任务**: 根据《口径文档 Category_Growth.md》全面更新 Category_Growth_matrix_solution — 字段名修正 + 7 个占位指标填充真实口径 + 格式字符串统一
+- **操作**: 修改
+- **变更内容**:
+  - **字段名修正**：
+    - `promotion_cost_amt` → `cost_amt`（所有 Cost 相关度量值：Cost / Cost VS LP / Cost% / Cost% VS LP）
+    - `season` → `mix_msg`（所有 ISINSCOPE/REMOVEFILTERS 引用，包括 11 个核心度量值 + 2 个辅助度量值）
+  - **7 个占位指标填充真实口径**：
+    - `Category Growth EOH(OMS)%`：stock_qty / TTL stock_qty（REMOVEFILTERS 5 维度），类型=比率类
+    - `Category Growth Active IDs`：SUM(living_sku_cnt) + 层级过滤（按 ISINSCOPE 过滤其他维度为 ALL），类型=计数类
+    - `Category Growth Active IDs VS LP`：本期/同期 - 1 + 层级过滤，类型=同比增长率
+    - `Category Growth Net Sales%`：net_sales_amt / TTL net_sales_amt（REMOVEFILTERS 5 维度），类型=比率类；net_sales_amt 无特殊处理，全局筛选条件下直接 SUM
+    - `Category Growth SLS% VS LP`：本期 Net Sales% / 同期 Net Sales% - 1，类型=同比增长率
+    - `Category Growth ROI`：media_sales_amt / cost_amt，类型=比率类
+    - `Category Growth ROI VS LP`：本期 ROI / 同期 ROI - 1，类型=同比增长率
+  - **格式字符串统一按口径文档修正**：
+    - 百分比类（EOH(OMS)% / Active IDs VS LP / Net Sales% / SLS% VS LP / Cost VS LP / Cost% / Cost% VS LP / ROI VS LP）：`#,##0.0%;#,##0.0%;0.0%`
+    - 货币类（Cost）：`#,##0`（拼接币种符号 `__CurrencySymbol & FORMAT(__Value, "#,##0")`）
+    - 小数类（ROI）：`#,##0.0;-#,##0.0;0.0`
+    - 整数类（Active IDs）：`#,##0;(#,##0);0`
+  - **全局筛选规则**：第1~4层（framework/brand/category/channel）mix_msg IS NULL；第5层（mix_msg 明细）mix_msg IS NOT NULL
+  - **Active IDs 层级过滤**：按当前 ISINSCOPE 层级，过滤其他维度为 ALL（BLANK），保留当前层级维度
+  - **口径文档勘误记录**：口径文档中 net_sales_amt "不可直接 sum，需先按商品属性取 max 后再求和"为文档错误，实际直接 SUM
+  - **口径文档勘误记录**：口径文档中底表写为 `a05_e2e_paid_media_product_data`，实际为 `a05_e2e_paid_media_product_data_d`
+- **关联文件**: `Category Growth/Category_Growth_matrix_solution`, `口径文档/Category_Growth.md`
+- **备注**:
+  - 度量值总数不变：11 核心 + 11 Display + 2 辅助 = 24 个
+  - 11 个核心指标全部有真实口径（v1 仅 4 个有口径，7 个占位=1）
+  - 架构（Table 视觉对象 + 5 级行维度 + 独立度量值）保持不变
+  - 先完成模块一（Framework × Brand × Category × Channel × Mix_msg），模块二（Super Season）待后续开发
+
+
+---
+
 ## [2026-06-23 16:30] 新建 — Category Growth 品类增长矩阵方案 v1（表结构 + 24 度量值）
 
 - **模块**: Category Growth

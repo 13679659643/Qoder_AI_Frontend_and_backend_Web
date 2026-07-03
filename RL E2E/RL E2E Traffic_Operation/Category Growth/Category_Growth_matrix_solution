@@ -1,32 +1,37 @@
 Category_Growth_matrix_solution 解决方案：
 
-> status: created
+> status: updated
 > created: 2026-06-23
-> updated: 2026-06-23
+> updated: 2026-07-03
 > complexity: 🟡中等
 > type: 度量值开发
 > naming: 遵循 dax-style.md 规范
+> 口径来源: Category_Growth.md（最新口径，2026-07-03 同步）
 
 ================================================================================
 度量值清单（11 核心 + 11 Display + 2 辅助 = 24 个）
 ================================================================================
 
 事实表：a05_e2e_paid_media_product_data_d（产品粒度）
-行维度（5 级，直接来自事实表字段）：framework → brand → category → channel → season
+行维度（5 级，直接来自事实表字段）：framework → brand → category → channel → mix_msg
 切片器：Slicer_Platform_Selection（单选含 ALL）/ Slicer_DataCaliber_Selection（单选）/ Slicer_Currency_Selection（单选）
 
+全局筛选规则（所有度量值必须遵守）：
+  - 第1~4层级（framework / brand / category / channel）：筛选 mix_msg IS NULL
+  - 第5层级（mix_msg 明细）：筛选 mix_msg IS NOT NULL
+
 指标顺序（页面展示顺序）：
-  1  EOH(OMS)%          — 占位=1（比率类）
-  2  Active IDs         — 占位=1（计数类）
-  3  Active IDs VS LP   — 占位=1（同比增长率）
-  4  Net Sales%         — 占位=1（比率类）
-  5  SLS% VS LP         — 占位=1（同比增长率）
-  6  Cost               — SUM(promotion_cost_amt) × ExchangeRate（金额类）
-  7  Cost VS LP         — Cost 同比增长率
-  8  Cost%              — DIVIDE(当前行 promotion_cost_amt, 总计 promotion_cost_amt)（比率类）
-  9  Cost% VS LP        — Cost% 同比增长率
-  10 ROI                — 占位=1（比率类）
-  11 ROI VS LP          — 占位=1（同比增长率）
+  1  EOH(OMS)%          — 占位=1（比率类）→ 已补齐口径
+  2  Active IDs         — 占位=1（计数类）→ 已补齐口径
+  3  Active IDs VS LP   — 占位=1（同比增长率）→ 已补齐口径
+  4  Net Sales%         — 占位=1（比率类）→ 已补齐口径
+  5  SLS% VS LP         — 占位=1（同比增长率）→ 已补齐口径
+  6  Cost               — SUM(cost_amt) × ExchangeRate → 已按最新口径修正字段
+  7  Cost VS LP         — Cost 同比增长率 → 已按最新口径修正字段
+  8  Cost%              — DIVIDE(当前行 cost_amt, 总计 cost_amt) → 已按最新口径修正字段
+  9  Cost% VS LP        — Cost% 同比增长率 → 已按最新口径修正字段
+  10 ROI                — DIVIDE(media_sales_amt, cost_amt) → 已补齐口径
+  11 ROI VS LP          — ROI 同比增长率 → 已补齐口径
 
 ================================================================================
 一、核心度量值（11 个，按页面展示顺序）
@@ -36,16 +41,89 @@ Category_Growth_matrix_solution 解决方案：
 1.1 Category Growth EOH(OMS)%
 --------------------------------------------------------------------------------
 
-Category Growth EOH(OMS)% =
+Category Growth EOH(OMS)% = 
 // ========================================
 // 度量值: Category Growth EOH(OMS)%
-// 中文名: EOH(OMS) 占比
+// 中文名: 库存%
 // Display Folder: Category Growth
-// 用途: EOH(OMS) 占比指标
-// 口径: 待确认，当前返回占位值 1
+// 用途: 库存占比指标
+// 口径: 该分组 stock_qty / 总 stock_qty
+//       分子 = 当前分组 SUM(stock_qty)
+//       分母 = 全店 SUM(stock_qty)（移除全部 5 个行维度）
 // 类型: 比率类，不乘汇率
+// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据底表: a05_e2e_paid_media_product_data_d
+// 筛选: 全局筛选（mix_msg IS NULL / IS NOT NULL）
+//       Platform（单选含 ALL，ALL → platform IN {"TM","JD"}）
+//       trans_cycle（单选，数据口径）
 // ========================================
-    1
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    // ── 1. 平台筛选 ──
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[platform]),
+            // 如果 __ChannelID = "ALL"，返回 IN {"TM", "JD"}，否则返回 = __ChannelID
+            IF(
+                __ChannelID = "ALL",
+                a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_product_data_d[platform] = __ChannelID
+            )
+        )
+
+    // ── 2. 层级判断 ──
+    VAR __IsFramework = ISINSCOPE(a05_e2e_paid_media_product_data_d[framework])
+    VAR __IsBrand     = ISINSCOPE(a05_e2e_paid_media_product_data_d[brand])
+    VAR __IsCategory  = ISINSCOPE(a05_e2e_paid_media_product_data_d[category])
+    VAR __IsChannel   = ISINSCOPE(a05_e2e_paid_media_product_data_d[channel])
+    VAR __IsMixMsg    = ISINSCOPE(a05_e2e_paid_media_product_data_d[mix_msg])
+
+    // ── 3. 层级过滤 (转为显式的 FILTER 表) ──
+    // 明确告诉引擎：这是一个针对 mix_msg 列的筛选表
+    VAR __LevelFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[mix_msg]),
+            SWITCH(
+                TRUE(),
+                __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg] <> BLANK(),
+                a05_e2e_paid_media_product_data_d[mix_msg] = BLANK()
+            )
+        )
+        
+    // ── 4. 周期筛选 (显式声明，覆盖该列原有上下文) ──
+    VAR __TransCycleFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[trans_cycle]),
+            a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+        )
+
+    // ── 5. 分子计算：当前分组 stock_qty ──
+    VAR __Numerator =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_product_data_d[stock_qty]),
+            __PlatformFilter,   // 交集 1：限定平台
+            __TransCycleFilter, // 交集 2：限定周期
+            __LevelFilter       // 交集 3：限定层级与 mix_msg 状态
+        )
+
+
+    // ── 分母：全店 stock_qty（移除全部 5 个行维度）──
+    VAR __Denominator =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_product_data_d[stock_qty]),
+            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[framework]),
+            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[brand]),
+            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[category]),
+            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[channel]),
+            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg]),
+            __PlatformFilter,   // 交集 1：限定平台
+            __TransCycleFilter, // 交集 2：限定周期
+            __LevelFilter       // 交集 3：限定层级与 mix_msg 状态
+        )
+
+    RETURN
+        DIVIDE(__Numerator, __Denominator)
 
 --------------------------------------------------------------------------------
 1.2 Category Growth Active IDs
@@ -54,89 +132,21 @@ Category Growth EOH(OMS)% =
 Category Growth Active IDs =
 // ========================================
 // 度量值: Category Growth Active IDs
-// 中文名: 活跃商品数
+// 中文名: 在推ID数量
 // Display Folder: Category Growth
-// 用途: 活跃商品数量
-// 口径: 待确认，当前返回占位值 1
+// 用途: 推广中SKU数，统计周期最后一天仍在推的商品ID去重计数
+// 口径: 获取当前时间周期的最大日期，然后对 living_sku_cnt 聚合 SUM
 // 类型: 计数类，不乘汇率
-// ========================================
-    1
-
---------------------------------------------------------------------------------
-1.3 Category Growth Active IDs VS LP
---------------------------------------------------------------------------------
-
-Category Growth Active IDs VS LP =
-// ========================================
-// 度量值: Category Growth Active IDs VS LP
-// 中文名: 活跃商品数同比增长率
-// Display Folder: Category Growth
-// 用途: Active IDs 同比增长率
-// 口径: 待确认，当前返回占位值 1
-// 类型: 同比增长率，不乘汇率
-// 同比机制: 本期值与同期值对比
-//   本期 = Dim_Date_Current 关系自然筛选
-//   同期 = Dim_Date_Ly 断开维度，MIN/MAX 取范围，CALCULATE 覆盖日期上下文
-//   增长率 = (本期 - 同期) / 同期
-//   边界: 同期为 0/空 → BLANK；本期为 0/空且同期有值 → -1
-// ========================================
-    1
-
---------------------------------------------------------------------------------
-1.4 Category Growth Net Sales%
---------------------------------------------------------------------------------
-
-Category Growth Net Sales% =
-// ========================================
-// 度量值: Category Growth Net Sales%
-// 中文名: 净销售额占比
-// Display Folder: Category Growth
-// 用途: 净销售额占比指标
-// 口径: 待确认，当前返回占位值 1
-// 类型: 比率类，不乘汇率
-// ========================================
-    1
-
---------------------------------------------------------------------------------
-1.5 Category Growth SLS% VS LP
---------------------------------------------------------------------------------
-
-Category Growth SLS% VS LP =
-// ========================================
-// 度量值: Category Growth SLS% VS LP
-// 中文名: 净销售额占比同比增长率
-// Display Folder: Category Growth
-// 用途: Net Sales% 同比增长率
-// 口径: 待确认，当前返回占位值 1
-// 类型: 同比增长率，不乘汇率
-// 同比机制: 本期值与同期值对比
-//   本期 = Dim_Date_Current 关系自然筛选
-//   同期 = Dim_Date_Ly 断开维度，MIN/MAX 取范围，CALCULATE 覆盖日期上下文
-//   增长率 = (本期 - 同期) / 同期
-//   边界: 同期为 0/空 → BLANK；本期为 0/空且同期有值 → -1
-// ========================================
-    1
-
---------------------------------------------------------------------------------
-1.6 Category Growth Cost
---------------------------------------------------------------------------------
-
-Category Growth Cost =
-// ========================================
-// 度量值: Category Growth Cost
-// 中文名: 推广花费
-// Display Folder: Category Growth
-// 用途: 推广花费金额
-// 口径: SUM(promotion_cost_amt) × ExchangeRate
-// 类型: 金额类，乘汇率
-// 数据字典: promotion_cost_amt = 推广花费
-// 筛选: Platform（单选含 ALL，ALL → platform IN {"TM","JD"} 精确圈定）
+// 数据格式: #,##0;(#,##0);0
+// 数据底表: a05_e2e_paid_media_product_data_d
+// 筛选: 层级过滤
+//       第5层级（mix_msg）：其他四个层级字段值为 ALL
+//       其他层级：同理，过滤其他层级字段值为 ALL
+//       Platform（单选含 ALL，ALL → platform IN {"TM","JD"}）
 //       trans_cycle（单选，数据口径）
-// 日期上下文: Dim_Date_Current 关系自然筛选
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
-    VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
     VAR __PlatformFilter =
         FILTER(
@@ -145,12 +155,355 @@ Category Growth Cost =
                 a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"},
                 a05_e2e_paid_media_product_data_d[platform] = __ChannelID)
         )
+    
+    VAR __TransCycleFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[trans_cycle]),
+            a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+        )
+
+    // ── 层级判断 ──
+    VAR __IsFramework = ISINSCOPE(a05_e2e_paid_media_product_data_d[framework])
+    VAR __IsBrand     = ISINSCOPE(a05_e2e_paid_media_product_data_d[brand])
+    VAR __IsCategory  = ISINSCOPE(a05_e2e_paid_media_product_data_d[category])
+    VAR __IsChannel   = ISINSCOPE(a05_e2e_paid_media_product_data_d[channel])
+    VAR __IsMixMsg    = ISINSCOPE(a05_e2e_paid_media_product_data_d[mix_msg])
+
+        // ── 层级过滤：严格隔离层级，防止重复汇总 ──
+    // 规则1：1~4层之间，当前层级字段有具体值(<>ALL)，其他三个层级字段必须为 "ALL"，且 mix_msg 必须为空
+    // 规则2：第5层，其他四个字段必须为 "ALL"，且 mix_msg 必须有具体值(不为空)
+    VAR __LevelFilter =
+        FILTER(
+            // 必须把所有五个层级字段放入 ALL，彻底清除外部矩阵/切片器对它们的筛选干扰
+            ALL(
+                a05_e2e_paid_media_product_data_d[mix_msg],
+                a05_e2e_paid_media_product_data_d[framework],
+                a05_e2e_paid_media_product_data_d[brand],
+                a05_e2e_paid_media_product_data_d[category],
+                a05_e2e_paid_media_product_data_d[channel]
+            ),
+            
+            // ── 核心防重逻辑 ──
+            SWITCH(
+                TRUE(),
+                
+                // ── 第5层：mix_msg 明细行 ──
+                // 必须满足：mix_msg 不为空 (IS NOT NULL)，且其他四个父层级字段均为 "ALL"
+                __IsMixMsg,
+                    NOT ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
+                    && a05_e2e_paid_media_product_data_d[framework] = "ALL"
+                    && a05_e2e_paid_media_product_data_d[brand] = "ALL"
+                    && a05_e2e_paid_media_product_data_d[category] = "ALL"
+                    && a05_e2e_paid_media_product_data_d[channel] = "ALL",
+
+                // ── 第4层：channel 小计行 ──
+                // 必须满足：channel 有具体值(<>ALL)，mix_msg 为空 (IS NULL)，且其余三个父层级为 "ALL"
+                __IsChannel,
+                    ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
+                    && a05_e2e_paid_media_product_data_d[channel] <> "ALL"
+                    && a05_e2e_paid_media_product_data_d[framework] = "ALL"
+                    && a05_e2e_paid_media_product_data_d[brand] = "ALL"
+                    && a05_e2e_paid_media_product_data_d[category] = "ALL",
+
+                // ── 第3层：category 小计行 ──
+                // 必须满足：category 有具体值(<>ALL)，mix_msg 为空 (IS NULL)，且其余三个父层级为 "ALL"
+                __IsCategory,
+                    ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
+                    && a05_e2e_paid_media_product_data_d[category] <> "ALL"
+                    && a05_e2e_paid_media_product_data_d[framework] = "ALL"
+                    && a05_e2e_paid_media_product_data_d[brand] = "ALL"
+                    && a05_e2e_paid_media_product_data_d[channel] = "ALL",
+
+                // ── 第2层：brand 小计行 ──
+                // 必须满足：brand 有具体值(<>ALL)，mix_msg 为空 (IS NULL)，且其余三个父层级为 "ALL"
+                __IsBrand,
+                    ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
+                    && a05_e2e_paid_media_product_data_d[brand] <> "ALL"
+                    && a05_e2e_paid_media_product_data_d[framework] = "ALL"
+                    && a05_e2e_paid_media_product_data_d[category] = "ALL"
+                    && a05_e2e_paid_media_product_data_d[channel] = "ALL",
+
+                // ── 第1层：framework 行 ──
+                // 必须满足：framework 有具体值(<>ALL)，mix_msg 为空 (IS NULL)，且其余三个子层级为 "ALL"
+                __IsFramework,
+                    ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
+                    && a05_e2e_paid_media_product_data_d[framework] <> "ALL"
+                    && a05_e2e_paid_media_product_data_d[brand] = "ALL"
+                    && a05_e2e_paid_media_product_data_d[category] = "ALL"
+                    && a05_e2e_paid_media_product_data_d[channel] = "ALL"
+            )
+        )
+
+    RETURN
+        CALCULATE(
+            SUM(a05_e2e_paid_media_product_data_d[living_sku_cnt]),
+            __PlatformFilter,
+            __TransCycleFilter,
+            __LevelFilter
+        )
+        
+
+--------------------------------------------------------------------------------
+1.3 Category Growth Active IDs VS LP
+--------------------------------------------------------------------------------
+
+Category Growth Active IDs VS LP =
+// ========================================
+// 度量值: Category Growth Active IDs VS LP
+// 中文名: 在推ID数量同期
+// Display Folder: Category Growth
+// 用途: 推广中SKU数同比，统计周期同期的最后一天仍在推的商品ID去重计数
+// 口径: YOY同比 = 本期值 / 同期(LP)值 - 1
+//       本期 = Dim_Date_Current 关系自然筛选
+//       同期 = Dim_Date_Ly 断开维度，MIN/MAX 取范围，CALCULATE 覆盖日期上下文
+// 类型: 同比增长率，不乘汇率
+// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据底表: a05_e2e_paid_media_product_data_d
+// 同比机制:
+//   本期 = Dim_Date_Current 关系自然筛选
+//   同期 = Dim_Date_Ly 断开维度，MIN/MAX 取范围，CALCULATE 覆盖日期上下文
+//   增长率 = (本期 - 同期) / 同期
+//   边界: 同期为 0/空 → BLANK；本期为 0/空且同期有值 → -1
+// ========================================
+
+    // ── 本期 Active IDs ──
+    VAR __CurrentValue = [Category Growth Active IDs]
+
+    // ── 同期 Active IDs（覆盖日期上下文为 LP 日期范围）──
+    VAR __LP_Start = MIN(Dim_Date_Ly[LY_数据日期])
+    VAR __LP_End = MAX(Dim_Date_Ly[LY_数据日期])
+    VAR __LP_Value =
+        IF(
+            ISBLANK(__LP_Start) || ISBLANK(__LP_End),
+            BLANK(),
+            CALCULATE(
+                [Category Growth Active IDs],
+                REMOVEFILTERS(Dim_Date_Current),
+                FILTER(
+                    ALL(Dim_Date_Current),
+                    Dim_Date_Current[数据日期] >= __LP_Start
+                        && Dim_Date_Current[数据日期] <= __LP_End
+                )
+            )
+        )
+
+    // ── 同比增长率（含边界判断）──
+    VAR __CurrIsEmpty = ISBLANK(__CurrentValue) || __CurrentValue = 0
+    VAR __LPIsEmpty = ISBLANK(__LP_Value) || __LP_Value = 0
+    RETURN
+        IF(
+            __LPIsEmpty,
+            BLANK(),
+            IF(__CurrIsEmpty, -1, DIVIDE(__CurrentValue - __LP_Value, __LP_Value))
+        )
+
+--------------------------------------------------------------------------------
+1.4 Category Growth Net Sales%
+--------------------------------------------------------------------------------
+
+Category Growth Net Sales% =
+// ========================================
+// 度量值: Category Growth Net Sales%
+// 中文名: 退后销售额占比
+// Display Folder: Category Growth
+// 用途: 退后销售额占比指标
+// 口径: 品类 net_sales_amt / TTL net_sales_amt
+//       分子 = 当前分组 SUM(net_sales_amt)
+//       分母 = 全店 SUM(net_sales_amt)（移除全部 5 个行维度）
+// 类型: 比率类，不乘汇率
+// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据底表: a05_e2e_paid_media_product_data_d
+// 筛选: 全局筛选条件下直接 SUM
+//       Platform（单选含 ALL，ALL → platform IN {"TM","JD"}）
+//       trans_cycle（单选，数据口径）
+// ========================================
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    // ── 1. 平台筛选 ──
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[platform]),
+            // 如果 __ChannelID = "ALL"，返回 IN {"TM", "JD"}，否则返回 = __ChannelID
+            IF(
+                __ChannelID = "ALL",
+                a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_product_data_d[platform] = __ChannelID
+            )
+        )
+
+    // ── 2. 层级判断 ──
+    VAR __IsFramework = ISINSCOPE(a05_e2e_paid_media_product_data_d[framework])
+    VAR __IsBrand     = ISINSCOPE(a05_e2e_paid_media_product_data_d[brand])
+    VAR __IsCategory  = ISINSCOPE(a05_e2e_paid_media_product_data_d[category])
+    VAR __IsChannel   = ISINSCOPE(a05_e2e_paid_media_product_data_d[channel])
+    VAR __IsMixMsg    = ISINSCOPE(a05_e2e_paid_media_product_data_d[mix_msg])
+
+    // ── 3. 层级过滤 (转为显式的 FILTER 表) ──
+    // 明确告诉引擎：这是一个针对 mix_msg 列的筛选表
+    VAR __LevelFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[mix_msg]),
+            SWITCH(
+                TRUE(),
+                __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg] <> BLANK(),
+                a05_e2e_paid_media_product_data_d[mix_msg] = BLANK()
+            )
+        )
+        
+    // ── 4. 周期筛选 (显式声明，覆盖该列原有上下文) ──
+    VAR __TransCycleFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[trans_cycle]),
+            a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+        )
+
+    // ── 分子：当前分组 net_sales_amt ──
+    VAR __Numerator =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_product_data_d[net_sales_amt]),
+            __PlatformFilter,
+            __TransCycleFilter,
+            __LevelFilter
+        )
+
+    // ── 分母：全店 net_sales_amt（移除全部 5 个行维度）──
+    VAR __Denominator =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_product_data_d[net_sales_amt]),
+            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[framework]),
+            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[brand]),
+            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[category]),
+            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[channel]),
+            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg]),
+            __PlatformFilter,   // 交集 1：限定平台
+            __TransCycleFilter, // 交集 2：限定周期
+            __LevelFilter       // 交集 3：限定层级与 mix_msg 状态
+        )
+
+    RETURN
+        DIVIDE(__Numerator, __Denominator)
+
+--------------------------------------------------------------------------------
+1.5 Category Growth SLS% VS LP
+--------------------------------------------------------------------------------
+
+Category Growth SLS% VS LP =
+// ========================================
+// 度量值: Category Growth SLS% VS LP
+// 中文名: 退后销售额占比同期
+// Display Folder: Category Growth
+// 用途: Net Sales% 同比增长率
+// 口径: YOY同比 = 本期 Net Sales% / 同期(LP) Net Sales% - 1
+//       本期 Net Sales% = 本期品类 net_sales_amt / 本期 TTL net_sales_amt
+//       同期 Net Sales% = 同期品类 net_sales_amt / 同期 TTL net_sales_amt
+// 类型: 同比增长率，不乘汇率
+// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据底表: a05_e2e_paid_media_product_data_d
+// 同比机制:
+//   本期 = Dim_Date_Current 关系自然筛选
+//   同期 = Dim_Date_Ly 断开维度，MIN/MAX 取范围，CALCULATE 覆盖日期上下文
+//   增长率 = (本期 - 同期) / 同期
+//   边界: 同期为 0/空 → BLANK；本期为 0/空且同期有值 → -1
+// ========================================
+    // ── 本期 Net Sales% ──
+    VAR __CurrentNetSalesPct = [Category Growth Net Sales%]
+
+    // ── 同期 Net Sales%（覆盖日期上下文为 LP 日期范围）──
+    VAR __LP_Start = MIN(Dim_Date_Ly[LY_数据日期])
+    VAR __LP_End = MAX(Dim_Date_Ly[LY_数据日期])
+    VAR __LPNetSalesPct =
+        IF(
+            ISBLANK(__LP_Start) || ISBLANK(__LP_End),
+            BLANK(),
+            CALCULATE(
+                [Category Growth Net Sales%],
+                REMOVEFILTERS(Dim_Date_Current),
+                FILTER(
+                    ALL(Dim_Date_Current),
+                    Dim_Date_Current[数据日期] >= __LP_Start
+                        && Dim_Date_Current[数据日期] <= __LP_End
+                )
+            )
+        )
+
+    // ── 同比增长率（含边界判断）──
+    VAR __CurrIsEmpty = ISBLANK(__CurrentNetSalesPct) || __CurrentNetSalesPct = 0
+    VAR __LPIsEmpty = ISBLANK(__LPNetSalesPct) || __LPNetSalesPct = 0
+    RETURN
+        IF(
+            __LPIsEmpty,
+            BLANK(),
+            IF(__CurrIsEmpty, -1, DIVIDE(__CurrentNetSalesPct - __LPNetSalesPct, __LPNetSalesPct))
+        )
+
+--------------------------------------------------------------------------------
+1.6 Category Growth Cost
+--------------------------------------------------------------------------------
+
+Category Growth Cost =
+// ========================================
+// 度量值: Category Growth Cost
+// 中文名: 花费
+// Display Folder: Category Growth
+// 用途: 实际总媒体花费
+// 口径: 各品类推广花费加总 SUM(cost_amt) × 汇率
+// 类型: 金额类，乘汇率
+// 数据格式: #,##0（在 DAX 中用 __CurrencySymbol & FORMAT(__Value, "#,##0") 拼接币种符号）
+// 数据底表: a05_e2e_paid_media_product_data_d
+// 筛选: 全局筛选（mix_msg IS NULL / IS NOT NULL）
+//       Platform（单选含 ALL，ALL → platform IN {"TM","JD"}）
+//       trans_cycle（单选，数据口径）
+// 日期上下文: Dim_Date_Current 关系自然筛选
+// ========================================
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
+
+    // ── 1. 平台筛选 ──
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[platform]),
+            // 如果 __ChannelID = "ALL"，返回 IN {"TM", "JD"}，否则返回 = __ChannelID
+            IF(
+                __ChannelID = "ALL",
+                a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_product_data_d[platform] = __ChannelID
+            )
+        )
+
+    // ── 2. 层级判断 ──
+    VAR __IsFramework = ISINSCOPE(a05_e2e_paid_media_product_data_d[framework])
+    VAR __IsBrand     = ISINSCOPE(a05_e2e_paid_media_product_data_d[brand])
+    VAR __IsCategory  = ISINSCOPE(a05_e2e_paid_media_product_data_d[category])
+    VAR __IsChannel   = ISINSCOPE(a05_e2e_paid_media_product_data_d[channel])
+    VAR __IsMixMsg    = ISINSCOPE(a05_e2e_paid_media_product_data_d[mix_msg])
+
+    // ── 3. 层级过滤 (转为显式的 FILTER 表) ──
+    // 明确告诉引擎：这是一个针对 mix_msg 列的筛选表
+    VAR __LevelFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[mix_msg]),
+            SWITCH(
+                TRUE(),
+                __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg] <> BLANK(),
+                a05_e2e_paid_media_product_data_d[mix_msg] = BLANK()
+            )
+        )
+        
+    // ── 4. 周期筛选 (显式声明，覆盖该列原有上下文) ──
+    VAR __TransCycleFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[trans_cycle]),
+            a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+        )
 
     VAR __BaseValue =
         CALCULATE(
-            SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
+            SUM(a05_e2e_paid_media_product_data_d[cost_amt]),
             __PlatformFilter,
-            a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+            __TransCycleFilter,
+            __LevelFilter
         )
     RETURN
         __BaseValue * __ExchangeRate
@@ -162,39 +515,25 @@ Category Growth Cost =
 Category Growth Cost VS LP =
 // ========================================
 // 度量值: Category Growth Cost VS LP
-// 中文名: 推广花费同比增长率
+// 中文名: 花费同期
 // Display Folder: Category Growth
 // 用途: Cost 同比增长率
-// 口径: (本期 Cost - 同期 Cost) / 同期 Cost
+// 口径: YOY同比 = 本期 Cost / 同期(LP) Cost - 1
 // 类型: 同比增长率，不乘汇率
 // 汇率说明: 增长率不受汇率影响（本期与同期乘相同汇率约分抵消）
 //           内部用原始值（不乘汇率）计算，结果与乘汇率后计算一致
+// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据底表: a05_e2e_paid_media_product_data_d
 // 同比机制:
 //   本期 = Dim_Date_Current 关系自然筛选
 //   同期 = Dim_Date_Ly 断开维度，MIN/MAX 取范围
 //          CALCULATE + REMOVEFILTERS(Dim_Date_Current) + FILTER(ALL(Dim_Date_Current)) 覆盖日期上下文
 //   其他维度筛选（platform / trans_cycle）不受日期覆盖影响
 //   边界: 同期为 0/空 → BLANK；本期为 0/空且同期有值 → -1
-// 数据字典: promotion_cost_amt = 推广花费
 // ========================================
-    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
-    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
-
-    VAR __PlatformFilter =
-        FILTER(
-            ALL(a05_e2e_paid_media_product_data_d[platform]),
-            IF(__ChannelID = "ALL",
-                a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"},
-                a05_e2e_paid_media_product_data_d[platform] = __ChannelID)
-        )
 
     // ── 本期 Cost（原始值，不乘汇率，同比约分）──
-    VAR __CurrentValue =
-        CALCULATE(
-            SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
-            __PlatformFilter,
-            a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
-        )
+    VAR __CurrentValue = [Category Growth Cost]
 
     // ── 同期 Cost（覆盖日期上下文为 LP 日期范围）──
     VAR __LP_Start = MIN(Dim_Date_Ly[LY_数据日期])
@@ -204,9 +543,7 @@ Category Growth Cost VS LP =
             ISBLANK(__LP_Start) || ISBLANK(__LP_End),
             BLANK(),
             CALCULATE(
-                SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
-                __PlatformFilter,
-                a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle,
+                [Category Growth Cost],
                 REMOVEFILTERS(Dim_Date_Current),
                 FILTER(
                     ALL(Dim_Date_Current),
@@ -233,14 +570,15 @@ Category Growth Cost VS LP =
 Category Growth Cost% =
 // ========================================
 // 度量值: Category Growth Cost%
-// 中文名: 推广花费占比
+// 中文名: 花费占比
 // Display Folder: Category Growth
-// 用途: 每行推广花费占总计推广花费的百分比
-// 口径: DIVIDE(当前行 promotion_cost_amt, 总计 promotion_cost_amt)
-//       分母不受行维度（framework / brand / category / channel / season）筛选上下文影响
+// 用途: 各品类推广花费占总花费的百分比
+// 口径: 品类 cost_amt / TTL cost_amt
+//       分母不受行维度（framework / brand / category / channel / mix_msg）筛选上下文影响
 //       分母使用 REMOVEFILTERS 移除全部 5 个行维度 + 保留切片器筛选
 // 类型: 比率类，不乘汇率
-// 数据字典: promotion_cost_amt = 推广花费
+// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据底表: a05_e2e_paid_media_product_data_d
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
@@ -253,25 +591,48 @@ Category Growth Cost% =
                 a05_e2e_paid_media_product_data_d[platform] = __ChannelID)
         )
 
-    // ── 分子：当前行 promotion_cost_amt ──
-    VAR __CostAmt =
-        CALCULATE(
-            SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
-            __PlatformFilter,
+    // ── 层级判断 ──
+    VAR __IsMixMsg = ISINSCOPE(a05_e2e_paid_media_product_data_d[mix_msg])
+
+    // 明确告诉引擎：这是一个针对 mix_msg 列的筛选表
+    VAR __LevelFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[mix_msg]),
+            SWITCH(
+                TRUE(),
+                __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg] <> BLANK(),
+                a05_e2e_paid_media_product_data_d[mix_msg] = BLANK()
+            )
+        )
+
+    // ── 周期筛选 (显式声明，覆盖该列原有上下文) ──
+    VAR __TransCycleFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[trans_cycle]),
             a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
         )
 
-    // ── 分母：总计 promotion_cost_amt（移除全部 5 个行维度）──
+    // ── 分子：当前行 cost_amt ──
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_product_data_d[cost_amt]),
+            __PlatformFilter,
+            __TransCycleFilter,
+            __LevelFilter
+        )
+
+    // ── 分母：总计 cost_amt（移除全部 5 个行维度）──
     VAR __TotalCostAmt =
         CALCULATE(
-            SUM(a05_e2e_paid_media_product_data_d[promotion_cost_amt]),
+            SUM(a05_e2e_paid_media_product_data_d[cost_amt]),
             REMOVEFILTERS(a05_e2e_paid_media_product_data_d[framework]),
             REMOVEFILTERS(a05_e2e_paid_media_product_data_d[brand]),
             REMOVEFILTERS(a05_e2e_paid_media_product_data_d[category]),
             REMOVEFILTERS(a05_e2e_paid_media_product_data_d[channel]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[season]),
-            __PlatformFilter,
-            a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg]),
+            __PlatformFilter,   // 交集 1：限定平台
+            __TransCycleFilter, // 交集 2：限定周期
+            __LevelFilter       // 交集 3：限定层级与 mix_msg 状态
         )
 
     RETURN
@@ -284,17 +645,18 @@ Category Growth Cost% =
 Category Growth Cost% VS LP =
 // ========================================
 // 度量值: Category Growth Cost% VS LP
-// 中文名: 推广花费占比同比增长率
+// 中文名: 花费占比同期
 // Display Folder: Category Growth
 // 用途: Cost% 同比增长率
-// 口径: (本期 Cost% - 同期 Cost%) / 同期 Cost%
+// 口径: YOY同比 = 本期 Cost% / 同期(LP) Cost% - 1
 // 类型: 同比增长率，不乘汇率
+// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据底表: a05_e2e_paid_media_product_data_d
 // 同比机制:
-//   本期 Cost% = 本期当前行 promotion_cost_amt / 本期总计 promotion_cost_amt
-//   同期 Cost% = 同期当前行 promotion_cost_amt / 同期总计 promotion_cost_amt
+//   本期 Cost% = 本期当前行 cost_amt / 本期总计 cost_amt
+//   同期 Cost% = 同期当前行 cost_amt / 同期总计 cost_amt
 //   同期通过 CALCULATE 覆盖日期上下文为 LP 日期范围，Cost% 内部分子分母同步切换到同期
 //   边界: 同期为 0/空 → BLANK；本期为 0/空且同期有值 → -1
-// 数据字典: promotion_cost_amt = 推广花费
 // ========================================
     // ── 本期 Cost% ──
     VAR __CurrentCostPct = [Category Growth Cost%]
@@ -334,13 +696,69 @@ Category Growth Cost% VS LP =
 Category Growth ROI =
 // ========================================
 // 度量值: Category Growth ROI
-// 中文名: 投资回报率
+// 中文名: 媒体 ROI
 // Display Folder: Category Growth
-// 用途: 投资回报率
-// 口径: 待确认，当前返回占位值 1
+// 用途: 成交金额 / 花费，计算出 ROI
+// 口径: 品类 media_sales_amt / 品类 cost_amt
 // 类型: 比率类，不乘汇率
+// 数据格式: #,##0.0;-#,##0.0;0.0
+// 数据底表: a05_e2e_paid_media_product_data_d
+// 筛选: 全局筛选（mix_msg IS NULL / IS NOT NULL）
+//       Platform（单选含 ALL，ALL → platform IN {"TM","JD"}）
+//       trans_cycle（单选，数据口径）
 // ========================================
-    1
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[platform]),
+            IF(__ChannelID = "ALL",
+                a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_product_data_d[platform] = __ChannelID)
+        )
+
+    // ── 层级判断 ──
+    VAR __IsMixMsg = ISINSCOPE(a05_e2e_paid_media_product_data_d[mix_msg])
+
+    // 明确告诉引擎：这是一个针对 mix_msg 列的筛选表
+    VAR __LevelFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[mix_msg]),
+            SWITCH(
+                TRUE(),
+                __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg] <> BLANK(),
+                a05_e2e_paid_media_product_data_d[mix_msg] = BLANK()
+            )
+        )
+
+    // ── 周期筛选 (显式声明，覆盖该列原有上下文) ──
+    VAR __TransCycleFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[trans_cycle]),
+            a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+        )
+
+    // ── 分子：品类 media_sales_amt（投放带来成交金额）──
+    VAR __SalesAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_product_data_d[media_sales_amt]),
+            __PlatformFilter,
+            __TransCycleFilter,
+            __LevelFilter
+        )
+
+    // ── 分母：品类 cost_amt（花费）──
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_product_data_d[cost_amt]),
+            __PlatformFilter,
+            __TransCycleFilter,
+            __LevelFilter
+        )
+
+    RETURN
+        DIVIDE(__SalesAmt, __CostAmt)
 
 --------------------------------------------------------------------------------
 1.11 Category Growth ROI VS LP
@@ -349,31 +767,61 @@ Category Growth ROI =
 Category Growth ROI VS LP =
 // ========================================
 // 度量值: Category Growth ROI VS LP
-// 中文名: 投资回报率同比增长率
+// 中文名: 媒体 ROI 同期
 // Display Folder: Category Growth
 // 用途: ROI 同比增长率
-// 口径: 待确认，当前返回占位值 1
+// 口径: YOY同比 = 本期 ROI / 同期(LP) ROI - 1
 // 类型: 同比增长率，不乘汇率
-// 同比机制: 本期值与同期值对比
-//   本期 = Dim_Date_Current 关系自然筛选
-//   同期 = Dim_Date_Ly 断开维度，MIN/MAX 取范围，CALCULATE 覆盖日期上下文
-//   增长率 = (本期 - 同期) / 同期
+// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据底表: a05_e2e_paid_media_product_data_d
+// 同比机制:
+//   本期 ROI = 本期 media_sales_amt / 本期 cost_amt
+//   同期 ROI = 同期 media_sales_amt / 同期 cost_amt
+//   同期通过 CALCULATE 覆盖日期上下文为 LP 日期范围
 //   边界: 同期为 0/空 → BLANK；本期为 0/空且同期有值 → -1
 // ========================================
-    1
+    // ── 本期 ROI ──
+    VAR __CurrentROI = [Category Growth ROI]
+
+    // ── 同期 ROI（覆盖日期上下文为 LP 日期范围）──
+    VAR __LP_Start = MIN(Dim_Date_Ly[LY_数据日期])
+    VAR __LP_End = MAX(Dim_Date_Ly[LY_数据日期])
+    VAR __LPROI =
+        IF(
+            ISBLANK(__LP_Start) || ISBLANK(__LP_End),
+            BLANK(),
+            CALCULATE(
+                [Category Growth ROI],
+                REMOVEFILTERS(Dim_Date_Current),
+                FILTER(
+                    ALL(Dim_Date_Current),
+                    Dim_Date_Current[数据日期] >= __LP_Start
+                        && Dim_Date_Current[数据日期] <= __LP_End
+                )
+            )
+        )
+
+    // ── 同比增长率（含边界判断）──
+    VAR __CurrIsEmpty = ISBLANK(__CurrentROI) || __CurrentROI = 0
+    VAR __LPIsEmpty = ISBLANK(__LPROI) || __LPROI = 0
+    RETURN
+        IF(
+            __LPIsEmpty,
+            BLANK(),
+            IF(__CurrIsEmpty, -1, DIVIDE(__CurrentROI - __LPROI, __LPROI))
+        )
 
 ================================================================================
 二、Display 格式化显示度量值（11 个，按页面展示顺序）
 ================================================================================
 
-格式字符串说明：
+格式字符串说明（以口径文档为准）：
   Power BI 自定义格式字符串由 1~3 节组成，以分号分隔：
     正数格式;负数格式;零值格式
-  百分比类: "0.0%;-0.0%;0.0%"
-  增长率百分比（带正负号）: "+0.0%;-0.0%;0.0%"
-  金额类: "#,##0.00;(#,##0.00);0.00"（前置货币符号）
+  百分比类: "#,##0.0%;#,##0.0%;0.0%"
   整数类: "#,##0;(#,##0);0"
-  小数类: "#,##0.00;-#,##0.00;0.00"
+  金额类: 在 DAX 中用 __CurrencySymbol & FORMAT(__Value, "#,##0") 拼接币种符号
+  小数类: "#,##0.0;-#,##0.0;0.0"
 
 --------------------------------------------------------------------------------
 2.1 Category Growth EOH(OMS)% Display
@@ -382,13 +830,18 @@ Category Growth ROI VS LP =
 Category Growth EOH(OMS)% Display =
 // ========================================
 // 度量值: Category Growth EOH(OMS)% Display
-// 中文名: EOH(OMS) 占比（格式化）
+// 中文名: 库存%（格式化）
 // Display Folder: Category Growth > Display
 // 用途: Category Growth EOH(OMS)% 的格式化显示
-// 数据类型: 百分比（保留一位小数，负数带负号）
-// 格式字符串: "0.0%;-0.0%;0.0%"
+// 数据类型: 百分比（保留一位小数，不含正号）
+// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
 // ========================================
-    FORMAT([Category Growth EOH(OMS)%], "0.0%;-0.0%;0.0%")
+    var __Value = [Category Growth EOH(OMS)%]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+        )   
 
 --------------------------------------------------------------------------------
 2.2 Category Growth Active IDs Display
@@ -397,13 +850,18 @@ Category Growth EOH(OMS)% Display =
 Category Growth Active IDs Display =
 // ========================================
 // 度量值: Category Growth Active IDs Display
-// 中文名: 活跃商品数（格式化）
+// 中文名: 在推ID数量（格式化）
 // Display Folder: Category Growth > Display
 // 用途: Category Growth Active IDs 的格式化显示
-// 数据类型: 整数（带千分位，无小数）
+// 数据类型: 整数（千分位整数，不含小数）
 // 格式字符串: "#,##0;(#,##0);0"
 // ========================================
-    FORMAT([Category Growth Active IDs], "#,##0;(#,##0);0")
+    VAR __Value = [Category Growth Active IDs]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",FORMAT(__Value, "#,##0;(#,##0);0")
+        )   
 
 --------------------------------------------------------------------------------
 2.3 Category Growth Active IDs VS LP Display
@@ -412,17 +870,18 @@ Category Growth Active IDs Display =
 Category Growth Active IDs VS LP Display =
 // ========================================
 // 度量值: Category Growth Active IDs VS LP Display
-// 中文名: 活跃商品数同比增长率（格式化）
+// 中文名: 在推ID数量同期（格式化）
 // Display Folder: Category Growth > Display
 // 用途: Category Growth Active IDs VS LP 的格式化显示
-// 数据类型: 增长率百分比（保留一位小数，带正负号）
-// 格式字符串: "+0.0%;-0.0%;0.0%"
+// 数据类型: 百分比（保留一位小数，不含正号）
+// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
 // ========================================
-    IF(
-        ISBLANK([Category Growth Active IDs VS LP]),
-        BLANK(),
-        FORMAT([Category Growth Active IDs VS LP], "+0.0%;-0.0%;0.0%")
-    )
+    VAR __Value = [Category Growth Active IDs VS LP]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+        )   
 
 --------------------------------------------------------------------------------
 2.4 Category Growth Net Sales% Display
@@ -431,13 +890,18 @@ Category Growth Active IDs VS LP Display =
 Category Growth Net Sales% Display =
 // ========================================
 // 度量值: Category Growth Net Sales% Display
-// 中文名: 净销售额占比（格式化）
+// 中文名: 退后销售额占比（格式化）
 // Display Folder: Category Growth > Display
 // 用途: Category Growth Net Sales% 的格式化显示
-// 数据类型: 百分比（保留一位小数，负数带负号）
-// 格式字符串: "0.0%;-0.0%;0.0%"
+// 数据类型: 百分比（保留一位小数，不含正号）
+// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
 // ========================================
-    FORMAT([Category Growth Net Sales%], "0.0%;-0.0%;0.0%")
+    VAR __Value = [Category Growth Net Sales%]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+        )   
 
 --------------------------------------------------------------------------------
 2.5 Category Growth SLS% VS LP Display
@@ -446,17 +910,18 @@ Category Growth Net Sales% Display =
 Category Growth SLS% VS LP Display =
 // ========================================
 // 度量值: Category Growth SLS% VS LP Display
-// 中文名: 净销售额占比同比增长率（格式化）
+// 中文名: 退后销售额占比同期（格式化）
 // Display Folder: Category Growth > Display
 // 用途: Category Growth SLS% VS LP 的格式化显示
-// 数据类型: 增长率百分比（保留一位小数，带正负号）
-// 格式字符串: "+0.0%;-0.0%;0.0%"
+// 数据类型: 百分比（保留一位小数，不含正号）
+// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
 // ========================================
-    IF(
-        ISBLANK([Category Growth SLS% VS LP]),
-        BLANK(),
-        FORMAT([Category Growth SLS% VS LP], "+0.0%;-0.0%;0.0%")
-    )
+    VAR __Value = [Category Growth SLS% VS LP]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+        )   
 
 --------------------------------------------------------------------------------
 2.6 Category Growth Cost Display
@@ -465,20 +930,21 @@ Category Growth SLS% VS LP Display =
 Category Growth Cost Display =
 // ========================================
 // 度量值: Category Growth Cost Display
-// 中文名: 推广花费（格式化）
+// 中文名: 花费（格式化）
 // Display Folder: Category Growth > Display
 // 用途: Category Growth Cost 的格式化显示
-// 数据类型: 金额（带千分位、两位小数，负数用括号，前置货币符号）
-// 格式字符串: "#,##0.00;(#,##0.00);0.00"
+// 数据类型: 货币（千分位整数，货币符号由切片器决定）
+// 格式字符串: "#,##0"（在 DAX 中用 __CurrencySymbol & FORMAT(__Value, "#,##0") 拼接币种符号）
 // 货币符号: 由 Slicer_Currency_Selection[Currency_Symbol] 动态决定
 // ========================================
+    VAR __Value = [Category Growth Cost]
     VAR __CurrencySymbol =
         SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
     RETURN
         IF(
-            ISBLANK([Category Growth Cost]),
-            BLANK(),
-            __CurrencySymbol & FORMAT([Category Growth Cost], "#,##0.00;(#,##0.00);0.00")
+            ISBLANK(__Value),
+            "-",
+            __CurrencySymbol & FORMAT(__Value, "#,##0")
         )
 
 --------------------------------------------------------------------------------
@@ -488,17 +954,18 @@ Category Growth Cost Display =
 Category Growth Cost VS LP Display =
 // ========================================
 // 度量值: Category Growth Cost VS LP Display
-// 中文名: 推广花费同比增长率（格式化）
+// 中文名: 花费同期（格式化）
 // Display Folder: Category Growth > Display
 // 用途: Category Growth Cost VS LP 的格式化显示
-// 数据类型: 增长率百分比（保留一位小数，带正负号）
-// 格式字符串: "+0.0%;-0.0%;0.0%"
+// 数据类型: 百分比（保留一位小数，不含正号）
+// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
 // ========================================
-    IF(
-        ISBLANK([Category Growth Cost VS LP]),
-        BLANK(),
-        FORMAT([Category Growth Cost VS LP], "+0.0%;-0.0%;0.0%")
-    )
+    VAR __Value = [Category Growth Cost VS LP]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+        )   
 
 --------------------------------------------------------------------------------
 2.8 Category Growth Cost% Display
@@ -507,17 +974,18 @@ Category Growth Cost VS LP Display =
 Category Growth Cost% Display =
 // ========================================
 // 度量值: Category Growth Cost% Display
-// 中文名: 推广花费占比（格式化）
+// 中文名: 花费占比（格式化）
 // Display Folder: Category Growth > Display
 // 用途: Category Growth Cost% 的格式化显示
-// 数据类型: 百分比（保留一位小数，负数带负号）
-// 格式字符串: "0.0%;-0.0%;0.0%"
+// 数据类型: 百分比（保留一位小数，不含正号）
+// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
 // ========================================
-    IF(
-        ISBLANK([Category Growth Cost%]),
-        BLANK(),
-        FORMAT([Category Growth Cost%], "0.0%;-0.0%;0.0%")
-    )
+    VAR __Value = [Category Growth Cost%]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+        )   
 
 --------------------------------------------------------------------------------
 2.9 Category Growth Cost% VS LP Display
@@ -526,17 +994,18 @@ Category Growth Cost% Display =
 Category Growth Cost% VS LP Display =
 // ========================================
 // 度量值: Category Growth Cost% VS LP Display
-// 中文名: 推广花费占比同比增长率（格式化）
+// 中文名: 花费占比同期（格式化）
 // Display Folder: Category Growth > Display
 // 用途: Category Growth Cost% VS LP 的格式化显示
-// 数据类型: 增长率百分比（保留一位小数，带正负号）
-// 格式字符串: "+0.0%;-0.0%;0.0%"
+// 数据类型: 百分比（保留一位小数，不含正号）
+// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
 // ========================================
-    IF(
-        ISBLANK([Category Growth Cost% VS LP]),
-        BLANK(),
-        FORMAT([Category Growth Cost% VS LP], "+0.0%;-0.0%;0.0%")
-    )
+    VAR __Value = [Category Growth Cost% VS LP]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+        )   
 
 --------------------------------------------------------------------------------
 2.10 Category Growth ROI Display
@@ -545,13 +1014,18 @@ Category Growth Cost% VS LP Display =
 Category Growth ROI Display =
 // ========================================
 // 度量值: Category Growth ROI Display
-// 中文名: 投资回报率（格式化）
+// 中文名: 媒体 ROI（格式化）
 // Display Folder: Category Growth > Display
 // 用途: Category Growth ROI 的格式化显示
-// 数据类型: 小数（带千分位、两位小数，负数带负号）
-// 格式字符串: "#,##0.00;-#,##0.00;0.00"
+// 数据类型: 小数（保留一位小数）
+// 格式字符串: "#,##0.0;-#,##0.0;0.0"
 // ========================================
-    FORMAT([Category Growth ROI], "#,##0.00;-#,##0.00;0.00")
+    VAR __Value = [Category Growth ROI]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",FORMAT(__Value, "#,##0.0;-#,##0.0;0.0")
+        )   
 
 --------------------------------------------------------------------------------
 2.11 Category Growth ROI VS LP Display
@@ -560,17 +1034,18 @@ Category Growth ROI Display =
 Category Growth ROI VS LP Display =
 // ========================================
 // 度量值: Category Growth ROI VS LP Display
-// 中文名: 投资回报率同比增长率（格式化）
+// 中文名: 媒体 ROI 同期（格式化）
 // Display Folder: Category Growth > Display
 // 用途: Category Growth ROI VS LP 的格式化显示
-// 数据类型: 增长率百分比（保留一位小数，带正负号）
-// 格式字符串: "+0.0%;-0.0%;0.0%"
+// 数据类型: 百分比（保留一位小数，不含正号）
+// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
 // ========================================
-    IF(
-        ISBLANK([Category Growth ROI VS LP]),
-        BLANK(),
-        FORMAT([Category Growth ROI VS LP], "+0.0%;-0.0%;0.0%")
-    )
+    VAR __Value = [Category Growth ROI VS LP]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+        )   
 
 ================================================================================
 三、辅助度量值（2 个）
@@ -587,21 +1062,21 @@ Category Growth Cell Font Color =
 // Display Folder: Category Growth > Formatting
 // 用途: 根据表视觉层级返回字体颜色
 //       用于条件格式 → 字体颜色
-// 表结构: 行维度 = framework -> brand -> category -> channel -> season（五级）
+// 表结构: 行维度 = framework -> brand -> category -> channel -> mix_msg（五级）
 // 颜色规则:
 //   - 总计行 (Grand Total) -> #252423（近黑，强调）
 //   - 所有小计行和明细行     -> #5F6165（深灰）
 // ========================================
-    VAR __IsSeason = ISINSCOPE(a05_e2e_paid_media_product_data_d[season])
-    VAR __IsChannel = ISINSCOPE(a05_e2e_paid_media_product_data_d[channel])
+    VAR __IsMixMsg   = ISINSCOPE(a05_e2e_paid_media_product_data_d[mix_msg])
+    VAR __IsChannel  = ISINSCOPE(a05_e2e_paid_media_product_data_d[channel])
     VAR __IsCategory = ISINSCOPE(a05_e2e_paid_media_product_data_d[category])
-    VAR __IsBrand = ISINSCOPE(a05_e2e_paid_media_product_data_d[brand])
+    VAR __IsBrand    = ISINSCOPE(a05_e2e_paid_media_product_data_d[brand])
     VAR __IsFramework = ISINSCOPE(a05_e2e_paid_media_product_data_d[framework])
 
     RETURN
         SWITCH(
             TRUE(),
-            NOT(__IsFramework) && NOT(__IsBrand) && NOT(__IsCategory) && NOT(__IsChannel) && NOT(__IsSeason),
+            NOT(__IsFramework) && NOT(__IsBrand) && NOT(__IsCategory) && NOT(__IsChannel) && NOT(__IsMixMsg),
                 "#252423",
             "#5F6165"
         )
@@ -616,9 +1091,9 @@ Category Growth Cell Background Color =
 // 中文名: 品类增长单元格背景色
 // Display Folder: Category Growth > Formatting
 // 用途: 根据表行层级返回背景色（5 级层次）
-// 表结构: 行维度 = framework -> brand -> category -> channel -> season（五级）
+// 表结构: 行维度 = framework -> brand -> category -> channel -> mix_msg（五级）
 // 颜色层次:
-//   第5层 season 明细行   -> #FFFFFF（白色）
+//   第5层 mix_msg 明细行   -> #FFFFFF（白色）
 //   第4层 channel 小计行  -> #FAF6F1（淡米色）
 //   第3层 category 小计行 -> #F4ECE4（浅米色）
 //   第2层 brand 小计行    -> #E6D9C7（中米色）
@@ -627,21 +1102,21 @@ Category Growth Cell Background Color =
 //       此时该行会被染成 brand 颜色（中米色），无法染成 framework 颜色（深米色）。
 //       这是 Power BI 表阶梯式布局的已知限制，非代码问题。
 // ========================================
-    VAR __IsSeason = ISINSCOPE(a05_e2e_paid_media_product_data_d[season])
-    VAR __IsChannel = ISINSCOPE(a05_e2e_paid_media_product_data_d[channel])
+    VAR __IsMixMsg   = ISINSCOPE(a05_e2e_paid_media_product_data_d[mix_msg])
+    VAR __IsChannel  = ISINSCOPE(a05_e2e_paid_media_product_data_d[channel])
     VAR __IsCategory = ISINSCOPE(a05_e2e_paid_media_product_data_d[category])
-    VAR __IsBrand = ISINSCOPE(a05_e2e_paid_media_product_data_d[brand])
+    VAR __IsBrand    = ISINSCOPE(a05_e2e_paid_media_product_data_d[brand])
     VAR __IsFramework = ISINSCOPE(a05_e2e_paid_media_product_data_d[framework])
 
     RETURN
         SWITCH(
             TRUE(),
-            // ── 第5层：season 明细行 ────────
+            // ── 第5层：mix_msg 明细行 ────────
             // 特征：5 个 ISINSCOPE 全部 = TRUE
-            __IsSeason, "#FFFFFF",
+            __IsMixMsg, "#FFFFFF",
 
             // ── 第4层：channel 小计行 ─────────
-            // 特征：Channel=T, Season=F
+            // 特征：Channel=T, MixMsg=F
             __IsChannel, "#FAF6F1",
 
             // ── 第3层：category 小计行 ─────────
@@ -664,7 +1139,7 @@ Category Growth Cell Background Color =
 //   brand 小计行：ISINSCOPE(framework) + ISINSCOPE(brand) = TRUE
 //   category 小计行：前 3 个 = TRUE
 //   channel 小计行：前 4 个 = TRUE
-//   season 明细行：全部 5 个 = TRUE
+//   mix_msg 明细行：全部 5 个 = TRUE
 //   SWITCH 从最深层级开始判断（自底向上），保证匹配到最具体层级
 
 ================================================================================
@@ -706,17 +1181,17 @@ _Measures
 
 | #  | 度量值名称                                   | Display Folder                   | 用途 | 返回类型 |
 |----|---------------------------------------------|----------------------------------|------|----------|
-| 1  | Category Growth EOH(OMS)%                    | Category Growth                  | EOH(OMS) 占比（占位=1） | 数值 |
-| 2  | Category Growth Active IDs                   | Category Growth                  | 活跃商品数（占位=1） | 数值 |
-| 3  | Category Growth Active IDs VS LP             | Category Growth                  | 活跃商品数同比增长率（占位=1） | 数值 |
-| 4  | Category Growth Net Sales%                   | Category Growth                  | 净销售额占比（占位=1） | 数值 |
-| 5  | Category Growth SLS% VS LP                   | Category Growth                  | 净销售额占比同比增长率（占位=1） | 数值 |
-| 6  | Category Growth Cost                         | Category Growth                  | 推广花费金额 | 数值 |
-| 7  | Category Growth Cost VS LP                   | Category Growth                  | 推广花费同比增长率 | 数值 |
-| 8  | Category Growth Cost%                        | Category Growth                  | 推广花费占比 | 数值 |
-| 9  | Category Growth Cost% VS LP                  | Category Growth                  | 推广花费占比同比增长率 | 数值 |
-| 10 | Category Growth ROI                          | Category Growth                  | 投资回报率（占位=1） | 数值 |
-| 11 | Category Growth ROI VS LP                    | Category Growth                  | 投资回报率同比增长率（占位=1） | 数值 |
+| 1  | Category Growth EOH(OMS)%                    | Category Growth                  | 库存% | 数值 |
+| 2  | Category Growth Active IDs                   | Category Growth                  | 在推ID数量 | 数值 |
+| 3  | Category Growth Active IDs VS LP             | Category Growth                  | 在推ID数量同期 | 数值 |
+| 4  | Category Growth Net Sales%                   | Category Growth                  | 退后销售额占比 | 数值 |
+| 5  | Category Growth SLS% VS LP                  | Category Growth                  | 退后销售额占比同期 | 数值 |
+| 6  | Category Growth Cost                         | Category Growth                  | 花费 | 数值 |
+| 7  | Category Growth Cost VS LP                   | Category Growth                  | 花费同期 | 数值 |
+| 8  | Category Growth Cost%                        | Category Growth                  | 花费占比 | 数值 |
+| 9  | Category Growth Cost% VS LP                  | Category Growth                  | 花费占比同期 | 数值 |
+| 10 | Category Growth ROI                          | Category Growth                  | 媒体 ROI | 数值 |
+| 11 | Category Growth ROI VS LP                    | Category Growth                  | 媒体 ROI 同期 | 数值 |
 | 12 | Category Growth EOH(OMS)% Display            | Category Growth > Display        | EOH(OMS)% 格式化显示 | 文本 |
 | 13 | Category Growth Active IDs Display           | Category Growth > Display        | Active IDs 格式化显示 | 文本 |
 | 14 | Category Growth Active IDs VS LP Display     | Category Growth > Display        | Active IDs VS LP 格式化显示 | 文本 |
@@ -737,14 +1212,30 @@ _Measures
 
 | # | 指标名            | 状态     | 口径                                              | 汇率 | 数据类型 | 格式字符串                    |
 |---|------------------|----------|---------------------------------------------------|------|----------|-------------------------------|
-| 1 | EOH(OMS)%        | 占位=1   | 待确认                                            | ❌   | 百分比   | #,##0.0%;#,##0.0%;0.0%             |
-| 2 | Active IDs      | 占位=1   | 待确认                                            | ❌   | 整数     | #,##0;(#,##0);0              |
-| 3 | Active IDs VS LP | 占位=1   | 待确认                                            | ❌   | 增长率   | #,##0.0%;#,##0.0%;0.0%             |
-| 4 | Net Sales%       | 占位=1   | 待确认                                            | ❌   | 百分比   | #,##0.0%;#,##0.0%;0.0%              |
-| 5 | SLS% VS LP       | 占位=1   | 待确认                                            | ❌   | 增长率   | #,##0.0%;#,##0.0%;0.0%             |
-| 6 | Cost             | 乱填的口径   | 待确认                                           | ✅乘 | 金额     | #,##0.00;(#,##0.00);0.00（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号）     |
-| 7 | Cost VS LP       | 乱填的口径   | 待确认                                             | ❌   | 增长率   | #,##0.0%;#,##0.0%;0.0%            |
-| 8 | Cost%            | 乱填的口径   | 待确认                                               | ❌   | 百分比   | 0.0%;-0.0%;0.0%              |
-| 9 | Cost% VS LP      | 乱填的口径   | 待确认                                                | ❌   | 增长率   | #,##0.0%;#,##0.0%;0.0%             |
-| 10| ROI              | 占位=1   | 待确认                                            | ❌   | 小数     | #,##0.0;-#,##0.0;0.0      |
-| 11| ROI VS LP        | 占位=1   | 待确认                                            | ❌   | 增长率   | #,##0.0%;#,##0.0%;0.0%             |
+| 1 | EOH(OMS)%        | ✅已实现  | stock_qty / TTL stock_qty（REMOVEFILTERS 5维度）   | ❌   | 百分比   | #,##0.0%;#,##0.0%;0.0%        |
+| 2 | Active IDs       | ✅已实现  | SUM(living_sku_cnt) + 层级过滤                     | ❌   | 整数     | #,##0;(#,##0);0               |
+| 3 | Active IDs VS LP | ✅已实现  | 本期/同期 - 1 + 层级过滤                           | ❌   | 百分比   | #,##0.0%;#,##0.0%;0.0%        |
+| 4 | Net Sales%       | ✅已实现  | net_sales_amt / TTL net_sales_amt（REMOVEFILTERS） | ❌   | 百分比   | #,##0.0%;#,##0.0%;0.0%        |
+| 5 | SLS% VS LP       | ✅已实现  | 本期 Net Sales% / 同期 Net Sales% - 1              | ❌   | 百分比   | #,##0.0%;#,##0.0%;0.0%        |
+| 6 | Cost             | ✅已修正  | SUM(cost_amt) × ExchangeRate                       | ✅乘 | 货币     | #,##0（拼接币种符号）          |
+| 7 | Cost VS LP       | ✅已修正  | 本期 Cost / 同期 Cost - 1                          | ❌   | 百分比   | #,##0.0%;#,##0.0%;0.0%        |
+| 8 | Cost%            | ✅已修正  | cost_amt / TTL cost_amt（REMOVEFILTERS）           | ❌   | 百分比   | #,##0.0%;#,##0.0%;0.0%        |
+| 9 | Cost% VS LP      | ✅已修正  | 本期 Cost% / 同期 Cost% - 1                        | ❌   | 百分比   | #,##0.0%;#,##0.0%;0.0%        |
+| 10| ROI              | ✅已实现  | media_sales_amt / cost_amt                          | ❌   | 小数     | #,##0.0;-#,##0.0;0.0          |
+| 11| ROI VS LP        | ✅已实现  | 本期 ROI / 同期 ROI - 1                             | ❌   | 百分比   | #,##0.0%;#,##0.0%;0.0%        |
+
+================================================================================
+七、变更记录
+================================================================================
+
+| 日期       | 变更内容                                                                                       |
+|------------|-----------------------------------------------------------------------------------------------|
+| 2026-06-23 | 初始创建：11 核心 + 11 Display + 2 辅助 = 24 个度量值；Cost 系列已实现，其余 7 个核心为占位=1   |
+| 2026-07-03 | 全面按口径文档 Category_Growth.md 更新：                                                       |
+|            | ① 字段名修正：promotion_cost_amt → cost_amt（所有 Cost 相关度量值）                             |
+|            | ② 维度名修正：season → mix_msg（所有 ISINSCOPE/REMOVEFILTERS 引用）                             |
+|            | ③ 新增口径实现：EOH(OMS)%、Active IDs、Active IDs VS LP、Net Sales%、SLS% VS LP、ROI、ROI VS LP |
+|            | ④ 全局筛选规则：第1~4层 mix_msg IS NULL，第5层 mix_msg IS NOT NULL                              |
+|            | ⑤ Active IDs 层级过滤：按当前 ISINSCOPE 层级过滤其他维度为 ALL                                   |
+|            | ⑥ 格式字符串统一按口径文档修正（百分比 #,##0.0%、货币 #,##0、小数 #,##0.0）                     |
+|            | ⑦ net_sales_amt 无特殊处理，全局筛选条件下直接 SUM                                              |

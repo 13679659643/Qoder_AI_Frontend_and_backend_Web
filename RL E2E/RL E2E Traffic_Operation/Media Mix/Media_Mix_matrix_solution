@@ -901,29 +901,35 @@ Media Mix Cell Display =
             "-",
             SWITCH(
                 __Format,
-                "currency",
-                    __CurrencySymbol & FORMAT(__Value, "#,##0"),
-                "integer",
-                    FORMAT(__Value, "#,##0"),
-                "decimal_2",
-                    FORMAT(__Value, "#,##0.00"),
-                "percent_1dp",
-                    FORMAT(__Value, "0.0%"),
-                "delta_pct_1dp",
-                    IF(__Value > 0, "+", "") & FORMAT(__Value, "0.0%"),
-                "currency_decimal_1dp",
-                    __CurrencySymbol & FORMAT(__Value, "#,##0.0"),
-                "currency_k",
-                    __CurrencySymbol & FORMAT(__Value / 1000, "#,##0") & "k",
-                "percent_2dp",
-                    FORMAT(__Value, "0.00%"),
-                "delta_pct_2dp",
-                    IF(__Value > 0, "+", "") & FORMAT(__Value, "0.00%"),
-                "delta_bp",
-                    IF(__Value >= 0, "+", "") & FORMAT(__Value * 10000, "#,##0") & "bp",
-                FORMAT(__Value, "#,##0.00")
+
+                // ─── 1. 基础数字格式 ───────────────────────────────────────────
+                "integer",                 FORMAT(__Value, "#,##0"),                                    // 1,000
+                "decimal_1dp",             FORMAT(__Value, "#,##0.0"),                                  // 1,000.0
+                "decimal_2dp",             FORMAT(__Value, "#,##0.00"),                                 // 1,000.00
+
+                // ─── 2. 货币格式 ─────────────────────────────────────────────
+                "currency",                __CurrencySymbol & FORMAT(__Value, "#,##0"),                 // ¥1,000 / $1,000
+                "currency_decimal_1dp",    __CurrencySymbol & FORMAT(__Value, "#,##0.0"),               // ¥1,000.0
+                "currency_k",              __CurrencySymbol & FORMAT(__Value / 1000, "#,##0") & "k",    // ¥1k / $5k
+
+                // ─── 3. 百分比格式 ──────────────────────────────────────────
+                "percent_1dp",             FORMAT(__Value, "0.0%"),                                     // 40.5%
+                "percent_2dp",             FORMAT(__Value, "0.00%"),                                    // 40.50%
+
+                // ─── 4. 增减百分比 (Delta %，自动添加正负号) ─────────────────
+                "delta_pct_1dp",           IF(__Value > 0, "+", "") & FORMAT(__Value, "0.0%"),          // +14.5% / -3.2%
+                "delta_pct_2dp",           IF(__Value > 0, "+", "") & FORMAT(__Value, "0.00%"),         // +14.50%
+
+                // ─── 5. 增减基点 (Delta BP，区分原始值与转换值) ──────────────
+                // 5.1 __Value 本身已经是基点值 (如 120.5)
+                "delta_bp_1dp",            IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0.0") & "bp",// +120.5bp / -80.0bp
+                // 5.2 __Value 是小数格式，需要乘以 10000 转换为基点 (如 0.012 -> 120bp)
+                "delta_bp",                IF(__Value >= 0, "+", "") & FORMAT(__Value * 10000, "#,##0") & "bp", // +120bp / -80bp
+
+                // ─── 6. 默认兜底格式 ─────────────────────────────────────────
+                FORMAT(__Value, "#,##0.00")                                           // 默认输出两位小数: 1,000.00
             )
-        )
+)
 
 ================================================================================
 5.4 条件格式度量值 — 字体颜色
