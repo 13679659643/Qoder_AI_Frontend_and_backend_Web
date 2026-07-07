@@ -1,0 +1,551 @@
+Crowd_YOY_matrix_solution — Crowd 同比矩阵解决方案
+
+> 本文件实现总计行的当期值、上期值、同比 YOY 值。
+> 同期值计算逻辑LP 日期覆盖机制。
+> 指标 SWITCH 分发架构（Base Value + Cell Value + Cell Display + 条件格式）。
+> 行维度采用 Keyword_matrix_solution 的 4 级结构（category → keyword_type → plan_name → keyword_name）。
+> channel 固定筛选 + Platform 切片器 + Dim_Crowd_Season_C_Label 切片器沿用 Keyword_X_matrix_solution 方案。
+>
+> 创建: 2026-07-06
+> 版本: v1.0
+> 依赖: Keyword_matrix_solution（行维度/字段映射）、Keyword_X_matrix_solution（channel 固定筛选/切片器）
+
+================================================================================
+1. 行路由维度 DIM_RowKPIs_Keyword_Crowd:Keyword和Crowd模块共用
+================================================================================
+
+DIM_RowKPIs_Keyword_Crowd =
+// ========================================
+// 表: DIM_RowKPIs_Keyword_Crowd
+// 类型: 断开维度
+// 用途: Crowd YOY 矩阵行内层维度（This Year / Last Year / Period on Period）
+//       结构与 DIM_RowKPIs_Media_Mix / DIM_RowKPIs_Overview 完全一致，复用同一模式
+//       单独建表以避免跨页面相互干扰
+// 行标签说明：
+//   This Year         — 当期值（本期日期范围对应的实际值）
+//   Last Year         — 上期值（同期日期范围 LP 对应的值）
+//   Period on Period  — 同比 YOY（(当期 - 上期) / 上期）
+// ========================================
+DATATABLE(
+    "Indicator Type",  STRING,     // 行标签（英文）
+    "Indicator Order", INTEGER,    // 排序值（起始10，步长10，便于后续插入新行）
+    {
+        { "This Year",         10 },
+        { "Last Year",         20 },
+        { "Period on Period",  30 }
+    }
+)
+
+Sort by Column 配置：
+| 表                 | 字段           | Sort by Column  |
+|--------------------|----------------|-----------------|
+| DIM_RowKPIs_Keyword_Crowd | Indicator Type | Indicator Order |
+
+================================================================================
+2. 列维度 DIM_ColMetric_Keyword_Crowd:Keyword和Crowd模块共用
+================================================================================
+
+DIM_ColMetric_Keyword_Crowd =
+// ========================================
+// 表: DIM_ColMetric_Keyword_Crowd
+// 类型: 断开维度
+// 用途: Crowd YOY 矩阵列维度（9 个指标）
+//
+// 指标清单（口径来源：口径文档/Crowd.md — SPEC，一切以口径文档为准）：
+//   1  Cost              花费金额（有口径: SUM(cost_amt)）
+//   2  Cost%             花费占比（有口径: 当前行 cost / 总计 cost）
+//   3  ROI               媒体ROI（有口径: GMV / Cost = sales_amt / cost_amt）
+//   4  Click             点击量（有口径: SUM(click)）
+//   5  CPC               平均点击花费（有口径: Cost / Click = cost_amt / click）
+//   6  CTR               点击率（有口径: Click / Impression = click / pv）
+//   7  CVR               点击转化率（有口径: Orders / Click = sales_order_cnt / click）
+//   8  Add to Cart       加购数（有口径: SUM(add_cart_cnt)）
+//   9  CPATC             加购成本（有口径: Cost / Add to Cart = cost_amt / add_cart_num）
+//
+// 格式类型（与 Crowd.md 口径文档一致）：
+//   currency              → 币种符号 + #,##0（千分位整数）→ Cost
+//   currency_decimal_1dp  → 币种符号 + #,##0.0（千分位一位小数）→ CPC / CPATC
+//   decimal_1dp           → #,##0.0（一位小数）→ ROI
+//   percent_1dp           → 0.0%（百分比一位小数）→ Cost% / CTR / CVR
+//   integer               → #,##0（千分位整数）→ Click / Add to Cart
+//
+// 颜色约定（YOY 行 — Period on Period）：
+//   正值（>0）：#1A9018 绿色
+//   负值（<0）：#D64550 红色
+//   零值（=0）：#E1C233 黄色
+//   默认：#5f6165 深灰（This Year / Last Year 行）
+//   不区分指标业务性质，统一按数值正负判断
+//
+// 汇率标记：Metric_IsCurrencyAmount = TRUE → 金额类，切换币种时乘汇率
+//           仅 Cost 为 TRUE；CPC/CPATC 为比率类不乘汇率，仅显示带币种符号
+// ========================================
+DATATABLE(
+    "Metric_ID",               INTEGER,
+    "Metric_Name",             STRING,
+    "Metric_Sort",             INTEGER,
+    "Metric_Format_Current",   STRING,
+    "Metric_Format_LP",        STRING,
+    "Metric_Format_VsLP",      STRING,
+    "Metric_IsCurrencyAmount", BOOLEAN,
+    "Metric_ColorPositive",    STRING,
+    "Metric_ColorNegative",    STRING,
+    "Metric_ColorZero",        STRING,
+    "Metric_ColorDefault",     STRING,
+    {
+        // ID  Name             Sort  Fmt_Current              Fmt_LP                   Fmt_VsLP       IsCurAmt  Pos        Neg        Zero       Default
+        // Metric_Sort：起始10，步长10（便于后续在指标间插入新列）
+        // 颜色规则：正值一律绿色 #1A9018，负值一律红色 #D64550，零值黄色 #E1C233（不区分指标业务性质）
+        // 汇率规则：仅 Cost（ID=1）为 TRUE（金额类乘汇率）；CPC/CPATC 为比率类不乘汇率
+        {  1, "Cost",            10,  "currency",              "currency",              "percent_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  2, "Cost%",           20,  "percent_1dp",           "percent_1dp",           "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  3, "ROI",             30,  "decimal_1dp",           "decimal_1dp",           "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  4, "Click",           40,  "integer",               "integer",               "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  5, "CPC",             50,  "currency_decimal_1dp",  "currency_decimal_1dp",  "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  6, "CTR",             60,  "percent_1dp",           "percent_1dp",           "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  7, "CVR",             70,  "percent_1dp",           "percent_1dp",           "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  8, "Add to Cart",     80,  "integer",               "integer",               "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  9, "CPATC",           90,  "currency_decimal_1dp",  "currency_decimal_1dp",  "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+    }
+)
+
+Sort by Column 配置：
+| 表                    | 字段        | Sort by Column |
+|-----------------------|-------------|----------------|
+| DIM_ColMetric_Keyword_Crowd | Metric_Name | Metric_Sort    |
+
+================================================================================
+3. 指标 SWITCH 分发 — Crowd Base Value
+================================================================================
+
+Crowd Base Value =
+// ========================================
+// 度量值: Crowd Base Value
+// Display Folder: Crowd YOY
+// 用途: 纯指标 SWITCH 分发器，9 列指标统一聚合分发
+//       返回 RMB 原始值（不乘汇率，汇率换算在 Cell Value 层处理）
+//
+// 架构说明：
+//     行维度筛选上下文由矩阵自然传递，无需 DAX 处理
+//   - 列上下文：DIM_ColMetric_Keyword[Metric_ID] 由 SELECTEDVALUE 获取
+//   - 固定数据范围筛选（SPEC：channel=直通车/引力魔方/全站推）：
+//     * channel IN {"直通车","引力魔方","全站推"} 固定筛选
+//     * FILTER(VALUES()) 交集模式（channel 不是行维度，但保留筛选语义一致性）
+//   - 切片器筛选：
+//     * Slicer_Platform_Selection（Platform，单选含 ALL，复用 Overview）
+//     * Slicer_DataCaliber_Selection（trans_cycle，单选，复用 Overview）
+//     * Dim_Crowd_Season_C_Label（Super Season / Category / Label 三列同源，多选级联）
+//       - [Super Season] → 事实表字段 season
+//       - [Category]     → 事实表字段 category
+//       - [Label]        → 事实表字段 brand
+//
+// 依赖: DIM_ColMetric_Keyword_Crowd[Metric_ID]
+//       Slicer_Platform_Selection[Platform_ID]
+//       Slicer_DataCaliber_Selection[DataCaliber_ID]
+//       Dim_Crowd_Season_C_Label[Super Season / Category / Label]
+//       a05_e2e_paid_media_crowed_data_d
+//       Dim_Date_Current（关系传递 data_date 筛选，本度量值不直接引用）
+// ========================================
+
+    // ── 列上下文 ──
+    VAR __MetricID = SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_ID])
+
+    // ── 复用切片器（单选）──
+    VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+
+    // ── Dim_Crowd_Season_C_Label 切片器值（多选）──
+    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+
+    // ── Platform FILTER 块 ──
+    // __ChannelID = "ALL" → platform IN {"TM","JD"}（精确圈定 TM+JD）
+    // __ChannelID = "TM"/"JD" → platform = __ChannelID（单平台精确筛选）
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_crowed_data_d[platform]),
+            IF(__ChannelID = "ALL",
+                a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_crowed_data_d[platform] = __ChannelID))
+
+    // ── Channel 固定数据范围筛选（SPEC：channel=直通车/引力魔方/全站推）──
+    // FILTER(VALUES()) 交集模式：保留行维度筛选，仅保留 channel 在 SPEC 范围内的行
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+
+    // ── 公共筛选参数（所有指标共用）──
+    // 行维度（category / keyword_type / plan_name / keyword_name）由矩阵行上下文自然传递
+    // 此处仅施加切片器 + 固定范围筛选
+    // ⚠️ 严禁在 CALCULATE 中使用 FILTER(ALL(事实表), ...)，会破坏 Dim_Date_Current
+    //    通过关系传递的 data_date 上下文，导致 Cell Value 层 LP 日期覆盖失效
+
+    // ── ID 1: Cost — 花费金额 ──
+    VAR __Cost =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[cost_amt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[season]),
+                a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[category]),
+                a05_e2e_paid_media_crowed_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[brand]),
+                a05_e2e_paid_media_crowed_data_d[brand] IN __LabelVals)
+        )
+
+    // ── ID 2: Cost% — 花费占比 ──
+    // 口径：DIVIDE(当前行 cost_amt, 总计 cost_amt)
+    // 分母移除全部 4 个行维度（category / keyword_type / plan_name / keyword_name）
+    // 分母用 FILTER(ALL()) 仅保留切片器 + channel 固定范围筛选
+    VAR __TotalCost =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[cost_amt]),
+            __PlatformFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
+            FILTER(ALLSELECTED(a05_e2e_paid_media_crowed_data_d[channel]),
+                a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"}),
+            FILTER(ALL(a05_e2e_paid_media_crowed_data_d[season]),
+                a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),
+            FILTER(ALL(a05_e2e_paid_media_crowed_data_d[category]),
+                a05_e2e_paid_media_crowed_data_d[category] IN __CategoryVals),
+            FILTER(ALL(a05_e2e_paid_media_crowed_data_d[brand]),
+                a05_e2e_paid_media_crowed_data_d[brand] IN __LabelVals)
+        )
+    VAR __CostPct = DIVIDE(__Cost, __TotalCost)
+
+    // ── ID 3: ROI — 媒体ROI = sales_amt / cost_amt ──
+    VAR __GMV =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[sales_amt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[season]),
+                a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[category]),
+                a05_e2e_paid_media_crowed_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[brand]),
+                a05_e2e_paid_media_crowed_data_d[brand] IN __LabelVals)
+        )
+    VAR __ROI = DIVIDE(__GMV, __Cost)
+
+    // ── ID 4: Click — 点击量 ──
+    VAR __Click =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[click]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[season]),
+                a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[category]),
+                a05_e2e_paid_media_crowed_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[brand]),
+                a05_e2e_paid_media_crowed_data_d[brand] IN __LabelVals)
+        )
+
+    // ── ID 5: CPC — 平均点击花费 = cost_amt / click（比率类，不乘汇率）──
+    VAR __CPC = DIVIDE(__Cost, __Click)
+
+    // ── ID 6: CTR — 点击率 = click / pv ──
+    VAR __PV =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[pv]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[season]),
+                a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[category]),
+                a05_e2e_paid_media_crowed_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[brand]),
+                a05_e2e_paid_media_crowed_data_d[brand] IN __LabelVals)
+        )
+    VAR __CTR = DIVIDE(__Click, __PV)
+
+    // ── ID 7: CVR — 点击转化率 = sales_order_cnt / click ──
+    VAR __Orders =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[sales_order_cnt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[season]),
+                a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[category]),
+                a05_e2e_paid_media_crowed_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[brand]),
+                a05_e2e_paid_media_crowed_data_d[brand] IN __LabelVals)
+        )
+    VAR __CVR = DIVIDE(__Orders, __Click)
+
+    // ── ID 8: Add to Cart — 加购数 ──
+    VAR __AddToCart =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[add_cart_cnt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[season]),
+                a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[category]),
+                a05_e2e_paid_media_crowed_data_d[category] IN __CategoryVals),
+            FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[brand]),
+                a05_e2e_paid_media_crowed_data_d[brand] IN __LabelVals)
+        )
+
+    // ── ID 9: CPATC — 加购成本 = cost_amt / add_cart_num（比率类，不乘汇率）──
+    VAR __CPATC = DIVIDE(__Cost, __AddToCart)
+
+    RETURN
+    SWITCH(
+        __MetricID,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 1: Cost — 花费金额
+        // 口径: SUM(cost_amt)
+        // ═══════════════════════════════════════════════════════
+        1, __Cost,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 2: Cost% — 花费占比
+        // 口径: 当前行 cost / 总计 cost
+        // ═══════════════════════════════════════════════════════
+        2, __CostPct,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 3: ROI — 媒体ROI
+        // 口径: sales_amt / cost_amt = GMV / Cost
+        // ═══════════════════════════════════════════════════════
+        3, __ROI,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 4: Click — 点击量
+        // 口径: SUM(click)
+        // ═══════════════════════════════════════════════════════
+        4, __Click,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 5: CPC — 平均点击花费
+        // 口径: Cost / Click = DIVIDE(__Cost, __Click)
+        // ═══════════════════════════════════════════════════════
+        5, __CPC,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 6: CTR — 点击率
+        // 口径: Click / Impression = DIVIDE(__Click, __PV)
+        // ═══════════════════════════════════════════════════════
+        6, __CTR,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 7: CVR — 点击转化率
+        // 口径: Orders / Click = DIVIDE(__Orders, __Click)
+        // ═══════════════════════════════════════════════════════
+        7, __CVR,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 8: Add to Cart — 加购数
+        // 口径: SUM(add_cart_cnt)
+        // ═══════════════════════════════════════════════════════
+        8, __AddToCart,
+
+        // ═══════════════════════════════════════════════════════
+        // ID 9: CPATC — 加购成本
+        // 口径: Cost / Add to Cart = DIVIDE(__Cost, __AddToCart)
+        // ═══════════════════════════════════════════════════════
+        9, __CPATC,
+
+        // ─── 默认 ──────────────────────────────────────────────
+        BLANK()
+    )
+
+================================================================================
+4. 行路由度量值 — Crowd Cell Value
+================================================================================
+
+Crowd Cell Value =
+// ========================================
+// 度量值: Crowd Cell Value
+// Display Folder: Crowd YOY
+// 用途: 根据行维度（This Year / Last Year / Period on Period）路由到不同的计算逻辑
+//       - This Year          ：调用 [Crowd Base Value]，金额类指标乘以汇率
+//       - Last Year          ：CALCULATE([Crowd Base Value], LP 日期覆盖)，金额类指标乘以汇率
+//       - Period on Period   ：(This Year - Last Year) / Last Year，增长率不受汇率影响
+//
+// 同期日期覆盖机制参考 Media Mix_matrix_solution#L820-841（LP 日期覆盖机制）：
+//   REMOVEFILTERS(Dim_Date_Current) + FILTER(ALL(Dim_Date_Current), 日期范围)
+//   日期范围来自 Dim_Date_Ly[LY_数据日期] 的 MIN/MAX
+//
+// 依赖: DIM_RowKPIs_Keyword_Crowd[Indicator Type]
+//       Dim_Date_Ly
+//       Slicer_Currency_Selection[Currency_ExchangeRate]
+//       DIM_ColMetric_Keyword_Crowd[Metric_IsCurrencyAmount]
+//       [Crowd Base Value]
+// ========================================
+
+    // ── 行上下文 ──
+    VAR __Indicator     = SELECTEDVALUE(DIM_RowKPIs_Keyword_Crowd[Indicator Type])
+
+    // ── 汇率上下文 ──
+    VAR __ExchangeRate  = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
+    VAR __IsCurrencyAmt = SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_IsCurrencyAmount], FALSE)
+
+    // ── 同期日期范围（来自 Dim_Date_Ly 断开维度）──
+    VAR __LP_Start      = MIN(Dim_Date_Ly[LY_数据日期])
+    VAR __LP_End        = MAX(Dim_Date_Ly[LY_数据日期])
+
+    // ── This Year 值 ──
+    VAR __CurrentValue  = [Crowd Base Value]
+
+    // ── Last Year 值（覆盖日期上下文为 LP 日期范围）──
+    // 机制：REMOVEFILTERS(Dim_Date_Current) 清除本期日期筛选
+    //       + FILTER(ALL(Dim_Date_Current), 日期在 LP 范围内) 重新施加同期日期筛选
+    //       其他维度筛选（channel/platform/trans_cycle/season/category/brand）不受影响
+    VAR __LP_Value      =
+        IF(
+            ISBLANK(__LP_Start) || ISBLANK(__LP_End),
+            BLANK(),
+            CALCULATE(
+                [Crowd Base Value],
+                REMOVEFILTERS(Dim_Date_Current),
+                FILTER(
+                    ALL(Dim_Date_Current),
+                    Dim_Date_Current[数据日期] >= __LP_Start
+                        && Dim_Date_Current[数据日期] <= __LP_End
+                )
+            )
+        )
+
+    // ── 汇率换算 ──
+    // 仅金额类指标（Metric_IsCurrencyAmount = TRUE）乘以汇率
+    // 比率类指标（CPC/CPATC 等）不乘汇率（分子分母同币种，比值无币种维度）
+    VAR __CurrentConverted =
+        IF(__IsCurrencyAmt, __CurrentValue * __ExchangeRate, __CurrentValue)
+    VAR __LP_Converted     =
+        IF(__IsCurrencyAmt, __LP_Value * __ExchangeRate, __LP_Value)
+
+    // ── YOY 同比计算 ──
+    // 口径：(This Year - Last Year) / Last Year
+    // 边界处理：
+    //   - Last Year 为空或 0 → YOY 返回 BLANK（避免除以 0）
+    //   - This Year 为空或 0 且 Last Year 有值 → YOY = -1（即 -100%）
+    //   - 增长率不受汇率影响（分子分母同币种，比值无币种维度）
+    VAR __CurrIsEmpty   = ISBLANK(__CurrentValue) || __CurrentValue = 0
+    VAR __LPIsEmpty     = ISBLANK(__LP_Value)     || __LP_Value = 0
+    VAR __YOY_Result    =
+        IF(
+            __LPIsEmpty,
+            BLANK(),
+            IF(__CurrIsEmpty, -1, DIVIDE(__CurrentValue - __LP_Value, __LP_Value))
+        )
+
+    RETURN
+    SWITCH(
+        TRUE(),
+        __Indicator = "This Year",         __CurrentConverted,
+        __Indicator = "Last Year",         __LP_Converted,
+        __Indicator = "Period on Period",  __YOY_Result,
+        BLANK()
+    )
+
+================================================================================
+5. 格式化显示度量值 — Crowd Cell Display
+================================================================================
+
+Crowd Cell Display =
+// ========================================
+// 度量值: Crowd Cell Display
+// Display Folder: Crowd YOY > Formatting
+// 用途: 根据行类型 + 列指标格式，返回格式化文本
+//       格式类型从 DIM_ColMetric_Keyword_Crowd 动态读取
+//       货币符号从 Slicer_Currency_Selection 动态读取
+//
+// 格式类型说明（与口径文档 Crowd.md 一致）：
+//   currency              → 币种符号 + #,##0（千分位整数）→ Cost
+//   currency_decimal_1dp  → 币种符号 + #,##0.0（千分位一位小数）→ CPC / CPATC
+//   decimal_1dp           → #,##0.0（一位小数）→ ROI
+//   percent_1dp           → 0.0%（百分比一位小数）→ Cost% / CTR / CVR
+//   integer               → #,##0（千分位整数）→ Click / Add to Cart
+//
+// YOY 行（Period on Period）格式：
+//   所有指标统一用 percent_1dp（增长率百分比）
+//   由 DIM_ColMetric_Keyword_Crowd[Metric_Format_VsLP] = "percent_1dp" 控制
+//
+// 依赖: [Crowd Cell Value]
+//       DIM_ColMetric_Keyword_Crowd[Metric_Format_*]
+//       DIM_RowKPIs_Keyword_Crowd[Indicator Type]
+//       Slicer_Currency_Selection[Currency_Symbol]
+// ========================================
+
+    VAR __Value          = [Crowd Cell Value]
+    VAR __Indicator      = SELECTEDVALUE(DIM_RowKPIs_Keyword_Crowd[Indicator Type])
+    VAR __Format         =
+        SWITCH(
+            __Indicator,
+            "This Year",         SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_Format_Current]),
+            "Last Year",         SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_Format_LP]),
+            "Period on Period",  SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_Format_VsLP]),
+            SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_Format_Current])
+        )
+    VAR __CurrencySymbol =
+        SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",
+            SWITCH(
+                __Format,
+
+                // ─── 1. 基础数字格式 ───────────────────────────────────────────
+                "integer",                 FORMAT(__Value, "#,##0"),                                    // 1,000
+                "decimal_1dp",             FORMAT(__Value, "#,##0.0"),                                  // 1,000.0
+
+                // ─── 2. 货币格式 ─────────────────────────────────────────────
+                "currency",                __CurrencySymbol & FORMAT(__Value, "#,##0"),                 // ¥1,000
+                "currency_decimal_1dp",    __CurrencySymbol & FORMAT(__Value, "#,##0.0"),               // ¥1,000.0
+
+                // ─── 3. 百分比格式 ──────────────────────────────────────────
+                "percent_1dp",             FORMAT(__Value, "0.0%"),                                     // 40.5%
+
+                // ─── 4. 默认兜底格式 ─────────────────────────────────────────
+                FORMAT(__Value, "#,##0.00")                                           // 默认: 1,000.00
+            )
+        )
+
+
+6. 切片器配置
+───────────────────────────────────────────────────────────────────────────────
+| 切片器          | 类型   | 字段                                               | 默认值 |
+|----------------|--------|----------------------------------------------------|--------|
+| 本期日期范围    | Between| Dim_Date_Current[数据日期]                         | —      |
+| 同期日期范围    | Between| Dim_Date_Ly[LY_数据日期]                           | —      |
+| Platform       | 单选   | Slicer_Platform_Selection[Platform_Label]          | ALL    |
+| 数据口径       | 单选   | Slicer_DataCaliber_Selection[DataCaliber_Label]    | T+1    |
+| 币种           | 单选   | Slicer_Currency_Selection[Currency_Label]          | RMB    |
+| Super Season   | 多选   | Dim_Crowd_Season_C_Label[Super Season]              | 全选   |
+| Category       | 多选   | Dim_Crowd_Season_C_Label[Category]                  | 全选   |
+| Label          | 多选   | Dim_Crowd_Season_C_Label[Label]                     | 全选   |
+
+注：channel=直通车/引力魔方/全站推 为内置于度量值的固定数据范围筛选，非切片器。
+
+================================================================================
+7. 指标口径与格式汇总（以口径文档 Crowd.md 为 SPEC）
+================================================================================
+
+| # | 指标名       | 状态     | 口径                                   | 汇率 | 数据类型              | This Year / Last Year 格式     | YOY 格式      |
+|---|-------------|----------|----------------------------------------|------|-----------------------|--------------------------------|---------------|
+| 1 | Cost        | 有口径   | SUM(cost_amt)                          | ✅乘 | currency              | 币种符号 + #,##0                | 0.0%          |
+| 2 | Cost%       | 有口径   | DIVIDE(当前行 cost_amt, 总计 cost_amt)  | ❌   | percent_1dp           | 0.0%                           | 0.0%          |
+| 3 | ROI         | 有口径   | DIVIDE(sales_amt, cost_amt)            | ❌   | decimal_1dp           | #,##0.0                        | 0.0%          |
+| 4 | Click       | 有口径   | SUM(click)                             | ❌   | integer               | #,##0                          | 0.0%          |
+| 5 | CPC         | 有口径   | DIVIDE(cost_amt, click)                | ❌   | currency_decimal_1dp  | 币种符号 + #,##0.0              | 0.0%          |
+| 6 | CTR         | 有口径   | DIVIDE(click, pv)                      | ❌   | percent_1dp           | 0.0%                           | 0.0%          |
+| 7 | CVR         | 有口径   | DIVIDE(sales_order_cnt, click)         | ❌   | percent_1dp           | 0.0%                           | 0.0%          |
+| 8 | Add to Cart | 有口径   | SUM(add_cart_cnt)                      | ❌   | integer               | #,##0                          | 0.0%          |
+| 9 | CPATC       | 有口径   | DIVIDE(cost_amt, add_cart_cnt)         | ❌   | currency_decimal_1dp  | 币种符号 + #,##0.0              | 0.0%          |
+
+口径与格式来源：RL E2E/RL E2E Traffic_Operation/口径文档/Crowd.md

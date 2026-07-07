@@ -791,6 +791,144 @@
 
 ---
 
+## [2026-07-06 01:00] 新建 — Keyword YOY 矩阵解决方案（当期/上期/同比三行路由 + 9 指标 SWITCH 分发）
+
+- **模块**: Keyword
+- **任务**: 新增 Keyword_YOY_matrix_solution，实现总计行的当期值、上期值、同比 YOY 值；参考 Media Mix 的 LP 日期覆盖机制和 SWITCH 分发架构
+- **操作**: 新建
+- **变更内容**:
+  - **新建文件**: `Keyword/Keyword_YOY_matrix_solution`（v1.0）
+  - **DIM_RowKPIs_Keyword**（行路由维度，3 行）：
+    - This Year（当期值，Indicator Order=10）
+    - Last Year（上期值，Indicator Order=20）
+    - Period on Period（同比 YOY，Indicator Order=30）
+    - 结构与 DIM_RowKPIs_Media_Mix / DIM_RowKPIs_Overview 一致，单独建表避免跨页面干扰
+  - **DIM_ColMetric_Keyword**（列维度，9 个指标，参考 Media Mix DIM_ColMetric_Media_Mix#L193-260）：
+    - 9 个指标：Cost / Cost% / ROI / Click / CPC / CTR / CVR / Add to Cart / CPATC
+    - 字段：Metric_ID / Metric_Name / Metric_Sort / Metric_Format_Current/LP/VsLP / Metric_IsCurrencyAmount / Metric_ColorPositive/Negative/Zero/Default
+    - 格式以口径文档 Keyword.md 为准：currency / currency_decimal_1dp / decimal_1dp / percent_1dp / integer
+    - 颜色规则：正值 #1A9018 / 负值 #D64550 / 零值 #E1C233 / 默认 #5f6165（不区分指标业务性质）
+    - 汇率标记：仅 Cost=TRUE（金额类乘汇率），CPC/CPATC=FALSE（比率类不乘汇率）
+  - **Keyword Base Value**（指标 SWITCH 分发，9 分支）：
+    - 返回 RMB 原始值（不乘汇率，汇率换算在 Cell Value 层处理）
+    - 行维度 4 级结构（category → keyword_type → plan_name → keyword_name）由矩阵自然传递
+    - channel 固定筛选 + Platform/DataCaliber/Crowd 切片器内建（沿用 Keyword_X_matrix_solution）
+    - Cost% 分母 REMOVEFILTERS 4 字段 + FILTER(ALL()) 仅保留切片器 + channel 固定范围
+    - 字段名以 SPEC 为准：media_sales_order_cnt / add_cart_num
+  - **Keyword Cell Value**（行路由 + 汇率换算 + LP 日期覆盖）：
+    - This Year → [Keyword Base Value]，金额类乘汇率
+    - Last Year → CALCULATE([Keyword Base Value], LP 日期覆盖)，金额类乘汇率
+    - Period on Period → (This Year - Last Year) / Last Year，不乘汇率
+    - LP 日期覆盖机制参考 Media_Mix_matrix_solution#L820-841：REMOVEFILTERS(Dim_Date_Current) + FILTER(ALL(Dim_Date_Current), LP 范围)
+    - YOY 边界处理：Last Year 为空/0 → BLANK；This Year 为空/0 → -1
+  - **Keyword Cell Display**（格式化显示）：
+    - 格式类型从 DIM_ColMetric_Keyword 动态读取（Metric_Format_Current/LP/VsLP）
+    - 货币符号从 Slicer_Currency_Selection 动态读取
+    - 支持 5 种格式：integer / decimal_1dp / currency / currency_decimal_1dp / percent_1dp
+    - YOY 行统一用 percent_1dp（增长率百分比）
+  - **Keyword Cell Font Color**（字体颜色）：
+    - This Year / Last Year 行：4 级层次（总计 #252423 近黑 / 其余 #5F6165 深灰）
+    - Period on Period 行（YOY）：正值绿色 / 负值红色 / 零值黄色 / 空值深灰
+    - 颜色从 DIM_ColMetric_Keyword 动态读取（Metric_ColorPositive/Negative/Zero/Default）
+    - ISINSCOPE 4 级判断来自 Keyword_matrix_solution
+  - **Keyword Cell SVG Icon**（YOY 行箭头图标）：
+    - 仅 Period on Period 行显示，This Year / Last Year 行返回 BLANK
+    - 正值绿色上箭头 / 负值红色下箭头 / 零值黄色横线
+    - 需将数据类别设为"图像 URL"
+  - **Keyword Cell Background Color**（行背景色，4 级层次）：
+    - 来自 Keyword_matrix_solution#L130-164
+    - category 行 + 总计行 → #DBC6A8（深米色）
+    - keyword_type 行 → #E6D9C7（中米色）
+    - plan_name 行 → #F4ECE4（浅米色）
+    - keyword_name 明细行 → #FFFFFF（白色）
+  - **引用关系**:
+    - Keyword_matrix_solution：行维度 4 级结构 + ISINSCOPE 4 级判断 + 4 级层次背景色 + Cost% 分母 REMOVEFILTERS 4 字段
+    - Keyword_X_matrix_solution：channel 固定筛选 + Platform/DataCaliber/Crowd 切片器架构 + 字段名（media_sales_order_cnt / add_cart_num）
+    - Media_Mix_matrix_solution：LP 日期覆盖机制（#L820-841）+ SWITCH 分发架构（Base Value + Cell Value + Cell Display + 条件格式）+ 汇率换算策略 + YOY 边界处理
+- **关联文件**: `Keyword/Keyword_YOY_matrix_solution`（新建）, `Keyword/Keyword_matrix_solution`（引用）, `Keyword/Keyword_X_matrix_solution`（引用）, `Media Mix/Media_Mix_matrix_solution`（参考）
+- **备注**:
+  - 口径来源：`RL E2E/RL E2E Traffic_Operation/口径文档/Keyword.md`
+  - 行维度：4 级结构（category → keyword_type → plan_name → keyword_name），来自 Keyword_matrix_solution
+  - LP 日期覆盖机制：REMOVEFILTERS(Dim_Date_Current) + FILTER(ALL(Dim_Date_Current), LP 范围)，来自 Media Mix
+  - SWITCH 分发架构：Base Value（9 分支）→ Cell Value（3 行路由）→ Cell Display（格式化）+ 3 个条件格式度量值
+  - 行标签用 "Period on Period" 而非 "YOY"（与 DIM_RowKPIs_Overview/Media_Mix 命名风格保持一致）
+  - 矩阵视觉对象：行 = 4 级行维度 + Indicator Type（最内层），列 = 9 个指标，值 = [Keyword Cell Display]
+  - Display Folder：Keyword YOY / Keyword YOY > Formatting
+
+---
+
+## [2026-07-06 00:00] 修改 — Keyword X 方案 v2 口径文档对齐（行维度重构 + channel 固定筛选 + 字段名修正 + ROI 口径填充 + 格式全面调整）
+
+- **模块**: Keyword
+- **任务**: 以《口径文档 Keyword.md》为 SPEC，全面调整 Keyword_X_matrix_solution — 行维度第5级替换 + 新增 channel 固定数据范围筛选 + 字段名修正 + ROI 口径填充 + 全部格式字符串按 SPEC 调整
+- **操作**: 修改
+- **变更内容**:
+  - **行维度第5级替换**：
+    - 原：channel → brand → framework → category → customer_type
+    - 新：channel → brand → framework → category → season（以 SPEC 为准）
+    - 影响范围：9 个核心度量值的 FILTER(VALUES()) 行维度引用、Cost% 分母 REMOVEFILTERS 字段、Cell Font Color / Cell Background Color 的 ISINSCOPE 字段、Table 视觉对象行配置
+  - **新增 channel 固定数据范围筛选（SPEC：channel=直通车/引力魔方/全站推）**：
+    - 所有度量值内建 channel IN {"直通车","引力魔方","全站推"} 固定筛选
+    - 采用 FILTER(VALUES()) 交集模式（channel 同时是行维度第1级，需保留行维度筛选）
+    - Cost% 分母使用 FILTER(ALL()) 模式（移除 channel 行维度后重新施加范围筛选）
+    - 与 Platform 切片器（platform IN {TM,JD}）并存，互不干扰
+    - 新增 `__ChannelScopeFilter` 变量（4 个双 CALCULATE 度量值复用）
+    - 新增 Section 2.3 全局固定数据范围筛选说明 + Section 9.2 技术说明
+  - **字段名修正（以 SPEC 为准）**：
+    - `sales_order_cnt` → `media_sales_order_cnt`（CVR 分子字段，9.8 CVR 度量值）
+    - `add_cart_cnt` → `add_cart_num`（Add to Cart / CPATC 度量值，9.9 / 9.10）
+    - 影响范围：Keyword X CVR / Keyword X Add to Cart / Keyword X CPATC 三个度量值
+  - **ROI 口径填充（原占位=1）**：
+    - 原：`IF(ISBLANK([Keyword X Cost]),BLANK(),1)`（占位值）
+    - 新：`DIVIDE(SUM(media_sales_amt), SUM(cost_amt))` = 成交金额 / 花费（以 SPEC 为准）
+    - 中文名从"投资回报率"改为"媒体ROI"（SPEC 用词）
+    - 数据字典补充：media_sales_amt = 成交金额(GMV)
+  - **格式字符串全面按 SPEC 调整**（9 个 Display 度量值）：
+    - Cost Display：`#,##0.00;(#,##0.00);0.00` → `币种符号 + #,##0`（千分位整数，currency 类型）
+    - Cost% Display：`0.0%;-0.0%;0.0%` → `#,##0.0%;#,##0.0%;0.0%`（percent_1dp，无负号）
+    - ROI Display：`#,##0.00;-#,##0.00;0.00` → `#,##0.0`（decimal_1dp，一位小数）
+    - Click Display：`#,##0;(#,##0);0` → `#,##0`（integer，无括号负数格式）
+    - CPC Display：`#,##0.00;-#,##0.00;0.00` → `币种符号 + #,##0.0`（currency_decimal_1dp，带币种符号）
+    - CTR Display：`0.0%;-0.0%;0.0%` → `#,##0.0%;#,##0.0%;0.0%`（percent_1dp，无负号）
+    - CVR Display：`0.0%;-0.0%;0.0%` → `#,##0.0%;#,##0.0%;0.0%`（percent_1dp，无负号）
+    - Add to Cart Display：`#,##0;(#,##0);0` → `#,##0`（integer，无括号负数格式）
+    - CPATC Display：`#,##0.00;-#,##0.00;0.00` → `币种符号 + #,##0.0`（currency_decimal_1dp，带币种符号）
+    - 中文名同步调整：CPC"单次点击成本"→"平均点击花费"、CVR"转化率"→"点击转化率"、Add to Cart"总加购数"→"加购数"、CPATC"单次加购成本"→"加购成本"（均以 SPEC 用词为准）
+  - **CPC / CPATC 显示带币种符号但不乘汇率**：
+    - CPC / CPATC 核心度量值不乘汇率（比率类指标，分子分母同币种）
+    - Display 度量值拼接币种符号 `__CurrencySymbol & FORMAT(__Value, "#,##0.0")`
+    - 与 Media Mix 模块 CPC/CPATC/AOV 处理方式一致
+    - 新增 Section 9.3 技术说明
+  - **辅助度量值 ISINSCOPE 字段更新**：
+    - `__IsCustomerType` → `__IsSeason`（Cell Font Color / Cell Background Color）
+    - ISINSCOPE 字段：customer_type → season
+    - 5 级层次背景色映射：season 明细行（白色 #FFFFFF）/ category 小计（淡米色 #FAF6F1）/ framework 小计（浅米色 #F4ECE4）/ brand 小计（中米色 #E6D9C7）/ channel 行+总计行（深米色 #DBC6A8）
+  - **Cost% 分母 REMOVEFILTERS 字段更新**：
+    - 原：REMOVEFILTERS(channel/brand/framework/category/customer_type)
+    - 新：REMOVEFILTERS(channel/brand/framework/category/season)
+    - 同步新增 FILTER(ALL(channel)) 施加 channel 固定范围筛选
+  - **文档同步更新**：
+    - 文件头版本信息升级至 v2（2026-07-06，口径文档对齐）
+    - 第 0 节架构总览重写（行维度 + channel 固定筛选 + 度量值口径说明）
+    - 第 2.1 节事实表字段清单更新（行维度字段 + 指标字段名）
+    - 第 2.3 节新增"全局固定数据范围筛选"说明
+    - 第 3.1 节公共筛选逻辑新增 `__ChannelScopeFilter` 变量
+    - 第 8 节指标口径与格式汇总表全面更新（以 SPEC 为准）
+    - 第 9 节技术说明新增 9.2 channel 固定筛选 / 9.3 CPC/CPATC 币种符号说明
+    - 第 9.6 节 Cost% 分母说明更新（新增 channel 固定范围筛选）
+    - 第 10 节验证清单更新（新增 channel 固定范围 / 字段名 / 格式字符串验证项）
+- **关联文件**: `Keyword/Keyword_X_matrix_solution`, `口径文档/Keyword.md`
+- **备注**:
+  - 口径来源：`RL E2E/RL E2E Traffic_Operation/口径文档/Keyword.md`
+  - 行维度变更：第5级 customer_type → season，影响全部度量值和辅助度量值
+  - channel 固定筛选策略：FILTER(VALUES()) 交集模式（channel 是行维度），与 Platform 切片器 FILTER(ALL()) 模式并存
+  - 字段名变更以 SPEC 为准：media_sales_order_cnt（CVR 分子）/ add_cart_num（加购字段）
+  - ROI 从占位值=1 填充为真实口径 DIVIDE(media_sales_amt, cost_amt)
+  - 格式字符串全部按 SPEC 调整：百分比无负号（#,##0.0%;#,##0.0%;0.0%）、金额千分位整数（#,##0）、小数一位（#,##0.0）、CPC/CPATC 带币种符号一位小数
+  - 架构（Table 视觉对象 + 9 独立度量值 + Dim_Crowd_Season_C_Label 切片器 + FILTER(VALUES()) 交集模式）保持不变
+
+---
+
 ## [2026-06-22 16:30] 修改 — Keyword 方案字段映射修正（crowed_* → season/category/brand）
 
 - **模块**: Keyword

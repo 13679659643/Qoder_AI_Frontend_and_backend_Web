@@ -3,7 +3,6 @@
 -- 表: `indep_rl_ads`.a05_e2e_paid_media_product_data_d
 -- ========================================
 select 
-IF(currency is null, 'RMB', currency) AS currency,
 *
 FROM `indep_rl_ads`.a05_e2e_paid_media_product_data_d
 WHERE platform IN ('JD', 'TM')
@@ -11,7 +10,6 @@ WHERE platform IN ('JD', 'TM')
 let
     源 = Odbc.Query("dsn=ByteHouse_MySQL_20260422", "
 select 
-IF(currency is null, 'RMB', currency) AS currency,
 *
 FROM `indep_rl_ads`.a05_e2e_paid_media_product_data_d
 WHERE platform IN ('JD', 'TM')

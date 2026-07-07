@@ -3,7 +3,7 @@
 > **Dashboard**: DCom Performance Media Operation Dashboard  
 > **Tab**: Category Growth  
 > **板块名称**: Framework/Super Season × Label × Category × channel × mix_msg  
-> **数据底表**: `a05_e2e_paid_media_product_data`  
+> **数据底表**: `a05_e2e_paid_media_product_data_d`  
 > **子模块说明**: 本板块统一名称下包含两个子模块，行维度不同，但各指标计算逻辑一致，无需拆分单独取数：
 > - 子模块一：Framework × Label × Category ×  channel × mix_msg（行维度含 `framework`）
 > - 子模块二：Super Season × Label × Category × channel × mix_msg（行维度含 `super_season`）
@@ -83,7 +83,7 @@ Category Growth Cell Background Color =
 | **计算公式** | 该分组库存件数 / 总库存件数 |
 | **分子** | `stock_qty`（该分组库存数量） |
 | **分母** | `stock_qty`（全部分组合计、移除全部 5 个行维度） |
-| **数据底表** | `a05_e2e_paid_media_product_data` |
+| **数据底表** | `a05_e2e_paid_media_product_data_d` |
 | **筛选条件** | 按 framework/brand/category 分组 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
@@ -98,7 +98,7 @@ Category Growth Cell Background Color =
 | **业务定义** | 推广中SKU数，统计周期最后一天仍在推的商品ID去重计数 |
 | **计算公式** | 获取当前时间周期的最大日期，然后对living_sku_cnt聚合SUM |
 | **统计字段** | `living_sku_cnt` |
-| **数据底表** | `a05_e2e_paid_media_product_data` |
+| **数据底表** | `a05_e2e_paid_media_product_data_d` |
 | **筛选条件** | 需要判断层级，如果当前上下文在第5层级，则需要过滤其他四个层级字段值为ALL，在其他层级的时候逻辑一致，比如现在在framework层级，需要过滤brand、category、channel、mix_msg字段值为ALL |
 | **数据类型** | integer → 千分位整数，不含小数 |
 | **数据格式** | `#,##0;(#,##0);0` |
@@ -113,7 +113,7 @@ Category Growth Cell Background Color =
 | **业务定义** | 推广中SKU数，统计周期同期的最后一天仍在推的商品ID去重计数 |
 | **计算公式** | YOY同比：本期值/同期(LP)统计周期最后一天对living_sku_cnt聚合SUM - 1 |
 | **统计字段** | `living_sku_cnt` |
-| **数据底表** | `a05_e2e_paid_media_product_data` |
+| **数据底表** | `a05_e2e_paid_media_product_data_d` |
 | **筛选条件** | 同期 LP；也需要判断层级，如果当前上下文在第5层级，则需要过滤其他四个层级字段值为ALL，在其他层级的时候逻辑一致，比如现在在framework层级，需要过滤brand、category、channel、mix_msg字段值为ALL |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
@@ -129,7 +129,7 @@ Category Growth Cell Background Color =
 | **计算公式** | 品类 Net Sales / TTL Net Sales |
 | **分子** | `net_sales_amt`（该品类） |
 | **分母** | `net_sales_amt`（全店 TTL、移除全部 5 个行维度） |
-| **数据底表** | `a05_e2e_paid_media_product_data` |
+| **数据底表** | `a05_e2e_paid_media_product_data_d` |
 | **筛选条件** | 全局筛选的条件下直接 sum |
 | **注意** | 注意带上全局筛选的条件 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
@@ -146,7 +146,7 @@ Category Growth Cell Background Color =
 | **计算公式** | YOY同比：本期值/（品类 Net Sales / TTL Net Sales（同期 LP）） - 1 |
 | **分子** | `net_sales_amt`（该品类，同期 LP） |
 | **分母** | `net_sales_amt`（全店 TTL，同期 LP、移除全部 5 个行维度） |
-| **数据底表** | `a05_e2e_paid_media_product_data` |
+| **数据底表** | `a05_e2e_paid_media_product_data_d` |
 | **筛选条件** | 全局筛选的条件下直接 sum |
 | **注意** | 注意带上全局筛选的条件 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
@@ -162,7 +162,7 @@ Category Growth Cell Background Color =
 | **业务定义** | 实际总媒体花费 |
 | **计算公式** | 各品类推广花费加总 |
 | **统计字段** | `cost_amt` |
-| **数据底表** | `a05_e2e_paid_media_product_data` |
+| **数据底表** | `a05_e2e_paid_media_product_data_d` |
 | **筛选条件** | 全局筛选的条件下直接 sum |
 | **注意** | 注意带上全局筛选的条件 |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
@@ -178,7 +178,7 @@ Category Growth Cell Background Color =
 | **业务定义** | 同期实际总媒体花费 |
 | **计算公式** | YOY同比：本期值/各品类推广花费（同期 LP）-1 |
 | **统计字段** | `cost_amt` |
-| **数据底表** | `a05_e2e_paid_media_product_data` |
+| **数据底表** | `a05_e2e_paid_media_product_data_d` |
 | **筛选条件** | 同期 LP：全局筛选的条件下直接 sum  |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
@@ -194,7 +194,7 @@ Category Growth Cell Background Color =
 | **计算公式** | 品类 Cost / TTL Cost |
 | **分子** | `cost_amt`（该品类） |
 | **分母** | `cost_amt`（商品表 TTL、移除全部 5 个行维度） |
-| **数据底表** | `a05_e2e_paid_media_product_data` |
+| **数据底表** | `a05_e2e_paid_media_product_data_d` |
 | **筛选条件** | 按 framework/brand/category 分组 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
@@ -209,7 +209,7 @@ Category Growth Cell Background Color =
 | **业务定义** | 同期实际媒体花费占比总媒体花费的百分比 |
 | **计算公式** | YOY同比：本期值/（品类 Cost / TTL Cost（同期 LP）） - 1 |
 | **统计字段** | `cost_amt`（品类）/ `cost_amt`（TTL） |
-| **数据底表** | `a05_e2e_paid_media_product_data` |
+| **数据底表** | `a05_e2e_paid_media_product_data_d` |
 | **筛选条件** | 同期 LP |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
@@ -225,7 +225,7 @@ Category Growth Cell Background Color =
 | **计算公式** | 品类 Sales / 品类 Cost |
 | **分子** | `media_sales_amt`（投放带来成交金额） |
 | **分母** | `cost_amt`（品类花费） |
-| **数据底表** | `a05_e2e_paid_media_product_data` |
+| **数据底表** | `a05_e2e_paid_media_product_data_d` |
 | **筛选条件** | 按 framework/brand/category 分组 |
 | **数据类型** | decimal_1dp → 数值，保留一位小数 |
 | **数据格式** | `#,##0.0;-#,##0.0;0.0` |
@@ -240,7 +240,7 @@ Category Growth Cell Background Color =
 | **业务定义** | 同期花费 / 同期成交金额，计算出 ROI |
 | **计算公式** | YOY同比：本期值/（品类 Sales / 品类 Cost（同期 LP）） - 1 |
 | **统计字段** | `media_sales_amt` / `cost_amt` |
-| **数据底表** | `a05_e2e_paid_media_product_data` |
+| **数据底表** | `a05_e2e_paid_media_product_data_d` |
 | **筛选条件** | 同期 LP |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
@@ -251,7 +251,7 @@ Category Growth Cell Background Color =
 
 | 规则项 | 说明 |
 |---|---|
-| **数据底表** | 全部指标统一使用 `a05_e2e_paid_media_product_data` |
+| **数据底表** | 全部指标统一使用 `a05_e2e_paid_media_product_data_d` |
 | **子模块** | 板块含两个子模块：Framework × Label × Category × Ads format、Super Season × Label × Category × Ads format；两者行维度不同但指标计算逻辑一致，仅个别指标有移除维度的差异，无需拆分取数 |
 | **分组维度** | 均按 `brand`（对应 Label）/ `category` 分组，并叠加首列行维度：子模块一为 `framework`，子模块二为 `super_season` |
 | **同期 LP** | 指标名带 "VS LP" 的表示同期对比，筛选条件为"同期 LP" |

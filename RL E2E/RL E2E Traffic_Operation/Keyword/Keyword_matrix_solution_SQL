@@ -3,18 +3,26 @@
 -- 表: `indep_rl_ads`.a05_e2e_paid_media_keyword_data_d
 -- ========================================
 select 
-IF(currency is null, 'RMB', currency) AS currency,
-*
+*,
+CASE WHEN channel='直通车' THEN 1
+WHEN channel='引力魔方' THEN 2
+WHEN channel='全站推' THEN 3
+ END AS channel_sort
 FROM `indep_rl_ads`.a05_e2e_paid_media_keyword_data_d
 WHERE platform IN ('JD', 'TM')
+AND channel IN ('直通车', '引力魔方', '全站推')
 
 let
     源 = Odbc.Query("dsn=ByteHouse_MySQL_20260422", "
 select 
-IF(currency is null, 'RMB', currency) AS currency,
-*
+*,
+CASE WHEN channel='直通车' THEN 1
+WHEN channel='引力魔方' THEN 2
+WHEN channel='全站推' THEN 3
+ END AS channel_sort
 FROM `indep_rl_ads`.a05_e2e_paid_media_keyword_data_d
 WHERE platform IN ('JD', 'TM')
+AND channel IN ('直通车', '引力魔方', '全站推')
 ")
 in
     源
