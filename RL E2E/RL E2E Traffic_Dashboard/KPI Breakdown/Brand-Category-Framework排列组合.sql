@@ -1,8 +1,8 @@
 	WITH 
-	-- 提取满足平台条件的去重 Season, Brand, Category 组合作为基础数据
+	-- 提取满足平台条件的去重 Framework, Brand, Category 组合作为基础数据
 	Base_Data AS (
 	    SELECT DISTINCT 
-	        season, 
+	        framework, 
 	        brand, 
 	        category
 	    FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d
@@ -10,62 +10,62 @@
 	),
 	-- 将6种Scenario_Type的分组数据通过UNION ALL合并
 	Unioned_Data AS (
-	    -- 1. Brand->Category->Season
+	    -- 1. Brand->Category->Framework
 	    SELECT 
-	        'Brand->Category->Season' AS Scenario_Type, 
+	        'Brand->Category->Framework' AS Scenario_Type, 
 	        1 AS Scenario_Sort,                          
 	        'Toatl' AS `Toatl`,                            
 	        brand AS `Level 1`,                          
 	        category AS `Level 2`,                       
-	        season AS `Level 3`                          
+	        framework AS `Level 3`                          
 	    FROM Base_Data
 	    UNION ALL
-	    -- 2. Brand->Season->Category
+	    -- 2. Brand->Framework->Category
 	    SELECT 
-	        'Brand->Season->Category' AS Scenario_Type,  
+	        'Brand->Framework->Category' AS Scenario_Type,  
 	        2 AS Scenario_Sort,                          
 	        'Toatl' AS `Toatl`,                            
 	        brand AS `Level 1`,                          
-	        season AS `Level 2`,                         
+	        framework AS `Level 2`,                         
 	        category AS `Level 3`                        
 	    FROM Base_Data
 	    UNION ALL
-	    -- 3. Category->Brand->Season
+	    -- 3. Category->Brand->Framework
 	    SELECT 
-	        'Category->Brand->Season' AS Scenario_Type,  
+	        'Category->Brand->Framework' AS Scenario_Type,  
 	        3 AS Scenario_Sort,                          
 	        'Toatl' AS `Toatl`,                            
 	        category AS `Level 1`,                       
 	        brand AS `Level 2`,                          
-	        season AS `Level 3`                          
+	        framework AS `Level 3`                          
 	    FROM Base_Data
 	    UNION ALL
-	    -- 4. Category->Season->Brand
+	    -- 4. Category->Framework->Brand
 	    SELECT 
-	        'Category->Season->Brand' AS Scenario_Type,  
+	        'Category->Framework->Brand' AS Scenario_Type,  
 	        4 AS Scenario_Sort,                          
 	        'Toatl' AS `Toatl`,                            
 	        category AS `Level 1`,                       
-	        season AS `Level 2`,                         
+	        framework AS `Level 2`,                         
 	        brand AS `Level 3`                           
 	    FROM Base_Data
 	    UNION ALL
-	    -- 5. Season->Brand->Category
+	    -- 5. Framework->Brand->Category
 	    SELECT 
-	        'Season->Brand->Category' AS Scenario_Type,  
+	        'Framework->Brand->Category' AS Scenario_Type,  
 	        5 AS Scenario_Sort,                          
 	        'Toatl' AS `Toatl`,                            
-	        season AS `Level 1`,                         
+	        framework AS `Level 1`,                         
 	        brand AS `Level 2`,                          
 	        category AS `Level 3`                        
 	    FROM Base_Data
 	    UNION ALL
-	    -- 6. Season->Category->Brand
+	    -- 6. Framework->Category->Brand
 	    SELECT 
-	        'Season->Category->Brand' AS Scenario_Type,  
+	        'Framework->Category->Brand' AS Scenario_Type,  
 	        6 AS Scenario_Sort,                          
 	        'Toatl' AS `Toatl`,                            
-	        season AS `Level 1`,                         
+	        framework AS `Level 1`,                         
 	        category AS `Level 2`,                       
 	        brand AS `Level 3`                           
 	    FROM Base_Data
@@ -106,3 +106,11 @@
 	    `Level 1`, 
 	    `Level 2`, 
 	    `Level 3`;
+
+数据样式：
+Scenario_Type	Scenario_Sort	Toatl	Level 1	Level 2	Level 3	ID_Sort
+Brand->Category->Framework	1	Toatl	CL	""	""	1110001
+Brand->Category->Framework	1	Toatl	CW	""	""	1210001
+Brand->Category->Framework	1	Toatl	HM	""	""	1310001
+Category->Brand->Framework	3	Toatl	Pants	M Polo	Complementary	4010001
+......

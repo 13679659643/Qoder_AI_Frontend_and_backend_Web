@@ -1,0 +1,62 @@
+DIM_ColMetric_Keyword_Crowd = 
+// ========================================
+// 表: DIM_ColMetric_Keyword_Crowd
+// 类型: 断开维度
+// 用途: Keyword YOY 矩阵列维度（9 个指标）
+//
+// 指标清单（口径来源：口径文档/Keyword.md — SPEC，一切以口径文档为准）：
+//   1  Cost              花费金额（有口径: SUM(cost_amt)）
+//   2  Cost%             花费占比（有口径: 当前行 cost / 总计 cost）
+//   3  ROI               媒体ROI（有口径: GMV / Cost = media_sales_amt / cost_amt）
+//   4  Click             点击量（有口径: SUM(click)）
+//   5  CPC               平均点击花费（有口径: Cost / Click = cost_amt / click）
+//   6  CTR               点击率（有口径: Click / Impression = click / pv）
+//   7  CVR               点击转化率（有口径: Orders / Click = media_sales_order_cnt / click）
+//   8  Add to Cart       加购数（有口径: SUM(add_cart_num)）
+//   9  CPATC             加购成本（有口径: Cost / Add to Cart = cost_amt / add_cart_num）
+//
+// 格式类型（与 Keyword.md 口径文档一致）：
+//   currency              → 币种符号 + #,##0（千分位整数）→ Cost
+//   currency_decimal_1dp  → 币种符号 + #,##0.0（千分位一位小数）→ CPC / CPATC
+//   decimal_1dp           → #,##0.0（一位小数）→ ROI
+//   percent_1dp           → 0.0%（百分比一位小数）→ Cost% / CTR / CVR
+//   integer               → #,##0（千分位整数）→ Click / Add to Cart
+//
+// 颜色约定（YOY 行 — Period on Period）：
+//   正值（>0）：#1A9018 绿色
+//   负值（<0）：#D64550 红色
+//   零值（=0）：#E1C233 黄色
+//   默认：#5f6165 深灰（This Year / Last Year 行）
+//   不区分指标业务性质，统一按数值正负判断
+//
+// 汇率标记：Metric_IsCurrencyAmount = TRUE → 金额类，切换币种时乘汇率
+//           仅 Cost 为 TRUE；CPC/CPATC 为比率类不乘汇率，仅显示带币种符号
+// ========================================
+DATATABLE(
+    "Metric_ID",               INTEGER,
+    "Metric_Name",             STRING,
+    "Metric_Sort",             INTEGER,
+    "Metric_Format_Current",   STRING,
+    "Metric_Format_LP",        STRING,
+    "Metric_Format_VsLP",      STRING,
+    "Metric_IsCurrencyAmount", BOOLEAN,
+    "Metric_ColorPositive",    STRING,
+    "Metric_ColorNegative",    STRING,
+    "Metric_ColorZero",        STRING,
+    "Metric_ColorDefault",     STRING,
+    {
+        // ID  Name             Sort  Fmt_Current              Fmt_LP                   Fmt_VsLP       IsCurAmt  Pos        Neg        Zero       Default
+        // Metric_Sort：起始10，步长10（便于后续在指标间插入新列）
+        // 颜色规则：正值一律绿色 #1A9018，负值一律红色 #D64550，零值黄色 #E1C233（不区分指标业务性质）
+        // 汇率规则：仅 Cost（ID=1）为 TRUE（金额类乘汇率）；CPC/CPATC 为比率类不乘汇率
+        {  1, "Cost",            10,  "currency",              "currency",              "percent_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  2, "Cost%",           20,  "percent_1dp",           "percent_1dp",           "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  3, "ROI",             30,  "decimal_1dp",           "decimal_1dp",           "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  4, "Click",           40,  "integer",               "integer",               "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  5, "CPC",             50,  "currency_decimal_1dp",  "currency_decimal_1dp",  "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  6, "CTR",             60,  "percent_1dp",           "percent_1dp",           "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  7, "CVR",             70,  "percent_1dp",           "percent_1dp",           "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  8, "Add to Cart",     80,  "integer",               "integer",               "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        {  9, "CPATC",           90,  "currency_decimal_1dp",  "currency_decimal_1dp",  "percent_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+    }
+)
