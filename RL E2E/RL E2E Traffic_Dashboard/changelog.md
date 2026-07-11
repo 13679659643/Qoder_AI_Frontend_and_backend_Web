@@ -44,6 +44,33 @@
 
 ### 子板块：KPI Breakdown
 
+## [2026-07-10 14:30] 新建 — KPI Breakdown 矩阵解决方案文件
+
+- **模块**: Category Growth > KPI Breakdown
+- **任务**: 以 Category Growth.md 口径文档为 SPEC，新增 KPI Breakdown 矩阵解决方案，实现 14 指标 × 4 平台 = 56 列动态矩阵
+- **操作**: 新建
+- **变更内容**:
+  - 新增文件 `KPI Breakdown/KPI_Breakdown_matrix_solution.md`
+  - 度量值 `KPI Breakdown Base Value`：列头 SWITCH 分发器，14 指标统一聚合分发
+    * 行维度 TREATAS 动态筛选：根据 `Brand-Category-Framework[Scenario_Type]` 动态映射 Level 1/2/3 到事实表 brand/category/framework 字段
+    * ISINSCOPE 层级判断：Total 行 / Level 1 / Level 2 / Level 3 四级层级
+    * Total 行自定义口径：Cost% vs SLS%=0pt、SLS%=100%、Cost MOB% Total=100%
+    * Total 行渠道列口径：Cost MOB% 渠道 = 渠道 cost / 三渠道总 cost；ROI/New Customer Cost% Total 列 = 三渠道汇总、渠道列 = 单渠道自身比值
+    * channel 动态映射：TM/RLE/DY → 直通车/引力魔方/全站推；JD → 快车/触点/海投
+  - 度量值 `KPI Breakdown Cell Value`：行路由度量值，直接调用 Base Value
+  - 度量值 `KPI Breakdown Cell Display`：格式化显示
+    * decimal_pt_1（Cost% vs SLS%）→ #,##0.0'pt';-#,##0.0'pt';0.0'pt'
+    * percent_1dp（SLS% / Cost MOB%）→ #,##0.0%;#,##0.0%;0.0%
+    * decimal_1dp（ROI / New Customer Cost%）→ #,##0.0
+  - 度量值 `KPI Breakdown Cell Font Color`：Total 指标列和总计行 #252423，其余 #5F6165
+  - 度量值 `KPI Breakdown Cell SVG Icon`：仅 Cost% vs SLS% 显示 SVG 圆形图标（绿/红/黄）
+  - 度量值 `KPI Breakdown Cell Background Color`：
+    * 明细行（Level 3）→ #F5F5F5
+    * 总计行 → #E6D9C7（Total 指标列 #FAF6F1）
+    * 其余行 → #FFFFFF（Total 指标列 #FAF6F1）
+- **关联文件**: KPI Breakdown/KPI_Breakdown_matrix_solution.md、口径文档/Category Growth.md、KPI Breakdown/Brand-Category-Framework排列组合.sql、KPI Breakdown/Dim_ColMetric_KpiBreakdown、维度复用/Slicer_Time_Frame.sql、维度复用/Slicer_Platform_Selection、维度复用/Slicer_Store_Name、维度复用/Slicer_DataCaliber_Selection、维度复用/Slicer_Currency_Selection
+- **备注**: 行维度表 `Brand-Category-Framework` 与事实表断开，通过 DAX 内 TREATAS 动态筛选；列维度表 `Dim_ColMetric_KpiBreakdown` 通过 Platform_ID 一对多关联 Slicer_Platform_Selection；Time_Frame 断开维度通过 TimeFrame_Min/Max 筛选 data_date；Currency 筛选器对本板块不生效（全为比率类指标）
+
 ---
 
 ## [2026-07-07 16:00] 修改 — Dim_ColMetric_KpiBreakdown 多平台扩展
