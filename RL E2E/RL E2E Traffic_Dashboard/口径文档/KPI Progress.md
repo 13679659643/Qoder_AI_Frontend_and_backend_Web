@@ -12,7 +12,7 @@
 | 项目 | 内容 |
 |---|---|
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **page_type 筛选** | 本板块统一 `page_type=1` |
+| **page_type 筛选** | 本板块统一 `page_type="1"` |
 | **customer_type 筛选** | 按指标定义区分 `ALL` / `NEW` |
 | **分子/分母标记** | Excel 中以 `└ 分子` / `└ 分母` 行标注派生指标的分子分母取数，本文件在各指标中合并展示 |
 | **派生指标** | Cost ACH%、Cost vs SLS ACH%、Media Contribution to New Customer Acquisition%、Cost Per New Acquisition、± Acceleration cost MOB% vs. store SLS MOB% 等为派生指标，本身无独立统计字段，依据其分子/分母行取数计算 |
@@ -32,7 +32,7 @@
 | **分子** | `cost_amt（含红包/返佣返货金）` |
 | **分母** | `net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='ALL' AND page_type=1` |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 
 ---
 
@@ -45,7 +45,7 @@
 | **计算公式** | 同 Cost（实际媒体花费） |
 | **统计字段** | `cost_amt（含红包/返佣返货金）` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='ALL' AND page_type=1` |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 
 ---
 
@@ -58,7 +58,7 @@
 | **计算公式** | 实际花费 / 计划花费 |
 | **统计字段** | `cost_amt / fcst_cost_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='ALL' AND page_type=1` |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 
 ---
 
@@ -83,7 +83,7 @@
 | **计算公式** | 实际退后金额 / 计划退后金额（运营也许会直接提供一个百分比的数值，待定） |
 | **统计字段** | `net_sales_amt / fcst_net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='ALL' AND page_type=1` |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 
 ---
 
@@ -96,7 +96,7 @@
 | **计算公式** | net_sales_amt 加总 |
 | **统计字段** | `net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='ALL' AND page_type=1` |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 
 ---
 
@@ -110,7 +110,7 @@
 | **分子** | `media_member_cnt`（媒体新客数 media_new_customer_no） |
 | **分母** | `member_cnt`（全店新客数） |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='NEW' AND page_type=1` |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"` |
 
 ---
 
@@ -124,7 +124,7 @@
 | **分子** | `media_cost_amt`（新客花费 media_new_cost） |
 | **分母** | `media_member_cnt`（媒体新客数 media_new_customer_no） |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='NEW' AND page_type=1` |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"` |
 
 ---
 
@@ -151,7 +151,7 @@
 | **计算公式** | COUNT DISTINCT 买家id（全店新客） |
 | **统计字段** | `member_cnt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='NEW' AND page_type=1` |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"` |
 
 ---
 
@@ -164,7 +164,7 @@
 | **计算公式** | Net Sales（framework='Acceleration'） |
 | **统计字段** | `net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='ALL' AND framework='Acceleration' AND page_type=1` |
+| **筛选条件** | `customer_type='ALL' AND framework='Acceleration' AND page_type="1"` |
 
 ---
 
@@ -178,7 +178,7 @@
 | **分子** | `net_sales_amt`（Acceleration 退后销售额） |
 | **分母** | `net_sales_amt`（全店 TTL 退后销售额，全部 framework） |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | 分子：`customer_type='ALL' AND framework='Acceleration' AND page_type=1`；分母：`customer_type='ALL' AND page_type=1` |
+| **筛选条件** | 分子：`customer_type='ALL' AND framework='Acceleration' AND page_type="1"`；分母：`customer_type='ALL' AND page_type="1"` |
 
 ---
 
@@ -193,7 +193,7 @@
 | **计算公式** | COUNT DISTINCT 买家id（新客趋势） |
 | **统计字段** | `member_cnt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='NEW' AND page_type=1` |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"` |
 
 ---
 
@@ -207,7 +207,7 @@
 | **分子** | `member_cnt`（new） |
 | **分母** | `member_cnt`（all） |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | 分子 `customer_type='NEW'`；分母 `customer_type='ALL' AND page_type=1` |
+| **筛选条件** | 分子 `customer_type='NEW'`；分母 `customer_type='ALL' AND page_type="1"` |
 
 ---
 
@@ -220,7 +220,7 @@
 | **计算公式** | 媒体新客数 / 全店新客数（趋势图） |
 | **统计字段** | `media_member_cnt（new）/ member_cnt（new）` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='NEW' AND page_type=1` |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"` |
 
 ---
 
@@ -235,7 +235,7 @@
 | **计算公式** | Net Sales（framework='Acceleration'，趋势图） |
 | **统计字段** | `net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='ALL' AND framework='Acceleration' AND page_type=1` |
+| **筛选条件** | `customer_type='ALL' AND framework='Acceleration' AND page_type="1"` |
 
 ---
 
@@ -248,7 +248,7 @@
 | **计算公式** | Acceleration SLS / TTL SLS（趋势图） |
 | **统计字段** | `net_sales_amt（framework='Acceleration'）/ net_sales_amt（全部 framework）` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='ALL' AND page_type=1` |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 
 ---
 
@@ -261,13 +261,13 @@
 | **计算公式** | Acceleration Cost / TTL Cost（趋势图） |
 | **统计字段** | `cost_amt（framework='Acceleration'）/ cost_amt（全部 framework）` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='ALL' AND page_type=1` |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 
 ---
 
 ## 子模块五：KPI by Platform
 
-> **分组维度**: 按 `platform` 分组
+> **分组维度**: 按 `platform` 分组，Slicer_Platform_Selection 1:* ──→ a05_e2e_paid_media_summary_d[platform]
 
 ### 19. Media Cost Rate — 费比（分平台）
 
@@ -278,7 +278,10 @@
 | **计算公式** | Cost / SLS |
 | **统计字段** | `cost_amt / net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='ALL' AND page_type=1`，按 platform 分组 |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"`，按 platform 分组 |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **相关字段格式** | 去年同期值(Media Cost Rate vs LP)：percent_1dp、同比(YOY%)：percent_1dp |
 
 ---
 
@@ -291,7 +294,10 @@
 | **计算公式** | 同 Cost（实际媒体花费），按 platform 分组 |
 | **统计字段** | `cost_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='ALL' AND page_type=1`，按 platform 分组 |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"`，按 platform 分组 |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
+| **相关字段格式** | 去年同期值(Media Cost vs LP)：currency、(YOY% )：percent_1dp |
 
 ---
 
@@ -302,9 +308,14 @@
 | **指标名称** | ± Acceleration cost MOB% vs. store SLS MOB% / 第二品类花费MOB%vs门店销售MOB% |
 | **业务定义** | 各平台第二品类花费 MOB% vs 门店销售 MOB% |
 | **计算公式** | Acceleration Cost MOB% − Store SLS MOB%（by platform，bp） |
-| **数据底表** | —（派生指标） |
-| **筛选条件** | 派生：Acceleration Cost MOB% − Store SLS MOB%（按 platform，bp），无独立底表取数 |
-
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **Acceleration Cost MOB%计算公式** | `cost_amt（framework='Acceleration'）/ cost_amt（全部 framework）` |
+| **Store SLS MOB%计算** | `net_sales_amt（framework='Acceleration'）/ net_sales_amt（全部 framework）` |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"`，按 platform 分组 |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **相关字段格式** | 去年同期值(± Acceleration cost MOB% vs. store SLS MOB% vs LP)：percent_1dp、(YOY%  )：percent_1dp |
+cost_amt（framework='Acceleration'
 ---
 
 ### 22. Media Contribution to New Customer Acquisition% — 媒体新客贡献率（分平台）
@@ -316,7 +327,10 @@
 | **计算公式** | 媒体新客数 / 全店新客数（by platform） |
 | **统计字段** | `media_member_cnt（new）/ member_cnt（new）` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='NEW' AND page_type=1`，按 platform 分组 |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"`，按 platform 分组 |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **相关字段格式** | 去年同期值(Media Contribution to New Customer Acquisition% vs LP)：percent_1dp、(YOY%   )：percent_1dp |
 
 ---
 
@@ -330,7 +344,12 @@
 | **分子** | `media_cost_amt`（新客花费 media_new_cost） |
 | **分母** | `media_member_cnt`（媒体新客数 media_new_customer_no） |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | `customer_type='NEW' AND page_type=1`，按 platform 分组 |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"`，按 platform 分组 |
+| **数据类型** | currency_decimal_1dp → 货币符号由币种切片器决定，千分位保留一位小数 |
+| **数据格式** | `#,##0.0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0.0")` 拼接币种符号） | 
+| **相关字段格式** | 去年同期值(Media Cost Per New Acquisition vs LP)：currency_decimal_1dp、(YOY%    )：percent_1dp |
+
+| **子模块五：15个指标汇总** | Media Cost Rate、Media Cost Rate vs LP、YOY%、Media Cost、Media Cost vs LP、YOY%、Cost ACH%、Cost ACH% vs LP、YOY%、Cost vs SLS ACH%、Cost vs SLS ACH% vs LP、YOY%、± Acceleration cost MOB% vs. store SLS MOB%、± Acceleration cost MOB% vs. store SLS MOB% vs LP、YOY%、Media Contribution to New Customer Acquisition%、Media Contribution to New Customer Acquisition% vs LP、YOY%、Cost Per New Acquisition、Cost Per New Acquisition vs LP、YOY% |
 
 ---
 
@@ -339,7 +358,7 @@
 | 规则项 | 说明 |
 |---|---|
 | **数据底表** | 全部指标统一使用 `a05_e2e_paid_media_summary_d` |
-| **page_type** | 本板块统一 `page_type=1` |
+| **page_type** | 本板块统一 `page_type="1"` |
 | **customer_type** | 按指标区分 `ALL`（全客）或 `NEW`（新客） |
 | **派生指标** | Cost vs SLS ACH%、± Acceleration cost MOB% vs. store SLS MOB% 为派生差值，无独立底表取数 |
 | **分平台维度** | 子模块五 KPI by Platform 按 `platform` 字段分组 |

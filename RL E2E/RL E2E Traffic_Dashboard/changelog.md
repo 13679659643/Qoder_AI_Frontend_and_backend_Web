@@ -36,6 +36,42 @@
 
 ### 子板块：KPI by Platform
 
+## [2026-07-14 17:30] 新建 — KPI by Platform 矩阵解决方案文件
+
+- **模块**: KPI Progress > KPI by Platform
+- **任务**: 子模块五 KPI by Platform 矩阵 Power BI 解决方案
+- **操作**: 新建
+- **变更内容**:
+  - 新建文件 `KPI Progress/KPI by Platform_matrix_solution.md`
+  - 度量值 [KPI by Platform Current Base Value] — 本期基础值（Metric_ID 1/4/13/16/19）
+  - 度量值 [KPI by Platform vsLP Base Value] — 同期基础值（Metric_ID 2/5/14/17/20），EDATE(-12) 推算
+  - 度量值 [KPI by Platform Base Value] — 总路由，含 YOY% 计算（Metric_ID 3/6/15/18/21）
+  - 度量值 [KPI by Platform Cell Value] — 对外值 = Base Value
+  - 度量值 [KPI by Platform Cell Display] — 格式化显示（currency / percent_1dp / delta_pct_1dp）
+  - 度量值 [KPI by Platform Cell Font Color] — 总计行#252423，其他行#5F6165
+  - 度量值 [KPI by Platform Cell Background Color] — 总计行#E6D9C7，其他行#FFFFFF
+  - 度量值 [KPI by Platform Cell SVG Icon] — 仅 YOY% 行显示 SVG 圆形图标
+- **关联文件**: `KPI Progress/KPI by Platform_matrix_solution.md`、`KPI Progress/Dim_ColMetric_KPI by Platform`、`口径文档/KPI Progress.md` 子模块五
+- **备注**: Base Value 按用户建议拆分为 Current / vsLP 两个子度量值，便于维护与复用；15 个指标全部按子模块五口径实现；trans_cycle 字段位置待确认（假设在事实表 a05_e2e_paid_media_summary_d 中）
+
+---
+
+## [2026-07-14 17:50] 新建 — KPI by Platform SQL 验证脚本
+
+- **模块**: KPI Progress > KPI by Platform
+- **任务**: 子模块五 KPI by Platform 矩阵 DAX 计算结果的 SQL 验证
+- **操作**: 新建
+- **变更内容**:
+  - 新建文件 `KPI Progress/KPI by Platform_SQL验证.sql`
+  - 第1组: Media Cost Rate（费比）— customer_type='ALL'，本期/同期/YOY%
+  - 第2组: Media Cost（媒体花费）— customer_type='ALL'，本期/同期/YOY %
+  - 第3组: ± Accel cost MOB% vs. store SLS MOB% — customer_type='ALL'，framework 区分，本期/同期/YOY  %
+  - 第4组: Media Contribution to New Customer Acquisition% — customer_type='NEW'，本期/同期/YOY   %
+  - 第5组: Cost Per New Acquisition — customer_type='NEW'，本期/同期/YOY    %
+  - 第6组: Total 行专项验证（全表汇总，无 GROUP BY store_name）
+- **关联文件**: `KPI Progress/KPI by Platform_SQL验证.sql`、`KPI Progress/KPI by Platform_matrix_solution.md`、`口径文档/KPI Progress.md` 子模块五
+- **备注**: 测试参数本期 2026-01-01~2026-07-14，同期 2025-01-01~2025-07-14；trans_cycle='T+1'；分组维度 store_name（含 Total 汇总行）
+
 ---
 
 ---
