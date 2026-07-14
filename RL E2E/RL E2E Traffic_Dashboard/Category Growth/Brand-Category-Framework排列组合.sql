@@ -14,7 +14,7 @@
 	    SELECT 
 	        'Brand->Category->Framework' AS Scenario_Type, 
 	        1 AS Scenario_Sort,                          
-	        'Toatl' AS `Toatl`,                            
+	        'Total' AS `Total`,                            
 	        brand AS `Level 1`,                          
 	        category AS `Level 2`,                       
 	        framework AS `Level 3`                          
@@ -24,7 +24,7 @@
 	    SELECT 
 	        'Brand->Framework->Category' AS Scenario_Type,  
 	        2 AS Scenario_Sort,                          
-	        'Toatl' AS `Toatl`,                            
+	        'Total' AS `Total`,                            
 	        brand AS `Level 1`,                          
 	        framework AS `Level 2`,                         
 	        category AS `Level 3`                        
@@ -34,7 +34,7 @@
 	    SELECT 
 	        'Category->Brand->Framework' AS Scenario_Type,  
 	        3 AS Scenario_Sort,                          
-	        'Toatl' AS `Toatl`,                            
+	        'Total' AS `Total`,                            
 	        category AS `Level 1`,                       
 	        brand AS `Level 2`,                          
 	        framework AS `Level 3`                          
@@ -44,7 +44,7 @@
 	    SELECT 
 	        'Category->Framework->Brand' AS Scenario_Type,  
 	        4 AS Scenario_Sort,                          
-	        'Toatl' AS `Toatl`,                            
+	        'Total' AS `Total`,                            
 	        category AS `Level 1`,                       
 	        framework AS `Level 2`,                         
 	        brand AS `Level 3`                           
@@ -54,7 +54,7 @@
 	    SELECT 
 	        'Framework->Brand->Category' AS Scenario_Type,  
 	        5 AS Scenario_Sort,                          
-	        'Toatl' AS `Toatl`,                            
+	        'Total' AS `Total`,                            
 	        framework AS `Level 1`,                         
 	        brand AS `Level 2`,                          
 	        category AS `Level 3`                        
@@ -64,7 +64,7 @@
 	    SELECT 
 	        'Framework->Category->Brand' AS Scenario_Type,  
 	        6 AS Scenario_Sort,                          
-	        'Toatl' AS `Toatl`,                            
+	        'Total' AS `Total`,                            
 	        framework AS `Level 1`,                         
 	        category AS `Level 2`,                       
 	        brand AS `Level 3`                           
@@ -75,7 +75,7 @@
 	    SELECT 
 	        Scenario_Type,
 	        Scenario_Sort,
-	        `Toatl`,
+	        `Total`,
 	        `Level 1`,
 	        `Level 2`,
 	        `Level 3`,
@@ -91,7 +91,7 @@
 	SELECT 
 	    Scenario_Type,                                                              -- 排列组合方式描述
 	    Scenario_Sort,                                                              -- 排序编号
-	    `Toatl`,                                                                    -- 收缩：Total
+	    `Total`,                                                                    -- 收缩：Total
 	    `Level 1`,                                                                  -- 第一层维度
 	    `Level 2`,                                                                  -- 第二层维度
 	    `Level 3`,                                                                  -- 第三层维度
@@ -102,15 +102,15 @@
 	-- 按照指定的排序编号以及各维度字段进行排序输出
 	ORDER BY 
 	    Scenario_Sort, 
-	    `Toatl`,
+	    `Total`,
 	    `Level 1`, 
 	    `Level 2`, 
 	    `Level 3`;
 
 数据样式：
-Scenario_Type	Scenario_Sort	Toatl	Level 1	Level 2	Level 3	ID_Sort
-Brand->Category->Framework	1	Toatl	CL	""	""	1110001
-Brand->Category->Framework	1	Toatl	CW	""	""	1210001
-Brand->Category->Framework	1	Toatl	HM	""	""	1310001
-Category->Brand->Framework	3	Toatl	Pants	M Polo	Complementary	4010001
+Scenario_Type	Scenario_Sort	Total	Level 1	Level 2	Level 3	ID_Sort
+Brand->Category->Framework	1	Total	CL	""	""	1110001
+Brand->Category->Framework	1	Total	CW	""	""	1210001
+Brand->Category->Framework	1	Total	HM	""	""	1310001
+Category->Brand->Framework	3	Total	Pants	M Polo	Complementary	4010001
 ......

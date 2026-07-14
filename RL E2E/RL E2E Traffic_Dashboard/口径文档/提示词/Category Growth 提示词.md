@@ -9,9 +9,9 @@
 4、Store Name筛选器，表Slicer_Store_Name，对应a05_e2e_paid_media_keyword_data_d[store_name]；一对多事实表，模型会自动筛选事实表；
 5、trans_cycle筛选器，RL E2E\RL E2E Traffic_Dashboard\维度复用\Slicer_DataCaliber_Selection对应事实表中的a05_e2e_paid_media_keyword_data_d[trans_cycle]；一对多事实表，模型会自动筛选事实表；
 6、Currency筛选器，RL E2E\RL E2E Traffic_Dashboard\维度复用\Slicer_Currency_Selection，断开连接，仅金额类指标乘以汇率固定为7；
-7、Scenario筛选器，表名Brand->Category->Framework，包括六个排列组合行维度，参考文件RL E2E\RL E2E Traffic_Dashboard\KPI Breakdown\Brand-Category-Framework排列组合.sql，通过SELECTEDVALUE获取到筛选器的值，判断Level 1	Level 2	Level3对应事实表中的字段，然后获取到当前上下文的值，才能准确的筛选事实表对应的字段。我这里虽然是四层结构，Total->Brand->Category->Framework,但只有最后三层是在变换level的，第一层始终是Total，也对应事实表中的`Total`值字段，这个字段一整列的值都为"Total";
-8、行路由维度使用这个表， Brand-Category-Framework，表结构就是由RL E2E\RL E2E Traffic_Dashboard\KPI Breakdown\Brand-Category-Framework排列组合.sql这个文件的SQL语句生成的，包括Scenario_Type	Scenario_Sort	Toatl	Level 1	Level 2	Level 3	ID_Sort这七个字段。和Scenario筛选器同源，通过Scenario_Type单选动态改变Toatl	Level 1	Level 2	Level 3四个层级的值。
-9、列维度使用这个表，Dim_ColMetric_KpiBreakdown，由这个文件RL E2E\RL E2E Traffic_Dashboard\KPI Breakdown\Dim_ColMetric_KpiBreakdown的DAX语句生成，包括四个平台，Platform筛选器一对多关联Dim_ColMetric_KpiBreakdown，通过筛选器动态切换不同的列维度，主要是JD和TM在channel字段上的差异，JD的channel有"快车"、"触点"、"海投"，TM的channel有"直通车"、"引力魔方"、"全站推"。
+7、Scenario筛选器，表名Brand->Category->Framework，包括六个排列组合行维度，参考文件RL E2E\RL E2E Traffic_Dashboard\Category Growth\Brand-Category-Framework排列组合.sql，通过SELECTEDVALUE获取到筛选器的值，判断Level 1	Level 2	Level3对应事实表中的字段，然后获取到当前上下文的值，才能准确的筛选事实表对应的字段。我这里虽然是四层结构，Total->Brand->Category->Framework,但只有最后三层是在变换level的，第一层始终是Total，也对应事实表中的 `Total`值字段，这个字段一整列的值都为"Total";
+8、行路由维度使用这个表， Brand-Category-Framework，表结构就是由RL E2E\RL E2E Traffic_Dashboard\Category Growth\Brand-Category-Framework排列组合.sql这个文件的SQL语句生成的，包括Scenario_Type	Scenario_Sort	Toatl	Level 1	Level 2	Level 3	ID_Sort这七个字段。和Scenario筛选器同源，通过Scenario_Type单选动态改变Toatl	Level 1	Level 2	Level 3四个层级的值。
+9、列维度使用这个表，Dim_ColMetric_KpiBreakdown，由这个文件RL E2E\RL E2E Traffic_Dashboard\Category Growth\Dim_ColMetric_KpiBreakdown的DAX语句生成，包括四个平台，Platform筛选器一对多关联Dim_ColMetric_KpiBreakdown，通过筛选器动态切换不同的列维度，主要是JD和TM在channel字段上的差异，JD的channel有"快车"、"触点"、"海投"，TM的channel有"直通车"、"引力魔方"、"全站推"。
 
 具体要求：
 1、只需要输出核心度量部分，必须要有必要的注释信息，参考文件：RL E2E\RL E2E Traffic_Operation\Keyword\Keyword_YOY_matrix_solution结构。
@@ -34,3 +34,16 @@
 第三次提示词：
 1、总计行的判断必须VAR __IsTotalRow = NOT __IsTotal && NOT __IsLevel1 && NOT __IsLevel2 && NOT __IsLevel3才行，所以层级都为False，才是总计行。赞同我的理解吗。
 2、__L1_Filter, __L2_Filter, __L3_Filter这三个一起不是取交集吗。当我在明细行的时候即Level3层级，我的预期效果，比如：__ScenarioType = "Brand->Category->Framework",那Total层级 = "Total"，Level 1 = Brand相关的值，通过这个值去筛选a05_e2e_paid_media_summary_d表中的brand字段，Level 2 = Category相关的值，通过这个值去筛选a05_e2e_paid_media_summary_d表中的category字段，Level 3 = Framework相关的值，通过这个值去筛选a05_e2e_paid_media_summary_d表中的framework_name字段。Brand->Category->Framework中的值就是从a05_e2e_paid_media_summary_d表提取brand、category、framework字段排列组合而成的。当我在Level2层级的时候，同理，区别在于此时Level 3是__ScenarioType = "Brand->Category->Framework"分组下的所有值；level2和Total列同理。
+
+第四轮提示：
+根据这三个文件：
+RL E2E\RL E2E Traffic_Dashboard\Category Growth\Brand-Category-Framework排列组合.sql
+RL E2E\RL E2E Traffic_Dashboard\Category Growth\Dim_ColMetric_KpiBreakdown
+RL E2E\RL E2E Traffic_Dashboard\Category Growth\KPI_Breakdown_matrix_solution.md
+在RL E2E\RL E2E Traffic_Dashboard\KPI Breakdown目录下输出针对数据库和Powerbi页面的测试SQL，
+
+sql测试参数时间为：2025-01-01~2026-07-14；platform：TM；shop_name：TM;trans_cycle:T+1;brand:M Polo;Category:Sweaters;Framework:Foundation;
+
+Scenario_Type:Category->Framework->Brand
+pbi指标：Cost% vs SLS%、Cost MOB% Total、Cost MOB%中直通车、ROI Total、ROI中全站推、New Customer Cost% Total、New Customer Cost% 引力魔法；
+给出完整SQL语句，每个指标单独验证。

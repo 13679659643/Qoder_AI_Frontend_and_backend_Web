@@ -12,23 +12,22 @@
 ## 1. 指标 SWITCH 分发 — KPI Breakdown Base Value
 
 ```dax
-KPI Breakdown Base Value =
+KPI Breakdown Base Value = 
 // ========================================
 // 度量值: KPI Breakdown Base Value
 // Display Folder: KPI Breakdown
 // 用途: 列头 SWITCH 分发器，14 指标统一聚合分发
 //
 // ════════════════════════════════════════════════════════════════
-// TREATAS 动态行筛选原理（维度表与事实表断开连接）
+// 采用“先解析标量，再按固定列 FILTER(VALUES(列))”的模式，根本原理在于规避 DAX 引擎对表表达式强类型推断的严苛限制，
+// 同时兼顾了筛选器的执行效率与上下文兼容性。（维度表与事实表断开连接）
 // ════════════════════════════════════════════════════════════════
-// Brand-Category-Framework 表与事实表 a05_e2e_paid_media_summary_d 断开连接
-// 通过 TREATAS 将维度表的 Level 值作为筛选器传递给事实表对应字段
-//
-// 多层 TREATAS 在 CALCULATE 中叠加为 AND 关系（取交集）：
-//   Level 3 明细行（__IsLevel1/2/3 全部 TRUE）：
-//     __L1_Filter = TREATAS({Brand值}, 事实表[brand])        → 生效
-//     __L2_Filter = TREATAS({Category值}, 事实表[category])   → 生效
-//     __L3_Filter = TREATAS({Framework值}, 事实表[framework]) → 生效
+// Brand->Category->Framework 表与事实表 a05_e2e_paid_media_summary_d 断开连接
+//Level 1\Level 2\Level 3:
+// 1. 规避 IF/SWITCH 返回表时的“数据沿袭冲突”
+// 2. 确保生成纯粹的“单列表”，满足 CALCULATE 的语法规范
+// 3. 巧用恒真条件实现“零影响占位”，替代非法的 BLANK()
+// 这种模式将复杂的“动态表生成”降维成了“动态标量求值”，把最容易引发 DAX 类型推断冲突的环节剥离了出去，从而保证了代码的绝对健壮性。
 //     → 事实表被 brand + category + framework 三个字段同时筛选（交集）
 //       示例 Scenario_Type="Brand->Category->Framework"：
 //         Total="Total"、Level 1=Brand 值 → 筛选 brand 字段
@@ -50,12 +49,6 @@ KPI Breakdown Base Value =
 //     三个 Filter 都返回 BLANK() 被忽略
 //     → 事实表不施加任何行维度筛选（但仍筛选 Total="Total"、page_type=2 等）
 //
-// TREATAS + BLANK() 开关机制原理：
-//   1) TREATAS({"值"}, column) 返回有效的表筛选器，等价于 column = "值"
-//   2) IF(__IsLevel3, TREATAS(...), BLANK()) 当条件为 FALSE 时返回 BLANK()
-//   3) CALCULATE 的筛选器参数为 BLANK() 时，DAX 引擎视为无效筛选器并忽略
-//   4) 由此实现筛选器开关：层级展开时筛选器生效，未展开时筛选器关闭
-//
 // Scenario_Type 动态字段映射（6 种排列组合）：
 //   'Brand->Category->Framework' → L1=brand,    L2=category,  L3=framework
 //   'Brand->Framework->Category' → L1=brand,    L2=framework, L3=category
@@ -66,14 +59,14 @@ KPI Breakdown Base Value =
 //
 // 注：Brand-Category-Framework 表中 Level 1/2/3 的值
 //     即从 a05_e2e_paid_media_summary_d 表提取 brand/category/framework 字段
-//     排列组合而成，因此 TREATAS 筛选一定能匹配到事实表数据
+//     排列组合而成
 // ════════════════════════════════════════════════════════════════
 
     // ── 行上下文：Scenario_Type + Level 值 ──
-    VAR __ScenarioType = SELECTEDVALUE('Brand-Category-Framework'[Scenario_Type])
-    VAR __Level1Val    = SELECTEDVALUE('Brand-Category-Framework'[Level 1])
-    VAR __Level2Val    = SELECTEDVALUE('Brand-Category-Framework'[Level 2])
-    VAR __Level3Val    = SELECTEDVALUE('Brand-Category-Framework'[Level 3])
+    VAR __ScenarioType = SELECTEDVALUE('Brand->Category->Framework'[Scenario_Type])
+    VAR __Level1Val    = SELECTEDVALUE('Brand->Category->Framework'[Level 1])
+    VAR __Level2Val    = SELECTEDVALUE('Brand->Category->Framework'[Level 2])
+    VAR __Level3Val    = SELECTEDVALUE('Brand->Category->Framework'[Level 3])
 
     // ── ISINSCOPE 层级判断（4 级层次：Total > Level 1 > Level 2 > Level 3）──
     // 矩阵层次结构 ISINSCOPE 状态：
@@ -82,10 +75,10 @@ KPI Breakdown Base Value =
     //   Level 2 小计行：Total=T, Level1=T, Level2=T, Level3=F
     //   Level 3 明细行：Total=T, Level1=T, Level2=T, Level3=T
     // 总计行判断必须所有层级 ISINSCOPE 都为 FALSE，避免边缘场景误判
-    VAR __IsTotal  = ISINSCOPE('Brand-Category-Framework'[Total])
-    VAR __IsLevel1 = ISINSCOPE('Brand-Category-Framework'[Level 1])
-    VAR __IsLevel2 = ISINSCOPE('Brand-Category-Framework'[Level 2])
-    VAR __IsLevel3 = ISINSCOPE('Brand-Category-Framework'[Level 3])
+    VAR __IsTotal  = ISINSCOPE('Brand->Category->Framework'[Total])
+    VAR __IsLevel1 = ISINSCOPE('Brand->Category->Framework'[Level 1])
+    VAR __IsLevel2 = ISINSCOPE('Brand->Category->Framework'[Level 2])
+    VAR __IsLevel3 = ISINSCOPE('Brand->Category->Framework'[Level 3])
     // 总计行：所有层级（Total + Level 1/2/3）ISINSCOPE 都为 FALSE
     VAR __IsTotalRow = NOT __IsTotal && NOT __IsLevel1 && NOT __IsLevel2 && NOT __IsLevel3
 
@@ -101,81 +94,74 @@ KPI Breakdown Base Value =
     // TM/RLE/DY → 直通车/引力魔方/全站推
     // JD       → 快车/触点/海投
     // JD 渠道映射：直通车→快车、引力魔方→触点、全站推→海投
-    VAR __ChannelList =
-        SWITCH(__PlatformID,
-            "JD", {"快车", "触点", "海投"},
-                       {"直通车", "引力魔方", "全站推"}  // TM/RLE/DY
-        )
-
     // ── channel 筛选器 ──
     // __MetricNameTrim = "Total" → 保留三渠道范围（不施加单 channel 筛选）
     // __MetricNameTrim = 具体渠道 → 筛选 channel = 该渠道
-    VAR __ChannelFilter =
-        IF(
-            __MetricNameTrim = "Total",
-            FILTER(VALUES(a05_e2e_paid_media_summary_d[channel]),
-                a05_e2e_paid_media_summary_d[channel] IN __ChannelList),
-            FILTER(VALUES(a05_e2e_paid_media_summary_d[channel]),
-                a05_e2e_paid_media_summary_d[channel] = __MetricNameTrim)
-        )
+	    // ── channel 筛选器 ──
+	VAR __ChannelFilter =
+	    FILTER(
+	        VALUES(a05_e2e_paid_media_summary_d[channel]),
+	        IF(
+	            __MetricNameTrim = "Total",
+	            (__PlatformID = "JD" && a05_e2e_paid_media_summary_d[channel] IN {"快车", "触点", "海投"})
+	            ||
+	            (__PlatformID <> "JD" && a05_e2e_paid_media_summary_d[channel] IN {"直通车", "引力魔方", "全站推"}),
+	            a05_e2e_paid_media_summary_d[channel] = __MetricNameTrim
+	        )
+	    )
 
     // ════════════════════════════════════════════════════════════════
-    // 行维度 TREATAS 筛选器（根据 Scenario_Type 动态映射）
-    // 原理：TREATAS({值}, 事实表[字段]) 等价于 事实表[字段] = 值
-    //       当值为 BLANK() 时，TREATAS 被忽略，不产生筛选
-    //       多个 TREATAS 在 CALCULATE 中叠加为 AND 关系
+    // 行维度 __BrandFilterVal\__CategoryFilterVal\__FrameworkFilterVal
+    // 原理：先解析标量，再按固定列 FILTER(VALUES(列))
     // ════════════════════════════════════════════════════════════════
 
-    // Level 1 筛选器：仅当 __IsLevel1=TRUE 时生效（Level 2/3/Total 行返回 BLANK）
-    VAR __L1_Filter =
-        IF(__IsLevel1,
-            SWITCH(__ScenarioType,
-                "Brand->Category->Framework", TREATAS({__Level1Val}, a05_e2e_paid_media_summary_d[brand]),
-                "Brand->Framework->Category", TREATAS({__Level1Val}, a05_e2e_paid_media_summary_d[brand]),
-                "Category->Brand->Framework", TREATAS({__Level1Val}, a05_e2e_paid_media_summary_d[category]),
-                "Category->Framework->Brand", TREATAS({__Level1Val}, a05_e2e_paid_media_summary_d[category]),
-                "Framework->Brand->Category", TREATAS({__Level1Val}, a05_e2e_paid_media_summary_d[framework]),
-                "Framework->Category->Brand", TREATAS({__Level1Val}, a05_e2e_paid_media_summary_d[framework]),
-                BLANK()
-            ),
-            BLANK()
-        )
-
-    // Level 2 筛选器：仅当 __IsLevel2=TRUE 时生效
-    VAR __L2_Filter =
-        IF(__IsLevel2,
-            SWITCH(__ScenarioType,
-                "Brand->Category->Framework", TREATAS({__Level2Val}, a05_e2e_paid_media_summary_d[category]),
-                "Brand->Framework->Category", TREATAS({__Level2Val}, a05_e2e_paid_media_summary_d[framework]),
-                "Category->Brand->Framework", TREATAS({__Level2Val}, a05_e2e_paid_media_summary_d[brand]),
-                "Category->Framework->Brand", TREATAS({__Level2Val}, a05_e2e_paid_media_summary_d[framework]),
-                "Framework->Brand->Category", TREATAS({__Level2Val}, a05_e2e_paid_media_summary_d[brand]),
-                "Framework->Category->Brand", TREATAS({__Level2Val}, a05_e2e_paid_media_summary_d[category]),
-                BLANK()
-            ),
-            BLANK()
-        )
-
-    // Level 3 筛选器：仅当 __IsLevel3=TRUE 时生效
-    VAR __L3_Filter =
-        IF(__IsLevel3,
-            SWITCH(__ScenarioType,
-                "Brand->Category->Framework", TREATAS({__Level3Val}, a05_e2e_paid_media_summary_d[framework]),
-                "Brand->Framework->Category", TREATAS({__Level3Val}, a05_e2e_paid_media_summary_d[category]),
-                "Category->Brand->Framework", TREATAS({__Level3Val}, a05_e2e_paid_media_summary_d[framework]),
-                "Category->Framework->Brand", TREATAS({__Level3Val}, a05_e2e_paid_media_summary_d[brand]),
-                "Framework->Brand->Category", TREATAS({__Level3Val}, a05_e2e_paid_media_summary_d[category]),
-                "Framework->Category->Brand", TREATAS({__Level3Val}, a05_e2e_paid_media_summary_d[brand]),
-                BLANK()
-            ),
-            BLANK()
-        )
+	// 1. 动态解析 Brand 列对应的筛选值
+	VAR __BrandFilterVal = 
+	    SWITCH(TRUE(),
+	        __IsLevel1 && (__ScenarioType = "Brand->Category->Framework" || __ScenarioType ="Brand->Framework->Category"), __Level1Val,
+	        __IsLevel2 && (__ScenarioType = "Category->Brand->Framework" || __ScenarioType ="Framework->Brand->Category"), __Level2Val,
+	        __IsLevel3 && (__ScenarioType = "Category->Framework->Brand" || __ScenarioType ="Framework->Category->Brand"), __Level3Val,
+	        BLANK()
+	    )
+	// 2. 动态解析 Category 列对应的筛选值
+	VAR __CategoryFilterVal = 
+	    SWITCH(TRUE(),
+	        __IsLevel1 && (__ScenarioType = "Category->Brand->Framework" || __ScenarioType ="Category->Framework->Brand"), __Level1Val,
+	        __IsLevel2 && (__ScenarioType = "Brand->Category->Framework" || __ScenarioType ="Framework->Category->Brand"), __Level2Val,
+	        __IsLevel3 && (__ScenarioType = "Brand->Framework->Category" || __ScenarioType ="Framework->Brand->Category"), __Level3Val,
+	        BLANK()
+	    )
+	// 3. 动态解析 Framework 列对应的筛选值
+	VAR __FrameworkFilterVal = 
+	    SWITCH(TRUE(),
+	        __IsLevel1 && (__ScenarioType = "Framework->Brand->Category" || __ScenarioType ="Framework->Category->Brand"), __Level1Val,
+	        __IsLevel2 && (__ScenarioType = "Brand->Framework->Category" || __ScenarioType ="Category->Framework->Brand"), __Level2Val,
+	        __IsLevel3 && (__ScenarioType = "Brand->Category->Framework" || __ScenarioType ="Category->Brand->Framework"), __Level3Val,
+	        BLANK()
+	    )
+	// 4. 将标量值转换为绝对合法的单列表筛选器（纯表表达式）
+	VAR __L1_Filter = 
+	    FILTER(
+	        VALUES(a05_e2e_paid_media_summary_d[brand]), 
+	        a05_e2e_paid_media_summary_d[brand] = __BrandFilterVal || __BrandFilterVal = BLANK()
+	    )
+	VAR __L2_Filter = 
+	    FILTER(
+	        VALUES(a05_e2e_paid_media_summary_d[category]), 
+	        a05_e2e_paid_media_summary_d[category] = __CategoryFilterVal || __CategoryFilterVal = BLANK()
+	    )
+	VAR __L3_Filter = 
+	    FILTER(
+	        VALUES(a05_e2e_paid_media_summary_d[framework]), 
+	        a05_e2e_paid_media_summary_d[framework] = __FrameworkFilterVal || __FrameworkFilterVal = BLANK()
+	    )
 
     // ── 公共筛选参数（所有指标共用）──
     // page_type=2、Total='Total' 固定筛选（事实表 Total 字段整列值为 "Total"）
-    // data_date 由 Slicer_Time_Frame 断开维度传递（TimeFrame_Min/Max → data_date 字符串筛选）
-    VAR __TimeMin = MIN(Slicer_Time_Frame[TimeFrame_Min])
-    VAR __TimeMax = MAX(Slicer_Time_Frame[TimeFrame_Max])
+    // data_date 由 Slicer_Time_Frame_Min/Max 断开维度传递（TimeFrame_Min/Max → data_date 字符串筛选）
+    // pbi表字段的文本类型需要切换为日期类型，才能与事实表日期字段匹配
+    VAR __TimeMin = MIN(Slicer_Time_Frame_Min[TimeFrame_Min])
+    VAR __TimeMax = MAX(Slicer_Time_Frame_Max[TimeFrame_Max])
     VAR __DateFilter =
         FILTER(VALUES(a05_e2e_paid_media_summary_d[data_date]),
             a05_e2e_paid_media_summary_d[data_date] >= __TimeMin
@@ -190,7 +176,7 @@ KPI Breakdown Base Value =
         CALCULATE(
             SUM(a05_e2e_paid_media_summary_d[cost_amt]),
             a05_e2e_paid_media_summary_d[customer_type] = "ALL",
-            a05_e2e_paid_media_summary_d[page_type] = 2,
+            a05_e2e_paid_media_summary_d[page_type] = "2",
             a05_e2e_paid_media_summary_d[Total] = "Total",
             __ChannelFilter, __DateFilter,
             __L1_Filter, __L2_Filter, __L3_Filter
@@ -201,7 +187,7 @@ KPI Breakdown Base Value =
         CALCULATE(
             SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
             a05_e2e_paid_media_summary_d[customer_type] = "ALL",
-            a05_e2e_paid_media_summary_d[page_type] = 2,
+            a05_e2e_paid_media_summary_d[page_type] = "2",
             a05_e2e_paid_media_summary_d[Total] = "Total",
             __ChannelFilter, __DateFilter,
             __L1_Filter, __L2_Filter, __L3_Filter
@@ -212,7 +198,7 @@ KPI Breakdown Base Value =
         CALCULATE(
             SUM(a05_e2e_paid_media_summary_d[media_sales_amt]),
             a05_e2e_paid_media_summary_d[customer_type] = "ALL",
-            a05_e2e_paid_media_summary_d[page_type] = 2,
+            a05_e2e_paid_media_summary_d[page_type] = "2",
             a05_e2e_paid_media_summary_d[Total] = "Total",
             __ChannelFilter, __DateFilter,
             __L1_Filter, __L2_Filter, __L3_Filter
@@ -223,7 +209,7 @@ KPI Breakdown Base Value =
         CALCULATE(
             SUM(a05_e2e_paid_media_summary_d[cost_amt]),
             a05_e2e_paid_media_summary_d[customer_type] = "NEW",
-            a05_e2e_paid_media_summary_d[page_type] = 2,
+            a05_e2e_paid_media_summary_d[page_type] = "2",
             a05_e2e_paid_media_summary_d[Total] = "Total",
             __ChannelFilter, __DateFilter,
             __L1_Filter, __L2_Filter, __L3_Filter
@@ -234,7 +220,7 @@ KPI Breakdown Base Value =
         CALCULATE(
             SUM(a05_e2e_paid_media_summary_d[cost_amt]),
             a05_e2e_paid_media_summary_d[customer_type] IN {"NEW", "EXISTING"},
-            a05_e2e_paid_media_summary_d[page_type] = 2,
+            a05_e2e_paid_media_summary_d[page_type] = "2",
             a05_e2e_paid_media_summary_d[Total] = "Total",
             __ChannelFilter, __DateFilter,
             __L1_Filter, __L2_Filter, __L3_Filter
@@ -250,10 +236,13 @@ KPI Breakdown Base Value =
         CALCULATE(
             SUM(a05_e2e_paid_media_summary_d[cost_amt]),
             a05_e2e_paid_media_summary_d[customer_type] = "ALL",
-            a05_e2e_paid_media_summary_d[page_type] = 2,
+            a05_e2e_paid_media_summary_d[page_type] = "2",
             a05_e2e_paid_media_summary_d[Total] = "Total",
             FILTER(ALLSELECTED(a05_e2e_paid_media_summary_d[channel]),
-                a05_e2e_paid_media_summary_d[channel] IN __ChannelList),
+	            (__PlatformID = "JD" && a05_e2e_paid_media_summary_d[channel] IN {"快车", "触点", "海投"})
+	            ||
+	            (__PlatformID <> "JD" && a05_e2e_paid_media_summary_d[channel] IN {"直通车", "引力魔方", "全站推"})
+	        ),
             __DateFilter
         )
 
@@ -262,7 +251,7 @@ KPI Breakdown Base Value =
         CALCULATE(
             SUM(a05_e2e_paid_media_summary_d[cost_amt]),
             a05_e2e_paid_media_summary_d[customer_type] = "ALL",
-            a05_e2e_paid_media_summary_d[page_type] = 2,
+            a05_e2e_paid_media_summary_d[page_type] = "2",
             a05_e2e_paid_media_summary_d[Total] = "Total",
             FILTER(ALLSELECTED(a05_e2e_paid_media_summary_d[channel]),
                 a05_e2e_paid_media_summary_d[channel] = __MetricNameTrim),
@@ -274,7 +263,7 @@ KPI Breakdown Base Value =
         CALCULATE(
             SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
             a05_e2e_paid_media_summary_d[customer_type] = "ALL",
-            a05_e2e_paid_media_summary_d[page_type] = 2,
+            a05_e2e_paid_media_summary_d[page_type] = "2",
             a05_e2e_paid_media_summary_d[Total] = "Total",
             __DateFilter
         )
@@ -318,7 +307,6 @@ KPI Breakdown Base Value =
     // Total 行和明细行口径一致：都是三渠道汇总 sales / 三渠道汇总 cost
     //   Total 行：不施加行维度 → 全 TTL 三渠道 sales / 全 TTL 三渠道 cost
     //   明细行：施加行维度 → 分组三渠道 sales / 分组三渠道 cost
-    // TREATAS 自动控制：Total 行 __L1/L2/L3 返回 BLANK → 不筛选行维度
     VAR __ROI_Total = DIVIDE(__MediaSales_ALL, __Cost_ALL)
 
     // ── ROI 渠道（渠道 Sales / 渠道 Cost）──
@@ -339,7 +327,7 @@ KPI Breakdown Base Value =
     // SWITCH 路由分发（使用 IN 合并平台，TM/RLE/DY 逻辑一致，JD 仅 channel 名不同）
     // channel 映射已由 __ChannelFilter 处理，此处无需区分平台
     // ════════════════════════════════════════════════════════════════
-    RETURN
+    RETURN 
     SWITCH(
         TRUE(),
 
@@ -394,7 +382,7 @@ KPI Breakdown Cell Value =
 ## 3. 格式化显示度量值 — KPI Breakdown Cell Display
 
 ```dax
-KPI Breakdown Cell Display =
+KPI Breakdown Cell Display = 
 // ========================================
 // 度量值: KPI Breakdown Cell Display
 // Display Folder: KPI Breakdown > Formatting
@@ -402,7 +390,7 @@ KPI Breakdown Cell Display =
 //
 // 格式类型（与口径文档 Category Growth.md 一致）：
 //   decimal_pt_1 → pt 点数1位小数 → Cost% vs SLS%
-//                  格式：#,##0.0'pt';-#,##0.0'pt';0.0'pt'（不含正号）
+//                  格式："#,##0.0pt;-#,##0.0pt;0.0pt"（不含正号）
 //   percent_1dp  → 百分比1位小数 → SLS% / Cost MOB% 系列
 //                  格式：#,##0.0%;#,##0.0%;0.0%
 //   decimal_1dp  → 数值1位小数 → ROI / New Customer Cost% 系列
@@ -415,18 +403,19 @@ KPI Breakdown Cell Display =
 
     RETURN
         IF(
-            ISBLANK(__Value),
-            "-",
-            SWITCH(
-                __Format,
-                // ─── pt 点数（Cost% vs SLS%）──
-                "decimal_pt_1", FORMAT(__Value, "#,##0.0'pt';-#,##0.0'pt';0.0'pt'"),
-                // ─── 百分比（SLS% / Cost MOB%）──
-                "percent_1dp",  FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%"),
-                // ─── 数值（ROI / New Customer Cost%）──
-                "decimal_1dp",  FORMAT(__Value, "#,##0.0"),
-                // ─── 默认 ───
-                FORMAT(__Value, "#,##0.0")
+            ISBLANK(__Value) && ISBLANK(COUNTROWS ( 'Dim_ColMetric_KpiBreakdown' )),BLANK(),
+            IF(ISBLANK(__Value),"-",
+                SWITCH(
+                    __Format,
+                    // ─── pt 点数（Cost% vs SLS%）──
+                    "decimal_pt_1", FORMAT(__Value, "#,##0.0pt;-#,##0.0pt;0.0pt"),
+                    // ─── 百分比（SLS% / Cost MOB%）──
+                    "percent_1dp",  FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%"),
+                    // ─── 数值（ROI / New Customer Cost%）──
+                    "decimal_1dp",  FORMAT(__Value, "#,##0.0"),
+                    // ─── 默认 ───
+                    FORMAT(__Value, "#,##0.0")
+                )
             )
         )
 ```
@@ -453,10 +442,10 @@ KPI Breakdown Cell Font Color =
 // ========================================
 
     // ── 行上下文：层级判断（必须包含 Total 层级）──
-    VAR __IsTotal  = ISINSCOPE('Brand-Category-Framework'[Total])
-    VAR __IsLevel1 = ISINSCOPE('Brand-Category-Framework'[Level 1])
-    VAR __IsLevel2 = ISINSCOPE('Brand-Category-Framework'[Level 2])
-    VAR __IsLevel3 = ISINSCOPE('Brand-Category-Framework'[Level 3])
+    VAR __IsTotal  = ISINSCOPE('Brand->Category->Framework'[Total])
+    VAR __IsLevel1 = ISINSCOPE('Brand->Category->Framework'[Level 1])
+    VAR __IsLevel2 = ISINSCOPE('Brand->Category->Framework'[Level 2])
+    VAR __IsLevel3 = ISINSCOPE('Brand->Category->Framework'[Level 3])
     VAR __IsTotalRow = NOT __IsTotal && NOT __IsLevel1 && NOT __IsLevel2 && NOT __IsLevel3
 
     // ── 列上下文：判断是否为 Total 指标列 ──
@@ -500,11 +489,23 @@ KPI Breakdown Cell SVG Icon =
 
     // ── SVG 图标定义 ──
     VAR __GreenSVG =
-        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><circle cx='6' cy='6' r='5' fill='%231A9018'/></svg>"
+        "data:image/svg+xml;utf8," &
+        "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
+        "<circle cx='8' cy='8' r='7' fill='%234CAF50'/>" &
+        "<path d='M8 12 L8 5 M5 7 L8 4 L11 7' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/     >" &
+        "</svg>"
     VAR __RedSVG =
-        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><circle cx='6' cy='6' r='5' fill='%23D64550'/></svg>"
+        "data:image/svg+xml;utf8," &
+        "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
+        "<circle cx='8' cy='8' r='7' fill='%23F44336'/>" &
+        "<path d='M8 4 L8 11 M5 9 L8 12 L11 9' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/>" &
+        "</svg>"
     VAR __YellowSVG =
-        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><circle cx='6' cy='6' r='5' fill='%23E1C233'/></svg>"
+        "data:image/svg+xml;utf8," &
+        "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
+        "<circle cx='8' cy='8' r='7' fill='%23FF9800'/>" &
+        "<path d='M4.5 8 L11.5 8' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/>" &
+        "</svg>"
 
     RETURN
         SWITCH(
@@ -523,7 +524,7 @@ KPI Breakdown Cell SVG Icon =
 ## 6. 条件格式度量值 — 行背景色
 
 ```dax
-KPI Breakdown Cell Background Color =
+KPI Breakdown Cell Background Color = 
 // ========================================
 // 度量值: KPI Breakdown Cell Background Color
 // Display Folder: KPI Breakdown > Formatting
@@ -539,10 +540,10 @@ KPI Breakdown Cell Background Color =
 // ========================================
 
     // ── 行上下文：层级判断（必须包含 Total 层级）──
-    VAR __IsTotal   = ISINSCOPE('Brand-Category-Framework'[Total])
-    VAR __IsLevel1  = ISINSCOPE('Brand-Category-Framework'[Level 1])
-    VAR __IsLevel2  = ISINSCOPE('Brand-Category-Framework'[Level 2])
-    VAR __IsLevel3  = ISINSCOPE('Brand-Category-Framework'[Level 3])
+    VAR __IsTotal   = ISINSCOPE('Brand->Category->Framework'[Total])
+    VAR __IsLevel1  = ISINSCOPE('Brand->Category->Framework'[Level 1])
+    VAR __IsLevel2  = ISINSCOPE('Brand->Category->Framework'[Level 2])
+    VAR __IsLevel3  = ISINSCOPE('Brand->Category->Framework'[Level 3])
     VAR __IsTotalRow = NOT __IsTotal && NOT __IsLevel1 && NOT __IsLevel2 && NOT __IsLevel3
 
     // ── 列上下文：判断是否为 Total 指标列 ──
@@ -553,16 +554,12 @@ KPI Breakdown Cell Background Color =
         SWITCH(
             TRUE(),
             // ── 总计行（__IsTotalRow=TRUE）──
-            // Total 指标列 → #FAF6F1（浅米色）
             // 其余列 → #E6D9C7（中米色）
-            __IsTotalRow && __IsTotalMetric, "#FAF6F1",
-            __IsTotalRow,                    "#E6D9C7",
+            __IsTotalRow, "#E6D9C7",
+            // Total 指标列 → #FAF6F1（浅米色）
+            NOT __IsTotalRow && __IsTotalMetric,"#FAF6F1",
             // ── 明细行（第四层级 Level 3）→ #F5F5F5（浅灰）──
             __IsLevel3, "#F5F5F5",
-            // ── 其余行（Level 1/2 小计行）──
-            // Total 指标列 → #FAF6F1（浅米色）
-            // 其余列 → #FFFFFF（白色）
-            __IsTotalMetric, "#FAF6F1",
             "#FFFFFF"
         )
 ```
