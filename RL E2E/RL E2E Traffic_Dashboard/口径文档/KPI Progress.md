@@ -22,6 +22,8 @@
 
 ## 子模块一：KPIs
 
+> **无分组维度**: 只受到筛选器影响，没有分组维度，用于制作Powebi卡片图。
+
 ### 1. Media Cost Rate — 媒体花费占比
 
 | 项目 | 内容 |
@@ -29,10 +31,12 @@
 | **指标名称** | Media Cost Rate / 媒体花费占比 |
 | **业务定义** | 实际总媒体花费占比退后金额的百分比 |
 | **计算公式** | Cost / Net Sales × 1.13 / 1.06 |
-| **分子** | `cost_amt（含红包/返佣返货金）` |
+| **分子** | `cost_amt（含红包/返佣返货金），字段值本身就含红包、返佣金，所以不需要加额外的计算` |
 | **分母** | `net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
 
 ---
 
@@ -43,9 +47,11 @@
 | **指标名称** | Media Cost / 媒体花费 |
 | **业务定义** | 实际媒体花费（绝对值） |
 | **计算公式** | 同 Cost（实际媒体花费） |
-| **统计字段** | `cost_amt（含红包/返佣返货金）` |
+| **统计字段** | `cost_amt（含红包/返佣返货金），字段值本身就含红包、返佣金，所以不需要加额外的计算` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
 
 ---
 
@@ -59,6 +65,8 @@
 | **统计字段** | `cost_amt / fcst_cost_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
 
 ---
 
@@ -69,8 +77,10 @@
 | **指标名称** | Cost vs SLS ACH% / 花费vs销售达成 |
 | **业务定义** | 花费进度达成 vs 销售进度达成差异 |
 | **计算公式** | Cost ACH% − SLS ACH% |
-| **数据底表** | —（派生指标） |
+| **数据底表** | (3. Cost ACH% — 花费进度达成) 减 (5. SLS ACH% — 目标达成率) |
 | **筛选条件** | 派生：Cost ACH% − SLS ACH%，无独立底表取数，根据 Cost ACH% 行和 SLS ACH% 行生成 |
+| **数据类型** | delta_bp      → 增减基点整数： → +120bp / -80bp（基点，含正负号，值×100 转 bp）,乘以100的操作可以放在Cell Display度量中实现 |        
+| **数据格式** | `+#,##0bp;-#,##0bp;0bp` |
 
 ---
 
@@ -80,10 +90,12 @@
 |---|---|
 | **指标名称** | SLS ACH% / 目标达成率 |
 | **业务定义** | 退后销售额目标达成率 |
-| **计算公式** | 实际退后金额 / 计划退后金额（运营也许会直接提供一个百分比的数值，待定） |
+| **计算公式** | 实际退后金额 / 计划退后金额（暂时就按fcst_net_sales_amt字段值计算，后续运营也许会直接提供一个百分比的数值再说） |
 | **统计字段** | `net_sales_amt / fcst_net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
 
 ---
 
@@ -97,6 +109,8 @@
 | **统计字段** | `net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
 
 ---
 
@@ -107,14 +121,47 @@
 | **指标名称** | Media Contribution to New Customer Acquisition% / 媒体新客贡献率 |
 | **业务定义** | 媒体新客贡献率 |
 | **计算公式** | 媒体新客数 / 全店新客数 |
+| **统计字段** | `media_member_cnt（new）/ member_cnt（new）` |
 | **分子** | `media_member_cnt`（媒体新客数 media_new_customer_no） |
 | **分母** | `member_cnt`（全店新客数） |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
 
 ---
 
-### 8. Cost Per New Acquisition — 媒体新客获客成本
+### 8. Media Contribution to New Customer Acquisition% vs LY— 媒体新客贡献率（对比去年同期）
+
+| 项目 | 内容 |
+|---|---|
+| **计算公式** | 和Media Contribution to New Customer Acquisition%逻辑一致，就是 当期值 - 去年同期值 |
+| **计算公式** |  当期值 - 去年同期值 |
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"` |
+| **数据类型** | delta_bp      → 增减基点整数： → +120bp / -80bp（基点，含正负号，值×100 转 bp）,乘以100的操作可以放在Cell Display度量中实现 |        
+| **数据格式** | `+#,##0bp;-#,##0bp;0bp` |
+
+---
+
+### 9. Media Contribution to New Customer Acquisition% TRA ACH% — 媒体新客贡献率进度达成
+
+| 项目 | 内容 |
+|---|---|
+| **指标名称** | Media Contribution to New Customer Acquisition% TRA ACH% / 媒体新客贡献率进度达成 |
+| **业务定义** | 媒体新客贡献率进度达成 |
+| **计算公式** | 媒体新客贡献率/媒体新客目标贡献率 |
+| **统计字段** | 媒体新客贡献率：`media_member_cnt（new）/ member_cnt（new）`，媒体新客目标贡献率：2，暂时固定为2 |
+| **分子** | 媒体新客贡献率：`media_member_cnt（new）/ member_cnt（new）` |
+| **分母** | `2`暂时固定为2，待后续补充口径，再计算实际分母值 |
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+
+---
+
+### 10. Media Cost Per New Acquisition — 媒体新客获客成本
 
 | 项目 | 内容 |
 |---|---|
@@ -125,37 +172,136 @@
 | **分母** | `media_member_cnt`（媒体新客数 media_new_customer_no） |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"` |
+| **数据类型** | currency_decimal_1dp → 货币符号由币种切片器决定，千分位保留一位小数 |
+| **数据格式** | `#,##0.0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0.0")` 拼接币种符号） | 
 
 ---
 
-### 9. ± Acceleration cost MOB% vs. store SLS MOB% — 第二品类花费MOB%vs门店销售MOB%
+### 11. Media Cost Per New Acquisition vs LY — 媒体新客获客成本（对比去年同期）
+
+| 项目 | 内容 |
+|---|---|
+| **计算公式** | 和Media Cost Per New Acquisition逻辑一致，就是当期值/去年同期值 - 1 |
+| **计算公式** | 当期值/去年同期值 - 1 |
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+
+---
+
+### 12. Media Cost Per New Acquisition TRA ACH% — 媒体新客获客成本进度达成
+| 项目 | 内容 |
+|---|---|
+| **指标名称** | Media Cost Per New Acquisition TRA ACH% / 媒体新客获客成本进度达成 |
+| **业务定义** | 媒体新客获客成本进度达成 |
+| **计算公式** | 媒体新客获客成本/媒体新客获客成本目标 |
+| **统计字段** | 媒体新客获客成本：`media_cost_amt（new）/ media_member_cnt（new）`，媒体新客获客成本目标：100，暂时固定为100 |
+| **分子** | 媒体新客获客成本：`media_cost_amt（new）/ media_member_cnt（new）` |
+| **分母** | `100`暂时固定为100，待后续补充口径，再计算实际分母值 |
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+
+---
+
+### 13. ± Acceleration cost MOB% vs. store SLS MOB% — 第二品类花费MOB%vs门店销售MOB%
 
 | 项目 | 内容 |
 |---|---|
 | **指标名称** | ± Acceleration cost MOB% vs. store SLS MOB% / 第二品类花费MOB%vs门店销售MOB% |
 | **业务定义** | 第二品类花费占比 vs 门店销售占比 |
 | **计算公式** | Acceleration Cost MOB% − Store SLS MOB%（×100 转为 bp） |
-| **数据底表** | —（派生指标） |
-| **筛选条件** | 派生：Acceleration Cost MOB% − Store SLS MOB%（×100→bp），无独立底表取数 |
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **Acceleration Cost MOB%计算公式** | `cost_amt（framework='Acceleration'）/ cost_amt（全部 framework）` |
+| **Store SLS MOB%计算** | `net_sales_amt（framework='Acceleration'）/ net_sales_amt（全部 framework）` |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+
+---
+
+### 14. ± Acceleration cost MOB% vs. store SLS MOB% vs LY — 第二品类花费MOB%vs门店销售MOB%（对比去年同期）
+
+| 项目 | 内容 |
+|---|---|
+| **计算公式** | 和± Acceleration cost MOB% vs. store SLS MOB%逻辑一致，就是 当期值 - 去年同期值 |
+| **计算公式** | 当期值 - 去年同期值 |
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"` |
+| **数据类型** | delta_bp      → 增减基点整数： → +120bp / -80bp（基点，含正负号，值×100 转 bp）,乘以100的操作可以放在Cell Display度量中实现 |        
+| **数据格式** | `+#,##0bp;-#,##0bp;0bp` |
+
+---
+
+### 15. ± Acceleration SLS MOB% vs. store SLS MOB% TRA ACH% — 第二品类退后销售额MOB%vs门店销售MOB%进度达成
+| 项目 | 内容 |
+|---|---|
+| **指标名称** | ± Acceleration SLS MOB% vs. store SLS MOB% TRA ACH% / 第二品类退后销售额MOB%vs门店销售MOB%进度达成 |
+| **业务定义** | 第二品类退后销售额MOB%vs门店销售MOB%进度达成 |
+| **计算公式** | 第二品类退后销售额MOB%vs门店销售MOB%/目标 |
+| **目标** | 2，暂时固定为2 |
+| **统计字段** | 第二品类退后销售额MOB%vs门店销售MOB%：`net_sales_amt（framework='Acceleration'）/ net_sales_amt（全部 framework）` ，目标：2 ，暂时固定为2|
+| **分子** | 第二品类退后销售额MOB%vs门店销售MOB%：`net_sales_amt（framework='Acceleration'）/ net_sales_amt（全部 framework）` |   
+| **分母** | `2`暂时固定为2，待后续补充口径，再计算实际分母值 |
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
 
 ---
 
 ## 子模块二：Performance Indicators
 
-### 10. New Customer No — 新客数量
+### 16. New Customer No — 新客数量
 
 | 项目 | 内容 |
 |---|---|
 | **指标名称** | New Customer No / 新客数量 |
 | **业务定义** | 店铺新客数 |
 | **计算公式** | COUNT DISTINCT 买家id（全店新客） |
-| **统计字段** | `member_cnt` |
+| **统计字段** | `1`暂时固定为1，待后续补充口径，再计算实际值 |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"` |
+| **数据类型** | integer → 整数，千分位整数 |
+| **数据格式** | `#,##0` |
 
 ---
 
-### 11. Acceleration SLS — 第二品类退后销售额
+### 17. New Customer No vs LY — 新客数量（对比去年同期）
+
+| 项目 | 内容 |
+|---|---|
+| **指标名称** | New Customer No vs LY / 新客数量（对比去年同期） |
+| **业务定义** | 店铺新客数 |
+| **计算公式** | COUNT DISTINCT 买家id（全店新客） |
+| **统计字段** | `1`暂时固定为1，待后续补充口径，再计算实际值 |
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+
+---
+
+### 18. New Customer No TRA ACH% — 新客数量进度达成
+
+| 项目 | 内容 |
+|---|---|
+| **指标名称** | New Customer No TRA ACH% / 新客数量进度达成 |
+| **业务定义** | 新客数量进度达成 |
+| **计算公式** | 新客数量/新客数量目标 |
+| **统计字段** | 新客数量：`1`，新客数量目标：1，暂时固定为1 |
+| **分子** | COUNT DISTINCT 买家id（全店新客），暂时固定为1，待后续补充口径，再计算实际值  |
+| **分母** | `1`暂时固定为1，待后续补充口径，再计算实际值 | 
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **筛选条件** | `customer_type='NEW' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+
+---
+
+### 19. Acceleration SLS — 第二品类退后销售额
 
 | 项目 | 内容 |
 |---|---|
@@ -165,10 +311,41 @@
 | **统计字段** | `net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND framework='Acceleration' AND page_type="1"` |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
 
 ---
 
-### 12. Acceleration SLS MOB% — 第二品类退后销售额MOB%
+### 20. Acceleration SLS vs LY — 第二品类退后销售额（对比去年同期）
+
+| 项目 | 内容 |
+|---|---|
+| **计算公式** | 和Acceleration SLS逻辑一致，就是当期值/去年同期值 - 1 |
+| **计算公式** | 当期值/去年同期值 - 1 |
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **筛选条件** | `customer_type='ALL' AND framework='Acceleration' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+
+---
+
+### 21. Acceleration SLS TRA ACH% — 第二品类退后销售额进度达成
+| 项目 | 内容 |
+|---|---|
+| **指标名称** | Acceleration SLS TRA ACH% / 第二品类退后销售额进度达成 |
+| **业务定义** | 第二品类退后销售额进度达成 |
+| **计算公式** | 第二品类退后销售额/第二品类退后销售额目标 |
+| **统计字段** | 第二品类退后销售额：`net_sales_amt（framework='Acceleration'）`，第二品类退后销售额目标：10000，暂时固定为10000 |
+| **分子** | 第二品类退后销售额：`net_sales_amt（framework='Acceleration'）` |
+| **分母** | `10000`暂时固定为10000，待后续补充口径，再计算实际分母值 | 
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **筛选条件** | `customer_type='ALL' AND framework='Acceleration' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+
+---
+
+### 22. Acceleration SLS MOB% — 第二品类退后销售额MOB%
 
 | 项目 | 内容 |
 |---|---|
@@ -176,9 +353,40 @@
 | **业务定义** | 第二品类退后销售额占比 |
 | **计算公式** | Acceleration SLS / TTL SLS |
 | **分子** | `net_sales_amt`（Acceleration 退后销售额） |
-| **分母** | `net_sales_amt`（全店 TTL 退后销售额，全部 framework） |
+| **分母** | `net_sales_amt`（TTL 退后销售额，全部 framework） |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | 分子：`customer_type='ALL' AND framework='Acceleration' AND page_type="1"`；分母：`customer_type='ALL' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+
+---
+
+### 23. Acceleration SLS MOB% vs LY — 第二品类退后销售额MOB%（对比去年同期）
+
+| 项目 | 内容 |
+|---|---|
+| **计算公式** | 和Acceleration SLS MOB%逻辑一致，就是当期值/去年同期值 - 1 |
+| **计算公式** | 当期值占比 - 去年同期占比 |
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **筛选条件** | 分子：`customer_type='ALL' AND framework='Acceleration' AND page_type="1"`；分母：`customer_type='ALL' AND page_type="1"` |
+| **数据类型** | delta_bp      → 增减基点整数： → +120bp / -80bp（基点，含正负号，值×100 转 bp）,乘以100的操作可以放在Cell Display度量中实现 |        
+| **数据格式** | `+#,##0bp;-#,##0bp;0bp` |
+
+---
+
+### 24. Acceleration SLS MOB% TRA ACH% — 第二品类退后销售额MOB%进度达成
+| 项目 | 内容 |
+|---|---|
+| **指标名称** | Acceleration SLS MOB% TRA ACH% / 第二品类退后销售额MOB%进度达成 |
+| **业务定义** | 第二品类退后销售额MOB%进度达成 |
+| **计算公式** | 第二品类退后销售额MOB%/目标 |
+| **统计字段** | 第二品类退后销售额MOB%：`net_sales_amt（framework='Acceleration'）/ net_sales_amt（全部 framework）`，目标：2，暂时固定为2 |
+| **分子** | 第二品类退后销售额MOB%：`net_sales_amt（framework='Acceleration'）/ net_sales_amt（全部 framework）` |
+| **分母** | `2`暂时固定为2，待后续补充口径，再计算实际分母值 |
+| **数据底表** | `a05_e2e_paid_media_summary_d` |
+| **筛选条件** | `customer_type='ALL' AND page_type="1"` |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
 
 ---
 
@@ -275,7 +483,7 @@
 |---|---|
 | **指标名称** | Media Cost Rate / 费比 |
 | **业务定义** | 各平台费比 |
-| **计算公式** | Cost / SLS |
+| **计算公式** | Cost / SLS × 1.13 / 1.06|
 | **统计字段** | `cost_amt / net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"`，按 platform 分组 |
@@ -315,7 +523,7 @@
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
 | **相关字段格式** | 去年同期值(± Acceleration cost MOB% vs. store SLS MOB% vs LP)：percent_1dp、(YOY%  )：percent_1dp |
-cost_amt（framework='Acceleration'
+
 ---
 
 ### 22. Media Contribution to New Customer Acquisition% — 媒体新客贡献率（分平台）

@@ -30,3 +30,5 @@ shop_name的所有分组，包括所有店铺的group by;trans_cycle:T+1;
 pbi指标：15个指标，三个为一组单验证本期、同期、YOY%。共计五组SQL验证语句，以及一组Total行的验证语句。
 给出完整SQL语句，mysql语法。
 输出在RL E2E\RL E2E Traffic_Dashboard\KPI Progress目录下。
+
+第三轮提示：

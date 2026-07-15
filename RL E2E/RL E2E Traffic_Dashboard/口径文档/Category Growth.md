@@ -34,7 +34,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type=2` AND `Total`='Total' |
 | **数据类型** | decimal_pt_1 → pt，保留一位小数，不含正号，* 100乘以100的操作可以放在Cell Display中实现 |
-| **数据格式** | `#,##0.0'pt';-#,##0.0'pt';0.0'pt'` |
+| **数据格式** | `#,##0.0pt;-#,##0.0pt;0.0pt` |
 
 ---
 
@@ -303,7 +303,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type=2` AND `Total`='Total' |
 | **数据类型** | decimal_pt_1 → pt，保留一位小数，不含正号，* 100乘以100的操作可以放在Cell Display中实现 |
-| **数据格式** | `#,##0.0'pt';-#,##0.0'pt';0.0'pt'` |
+| **数据格式** | `#,##0.0pt;-#,##0.0pt;0.0pt` |
 
 ---
 
