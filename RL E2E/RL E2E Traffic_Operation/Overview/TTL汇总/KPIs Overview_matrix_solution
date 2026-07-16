@@ -140,7 +140,7 @@ KPIs Overview Cell Value ── 行路由（This Year / Last Year / YOY）
    CALCULATE + REMOVEFILTERS + FILTER(ALL(Dim_Date_Current)) 覆盖日期上下文
 5. 币种汇率转换：数据源仅 RMB，Base Value 不做币种筛选；
    Cell Value 层通过 Slicer_Currency_Selection[Currency_ExchangeRate] 获取汇率，
-   仅 Metric_IsCurrencyAmount = TRUE 的金额类指标乘以汇率（RMB=1, USD=7）
+   仅 Metric_IsCurrencyAmount = TRUE 的金额类指标除以汇率（RMB=1, USD=7）
 6. Platform 单选 + ALL（精确 IN 筛选）：
    - 选择 ALL → __ChannelID = "ALL"，Base Value 中施加 FILTER platform IN {"TM","JD"}
      精确圈定 TM + JD，避免数据源新增其他 platform 时被误聚合
@@ -788,9 +788,9 @@ KPIs Overview Cell Value =
 
     // ── 汇率换算（仅金额类指标需要）──
     VAR __CurrentConverted =
-        IF(__IsCurrencyAmt, __CurrentValue * __ExchangeRate, __CurrentValue)
+        IF(__IsCurrencyAmt, DIVIDE(__CurrentValue, __ExchangeRate), __CurrentValue)
     VAR __LP_Converted =
-        IF(__IsCurrencyAmt, __LP_Value * __ExchangeRate, __LP_Value)
+        IF(__IsCurrencyAmt, DIVIDE(__LP_Value, __ExchangeRate), __LP_Value)
 
     // ── YOY 同比计算（含边界判断）──
     // 判断逻辑：

@@ -50,3 +50,24 @@ KPI 计算框架解决方案 — 多指标 SWITCH 分发模式需求：
 7、由于是一个看板的不同模块，所以筛选器是公用的，具体用法和RL E2E\RL E2E Traffic_Dashboard\Category Growth\KPI_Breakdown_matrix_solution解决方案中的筛选器用法一致。比如：Currency筛选器，断开连接，仅金额类指标乘以汇率固定为7；
 在RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS目录下输出解决方案。
 
+第五轮提示：
+KPI Trend计算框架解决方案 — 多指标 需求：
+1、指标口径文档RL E2E\RL E2E Traffic_Dashboard\口径文档\KPI Progress.md的子模块三：New Acquisition KPI Trend和子模块四：Category Growth KPI Trend部分，即25-30，共六个指标口径，一切以口径文档为准，不懂就问。
+2、可以参考：RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS\KPIs_matrix_solution.md解决方案，但是没那么复杂，我只适用于柱形图和趋势图的展示，所以不需要矩阵的路由分发，单独写每个度量就行，只需要包括以下内容就行：
+New Customer No. Value、New Customer No. Display、
+New Customer% Value、New Customer% Display、
+Media Contribution to New Customer Acquisition% Value、Media Contribution to New Customer Acquisition% Display、
+Acceleration SLS Value、Acceleration SLS Display、
+Acceleration SLS MOB% Value、Acceleration SLS MOB% Display、
+Acceleration Cost MOB% Value、Acceleration Cost MOB% Display；
+对应六个指标的值和数据格式度量。
+清单：度量值清单与 Display Folder、指标口径来源对照、血缘关系图（Lineage Diagram）
+3、在RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPI_Trend目录下生成KPI_Trend_solution解决方案文件，文件开头，参考以下固定格式：
+KPI_Trend_solution 解决方案：
+> status: updated
+> created: 2026-06-23
+> updated: 2026-07-03
+> complexity: 🟡中等
+> type: 度量值开发
+> naming: 遵循 dax-style.md 规范
+> 口径来源: KPI Progress.md（最新口径，2026-07-03 同步）

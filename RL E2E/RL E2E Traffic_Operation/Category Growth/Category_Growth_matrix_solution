@@ -506,7 +506,7 @@ Category Growth Cost =
             __LevelFilter
         )
     RETURN
-        __BaseValue * __ExchangeRate
+        DIVIDE(__BaseValue, __ExchangeRate)
 
 --------------------------------------------------------------------------------
 1.7 Category Growth Cost VS LP

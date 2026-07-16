@@ -842,9 +842,9 @@ Media Mix Cell Value =
 
     // ── 汇率换算 ──
     VAR __CurrentConverted =
-        IF(__IsCurrencyAmt, __CurrentValue * __ExchangeRate, __CurrentValue)
+        IF(__IsCurrencyAmt, DIVIDE(__CurrentValue, __ExchangeRate), __CurrentValue)
     VAR __LP_Converted     =
-        IF(__IsCurrencyAmt, __LP_Value * __ExchangeRate, __LP_Value)
+        IF(__IsCurrencyAmt, DIVIDE(__LP_Value, __ExchangeRate), __LP_Value)
 
     // ── YOY 同比计算 ──
     VAR __CurrIsEmpty   = ISBLANK(__CurrentValue) || __CurrentValue = 0

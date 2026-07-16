@@ -423,9 +423,9 @@ Keyword Cell Value =
     // 仅金额类指标（Metric_IsCurrencyAmount = TRUE）乘以汇率
     // 比率类指标（CPC/CPATC 等）不乘汇率（分子分母同币种，比值无币种维度）
     VAR __CurrentConverted =
-        IF(__IsCurrencyAmt, __CurrentValue * __ExchangeRate, __CurrentValue)
+        IF(__IsCurrencyAmt, DIVIDE(__CurrentValue, __ExchangeRate), __CurrentValue)
     VAR __LP_Converted     =
-        IF(__IsCurrencyAmt, __LP_Value * __ExchangeRate, __LP_Value)
+        IF(__IsCurrencyAmt, DIVIDE(__LP_Value, __ExchangeRate), __LP_Value)
 
     // ── YOY 同比计算 ──
     // 口径：(This Year - Last Year) / Last Year

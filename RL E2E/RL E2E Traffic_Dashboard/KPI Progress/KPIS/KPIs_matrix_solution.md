@@ -289,15 +289,15 @@ KPIs Current Base Value =
             __MetricID,
             // ─── 子模块一：KPIs（1~15）本期值 ───
             1,  DIVIDE(__MediaCostRate * 1.13 , 1.06),                       // Media Cost Rate
-            2,  __Cost_ALL * __FXRate,                 // Media Cost（金额×汇率）
+            2,  DIVIDE(__Cost_ALL , __FXRate),                 // Media Cost（金额×汇率）
             3,  __CostACH,                             // Cost ACH%
             // 4 Cost vs SLS ACH% 在 Base Value 中派生（Cost ACH% − SLS ACH%）
             5,  __SLSACH,                              // SLS ACH%
-            6,  __SLS_ALL * __FXRate,                  // SLS DCom（金额×汇率）
+            6,  DIVIDE(__SLS_ALL , __FXRate),                  // SLS DCom（金额×汇率）
             7,  __MediaNewCustContrib,                 // Media Contribution to New Customer Acquisition%
             // 8 Media Contribution vs LY 在 Base Value 中派生（本期 − 去年同期，bp）
             9,  __MediaNewCustContribACH,              // Media Contribution TRA ACH%
-            10, __CostPerNewAcq * __FXRate,            // Media Cost Per New Acquisition（金额×汇率）
+            10, DIVIDE(__CostPerNewAcq , __FXRate),            // Media Cost Per New Acquisition（金额×汇率）
             // 11 Media Cost Per New Acquisition vs LY 在 Base Value 中派生（本期/同期−1）
             12, __CostPerNewAcqACH,                    // Media Cost Per New Acquisition TRA ACH%
             13, __AccelCostMOBvsSLS,                   // ± Acceleration cost MOB% vs. store SLS MOB%
@@ -307,7 +307,7 @@ KPIs Current Base Value =
             16, 1,                                     // New Customer No（暂时固定为 1，待口径补充）
             // 17 New Customer No vs LY 在 Base Value 中派生（本期/同期−1）
             18, __NewCustNoACH,                        // New Customer No TRA ACH%
-            19, __AccelSLS_ALL * __FXRate,             // Acceleration SLS（金额×汇率）
+            19, DIVIDE(__AccelSLS_ALL , __FXRate),             // Acceleration SLS（金额×汇率）
             // 20 Acceleration SLS vs LY 在 Base Value 中派生（本期/同期−1）
             21, __AccelSLSACH,                         // Acceleration SLS TRA ACH%
             22, __AccelSLSMOB,                         // Acceleration SLS MOB%
@@ -424,7 +424,7 @@ KPIs vsLP Base Value =
             11, __CostPerNewAcq,                       // #11 vs LY：获客成本（本期/同期 − 1）
             14, __AccelCostMOBvsSLS,                   // #14 vs LY：± Accel cost MOB%（本期 − 同期，bp）
             17, 1,                                     // #17 vs LY：新客数量（本期/同期 − 1，分子暂时固定 1）
-            20, __AccelSLS_ALL * __FXRate,             // #20 vs LY：Acceleration SLS（本期/同期 − 1）
+            20, DIVIDE(__AccelSLS_ALL , __FXRate),             // #20 vs LY：Acceleration SLS（本期/同期 − 1）
             23, __AccelSLSMOB,                         // #23 vs LY：Acceleration SLS MOB%（本期占比 − 同期占比，bp）
             BLANK()
         )

@@ -1025,9 +1025,9 @@ KPIs Overview Target Cell Value =
     VAR __TargetValue = [KPIs Overview Target Target Base Value]
 
     VAR __ActualConverted =
-        IF(__IsCurrencyAmt, __ActualValue * __ExchangeRate, __ActualValue)
+        IF(__IsCurrencyAmt, DIVIDE(__ActualValue, __ExchangeRate), __ActualValue)
     VAR __TargetConverted =
-        IF(__IsCurrencyAmt, __TargetValue * __ExchangeRate, __TargetValue)
+        IF(__IsCurrencyAmt, DIVIDE(__TargetValue, __ExchangeRate), __TargetValue)
 
     // ── 判断分子分母是否为 0 或 空 ──
     VAR __ActIsEmpty = ISBLANK(__ActualValue) || __ActualValue = 0

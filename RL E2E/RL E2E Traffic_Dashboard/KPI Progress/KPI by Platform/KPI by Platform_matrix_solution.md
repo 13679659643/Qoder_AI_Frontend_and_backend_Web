@@ -239,11 +239,11 @@ KPI by Platform Current Base Value =
     RETURN
         SWITCH(
             __MetricID,
-            1,  DIVIDE(__MediaCostRate * 1.13 , 1.06),                    // Media Cost Rate（本期）
-            4,  __Cost_ALL * __FXRate,              // Media Cost（本期，金额×汇率）
+            1,  DIVIDE(__MediaCostRate * 1.13 , 1.06) ,                    // Media Cost Rate（本期）
+            4,  DIVIDE(__Cost_ALL , __FXRate),              // Media Cost（本期，金额×汇率）
             7, __AccelCostMOBvsSLS,                // ± Accel cost MOB% vs. store SLS MOB%（本期）
             10, __MediaNewCustContrib,              // Media Contribution to New Cust%（本期）
-            13, __CostPerNewAcq * __FXRate,         // Cost Per New Acq（本期，金额×汇率）
+            13, DIVIDE(__CostPerNewAcq , __FXRate),         // Cost Per New Acq（本期，金额×汇率）
             BLANK()
         )
 ```
@@ -340,10 +340,10 @@ KPI by Platform vsLP Base Value =
         SWITCH(
             __MetricID,
             2,  DIVIDE(__MediaCostRate * 1.13 , 1.06),                    // Media Cost Rate vs LP
-            5,  __Cost_ALL * __FXRate,              // Media Cost vs LP
+            5,  DIVIDE(__Cost_ALL , __FXRate),              // Media Cost vs LP
             8, __AccelCostMOBvsSLS,                // ± Accel cost MOB% vs. store SLS MOB% vs LP
             11, __MediaNewCustContrib,              // Media Contribution to New Cust% vs LP
-            14, __CostPerNewAcq * __FXRate,         // Cost Per New Acq vs LP
+            14, DIVIDE(__CostPerNewAcq , __FXRate),         // Cost Per New Acq vs LP
             BLANK()
         )
 ```

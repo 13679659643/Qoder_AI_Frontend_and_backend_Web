@@ -238,7 +238,7 @@ Keyword X Cost =
                 a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
     RETURN
-        __BaseValue * __ExchangeRate
+        DIVIDE(__BaseValue, __ExchangeRate)
 
 3.3 Keyword X Cost%
 ────────────────
