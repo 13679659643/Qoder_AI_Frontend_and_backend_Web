@@ -1,0 +1,67 @@
+Dim_ColMetric_KPIs = 
+// ========================================
+// 表: Dim_ColMetric_KPIs
+// 类型: 断开维度
+// 用途: KPIs 页面矩阵列维度，覆盖口径文档子模块一（KPIs，1~15）与子模块二（Performance Indicators，16~24）共 24 个指标行
+// 变更: 2026-07-15 新建，依据口径文档 KPI Progress.md 子模块一、子模块二生成
+//
+// 格式类型清单（严格遵循口径文档数据类型定义）：
+//   currency              → ¥1,000 / $1,000（货币符号由币种切片器决定，千分位整数）  格式串: #,##0
+//   currency_decimal_1dp  → ¥1,000.0 / $1,000.0（货币符号由币种切片器决定，保留一位小数）  格式串: #,##0.0
+//   integer               → 1,000（整数，千分位）  格式串: #,##0
+//   percent_1dp           → 1,000.0%（百分比，保留一位小数，不含正号）  格式串: #,##0.0%;#,##0.0%;0.0%
+//   delta_bp              → +120bp / -80bp（增减基点整数，含正负号，值×100 转 bp）  格式串: +#,##0bp;-#,##0bp;0bp
+//
+// 颜色说明：
+//   全部行启用条件颜色（正/负/零）
+//   正值 #1A9018（绿）/ 负值 #D64550（红）/ 零值 #E1C233（黄）/ 默认 #252423（黑色）
+//
+// 汇率转换标记：
+//   Metric_IsCurrencyAmount = TRUE  → 金额类指标（currency / currency_decimal_1dp），切换币种时乘以汇率
+//   Metric_IsCurrencyAmount = FALSE → 比率/计数/基点类指标，不受汇率影响
+// ========================================
+DATATABLE(
+    "Metric_ID",              INTEGER,    // 主键 1~24
+    "Metric_Name",            STRING,     // 列标题显示名称（取口径文档标题中"—"前的英文指标名）
+    "Metric_Sort",            INTEGER,    // 排序值（起始10，步长10，便于插入）
+    "Metric_Format",          STRING,     // 行格式（严格遵循口径文档数据类型定义）
+    "Metric_IsCurrencyAmount", BOOLEAN,   // 是否金额类指标（需要汇率转换）
+    "Metric_ColorPositive",   STRING,     // 正值颜色
+    "Metric_ColorNegative",   STRING,     // 负值颜色
+    "Metric_ColorZero",       STRING,     // 零值颜色
+    "Metric_ColorDefault",    STRING,     // 默认颜色
+    {
+        // ═══════════════════════════════════════
+        // 子模块一：KPIs（1~15）
+        // ═══════════════════════════════════════
+        //  ID  Name                                                        Sort  Metric_Format           IsCurAmt  Pos        Neg        Zero       Default
+        { 1,  "Media Cost Rate",                                           10,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 2,  "Media Cost",                                                20,  "currency",             TRUE,     "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 3,  "Cost ACH%",                                                 30,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 4,  "Cost vs SLS ACH%",                                          40,  "delta_bp",             FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 5,  "SLS ACH%",                                                  50,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 6,  "SLS DCom",                                                  60,  "currency",             TRUE,     "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 7,  "Media Contribution to New Customer Acquisition%",           70,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 8,  "Media Contribution to New Customer Acquisition% vs LY",     80,  "delta_bp",             FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 9,  "Media Contribution to New Customer Acquisition% TRA ACH%",  90,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 10, "Media Cost Per New Acquisition",                           100,  "currency_decimal_1dp", TRUE,     "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 11, "Media Cost Per New Acquisition vs LY",                    110,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 12, "Media Cost Per New Acquisition TRA ACH%",                 120,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 13, "± Acceleration cost MOB% vs. store SLS MOB%",             130,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 14, "± Acceleration cost MOB% vs. store SLS MOB% vs LY",      140,  "delta_bp",             FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 15, "± Acceleration SLS MOB% vs. store SLS MOB% TRA ACH%",    150,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+
+        // ═══════════════════════════════════════
+        // 子模块二：Performance Indicators（16~24）
+        // ═══════════════════════════════════════
+        { 16, "New Customer No",                                         160,  "integer",              FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 17, "New Customer No vs LY",                                   170,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 18, "New Customer No TRA ACH%",                                180,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 19, "Acceleration SLS",                                        190,  "currency",             TRUE,     "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 20, "Acceleration SLS vs LY",                                  200,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 21, "Acceleration SLS TRA ACH%",                               210,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 22, "Acceleration SLS MOB%",                                   220,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 23, "Acceleration SLS MOB% vs LY",                             230,  "delta_bp",             FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 24, "Acceleration SLS MOB% TRA ACH%",                          240,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" }
+    }
+)

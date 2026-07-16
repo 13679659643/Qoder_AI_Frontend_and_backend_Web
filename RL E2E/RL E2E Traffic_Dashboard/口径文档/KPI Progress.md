@@ -392,34 +392,38 @@
 
 ## 子模块三：New Acquisition KPI Trend
 
-### 13. New Customer No. — 新客数量（趋势）
+### 25. New Customer No. — 新客数量（趋势）
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | New Customer No. / 新客数量 |
-| **业务定义** | 新客数量趋势 |
-| **计算公式** | COUNT DISTINCT 买家id（新客趋势） |
-| **统计字段** | `member_cnt` |
+| **指标名称** | New Customer No / 新客数量 |
+| **业务定义** | 店铺新客数 |
+| **计算公式** | COUNT DISTINCT 买家id（全店新客） |
+| **统计字段** | `1`暂时固定为1，待后续补充口径，再计算实际值 |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"` |
+| **数据类型** | currency_M_K_Int_0db → 货币符号由币种切片器决定，千分位整数,需要在Cell Display度量中拼接币种符号，需要判断是否带K、M、或者就是千分位整数，如果值小于1000，就直接表示为千分位整数，如果值大于等于1000，就表示为带K、M的格式，1K为一千，1M为一百万，都采用千分位的格式 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
 
 ---
 
-### 14. New Customer% — 新客占比（趋势）
+### 26. New Customer% — 新客占比（趋势）
 
 | 项目 | 内容 |
 |---|---|
 | **指标名称** | New Customer% / 新客占比 |
 | **业务定义** | 新客占比趋势 |
 | **计算公式** | New Customer No / TTL Buyers |
-| **分子** | `member_cnt`（new） |
-| **分母** | `member_cnt`（all） |
+| **分子** | `member_cnt`（new），`1`暂时固定为1，待后续补充口径，再计算实际值 |
+| **分母** | `member_cnt`（all），`2`暂时固定为2，待后续补充口径，再计算实际值 |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **筛选条件** | 分子 `customer_type='NEW'`；分母 `customer_type='ALL' AND page_type="1"` |
+| **筛选条件** | 分子 `customer_type='NEW' AND page_type="1"`；分母 `customer_type='ALL' AND page_type="1"` |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%;#,##0%;0%` |
 
 ---
 
-### 15. Media Contribution to New Customer Acquisition% — 媒体新客贡献率（趋势）
+### 27. Media Contribution to New Customer Acquisition% — 媒体新客贡献率（趋势）
 
 | 项目 | 内容 |
 |---|---|
@@ -427,14 +431,18 @@
 | **业务定义** | 新客贡献率趋势 |
 | **计算公式** | 媒体新客数 / 全店新客数（趋势图） |
 | **统计字段** | `media_member_cnt（new）/ member_cnt（new）` |
+| **分子** | `media_member_cnt`（new），`1`暂时固定为1，待后续补充口径，再计算实际值 |
+| **分母** | `member_cnt`（all），`3`暂时固定为3，待后续补充口径，再计算实际值 |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"` |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%;#,##0%;0%` |
 
 ---
 
 ## 子模块四：Category Growth KPI Trend
 
-### 16. Acceleration SLS — 第二品类退后销售额（趋势）
+### 28. Acceleration SLS — 第二品类退后销售额（趋势）
 
 | 项目 | 内容 |
 |---|---|
@@ -444,10 +452,12 @@
 | **统计字段** | `net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND framework='Acceleration' AND page_type="1"` |
+| **数据类型** | currency_M_K_Int_0db → 货币符号由币种切片器决定，千分位整数,需要在Cell Display度量中拼接币种符号，需要判断是否带K、M、或者就是千分位整数，如果值小于1000，就直接表示为千分位整数，如果值大于等于1000，就表示为带K、M的格式，1K为一千，1M为一百万，都采用千分位的格式 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
 
 ---
 
-### 17. Acceleration SLS MOB% — 第二品类退后销售额MOB%（趋势）
+### 29. Acceleration SLS MOB% — 第二品类退后销售额MOB%（趋势）
 
 | 项目 | 内容 |
 |---|---|
@@ -457,10 +467,12 @@
 | **统计字段** | `net_sales_amt（framework='Acceleration'）/ net_sales_amt（全部 framework）` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%;#,##0%;0%` |
 
 ---
 
-### 18. Acceleration Cost MOB% — 第二品类花费MOB%（趋势）
+### 30. Acceleration Cost MOB% — 第二品类花费MOB%（趋势）
 
 | 项目 | 内容 |
 |---|---|
@@ -470,6 +482,8 @@
 | **统计字段** | `cost_amt（framework='Acceleration'）/ cost_amt（全部 framework）` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%;#,##0%;0%` |
 
 ---
 

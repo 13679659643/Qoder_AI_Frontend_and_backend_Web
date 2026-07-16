@@ -1,0 +1,27 @@
+KPIs Font Color = 
+// ========================================
+// 度量值: KPIs Font Color
+// Display Folder: Formatting
+// 用途: 根据 KPI 值正负和 Dim_Metric_KPIs 中定义的颜色映射，
+//       返回对应字体颜色
+// 依赖: [KPIs Cell Value], Dim_Metric_KPIs[KPI_Color*]
+// 说明:
+//   - 每个 KPI 在 Dim_Metric_KPIs 中有独立的 4 色配置
+//   - Major 行：统一 #212121 默认黑色（4 色列全部设为 #212121）
+//   - Sub 行：启用正/负/零三色，正向=绿色 / 负向=红色
+//   - 颜色值在维度表中维护，无需修改度量值即可调整配色
+// ========================================
+    VAR __Value = [KPIs Cell Value]
+    RETURN
+        SWITCH(
+            TRUE(),
+            ISBLANK(__Value),
+                SELECTEDVALUE(Dim_Metric_KPIs[KPI_ColorDefault]),       // 空值 → 默认色
+            __Value > 0,
+                SELECTEDVALUE(Dim_Metric_KPIs[KPI_ColorPositive]),      // 正值 → 正值色
+            __Value < 0,
+                SELECTEDVALUE(Dim_Metric_KPIs[KPI_ColorNegative]),      // 负值 → 负值色
+            __Value = 0,
+                SELECTEDVALUE(Dim_Metric_KPIs[KPI_ColorZero]),          // 零值 → 零值色
+            SELECTEDVALUE(Dim_Metric_KPIs[KPI_ColorDefault])            // 兜底 → 默认色
+        )
