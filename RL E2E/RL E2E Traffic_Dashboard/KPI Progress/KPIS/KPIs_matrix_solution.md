@@ -25,51 +25,51 @@
 
 ### 2.1 数据底表
 
-| 对象     | 名称                                                                                                                                                     | 出处                                      |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| 事实表   | a05_e2e_paid_media_summary_d                                                                                                                             | 维度复用/a05_e2e_paid_media_summary_d.sql |
+| 对象     | 名称                                                                                                                                                                                        | 出处                                      |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| 事实表   | a05_e2e_paid_media_summary_d                                                                                                                                                                | 维度复用/a05_e2e_paid_media_summary_d.sql |
 | 关键字段 | data_date, platform, store_name, trans_cycle, customer_type, page_type, framework, cost_amt, net_sales_amt, fcst_cost_amt, fcst_net_sales_amt, media_member_cnt, member_cnt, media_cost_amt | 口径文档 KPI Progress.md 子模块一、二     |
 
 ### 2.2 维度表清单
 
-| 维度表                    | 类型     | 连接方式                                                  | 出处                                       |
-| ------------------------- | -------- | --------------------------------------------------------- | ------------------------------------------ |
-| Slicer_Time_Frame_Min     | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Min                          | 维度复用/Slicer_Time_Frame_Min.sql         |
-| Slicer_Time_Frame_Max     | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Max                          | 维度复用/Slicer_Time_Frame_Max.sql         |
-| Slicer_Platform_Selection | 1:N 关系 | Platform_ID → 事实表[platform]                           | 维度复用/Slicer_Platform_Selection         |
-| Slicer_Store_Name         | 1:N 关系 | Store_ID → 事实表[store_name]                            | 维度复用/Slicer_Store_Name                 |
-| Slicer_Currency_Selection | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol | 维度复用/Slicer_Currency_Selection         |
-| trans_cycle 筛选器        | 1:N 关系 | → 事实表[trans_cycle]（模型自动筛选）                    | 用户需求                                   |
-| Dim_ColMetric_KPIs        | 断开维度 | SELECTEDVALUE 读取 Metric_ID, Metric_Format               | KPI Progress/KPIS/Dim_ColMetric_KPIs       |
+| 维度表                    | 类型     | 连接方式                                                  | 出处                                 |
+| ------------------------- | -------- | --------------------------------------------------------- | ------------------------------------ |
+| Slicer_Time_Frame_Min     | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Min                          | 维度复用/Slicer_Time_Frame_Min.sql   |
+| Slicer_Time_Frame_Max     | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Max                          | 维度复用/Slicer_Time_Frame_Max.sql   |
+| Slicer_Platform_Selection | 1:N 关系 | Platform_ID → 事实表[platform]                           | 维度复用/Slicer_Platform_Selection   |
+| Slicer_Store_Name         | 1:N 关系 | Store_ID → 事实表[store_name]                            | 维度复用/Slicer_Store_Name           |
+| Slicer_Currency_Selection | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol | 维度复用/Slicer_Currency_Selection   |
+| trans_cycle 筛选器        | 1:N 关系 | → 事实表[trans_cycle]（模型自动筛选）                    | 用户需求                             |
+| Dim_ColMetric_KPIs        | 断开维度 | SELECTEDVALUE 读取 Metric_ID, Metric_Format               | KPI Progress/KPIS/Dim_ColMetric_KPIs |
 
 ### 2.3 指标维度表（Dim_ColMetric_KPIs）24 个指标
 
-| Metric_ID | Metric_Name                                            | Metric_Sort | Metric_Format        | IsCurrencyAmount |
-| --------- | ------------------------------------------------------ | ----------- | -------------------- | ---------------- |
-| 1         | Media Cost Rate                                        | 10          | percent_1dp          | FALSE            |
-| 2         | Media Cost                                             | 20          | currency             | TRUE             |
-| 3         | Cost ACH%                                              | 30          | percent_1dp          | FALSE            |
-| 4         | Cost vs SLS ACH%                                       | 40          | delta_bp             | FALSE            |
-| 5         | SLS ACH%                                               | 50          | percent_1dp          | FALSE            |
-| 6         | SLS DCom                                               | 60          | currency             | TRUE             |
-| 7         | Media Contribution to New Customer Acquisition%        | 70          | percent_1dp          | FALSE            |
-| 8         | Media Contribution to New Customer Acquisition% vs LY  | 80          | delta_bp             | FALSE            |
+| Metric_ID | Metric_Name                                              | Metric_Sort | Metric_Format        | IsCurrencyAmount |
+| --------- | -------------------------------------------------------- | ----------- | -------------------- | ---------------- |
+| 1         | Media Cost Rate                                          | 10          | percent_1dp          | FALSE            |
+| 2         | Media Cost                                               | 20          | currency             | TRUE             |
+| 3         | Cost ACH%                                                | 30          | percent_1dp          | FALSE            |
+| 4         | Cost vs SLS ACH%                                         | 40          | delta_bp             | FALSE            |
+| 5         | SLS ACH%                                                 | 50          | percent_1dp          | FALSE            |
+| 6         | SLS DCom                                                 | 60          | currency             | TRUE             |
+| 7         | Media Contribution to New Customer Acquisition%          | 70          | percent_1dp          | FALSE            |
+| 8         | Media Contribution to New Customer Acquisition% vs LY    | 80          | delta_bp             | FALSE            |
 | 9         | Media Contribution to New Customer Acquisition% TRA ACH% | 90          | percent_1dp          | FALSE            |
-| 10        | Media Cost Per New Acquisition                         | 100         | currency_decimal_1dp | TRUE             |
-| 11        | Media Cost Per New Acquisition vs LY                   | 110         | percent_1dp          | FALSE            |
-| 12        | Media Cost Per New Acquisition TRA ACH%                | 120         | percent_1dp          | FALSE            |
-| 13        | ± Acceleration cost MOB% vs. store SLS MOB%            | 130         | percent_1dp          | FALSE            |
-| 14        | ± Acceleration cost MOB% vs. store SLS MOB% vs LY      | 140         | delta_bp             | FALSE            |
-| 15        | ± Acceleration SLS MOB% vs. store SLS MOB% TRA ACH%    | 150         | percent_1dp          | FALSE            |
-| 16        | New Customer No                                        | 160         | integer              | FALSE            |
-| 17        | New Customer No vs LY                                  | 170         | percent_1dp          | FALSE            |
-| 18        | New Customer No TRA ACH%                               | 180         | percent_1dp          | FALSE            |
-| 19        | Acceleration SLS                                       | 190         | currency             | TRUE             |
-| 20        | Acceleration SLS vs LY                                 | 200         | percent_1dp          | FALSE            |
-| 21        | Acceleration SLS TRA ACH%                              | 210         | percent_1dp          | FALSE            |
-| 22        | Acceleration SLS MOB%                                  | 220         | percent_1dp          | FALSE            |
-| 23        | Acceleration SLS MOB% vs LY                            | 230         | delta_bp             | FALSE            |
-| 24        | Acceleration SLS MOB% TRA ACH%                         | 240         | percent_1dp          | FALSE            |
+| 10        | Media Cost Per New Acquisition                           | 100         | currency_decimal_1dp | TRUE             |
+| 11        | Media Cost Per New Acquisition vs LY                     | 110         | percent_1dp          | FALSE            |
+| 12        | Media Cost Per New Acquisition TRA ACH%                  | 120         | percent_1dp          | FALSE            |
+| 13        | ± Acceleration cost MOB% vs. store SLS MOB%             | 130         | percent_1dp          | FALSE            |
+| 14        | ± Acceleration cost MOB% vs. store SLS MOB% vs LY       | 140         | delta_bp             | FALSE            |
+| 15        | ± Acceleration SLS MOB% vs. store SLS MOB% TRA ACH%     | 150         | percent_1dp          | FALSE            |
+| 16        | New Customer No                                          | 160         | integer              | FALSE            |
+| 17        | New Customer No vs LY                                    | 170         | percent_1dp          | FALSE            |
+| 18        | New Customer No TRA ACH%                                 | 180         | percent_1dp          | FALSE            |
+| 19        | Acceleration SLS                                         | 190         | currency             | TRUE             |
+| 20        | Acceleration SLS vs LY                                   | 200         | percent_1dp          | FALSE            |
+| 21        | Acceleration SLS TRA ACH%                                | 210         | percent_1dp          | FALSE            |
+| 22        | Acceleration SLS MOB%                                    | 220         | percent_1dp          | FALSE            |
+| 23        | Acceleration SLS MOB% vs LY                              | 230         | delta_bp             | FALSE            |
+| 24        | Acceleration SLS MOB% TRA ACH%                           | 240         | percent_1dp          | FALSE            |
 
 ---
 
@@ -156,7 +156,7 @@ KPIs Current Base Value =
     // ── 时间筛选：本期 ──
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
-    // ── 汇率（金额类指标需要乘以汇率）──
+    // ── 汇率（金额类指标需要除以汇率）──
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
     // ═══════════════════════════════════════
@@ -705,47 +705,47 @@ KPIs Cell SVG Icon =
 
 ## 5. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称                  | Display Folder | 用途                                              |
-| ---- | --------------------------- | -------------- | ------------------------------------------------- |
-| 1    | KPIs Current Base Value     | Base Metrics   | 本期基础值（17 个本期 Metric_ID）                 |
-| 2    | KPIs vsLP Base Value        | Base Metrics   | 去年同期基础值（6 个 vs LY 派生所需）             |
-| 3    | KPIs Base Value             | Base Metrics   | 总路由（含 vs LY / TRA ACH% / Cost vs SLS 派生）  |
-| 4    | KPIs Cell Value             | Cell Values    | 对外值 = Base Value                               |
-| 5    | KPIs Cell Display           | Formatting     | 格式化显示文本                                    |
-| 6    | KPIs Cell Font Color        | Formatting     | 字体颜色（仅 8 个指标启用条件色）                 |
-| 7    | KPIs Cell Background Color  | Formatting     | 背景色（统一白色）                                |
-| 8    | KPIs Cell SVG Icon          | Formatting     | SVG 图标（仅 6 个 vs LY 指标）                    |
+| 序号 | 度量值名称                 | Display Folder | 用途                                             |
+| ---- | -------------------------- | -------------- | ------------------------------------------------ |
+| 1    | KPIs Current Base Value    | Base Metrics   | 本期基础值（17 个本期 Metric_ID）                |
+| 2    | KPIs vsLP Base Value       | Base Metrics   | 去年同期基础值（6 个 vs LY 派生所需）            |
+| 3    | KPIs Base Value            | Base Metrics   | 总路由（含 vs LY / TRA ACH% / Cost vs SLS 派生） |
+| 4    | KPIs Cell Value            | Cell Values    | 对外值 = Base Value                              |
+| 5    | KPIs Cell Display          | Formatting     | 格式化显示文本                                   |
+| 6    | KPIs Cell Font Color       | Formatting     | 字体颜色（仅 8 个指标启用条件色）                |
+| 7    | KPIs Cell Background Color | Formatting     | 背景色（统一白色）                               |
+| 8    | KPIs Cell SVG Icon         | Formatting     | SVG 图标（仅 6 个 vs LY 指标）                   |
 
 ---
 
 ## 6. 指标口径来源对照
 
-| Metric_ID | Metric_Name                                            | 口径文档出处   | 计算公式                                                  | 统计字段                                                            | customer_type | framework           | 数据类型            |
-| --------- | ------------------------------------------------------ | -------------- | --------------------------------------------------------- | ------------------------------------------------------------------- | ------------- | ------------------- | ------------------- |
-| 1         | Media Cost Rate                                        | 子模块一 §1    | Cost / SLS × 1.13 / 1.06                                  | cost_amt / net_sales_amt                                            | ALL           | -                   | percent_1dp         |
-| 2         | Media Cost                                             | 子模块一 §2    | SUM(cost_amt)                                             | cost_amt                                                            | ALL           | -                   | currency            |
-| 3         | Cost ACH%                                              | 子模块一 §3    | Cost / 计划 Cost                                          | cost_amt / fcst_cost_amt                                            | ALL           | -                   | percent_1dp         |
-| 4         | Cost vs SLS ACH%                                       | 子模块一 §4    | Cost ACH% − SLS ACH%                                      | 派生（#3 − #5）                                                     | ALL           | -                   | delta_bp            |
-| 5         | SLS ACH%                                               | 子模块一 §5    | SLS / 计划 SLS                                            | net_sales_amt / fcst_net_sales_amt                                  | ALL           | -                   | percent_1dp         |
-| 6         | SLS DCom                                               | 子模块一 §6    | SUM(net_sales_amt)                                        | net_sales_amt                                                       | ALL           | -                   | currency            |
-| 7         | Media Contribution to New Customer Acquisition%        | 子模块一 §7    | 媒体新客数 / 全店新客数                                  | media_member_cnt / member_cnt                                       | NEW           | -                   | percent_1dp         |
-| 8         | Media Contribution to New Customer Acquisition% vs LY  | 子模块一 §8    | 当期值 − 去年同期值（bp）                                 | 派生（#7 当期 − #7 同期）                                           | NEW           | -                   | delta_bp            |
-| 9         | Media Contribution to New Customer Acquisition% TRA ACH% | 子模块一 §9  | 媒体新客贡献率 / 2                                        | media_member_cnt / member_cnt / 2                                   | NEW           | -                   | percent_1dp         |
-| 10        | Media Cost Per New Acquisition                         | 子模块一 §10   | 新客花费 / 媒体新客数                                    | media_cost_amt / media_member_cnt                                   | NEW           | -                   | currency_decimal_1dp |
-| 11        | Media Cost Per New Acquisition vs LY                   | 子模块一 §11   | 当期值 / 去年同期值 − 1                                   | 派生（#10 当期 / #10 同期 − 1）                                     | NEW           | -                   | percent_1dp         |
-| 12        | Media Cost Per New Acquisition TRA ACH%                | 子模块一 §12   | 获客成本 / 100                                            | media_cost_amt / media_member_cnt / 100                             | NEW           | -                   | percent_1dp         |
-| 13        | ± Acceleration cost MOB% vs. store SLS MOB%            | 子模块一 §13   | Accel Cost MOB% − Store SLS MOB%                          | cost_amt(Accel)/cost_amt(全部) − net_sales_amt(Accel)/net_sales_amt(全部) | ALL | Acceleration + 全部 | percent_1dp         |
-| 14        | ± Acceleration cost MOB% vs. store SLS MOB% vs LY      | 子模块一 §14   | 当期值 − 去年同期值（bp）                                 | 派生（#13 当期 − #13 同期）                                         | ALL           | Acceleration + 全部 | delta_bp            |
-| 15        | ± Acceleration SLS MOB% vs. store SLS MOB% TRA ACH%    | 子模块一 §15   | Accel SLS MOB% / 2                                        | net_sales_amt(Accel)/net_sales_amt(全部) / 2                        | ALL           | Acceleration + 全部 | percent_1dp         |
-| 16        | New Customer No                                        | 子模块二 §16   | COUNT DISTINCT 买家id（暂时固定 1）                       | 1                                                                   | NEW           | -                   | integer             |
-| 17        | New Customer No vs LY                                  | 子模块二 §17   | 当期值 / 去年同期值 − 1                                   | 派生（#16 当期 / #16 同期 − 1）                                     | NEW           | -                   | percent_1dp         |
-| 18        | New Customer No TRA ACH%                               | 子模块二 §18   | 新客数量 / 1（目标固定 1）                                | 1 / 1                                                               | NEW           | -                   | percent_1dp         |
-| 19        | Acceleration SLS                                       | 子模块二 §19   | SUM(net_sales_amt) framework='Acceleration'               | net_sales_amt                                                       | ALL           | Acceleration        | currency            |
-| 20        | Acceleration SLS vs LY                                 | 子模块二 §20   | 当期值 / 去年同期值 − 1                                   | 派生（#19 当期 / #19 同期 − 1）                                     | ALL           | Acceleration        | percent_1dp         |
-| 21        | Acceleration SLS TRA ACH%                              | 子模块二 §21   | Accel SLS / 10000                                         | net_sales_amt(Accel) / 10000                                        | ALL           | Acceleration        | percent_1dp         |
-| 22        | Acceleration SLS MOB%                                  | 子模块二 §22   | Accel SLS / TTL SLS                                       | net_sales_amt(Accel) / net_sales_amt(全部)                          | ALL           | Acceleration + 全部 | percent_1dp         |
-| 23        | Acceleration SLS MOB% vs LY                            | 子模块二 §23   | 当期占比 − 去年同期占比（bp）                             | 派生（#22 当期 − #22 同期）                                         | ALL           | Acceleration + 全部 | delta_bp            |
-| 24        | Acceleration SLS MOB% TRA ACH%                         | 子模块二 §24   | Accel SLS MOB% / 2                                        | net_sales_amt(Accel)/net_sales_amt(全部) / 2                        | ALL           | Acceleration + 全部 | percent_1dp         |
+| Metric_ID | Metric_Name                                              | 口径文档出处  | 计算公式                                    | 统计字段                                                                   | customer_type | framework           | 数据类型             |
+| --------- | -------------------------------------------------------- | ------------- | ------------------------------------------- | -------------------------------------------------------------------------- | ------------- | ------------------- | -------------------- |
+| 1         | Media Cost Rate                                          | 子模块一 §1  | Cost / SLS × 1.13 / 1.06                   | cost_amt / net_sales_amt                                                   | ALL           | -                   | percent_1dp          |
+| 2         | Media Cost                                               | 子模块一 §2  | SUM(cost_amt)                               | cost_amt                                                                   | ALL           | -                   | currency             |
+| 3         | Cost ACH%                                                | 子模块一 §3  | Cost / 计划 Cost                            | cost_amt / fcst_cost_amt                                                   | ALL           | -                   | percent_1dp          |
+| 4         | Cost vs SLS ACH%                                         | 子模块一 §4  | Cost ACH% − SLS ACH%                       | 派生（#3 − #5）                                                           | ALL           | -                   | delta_bp             |
+| 5         | SLS ACH%                                                 | 子模块一 §5  | SLS / 计划 SLS                              | net_sales_amt / fcst_net_sales_amt                                         | ALL           | -                   | percent_1dp          |
+| 6         | SLS DCom                                                 | 子模块一 §6  | SUM(net_sales_amt)                          | net_sales_amt                                                              | ALL           | -                   | currency             |
+| 7         | Media Contribution to New Customer Acquisition%          | 子模块一 §7  | 媒体新客数 / 全店新客数                     | media_member_cnt / member_cnt                                              | NEW           | -                   | percent_1dp          |
+| 8         | Media Contribution to New Customer Acquisition% vs LY    | 子模块一 §8  | 当期值 − 去年同期值（bp）                  | 派生（#7 当期 − #7 同期）                                                 | NEW           | -                   | delta_bp             |
+| 9         | Media Contribution to New Customer Acquisition% TRA ACH% | 子模块一 §9  | 媒体新客贡献率 / 2                          | media_member_cnt / member_cnt / 2                                          | NEW           | -                   | percent_1dp          |
+| 10        | Media Cost Per New Acquisition                           | 子模块一 §10 | 新客花费 / 媒体新客数                       | media_cost_amt / media_member_cnt                                          | NEW           | -                   | currency_decimal_1dp |
+| 11        | Media Cost Per New Acquisition vs LY                     | 子模块一 §11 | 当期值 / 去年同期值 − 1                    | 派生（#10 当期 / #10 同期 − 1）                                           | NEW           | -                   | percent_1dp          |
+| 12        | Media Cost Per New Acquisition TRA ACH%                  | 子模块一 §12 | 获客成本 / 100                              | media_cost_amt / media_member_cnt / 100                                    | NEW           | -                   | percent_1dp          |
+| 13        | ± Acceleration cost MOB% vs. store SLS MOB%             | 子模块一 §13 | Accel Cost MOB% − Store SLS MOB%           | cost_amt(Accel)/cost_amt(全部) − net_sales_amt(Accel)/net_sales_amt(全部) | ALL           | Acceleration + 全部 | percent_1dp          |
+| 14        | ± Acceleration cost MOB% vs. store SLS MOB% vs LY       | 子模块一 §14 | 当期值 − 去年同期值（bp）                  | 派生（#13 当期 − #13 同期）                                               | ALL           | Acceleration + 全部 | delta_bp             |
+| 15        | ± Acceleration SLS MOB% vs. store SLS MOB% TRA ACH%     | 子模块一 §15 | Accel SLS MOB% / 2                          | net_sales_amt(Accel)/net_sales_amt(全部) / 2                               | ALL           | Acceleration + 全部 | percent_1dp          |
+| 16        | New Customer No                                          | 子模块二 §16 | COUNT DISTINCT 买家id（暂时固定 1）         | 1                                                                          | NEW           | -                   | integer              |
+| 17        | New Customer No vs LY                                    | 子模块二 §17 | 当期值 / 去年同期值 − 1                    | 派生（#16 当期 / #16 同期 − 1）                                           | NEW           | -                   | percent_1dp          |
+| 18        | New Customer No TRA ACH%                                 | 子模块二 §18 | 新客数量 / 1（目标固定 1）                  | 1 / 1                                                                      | NEW           | -                   | percent_1dp          |
+| 19        | Acceleration SLS                                         | 子模块二 §19 | SUM(net_sales_amt) framework='Acceleration' | net_sales_amt                                                              | ALL           | Acceleration        | currency             |
+| 20        | Acceleration SLS vs LY                                   | 子模块二 §20 | 当期值 / 去年同期值 − 1                    | 派生（#19 当期 / #19 同期 − 1）                                           | ALL           | Acceleration        | percent_1dp          |
+| 21        | Acceleration SLS TRA ACH%                                | 子模块二 §21 | Accel SLS / 10000                           | net_sales_amt(Accel) / 10000                                               | ALL           | Acceleration        | percent_1dp          |
+| 22        | Acceleration SLS MOB%                                    | 子模块二 §22 | Accel SLS / TTL SLS                         | net_sales_amt(Accel) / net_sales_amt(全部)                                 | ALL           | Acceleration + 全部 | percent_1dp          |
+| 23        | Acceleration SLS MOB% vs LY                              | 子模块二 §23 | 当期占比 − 去年同期占比（bp）              | 派生（#22 当期 − #22 同期）                                               | ALL           | Acceleration + 全部 | delta_bp             |
+| 24        | Acceleration SLS MOB% TRA ACH%                           | 子模块二 §24 | Accel SLS MOB% / 2                          | net_sales_amt(Accel)/net_sales_amt(全部) / 2                               | ALL           | Acceleration + 全部 | percent_1dp          |
 
 ---
 
@@ -829,26 +829,26 @@ KPIs Cell SVG Icon =
 
 ### 8.1 vs LY 派生计算分类
 
-| Metric_ID | 指标名                              | 派生方式              | 数据类型   |
-| --------- | ----------------------------------- | --------------------- | ---------- |
-| 8         | Media Contribution vs LY            | 当期值 − 同期值（bp） | delta_bp   |
-| 11        | Media Cost Per New Acquisition vs LY | 当期/同期 − 1（%）    | percent_1dp |
-| 14        | ± Accel cost MOB% vs LY             | 当期值 − 同期值（bp） | delta_bp   |
-| 17        | New Customer No vs LY               | 当期/同期 − 1（%）    | percent_1dp |
-| 20        | Acceleration SLS vs LY              | 当期/同期 − 1（%）    | percent_1dp |
-| 23        | Acceleration SLS MOB% vs LY         | 当期占比 − 同期占比（bp） | delta_bp   |
+| Metric_ID | 指标名                               | 派生方式                   | 数据类型    |
+| --------- | ------------------------------------ | -------------------------- | ----------- |
+| 8         | Media Contribution vs LY             | 当期值 − 同期值（bp）     | delta_bp    |
+| 11        | Media Cost Per New Acquisition vs LY | 当期/同期 − 1（%）        | percent_1dp |
+| 14        | ± Accel cost MOB% vs LY             | 当期值 − 同期值（bp）     | delta_bp    |
+| 17        | New Customer No vs LY                | 当期/同期 − 1（%）        | percent_1dp |
+| 20        | Acceleration SLS vs LY               | 当期/同期 − 1（%）        | percent_1dp |
+| 23        | Acceleration SLS MOB% vs LY          | 当期占比 − 同期占比（bp） | delta_bp    |
 
 ### 8.2 暂时固定值指标（待口径补充）
 
-| Metric_ID | 指标名                              | 固定值            | 说明           |
-| --------- | ----------------------------------- | ----------------- | -------------- |
-| 16        | New Customer No                     | 1                 | 待补充实际口径 |
-| 18        | New Customer No TRA ACH%            | 1/1               | 目标固定为 1   |
-| 9         | Media Contribution TRA ACH%         | 贡献率 / 2        | 目标固定为 2   |
-| 12        | Media Cost Per New Acquisition TRA ACH% | 获客成本 / 100 | 目标固定为 100 |
-| 15        | ± Accel SLS MOB% vs store SLS TRA ACH% | MOB% / 2       | 目标固定为 2   |
-| 21        | Acceleration SLS TRA ACH%           | Accel SLS / 10000 | 目标固定为 10000 |
-| 24        | Acceleration SLS MOB% TRA ACH%      | MOB% / 2          | 目标固定为 2   |
+| Metric_ID | 指标名                                  | 固定值            | 说明             |
+| --------- | --------------------------------------- | ----------------- | ---------------- |
+| 16        | New Customer No                         | 1                 | 待补充实际口径   |
+| 18        | New Customer No TRA ACH%                | 1/1               | 目标固定为 1     |
+| 9         | Media Contribution TRA ACH%             | 贡献率 / 2        | 目标固定为 2     |
+| 12        | Media Cost Per New Acquisition TRA ACH% | 获客成本 / 100    | 目标固定为 100   |
+| 15        | ± Accel SLS MOB% vs store SLS TRA ACH% | MOB% / 2          | 目标固定为 2     |
+| 21        | Acceleration SLS TRA ACH%               | Accel SLS / 10000 | 目标固定为 10000 |
+| 24        | Acceleration SLS MOB% TRA ACH%          | MOB% / 2          | 目标固定为 2     |
 
 ### 8.3 筛选器公用说明
 
@@ -881,14 +881,14 @@ KPIs Cell SVG Icon =
 
 ### 9.1 占位值验证
 
-| 验证项         | 方法                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------ |
-| 矩阵列数       | 确认 24 列（Metric_ID 1~24，无跳号）                                                       |
-| 列排序         | 列按 Metric_Sort 排序（10, 20, 30, ... 240）                                               |
-| 金额类指标     | #2/#6/#10/#19 切换币种时数值变化（RMB×1 / USD×7）                                          |
-| vs LY 派生     | #8/#14/#23 为差值（bp）；#11/#17/#20 为增长率（%）                                          |
-| 字体颜色       | 仅 #4/#6/#8/#11/#14/#17/#20/#23 启用条件色，其余为 #252423                                 |
-| SVG 图标       | 仅 #8/#11/#14/#17/#20/#23 显示圆形图标                                                     |
+| 验证项     | 方法                                                       |
+| ---------- | ---------------------------------------------------------- |
+| 矩阵列数   | 确认 24 列（Metric_ID 1~24，无跳号）                       |
+| 列排序     | 列按 Metric_Sort 排序（10, 20, 30, ... 240）               |
+| 金额类指标 | #2/#6/#10/#19 切换币种时数值变化（RMB×1 / USD×7）        |
+| vs LY 派生 | #8/#14/#23 为差值（bp）；#11/#17/#20 为增长率（%）         |
+| 字体颜色   | 仅 #4/#6/#8/#11/#14/#17/#20/#23 启用条件色，其余为 #252423 |
+| SVG 图标   | 仅 #8/#11/#14/#17/#20/#23 显示圆形图标                     |
 
 ### 9.2 数据验证 SQL
 

@@ -468,7 +468,7 @@ Acceleration Cost MOB% Display =
 
 ### 6.2 金额类指标与汇率转换
 
-仅 #25（New Customer No.）和 #28（Acceleration SLS）为金额类指标，需乘以 `Slicer_Currency_Selection[Currency_ExchangeRate]`（RMB=1, USD=7）。#25 当前为固定值 1，汇率转换逻辑已预留，待补充实际口径后自动生效。
+仅 #25（New Customer No.）和 #28（Acceleration SLS）为金额类指标，需除以 `Slicer_Currency_Selection[Currency_ExchangeRate]`（RMB=1, USD=7）。#25 当前为固定值 1，汇率转换逻辑已预留，待补充实际口径后自动生效。
 
 ### 6.3 暂时固定值指标（待口径补充）
 
@@ -485,7 +485,7 @@ Acceleration Cost MOB% Display =
 - **Slicer_Month_Period_Min/Max**：断开维度，SELECTEDVALUE 读取时间范围
 - **Slicer_Platform_Selection**：1:N 关系，模型自动筛选
 - **Slicer_Store_Name**：1:N 关系，模型自动筛选
-- **Slicer_Currency_Selection**：断开维度，仅金额类指标（#25/#28）乘以汇率
+- **Slicer_Currency_Selection**：断开维度，仅金额类指标（#25/#28）除以汇率
 - **trans_cycle**：1:N 关系，模型自动筛选
 
 ### 6.5 趋势图/柱形图使用方式
