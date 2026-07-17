@@ -1,4 +1,3 @@
-
 第一轮提示词:
 在RL E2E\RL E2E Traffic_Dashboard\维度复用目录下，我已经完成了一些维度表的设计工作，可服用的如下，以及设计表的DAX语句、SQL语句：
 1、事实表：a05_e2e_paid_media_summary_d；
@@ -47,7 +46,7 @@ KPI 计算框架解决方案 — 多指标 SWITCH 分发模式需求：
 4、计算vs LY（对比去年同期）的时候，会用到上期值vs LP， 上期值根据当前时间往前推一年就行了，比如当前时间是2025-10-24到2025-10-31，那么vs LP 上期值就是2024-10-24到2024-10-31。
 5、KPI by Platform Cell Font Color，只配置Cost vs SLS ACH%、SLS DCom、以及所有vs LY指标的颜色，其余指标颜色为#252423；在 Dim_Metric_KPIs 中有独立的 4 色配置，启用正/负/零三色，颜色值在维度表中维护，无需修改度量值即可调整配色；可以参考这个文件：RL E2E\RL E2E Traffic_Dashboard\KPI Progress\参考指标\Font Color；
 6、一切口径以指标口径文档RL E2E\RL E2E Traffic_Dashboard\口径文档\KPI Progress.md中的的子模块一：KPIs和子模块二为准，不懂就问。
-7、由于是一个看板的不同模块，所以筛选器是公用的，具体用法和RL E2E\RL E2E Traffic_Dashboard\Category Growth\KPI_Breakdown_matrix_solution解决方案中的筛选器用法一致。比如：Currency筛选器，断开连接，仅金额类指标乘以汇率固定为7；
+7、由于是一个看板的不同模块，所以筛选器是公用的，具体用法和RL E2E\RL E2E Traffic_Dashboard\Category Growth\KPI_Breakdown_matrix_solution解决方案中的筛选器用法一致。比如：Currency筛选器，断开连接，仅金额类指标除以汇率固定为7；
 在RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS目录下输出解决方案。
 
 第五轮提示：
@@ -64,6 +63,7 @@ Acceleration Cost MOB% Value、Acceleration Cost MOB% Display；
 清单：度量值清单与 Display Folder、指标口径来源对照、血缘关系图（Lineage Diagram）
 3、在RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPI_Trend目录下生成KPI_Trend_solution解决方案文件，文件开头，参考以下固定格式：
 KPI_Trend_solution 解决方案：
+
 > status: updated
 > created: 2026-06-23
 > updated: 2026-07-03
