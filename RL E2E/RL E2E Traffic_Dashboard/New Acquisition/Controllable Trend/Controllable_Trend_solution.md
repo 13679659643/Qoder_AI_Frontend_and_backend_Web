@@ -313,6 +313,126 @@ Uncontrollable Cost Display =
 
 ---
 
+### 2.5 Cost amt Value（自己额外新增）
+
+```dax
+Cost amt Value = 
+// ========================================
+// 度量值: Cost amt Value
+// Display Folder: Controllable Trend
+// 用途: 广告花费趋势值（矩阵柱形图/趋势图 Y 轴）
+// 口径来源: New Acquisition实际使用版本.md 子模块三 §5
+// 计算公式: SUM(cost_amt)  
+// 统计字段: cost_amt
+// 筛选条件: customer_type='ALL' AND page_type="1"
+// 数据类型: currency_M_K_Int_0db（金额类指标，需汇率转换）
+// 汇率方向: 人民币转美元，除以 Currency_ExchangeRate
+// 矩阵场景: 同时应用全局月份筛选 + X轴当前月份筛选
+// ========================================
+    // 1. 获取起止切片器选择的全局范围
+    VAR __TimeMin = SELECTEDVALUE(Slicer_Month_Period_Min[TimeFrame_Min])
+    VAR __TimeMax = SELECTEDVALUE(Slicer_Month_Period_Max[TimeFrame_Max])
+    // 2. 获取柱形图 X 轴当前遍历的月份的自然日范围
+    VAR __CurrentMonthMin = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Min])
+    VAR __CurrentMonthMax = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Max])
+    // 3. 汇率（人民币转美元，用除法）
+    VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
+    VAR __CostAmt =
+        CALCULATE(
+            SUM('a05_e2e_paid_media_summary_d'[cost_amt]),
+            'a05_e2e_paid_media_summary_d'[customer_type] = "ALL",
+            'a05_e2e_paid_media_summary_d'[page_type] = "1",
+            // 4. 全局切片器筛选
+            'a05_e2e_paid_media_summary_d'[data_date] >= __TimeMin,
+            'a05_e2e_paid_media_summary_d'[data_date] <= __TimeMax,
+            // 5. X轴上下文筛选
+            'a05_e2e_paid_media_summary_d'[data_date] >= __CurrentMonthMin,
+            'a05_e2e_paid_media_summary_d'[data_date] <= __CurrentMonthMax
+        )
+    RETURN
+        DIVIDE(__CostAmt, __FXRate)
+```
+
+```dax
+Cost amt Display = 
+// ========================================
+// 度量值: Cost amt Display
+// Display Folder: KPIs Measure
+// 用途: 广告花费格式化显示（K/M 单位切换）
+// 依赖: [Cost amt Value], Slicer_Currency_Selection
+// 格式类型: currency_M_K_Int_0db
+//   值 < 1,000        → 货币符号 + 千分位整数：¥999
+//   1,000 ≤ 值 < 1M   → 货币符号 + K 单位（1位小数）：¥1.5K
+//   值 ≥ 1,000,000    → 货币符号 + M 单位（1位小数）：¥1.5M
+// ========================================
+    VAR __Value = [Cost amt Value]
+    VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",
+            IF(
+                __Value < 1000,
+                __CurrencySymbol & FORMAT(__Value, "#,##0"),
+                IF(
+                    __Value < 1000000,
+                    __CurrencySymbol & FORMAT(__Value / 1000, "#,##0.0") & "K",
+                    __CurrencySymbol & FORMAT(__Value / 1000000, "#,##0.0") & "M"
+                )
+            )
+        )
+```
+### 2.6 Cost amt Un controllable%（自己额外新增）
+
+```dax
+Cost amt Un controllable% Value = 
+// ========================================
+// 度量值: Cost amt Un controllable% Value
+// Display Folder: Controllable Trend
+// 用途: 广告花费占比趋势值（矩阵柱形图/趋势图 Y 轴）
+// 基础: 基于 [Cost amt Value] 计算
+// 计算公式: [Cost amt Value] / 移除 Un_Controllable_Group 维度的 [Cost amt Value]
+//   分子: [Cost amt Value]（保持原计算方式不变）
+//   分母: [Cost amt Value]，但移除 Un_Controllable_Group 维度的筛选
+//         移除范围包括：行维度 + 筛选器对 Un_Controllable_Group 字段的筛选
+// 数据类型: percent_0dp → 百分比整数，不含正号
+// 矩阵场景: 同时应用全局月份筛选 + X轴当前月份筛选（继承自 Cost amt Value）
+// 占比指标：分子分母均含汇率转换，结果不受汇率影响
+// ========================================
+    // ── 分子：Cost amt Value（保持原计算方式不变）──
+    VAR __Numerator = [Cost amt Value]
+    // ── 分母：移除 Un_Controllable_Group 维度的 Cost amt Value ──
+    // REMOVEFILTERS 移除该列上的所有筛选，包括行维度和筛选器筛选
+    VAR __Denominator =
+        CALCULATE(
+            [Cost amt Value],
+            REMOVEFILTERS('a05_e2e_paid_media_summary_d'[Un_Controllable_Group])
+        )
+    RETURN
+        DIVIDE(__Numerator, __Denominator)
+```
+
+```dax
+Cost amt Un controllable% Display = 
+// ========================================
+// 度量值: Cost amt Un controllable% Display
+// Display Folder: Controllable Trend
+// 用途: 广告花费占比格式化显示
+// 依赖: [Cost amt Un controllable% Value]
+// 格式类型: percent_0dp → 百分比整数，不含正号
+// 格式串: #,##0%;#,##0%;0%
+// ========================================
+    VAR __Value = [Cost amt Un controllable% Value]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",
+            FORMAT(__Value, "#,##0%;#,##0%;0%")
+        )
+```
+
+---
+
 ## 3. 度量值清单与 Display Folder
 
 | 序号 | 度量值名称                    | Display Folder     | 用途                       | 数据类型            | 是否金额类 |

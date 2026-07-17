@@ -3,6 +3,11 @@ let
     "select 
 *,
 'Total' AS Total,
+CASE 
+    WHEN is_controllable_channel = 1 THEN 'Controllable%'
+    WHEN is_controllable_channel = 0 THEN 'Uncontrollable%'
+    ELSE 'Unknown' -- 良好实践，尽管按 is_controllable_channel 过滤后可能不会触发
+END AS Un_Controllable_Group,
 CASE
     WHEN is_controllable_channel = 0 THEN 'Uncontrollable'
     WHEN platform = 'TM' THEN
@@ -29,6 +34,11 @@ in
 select 
 *,
 'Total' AS Total,
+CASE 
+    WHEN is_controllable_channel = 1 THEN 'Controllable%'
+    WHEN is_controllable_channel = 0 THEN 'Uncontrollable%'
+    ELSE 'Unknown' -- 良好实践，尽管按 is_controllable_channel 过滤后可能不会触发
+END AS Un_Controllable%_Group,
 CASE
     WHEN is_controllable_channel = 0 THEN 'Uncontrollable'
     WHEN platform = 'TM' THEN
