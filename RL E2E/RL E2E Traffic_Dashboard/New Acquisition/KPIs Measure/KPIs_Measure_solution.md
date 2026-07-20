@@ -294,7 +294,7 @@ ROI 引力魔方 Value =
     // ── 分子：引力魔方 TA 层级 Sales ──
     VAR __Sales =
         CALCULATE(
-            SUM('a05_e2e_paid_media_crowed_data_d'[media_sales_amt]),
+            SUM('a05_e2e_paid_media_crowed_data_d'[sales_amt]),
             'a05_e2e_paid_media_crowed_data_d'[channel] = "引力魔方",
             'a05_e2e_paid_media_crowed_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_crowed_data_d'[data_date] <= __TimeMax
@@ -529,7 +529,7 @@ ROI 直通车 Value =
     // ── 分子：直通车关键词层级 Sales ──
     VAR __Sales =
         CALCULATE(
-            SUM('a05_e2e_paid_media_keyword_data_d'[media_sales_amt]),
+            SUM('a05_e2e_paid_media_keyword_data_d'[sales_amt]),
             'a05_e2e_paid_media_keyword_data_d'[channel] = "直通车",
             'a05_e2e_paid_media_keyword_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_keyword_data_d'[data_date] <= __TimeMax

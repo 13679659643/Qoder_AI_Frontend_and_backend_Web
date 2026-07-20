@@ -163,7 +163,7 @@
 | **指标名称** | ROI / ROI |
 | **业务定义** | 引力魔方 TA/新老/OAIPL 层级 ROI |
 | **计算公式** | 引力魔方 TA 层级 Sales / Cost |
-| **分子** | `media_sales_amt`（引力魔方 TA 层级成交金额） |
+| **分子** | `sales_amt`（引力魔方 TA 层级成交金额） |
 | **分母** | `cost_amt`（引力魔方 TA 层级花费） |
 | **数据底表** | `a05_e2e_paid_media_crowed_data_d` |
 | **筛选条件** | `channel='引力魔方'` |
@@ -233,7 +233,7 @@
 | **指标名称** | ROI / ROI |
 | **业务定义** | 直通车新老/计划层级 ROI |
 | **计算公式** | 直通车关键词层级 Sales / Cost |
-| **分子** | `media_sales_amt`（直通车关键词层级成交金额） |
+| **分子** | `sales_amt`（直通车关键词层级成交金额） |
 | **分母** | `cost_amt`（直通车关键词层级花费） |
 | **数据底表** | `a05_e2e_paid_media_keyword_data_d` |
 | **筛选条件** | `channel='直通车'` |
