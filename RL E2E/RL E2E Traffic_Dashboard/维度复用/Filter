@@ -1,0 +1,63 @@
+-- 层级筛选的时候，使用度量过滤筛选内容，实现联级效果，比如平台到店铺。
+IsMonthVisible = 
+	/*
+	功能：判断当前柱形图X轴的月份是否落在起止切片器选定的范围内
+	返回：1（显示）或0（隐藏）
+	*/
+	// 步骤1：获取起始切片器选中的月份Key。
+	// 若未选择，默认取主表的最小Key，确保全部显示
+	VAR MinKey = IF(
+	    ISFILTERED(Slicer_Month_Period_Min[TimeFrame_Value]),
+	    MIN(Slicer_Month_Period_Min[TimeFrame_Key]),
+	    MIN(Slicer_Month_Period[TimeFrame_Key])
+	)
+	// 步骤2：获取结束切片器选中的月份Key。
+	// 若未选择，默认取主表的最大Key，确保全部显示
+	VAR MaxKey = IF(
+	    ISFILTERED(Slicer_Month_Period_Max[TimeFrame_Value]),
+	    MAX(Slicer_Month_Period_Max[TimeFrame_Key]),
+	    MAX(Slicer_Month_Period[TimeFrame_Key])
+	)
+	// 步骤3：获取当前筛选上下文（柱状图X轴遍历的当前行）的月份Key
+	VAR CurrentKey = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Key])
+	// 步骤4：判断当前月份Key是否在 [MinKey, MaxKey] 区间内
+	RETURN
+	    IF(
+	        CurrentKey >= MinKey && CurrentKey <= MaxKey,
+	        1,  // 在范围内：柱子显示
+	        0   // 不在范围内：柱子隐藏
+	    )
+
+
+-- 柱形或者趋势图中用于过滤多余的x轴维度
+IsShopVisible_Optimized = 
+VAR SelectedPlatforms = VALUES(Slicer_Platform_Selection[Platform_ID])
+/*
+3、IsShopVisible_Optimized:
+度量名称：IsShopVisible_Optimized
+功能：IsShopVisible的优化版本，减少计算量
+返回：1（显示）或0（隐藏）
+步骤1：获取当前筛选上下文中的平台ID
+这是一个平台ID的列表（可能包含0个、1个或多个值）
+*/
+// 步骤2：判断并返回
+RETURN
+    IF(
+        // 条件A：检查平台是否被筛选
+        ISFILTERED(Slicer_Platform_Selection[Platform_ID]),
+        // 如果筛选了平台：
+        IF(
+            // 条件B：使用CONTAINS函数检查当前店铺平台是否在已选平台中
+            // CONTAINS(表, 表[列], 值) → 检查表中是否包含指定的值
+            // SELECTEDVALUE(Slicer_Store_Name[Platform_ID])返回当前店铺的平台ID
+            CONTAINS(
+                SelectedPlatforms,      // 要搜索的表
+                [Platform_ID],            // 表中的列（平台ID列）
+                SELECTEDVALUE(Slicer_Store_Name[Platform_ID])  // 要查找的值
+            ),
+            1,  // 找到了：店铺应该显示
+            0   // 没找到：店铺不应该显示
+        ),
+        // 如果没筛选平台：
+        1  // 显示所有店铺
+    )

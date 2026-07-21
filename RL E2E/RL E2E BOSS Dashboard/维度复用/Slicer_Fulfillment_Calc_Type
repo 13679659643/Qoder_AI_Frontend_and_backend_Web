@@ -1,0 +1,36 @@
+Slicer_Fulfillment_Calc_Type = 
+// 功能：创建履约计算方式参数表，用于控制订单履约KPI的计算口径
+// 用途：用户可通过此表选择不同的履约计算规则，以适应不同的业务分析场景
+// 参数表名称：Slicer_Fulfillment_Calc_Type
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "Calc_Type_ID", STRING,           // 主键标识，用于唯一标识每种计算方式
+    "Calc_Type_Label", STRING,        // 显示标签，在报表界面中向用户展示的规则名称
+    "Calc_Type_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "Calc_Type_Description", STRING,  // 详细描述，说明该计算方式的具体业务逻辑
+    // 扩展字段 - 可选字段
+    "Calc_Type_IsDefault", BOOLEAN,   // 是否默认选中
+    "Calc_Type_IsActive", BOOLEAN,    // 是否激活状态
+    // 数据行
+    {
+        // 规则1: Exclude orders cancelled in pay date (排除支付日取消的订单)
+        {
+            "1",                 // 计算方式代码
+            "Exclude orders cancelled in pay date", // 计算方式显示名称
+            10,                  // 排序顺序
+            "排除支付日取消的订单", // 计算方式描述
+            TRUE,                // 默认选中
+            TRUE                 // 激活状态，当前可用
+        },
+        // 规则2: Exclude orders cancelled in paydate & EC-fulfilled from O2O unfulfilled
+        {
+            "2",                 // 计算方式代码
+            "Exclude orders cancelled in paydate & EC-fulfilled from O2O unfulfilled", // 计算方式显示名称
+            20,                  // 排序顺序
+            "排除支付日取消的订单 & 从O2O未履约订单中排除已完成的EC订单", // 计算方式描述
+            FALSE,               // 非默认选项
+            TRUE                 // 激活状态，当前可用
+        }
+    }
+)

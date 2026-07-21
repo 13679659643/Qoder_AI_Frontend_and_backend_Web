@@ -1,0 +1,46 @@
+Slicer_Currency_Selection = 
+// 功能：创建币种维度表，用于报表中的货币单位切换与汇率转换
+// 用途：用户可通过此表选择以人民币或美元展示 KPI 金额类数据
+//       数据源仅存储 RMB，选择 USD 时通过 Currency_ExchangeRate 进行汇率换算
+// 参数表名称：Currency
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "Currency_ID", STRING,           // 主键标识，用于唯一标识每个币种选项
+    "Currency_Label", STRING,        // 显示标签，在报表界面中向用户展示的币种名称
+    "Currency_Sort", INTEGER,        // 排序顺序，控制选项在切片器中的显示顺序
+    "Currency_Description", STRING,  // 详细描述，说明该币种的业务含义
+    
+    // 扩展字段 - 可选字段
+    "Currency_IsDefault", BOOLEAN,   // 是否默认选中
+    "Currency_IsActive", BOOLEAN,    // 是否激活状态
+    "Currency_Symbol", STRING,       // 货币符号，用于度量值 FORMAT 拼接
+    "Currency_ExchangeRate", DOUBLE, // 汇率乘数：RMB=1（原始值），USD=7（RMB对USD汇率）
+    
+    // 数据行
+    {
+        // RMB - 人民币（基准币种，汇率 = 1，即原始值）
+        {
+            "RMB",                 // 币种代码
+            "RMB",                 // 币种显示名称
+            10,                    // 排序顺序（起始10，步长10）
+            "人民币，中国境内业务默认结算货币",  // 币种描述
+            TRUE,                  // 默认选中
+            TRUE,                  // 激活状态，当前可用
+            "¥",                   // 货币符号
+            1                      // 汇率乘数：原始值不转换
+        },
+        
+        // USD - 美元（汇率 = 7，RMB 对 USD 默认汇率）
+        {
+            "USD",                 // 币种代码
+            "USD",                 // 币种显示名称
+            20,                    // 排序顺序（起始10，步长10）
+            "美元，用于跨境业务或集团汇报口径",  // 币种描述
+            FALSE,                 // 非默认选项
+            TRUE,                  // 激活状态，当前可用
+            "$",                   // 货币符号
+            7                      // 汇率乘数：RMB × 7 = USD 展示值
+        }
+    }
+)

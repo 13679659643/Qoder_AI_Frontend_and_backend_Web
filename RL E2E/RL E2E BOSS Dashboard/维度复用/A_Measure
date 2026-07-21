@@ -1,0 +1,10 @@
+A_Measure = 
+DATATABLE(
+    "measure_name", STRING,
+    "sort_order", INTEGER,
+    {
+        // 行顺序即为最终排序顺序
+        {"此处存放报表的各层级度量值，便于统一管理",  1}
+        // 可以继续添加其他列
+    }
+)
