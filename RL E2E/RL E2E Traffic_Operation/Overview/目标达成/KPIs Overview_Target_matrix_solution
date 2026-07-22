@@ -95,7 +95,7 @@ DIM_ColMetric_Target =
 // 颜色：仅 ±delta 行条件色（正绿/负红/零黄），Actual/Target 行统一 #5f6165
 VAR __Rows =
     UNION(
-        // ID 1: Cost Rate — Actual=SUM(cost_amt)/SUM(net_sales_amt)，Target=SUM(fcst_cost_amt)/SUM(fcst_net_sales_amt)
+        // ID 1: Cost Rate — Actual=SUM(cost_amt)/SUM(net_sales_amt) × 1.13 / 1.06，Target=SUM(fcst_cost_amt)/SUM(fcst_net_sales_amt)
         // 筛选: customer_type="ALL" AND page_type="1" | ±delta: 偏差率
         ROW(
             "Metric_ID",              1,
@@ -352,7 +352,7 @@ KPIs Overview Target Actual Base Value =
     SWITCH(
         __SelID,
 
-        // ID 1: Cost Rate = SUM(cost_amt)/SUM(net_sales_amt)；customer_type="ALL" AND page_type="1"
+        // ID 1: Cost Rate = SUM(cost_amt)/SUM(net_sales_amt) × 1.13 / 1.06；customer_type="ALL" AND page_type="1"
         1,
         VAR __CostAmt = IF(__IsAllPlatform,
             CALCULATE(SUM(a05_e2e_paid_media_summary_d[cost_amt]),
@@ -376,7 +376,7 @@ KPIs Overview Target Actual Base Value =
                 a05_e2e_paid_media_summary_d[page_type] = "1",
                 a05_e2e_paid_media_summary_d[platform] = __ChannelID,
                 a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle))
-        RETURN DIVIDE(__CostAmt, __NetSalesAmt),
+        RETURN DIVIDE(DIVIDE(__CostAmt, __NetSalesAmt) * 1.13 , 1.06),
 
         // ID 2: RTB Cost ACH% = SUM(cost_amt)（RTB渠道）；customer_type="ALL" AND channel_type="RTB" AND page_type="1"
         2,
@@ -591,7 +591,7 @@ KPIs Overview Target Target Base Value =
     SWITCH(
         __SelID,
 
-        // ID 1: Cost Rate = SUM(fcst_cost_amt)/SUM(fcst_net_sales_amt)；customer_type="ALL" AND page_type="1"
+        // ID 1: Cost Rate = SUM(fcst_cost_amt)/SUM(fcst_net_sales_amt) × 1.13 / 1.06；customer_type="ALL" AND page_type="1"
         1,
         VAR __FcstCostAmt = IF(__IsAllPlatform,
             CALCULATE(SUM(a05_e2e_paid_media_summary_d[fcst_cost_amt]),
@@ -639,7 +639,7 @@ KPIs Overview Target Target Base Value =
                     Dim_Date_Current[数据日期] >= __MonthStart
                         && Dim_Date_Current[数据日期] <= __MonthEnd
                 )))
-        RETURN DIVIDE(__FcstCostAmt, __FcstNetSalesAmt),
+        RETURN DIVIDE(DIVIDE(__FcstCostAmt, __FcstNetSalesAmt) * 1.13 , 1.06),
 
         // ID 2: RTB Cost ACH% = SUM(fcst_cost_amt)（RTB渠道）；customer_type="ALL" AND channel_type="RTB" AND page_type="1"
         2,

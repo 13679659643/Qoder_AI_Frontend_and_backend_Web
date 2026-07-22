@@ -569,7 +569,7 @@ KPIs Overview Base Value =
         // ═══════════════════════════════════════════════════════
         2, VAR __Cost = CALCULATE(SUM(a05_e2e_paid_media_summary_d[cost_amt]), __BaseFilter_ALL)
            VAR __NetSales = CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]), __BaseFilter_ALL)
-           RETURN DIVIDE(__Cost, __NetSales) * 1.13 / 1.06,
+           RETURN DIVIDE(DIVIDE(__Cost, __NetSales) * 1.13 , 1.06),
 
         // ═══════════════════════════════════════════════════════
         // ID 3: Cost (Exclude Refund) — 花费（剔除红包/返佣返货金）
@@ -604,7 +604,7 @@ KPIs Overview Base Value =
                    __BaseFilter_ALL
                )
            VAR __NetSales = CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]), __BaseFilter_ALL)
-           RETURN DIVIDE(__CostExRefund, __NetSales) * 1.13 / 1.06,
+           RETURN DIVIDE(DIVIDE(__CostExRefund, __NetSales) * 1.13 , 1.06),
 
         // ═══════════════════════════════════════════════════════
         // ID 5: Net Sales — 退后销售额

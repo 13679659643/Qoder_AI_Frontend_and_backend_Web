@@ -177,10 +177,11 @@
 |---|---|
 | **指标名称** | Cost Rate / 目标花费占比 |
 | **业务定义** | 目标总媒体花费占比目标退后金额的百分比 |
-| **Actual 统计字段** | `cost_amt / net_sales_amt` |
+| **Actual 统计字段** | `cost_amt / net_sales_amt` × 1.13 / 1.06 |
 | **Target 统计字段** | `fcst_cost_amt / fcst_net_sales_amt` |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type="ALL" AND page_type="1"` |
+| **系数说明** | 结果需乘以 1.13 再除以 1.06 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
 
