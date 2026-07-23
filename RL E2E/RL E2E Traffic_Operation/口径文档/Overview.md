@@ -162,8 +162,8 @@
 | **分子** | `cost_amt`（新客花费，即 `customer_type="NEW",包括(EXISTING、NEW、ALL)`） |
 | **分母** | `cost_amt`（新客花费 + 老客花费，即 `customer_type="ALL"`） |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **分子筛选** | `customer_type="NEW" AND page_type="2" AND channel in ("直通车","引力魔方")` |
-| **分母筛选** | `customer_type in ("EXISTING","NEW") AND page_type="2" AND channel in ("直通车","引力魔方") ` |
+| **分子筛选** | `customer_type="NEW" AND page_type="2" AND channel in ("直通车","引力魔方","快车","触点")` |
+| **分母筛选** | `customer_type in ("EXISTING","NEW") AND page_type="2" AND channel in ("直通车","引力魔方","快车","触点") ` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
 

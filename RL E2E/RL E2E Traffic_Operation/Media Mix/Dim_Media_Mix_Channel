@@ -173,7 +173,7 @@
 	    Platform,
 	    Platform_Sort,
 	    Channel,
-	     IF(Platform = 'TM',Channel_Sort,Channel_Sort*10) AS Channel_Sort,,
+	     IF(Platform = 'TM',Channel_Sort,Channel_Sort*10) AS Channel_Sort,
 	    IF(Platform = 'TM',Channel_Label,CONCAT(Channel_Label,'.')) AS Channel_Label,
 	    Channel_Description,
 	    Channel_Type,
@@ -185,7 +185,8 @@
 	    UNION ALL
 	    SELECT * FROM summary_data
 	) AS dim_channel_config
-	ORDER BY Platform_Sort, Channel_Sort;
+	ORDER BY Platform_Sort, Channel_Sort
+	;
 
 --
 -- 方案B：完整维度表

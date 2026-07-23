@@ -686,8 +686,8 @@ KPIs Overview Base Value =
         // ═══════════════════════════════════════════════════════
         // ID 9: New Customer Cost% — 招募新客花费占比
         // 口径: cost_amt(NEW) / cost_amt(EXISTING + NEW)
-        // 分子筛选: customer_type='NEW' AND page_type="2" AND channel IN {"直通车","引力魔方"}
-        // 分母筛选: customer_type IN {"EXISTING","NEW"} AND page_type="2" AND channel IN {"直通车","引力魔方"}
+        // 分子筛选: customer_type='NEW' AND page_type="2" AND channel IN {"直通车","引力魔方","快车","触点"}
+        // 分母筛选: customer_type IN {"EXISTING","NEW"} AND page_type="2" AND channel IN {"直通车","引力魔方","快车","触点"}
         // 数据类型: percent_1dp
         // ═══════════════════════════════════════════════════════
         9, VAR __NewCustomerFilter =
@@ -695,7 +695,7 @@ KPIs Overview Base Value =
                    a05_e2e_paid_media_summary_d,
                    a05_e2e_paid_media_summary_d[customer_type] = "NEW"
                        && a05_e2e_paid_media_summary_d[page_type] = "2"
-                       && a05_e2e_paid_media_summary_d[channel] IN {"直通车", "引力魔方"}
+                       && a05_e2e_paid_media_summary_d[channel] IN {"直通车","引力魔方","快车","触点"}
                        && a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
                        && (
                            __IsAllPlatform
@@ -709,7 +709,7 @@ KPIs Overview Base Value =
                    a05_e2e_paid_media_summary_d,
                    a05_e2e_paid_media_summary_d[customer_type] IN {"EXISTING", "NEW"}
                        && a05_e2e_paid_media_summary_d[page_type] = "2"
-                       && a05_e2e_paid_media_summary_d[channel] IN {"直通车", "引力魔方"}
+                       && a05_e2e_paid_media_summary_d[channel] IN {"直通车","引力魔方","快车","触点"}
                        && a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
                        && (
                            __IsAllPlatform
