@@ -185,8 +185,8 @@ DATATABLE(
     "Indicator Type", STRING,       // 行标签（英文）
     "Indicator Order", INTEGER,     // 排序值（起始10，步长10，便于插入）
     {
-        {"This Year", 10},
-        {"Last Year", 20},
+        {"This Period", 10},
+        {"Last Period", 20},
         {"YOY",       30}
     }
 )
@@ -819,11 +819,11 @@ KPIs Overview Cell Value =
         // ── This Year：返回汇率换算后的值 ──
         // 金额类指标乘以汇率（RMB=1 不变，USD=7 转换）
         // 比率/计数类指标原值返回
-        __Indicator = "This Year", __CurrentConverted,
+        __Indicator = "This Period", __CurrentConverted,
 
         // ── Last Year：返回汇率换算后的同期值 ──
         // 与 This Year 同样的汇率换算逻辑
-        __Indicator = "Last Year", __LP_Converted,
+        __Indicator = "Last Period", __LP_Converted,
 
         // ── YOY：同比增长率（ID8 bp 指标为差值）──
         // 默认: 增长率不受汇率影响：(C*R - L*R) / (L*R) = (C-L) / L

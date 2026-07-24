@@ -100,8 +100,21 @@ Category Growth Cell Background Color =
 | **统计字段** | `living_sku_cnt` |
 | **数据底表** | `a05_e2e_paid_media_product_data_d` |
 | **筛选条件** | 需要判断层级，如果当前上下文在第5层级，则需要过滤其他四个层级字段值为ALL，在其他层级的时候逻辑一致，比如现在在framework层级，需要过滤brand、category、channel、mix_msg字段值为ALL |
+| **具体逻辑** | 统计周期最后一天有 cost 记录的在推商品；
+行维度结构：framework/season -> brand -> category -> channel -> mix_msg
+第1层 framework：
+按 framework 分组，限制 mix_msg is null and channel = 'ALL'
+第2层 brand：
+按 framework/brand 分组，限制 mix_msg is null and channel = 'ALL'
+第3层 category：
+按 framework/brand/category 分组，限制 mix_msg is null and channel = 'ALL'
+第4层 channel：
+按 framework/brand/category/channel 分组，限制 mix_msg is null，不限制 channel = 'ALL'
+第5层 mix_msg：
+按 framework/brand/category/channel/mix_msg 分组，channel 取当前渠道，mix_msg 取当前明细值 |
 | **数据类型** | integer → 千分位整数，不含小数 |
 | **数据格式** | `#,##0;(#,##0);0` |
+
 
 ---
 

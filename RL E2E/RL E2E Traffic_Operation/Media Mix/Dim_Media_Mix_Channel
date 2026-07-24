@@ -179,7 +179,8 @@
 	    Channel_Type,
 	    Channel_ID,
 	    Summary_Scope,
-	    Parent_Channel_ID
+		-- 分母默认为 TM_Total 或 JD_Total，根据平台不同而变化
+	    IF(Platform = 'TM','TM_Total','JD_Total') AS Parent_Channel_ID
 	FROM (
 	    SELECT * FROM detail_data
 	    UNION ALL

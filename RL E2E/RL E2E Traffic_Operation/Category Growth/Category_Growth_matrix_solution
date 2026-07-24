@@ -147,6 +147,8 @@ Category Growth Active IDs =
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    // ── 获取当前时间周期的最大日期──
+    VAR __Current_End = MAX(Dim_Date_Current[数据日期])
 
     VAR __PlatformFilter =
         FILTER(
@@ -169,13 +171,20 @@ Category Growth Active IDs =
     VAR __IsChannel   = ISINSCOPE(a05_e2e_paid_media_product_data_d[channel])
     VAR __IsMixMsg    = ISINSCOPE(a05_e2e_paid_media_product_data_d[mix_msg])
 
+    // 获取当前行上下文的值
+    VAR __CurrentFramework = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[framework])
+    VAR __CurrentBrand = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[brand])
+    VAR __CurrentCategory = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[category])
+    VAR __CurrentChannel = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[channel])
+    VAR __CurrentMixMsg = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[mix_msg])
+
         // ── 层级过滤：严格隔离层级，防止重复汇总 ──
     // 规则1：1~4层之间，当前层级字段有具体值(<>ALL)，其他三个层级字段必须为 "ALL"，且 mix_msg 必须为空
     // 规则2：第5层，其他四个字段必须为 "ALL"，且 mix_msg 必须有具体值(不为空)
     VAR __LevelFilter =
         FILTER(
             // 必须把所有五个层级字段放入 ALL，彻底清除外部矩阵/切片器对它们的筛选干扰
-            ALL(
+            ALLSELECTED(
                 a05_e2e_paid_media_product_data_d[mix_msg],
                 a05_e2e_paid_media_product_data_d[framework],
                 a05_e2e_paid_media_product_data_d[brand],
@@ -188,55 +197,65 @@ Category Growth Active IDs =
                 TRUE(),
                 
                 // ── 第5层：mix_msg 明细行 ──
-                // 必须满足：mix_msg 不为空 (IS NOT NULL)，且其他四个父层级字段均为 "ALL"
+                // 五个字段值与当前行上下文一致，mix_msg 不为空
                 __IsMixMsg,
                     NOT ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
-                    && a05_e2e_paid_media_product_data_d[framework] = "ALL"
-                    && a05_e2e_paid_media_product_data_d[brand] = "ALL"
-                    && a05_e2e_paid_media_product_data_d[category] = "ALL"
-                    && a05_e2e_paid_media_product_data_d[channel] = "ALL",
+                && a05_e2e_paid_media_product_data_d[framework] = __CurrentFramework
+                && a05_e2e_paid_media_product_data_d[brand] = __CurrentBrand
+                && a05_e2e_paid_media_product_data_d[category] = __CurrentCategory
+                && a05_e2e_paid_media_product_data_d[channel] = __CurrentChannel
+                && a05_e2e_paid_media_product_data_d[mix_msg] = __CurrentMixMsg,
 
                 // ── 第4层：channel 小计行 ──
-                // 必须满足：channel 有具体值(<>ALL)，mix_msg 为空 (IS NULL)，且其余三个父层级为 "ALL"
+                // 限制 mix_msg 为空，不限制 channel = 'ALL' (保留当前 channel 上下文)
                 __IsChannel,
                     ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
-                    && a05_e2e_paid_media_product_data_d[channel] <> "ALL"
-                    && a05_e2e_paid_media_product_data_d[framework] = "ALL"
-                    && a05_e2e_paid_media_product_data_d[brand] = "ALL"
-                    && a05_e2e_paid_media_product_data_d[category] = "ALL",
+                && a05_e2e_paid_media_product_data_d[framework] = __CurrentFramework
+                && a05_e2e_paid_media_product_data_d[brand] = __CurrentBrand
+                && a05_e2e_paid_media_product_data_d[category] = __CurrentCategory
+                && a05_e2e_paid_media_product_data_d[channel] = __CurrentChannel,
 
                 // ── 第3层：category 小计行 ──
-                // 必须满足：category 有具体值(<>ALL)，mix_msg 为空 (IS NULL)，且其余三个父层级为 "ALL"
+                // 限制 mix_msg 为空，且子级 channel 必须为 "ALL"
                 __IsCategory,
                     ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
-                    && a05_e2e_paid_media_product_data_d[category] <> "ALL"
-                    && a05_e2e_paid_media_product_data_d[framework] = "ALL"
-                    && a05_e2e_paid_media_product_data_d[brand] = "ALL"
-                    && a05_e2e_paid_media_product_data_d[channel] = "ALL",
+                && a05_e2e_paid_media_product_data_d[framework] = __CurrentFramework
+                && a05_e2e_paid_media_product_data_d[brand] = __CurrentBrand
+                && a05_e2e_paid_media_product_data_d[category] = __CurrentCategory
+                && a05_e2e_paid_media_product_data_d[channel] = "ALL",
 
                 // ── 第2层：brand 小计行 ──
-                // 必须满足：brand 有具体值(<>ALL)，mix_msg 为空 (IS NULL)，且其余三个父层级为 "ALL"
+                // 限制 mix_msg 为空，且子级 category, channel 必须为 "ALL"
                 __IsBrand,
                     ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
-                    && a05_e2e_paid_media_product_data_d[brand] <> "ALL"
-                    && a05_e2e_paid_media_product_data_d[framework] = "ALL"
-                    && a05_e2e_paid_media_product_data_d[category] = "ALL"
-                    && a05_e2e_paid_media_product_data_d[channel] = "ALL",
+                && a05_e2e_paid_media_product_data_d[framework] = __CurrentFramework
+                && a05_e2e_paid_media_product_data_d[brand] = __CurrentBrand
+                && a05_e2e_paid_media_product_data_d[channel] = "ALL",
 
                 // ── 第1层：framework 行 ──
-                // 必须满足：framework 有具体值(<>ALL)，mix_msg 为空 (IS NULL)，且其余三个子层级为 "ALL"
+                // 限制 mix_msg 为空，且子级 brand, category, channel 必须为 "ALL"
                 __IsFramework,
                     ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
-                    && a05_e2e_paid_media_product_data_d[framework] <> "ALL"
-                    && a05_e2e_paid_media_product_data_d[brand] = "ALL"
-                    && a05_e2e_paid_media_product_data_d[category] = "ALL"
-                    && a05_e2e_paid_media_product_data_d[channel] = "ALL"
+                && a05_e2e_paid_media_product_data_d[framework] = __CurrentFramework
+                && a05_e2e_paid_media_product_data_d[channel] = "ALL",
+                
+                // ── 总计行 ──
+                // 限制所有层级字段必须为 "ALL"，且 mix_msg 为空
+                TRUE(),
+                    ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
+                && a05_e2e_paid_media_product_data_d[channel] = "ALL"
             )
         )
 
     RETURN
         CALCULATE(
             SUM(a05_e2e_paid_media_product_data_d[living_sku_cnt]),
+            REMOVEFILTERS(Dim_Date_Current),
+            FILTER(
+                    ALL(Dim_Date_Current),
+                    Dim_Date_Current[数据日期] = __Current_End
+                ),
+            NOT ISBLANK(a05_e2e_paid_media_product_data_d[cost_amt]),
             __PlatformFilter,
             __TransCycleFilter,
             __LevelFilter
@@ -281,8 +300,7 @@ Category Growth Active IDs VS LP =
                 REMOVEFILTERS(Dim_Date_Current),
                 FILTER(
                     ALL(Dim_Date_Current),
-                    Dim_Date_Current[数据日期] >= __LP_Start
-                        && Dim_Date_Current[数据日期] <= __LP_End
+                    Dim_Date_Current[数据日期] = __LP_End
                 )
             )
         )
