@@ -1,0 +1,73 @@
+Slicer_Strategic_Category_Selection = 
+// 功能：创建一个战略品类维度表，用于报表中的品类角色筛选和分组
+// 用途：用户可以通过此表选择不同的战略品类（基石、加速、互补、其他）进行分析
+// 参数表名称：Strategic_Category
+// 遵循通用参数表模板规范
+DATATABLE(
+    // 基础字段 - 必选字段
+    "Strategic_Category_ID", STRING,         // 主键标识，用于唯一标识每个战略品类选项
+    "Strategic_Category_Label", STRING,      // 显示标签，在报表界面中向用户展示的品类名称
+    "Strategic_Category_Sort", INTEGER,      // 排序顺序，控制选项在切片器中的显示顺序
+    "Strategic_Category_Description", STRING, // 详细描述，说明该战略品类的具体特点和业务含义
+    
+    // 扩展字段 - 可选字段
+    "Strategic_Category_IsDefault", BOOLEAN,  // 是否默认选中，TRUE表示用户打开报表时默认选择此品类
+    "Strategic_Category_IsActive", BOOLEAN,   // 是否激活状态，控制该品类选项是否可用
+    "Strategic_Category_Group", STRING,       // 分组标识，用于对相关品类进行逻辑分组
+    
+    // 自定义扩展字段 - 根据业务需求添加
+    "Strategic_Category_Code", STRING,       // 业务代码：对应Foundation、Acceleration等字段值
+    
+    // 数据行
+    {
+        // 格式说明：每个花括号{}包含一行数据，顺序与上方字段定义一致
+        
+        // Foundation - 基石品类
+        {
+            "Foundation",          // 品类代码
+            "FOUNDATION",          // 品类显示名称
+            10,                    // 排序顺序，从10开始
+            "为核心业务提供基础销量和客流的品类，是品牌或店铺的基本盘，通常拥有高渗透率",  // 品类描述
+            TRUE,                  // 默认选中
+            TRUE,                  // 激活状态，当前可用
+            "战略品类角色",        // 分组
+            "Foundation"           // 业务代码，对应源系统字段值
+        },
+        
+        // Acceleration - 加速品类
+        {
+            "Acceleration",        // 品类代码
+            "ACCELERATION",        // 品类显示名称
+            20,                    // 排序顺序
+            "具有高增长潜力的品类，能够带动整体业务快速突破，通常是当前重点投入和推广的趋势单品",  // 品类描述
+            FALSE,                 // 非默认选项
+            TRUE,                  // 激活状态，当前可用
+            "战略品类角色",        // 分组
+            "Acceleration"         // 业务代码，对应源系统字段值
+        },
+        
+        // Complementary - 互补品类
+        {
+            "Complementary",       // 品类代码
+            "COMPLEMENTARY",       // 品类显示名称
+            30,                    // 排序顺序
+            "与主销产品形成互补的品类，用于提升客单价和连带率，完善消费者的整体使用场景",  // 品类描述
+            FALSE,                 // 非默认选项
+            TRUE,                  // 激活状态，当前可用
+            "战略品类角色",        // 分组
+            "Complementary"        // 业务代码，对应源系统字段值
+        },
+        
+        // Other - 其他品类
+        {
+            "Other",               // 品类代码
+            "OTHER",               // 品类显示名称
+            40,                    // 排序顺序
+            "不属于核心战略分类的长尾品类或测试性新品，用于补充丰富产品线",  // 品类描述
+            FALSE,                 // 非默认选项
+            TRUE,                  // 激活状态，当前可用
+            "战略品类角色",        // 分组
+            "Other"                // 业务代码，对应源系统字段值
+        }
+    }
+)
