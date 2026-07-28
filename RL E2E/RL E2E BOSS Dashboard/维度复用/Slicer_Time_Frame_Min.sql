@@ -8,8 +8,8 @@ SELECT
 	    natural_date AS TimeFrame_Min,                                                  -- 最小自然日
 	    natural_date AS TimeFrame_Max                                                   -- 最大自然日
 	FROM `indep_rl_dim`.dim_t00_calendar
-	WHERE natural_date >= (SELECT MIN(data_date) FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d)
-	  AND natural_date <= (SELECT MAX(data_date) FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d)
+	WHERE natural_date >= (SELECT MIN(data_date) FROM `indep_rl_ads`.a02_e2e_boss_performance_summary_d)
+	  AND natural_date <= (SELECT MAX(data_date) FROM `indep_rl_ads`.a02_e2e_boss_performance_summary_d)
 	UNION ALL
 	-- 周维度数据抽取
 	SELECT 
@@ -22,8 +22,8 @@ SELECT
 	    MIN(natural_date) AS TimeFrame_Min,                                             -- 当前财周范围内最小自然日
 	    MAX(natural_date) AS TimeFrame_Max                                              -- 当前财周范围内最大自然日
 	FROM `indep_rl_dim`.dim_t00_calendar
-	WHERE natural_date >= (SELECT MIN(data_date) FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d)
-	  AND natural_date <= (SELECT MAX(data_date) FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d)
+	WHERE natural_date >= (SELECT MIN(data_date) FROM `indep_rl_ads`.a02_e2e_boss_performance_summary_d)
+	  AND natural_date <= (SELECT MAX(data_date) FROM `indep_rl_ads`.a02_e2e_boss_performance_summary_d)
 	GROUP BY financial_year, financial_week_num
 	UNION ALL
 	-- 月维度数据抽取
@@ -37,8 +37,8 @@ SELECT
 	    MIN(natural_date) AS TimeFrame_Min,                                             -- 当前财月范围内最小自然日
 	    MAX(natural_date) AS TimeFrame_Max                                              -- 当前财月范围内最大自然日
 	FROM `indep_rl_dim`.dim_t00_calendar
-	WHERE natural_date >= (SELECT MIN(data_date) FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d)
-	  AND natural_date <= (SELECT MAX(data_date) FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d)
+	WHERE natural_date >= (SELECT MIN(data_date) FROM `indep_rl_ads`.a02_e2e_boss_performance_summary_d)
+	  AND natural_date <= (SELECT MAX(data_date) FROM `indep_rl_ads`.a02_e2e_boss_performance_summary_d)
 	GROUP BY financial_year, financial_month_num
 	UNION ALL
 	-- 季度维度数据抽取
@@ -52,8 +52,8 @@ SELECT
 	    MIN(natural_date) AS TimeFrame_Min,                                             -- 当前财季范围内最小自然日
 	    MAX(natural_date) AS TimeFrame_Max                                              -- 当前财季范围内最大自然日
 	FROM `indep_rl_dim`.dim_t00_calendar
-	WHERE natural_date >= (SELECT MIN(data_date) FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d)
-	  AND natural_date <= (SELECT MAX(data_date) FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d)
+	WHERE natural_date >= (SELECT MIN(data_date) FROM `indep_rl_ads`.a02_e2e_boss_performance_summary_d)
+	  AND natural_date <= (SELECT MAX(data_date) FROM `indep_rl_ads`.a02_e2e_boss_performance_summary_d)
 	GROUP BY financial_year, financial_quarter_num
 	UNION ALL
 	-- 年维度数据抽取
@@ -67,8 +67,8 @@ SELECT
 	    MIN(natural_date) AS TimeFrame_Min,                                             -- 当前财年范围内最小自然日
 	    MAX(natural_date) AS TimeFrame_Max                                              -- 当前财年范围内最大自然日
 	FROM `indep_rl_dim`.dim_t00_calendar
-	WHERE natural_date >= (SELECT MIN(data_date) FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d)
-	  AND natural_date <= (SELECT MAX(data_date) FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d)
+	WHERE natural_date >= (SELECT MIN(data_date) FROM `indep_rl_ads`.a02_e2e_boss_performance_summary_d)
+	  AND natural_date <= (SELECT MAX(data_date) FROM `indep_rl_ads`.a02_e2e_boss_performance_summary_d)
 	GROUP BY financial_year
 
 

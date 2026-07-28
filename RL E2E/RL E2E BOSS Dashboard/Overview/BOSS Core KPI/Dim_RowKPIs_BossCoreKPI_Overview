@@ -1,0 +1,130 @@
+Dim_RowKPIs_BossCoreKPI_Overview = 
+// ========================================
+// 表: Dim_RowKPIs_BossCoreKPI_Overview
+// 类型: 维度表（Dim_ 前缀），断开维度
+// 用途: 定义 BOSS Core KPI 矩阵的行维度（KPIGroup > KPIName）
+// 范围: 子模块一 BOSS Core KPI（共 12 个基础 KPI）
+// 说明: 2 个分组：Sales（5 个 KPI）+ Fulfillment（7 个 KPI）
+//       每行一个 KPI，对应口径文档子模块一的基础指标
+//       不含 LY / vs LY 派生列，派生列在列维度 Dim_ColKPIs_BossCoreKPI_Overview 中定义
+//
+// 字段说明:
+//   RowKPI_ID             主键（全局唯一），从 10 开始递增，间隔 10 便于扩展
+//   KPIGroup              Level 1 分组：Sales / Fulfillment
+//   KPIName               Level 2 KPI 名称（与口径文档子模块一一致）
+//   KPIName_CN            KPI 中文名称（与口径文档一致）
+//   KPIGroup_Sort         Level 1 排序：Sales=10, Fulfillment=20
+//   KPIName_Sort          Level 2 排序，组内递增 10，便于后续插入新 KPI
+//   KPI_CalcType          calc_type 标识：payment / fulfillment（用于事实表筛选）
+//   Metric_Format_Act     当期行格式（与口径文档中 Act 数据类型一致）
+//   Metric_Format_LY      去年同期行格式（与 Act 格式一致）
+//   Metric_Format_VsLY    YOY/同比行格式：
+//                          - 金额类（currency）/ 数量类（integer）：今年 / 去年 - 1 → percent_1dp
+//                          - 比率类（SLS Penetration / Return% / Fulfillment%）：今年 - 去年（差值）→ delta_bp
+//   Metric_IsCurrencyAmount BOOLEAN → 是否金额类指标（仅金额类才涉及汇率换算与币种符号拼接）
+//                          TRUE: SLS / Demand SLS / Return / Request Order Amt / Shipped Order Amt
+//                          FALSE: SLS Penetration / Return% / Fulfillment% / Request Order Qty /
+//                                 Request Units / Shipped Order Qty / Shipped Units
+//   Metric_ColorPositive  正值颜色
+//   Metric_ColorNegative  负值颜色
+//   Metric_ColorZero      零值颜色
+//   Metric_ColorDefault   默认颜色
+//
+// 格式类型说明（与 Overview.md 口径文档一致）:
+//   currency       → 货币符号由币种切片器决定，千分位整数
+//                    DAX: __CurrencySymbol & FORMAT(__Value, "#,##0")
+//   percent_1dp    → 百分比1位小数（如 "58.3%"）
+//                    格式: "#,##0.0%;#,##0.0%;0.0%"
+//   integer        → 整数，千分位整数
+//                    格式: "#,##0"
+//   delta_bp       → 增减基点整数（如 "+120bp"）
+//                    乘以 100 转 bp 的操作放在 Cell Display 度量中实现
+//                    格式: "+#,##0bp;-#,##0bp;0bp"
+//
+// 货币转换规则（与 Slicer_Currency_Selection 表配合）:
+//   - 数据源默认为 RMB，转化为 USD 时除以固定汇率 7（Currency_ExchangeRate）
+//   - 仅 Metric_IsCurrencyAmount = TRUE 的 KPI 涉及汇率换算与币种符号拼接
+//   - vs LY 同比值不受 Currency 切片器影响（同比为比率/差值，无金额单位）
+//
+// 颜色约定（参考 Dim_ColMetric_KpiBreakdown）:
+//   正值（>0）：#1A9018 绿色
+//   负值（<0）：#D64550 红色
+//   零值（=0）：#E1C233 黄色
+//   默认：#5f6165 深灰
+// ========================================
+DATATABLE(
+    "RowKPI_ID",              INTEGER,    // 主键标识（全局唯一，间隔 10 便于扩展）
+    "KPIGroup",               STRING,     // Level 1: 分组（Sales / Fulfillment）
+    "KPIName",                STRING,     // Level 2: KPI 名称（英文）
+    "KPIName_CN",             STRING,     // KPI 中文名称
+    "KPIGroup_Sort",          INTEGER,    // Level 1 排序：Sales=10, Fulfillment=20
+    "KPIName_Sort",           INTEGER,    // Level 2 排序（组内间隔 10）
+    "KPI_CalcType",           STRING,     // calc_type：payment / fulfillment
+    "Metric_Format_Act",      STRING,     // 当期 行格式
+    "Metric_Format_LY",       STRING,     // 去年同期 行格式（与本期格式一致）
+    "Metric_Format_VsLY",     STRING,     // YOY、同比 行格式
+    "Metric_IsCurrencyAmount",BOOLEAN,    // 是否金额类（TRUE 才涉及汇率换算与币种符号拼接）
+    "Metric_ColorPositive",   STRING,     // 正值颜色
+    "Metric_ColorNegative",   STRING,     // 负值颜色
+    "Metric_ColorZero",       STRING,     // 零值颜色
+    "Metric_ColorDefault",    STRING,     // 默认颜色
+    {
+        // ════════════════════════════════════════════════════════════════
+        // Sales 分组（KPIGroup_Sort = 10）
+        // calc_type = payment
+        // ════════════════════════════════════════════════════════════════
+
+        // ─── 1. SLS — O2O销售净额（金额类） ───
+        // Act/LY: currency；vs LY: percent_1dp（今年/去年-1）
+        { 10, "Sales", "SLS",              "O2O销售净额",       10, 10, "payment",     "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+
+        // ─── 2. Demand SLS — O2O退前销售额（金额类） ───
+        // Act/LY: currency；vs LY: percent_1dp（今年/去年-1）
+        { 20, "Sales", "Demand SLS",       "O2O退前销售额",     10, 20, "payment",     "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+
+        // ─── 3. SLS Penetration — O2O销售渗透率（比率类） ───
+        // Act/LY: percent_1dp；vs LY: delta_bp（今年-去年，差值bp）
+        { 30, "Sales", "SLS Penetration",  "O2O销售渗透率",     10, 30, "payment",     "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+
+        // ─── 4. Return — O2O退货金额（金额类） ───
+        // Act/LY: currency；vs LY: percent_1dp（今年/去年-1）
+        { 40, "Sales", "Return",           "O2O退货金额",       10, 40, "payment",     "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+
+        // ─── 5. Return% — O2O退货率（金额）（比率类） ───
+        // Act/LY: percent_1dp；vs LY: delta_bp（今年-去年，差值bp）
+        { 50, "Sales", "Return%",          "O2O退货率（金额）", 10, 50, "payment",     "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+
+        // ════════════════════════════════════════════════════════════════
+        // Fulfillment 分组（KPIGroup_Sort = 20）
+        // calc_type = fulfillment
+        // ════════════════════════════════════════════════════════════════
+
+        // ─── 6. Fulfillment% — O2O订单履约率（比率类） ───
+        // Act/LY: percent_1dp；vs LY: delta_bp（今年-去年，差值bp）
+        { 110, "Fulfillment", "Fulfillment%",       "O2O订单履约率",       20, 10, "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+
+        // ─── 7. Request Order Qty — O2O销售订单量（数量类） ───
+        // Act/LY: integer；vs LY: percent_1dp（今年/去年-1）
+        { 120, "Fulfillment", "Request Order Qty",  "O2O销售订单量",       20, 20, "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+
+        // ─── 8. Request Units — O2O商品销售件数（数量类） ───
+        // Act/LY: integer；vs LY: percent_1dp（今年/去年-1）
+        { 130, "Fulfillment", "Request Units",      "O2O商品销售件数",     20, 30, "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+
+        // ─── 9. Request Order Amt — O2O销售金额（金额类） ───
+        // Act/LY: currency；vs LY: percent_1dp（今年/去年-1）
+        { 140, "Fulfillment", "Request Order Amt",  "O2O销售金额",         20, 40, "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+
+        // ─── 10. Shipped Order Qty — O2O已配货订单量（数量类） ───
+        // Act/LY: integer；vs LY: percent_1dp（今年/去年-1）
+        { 150, "Fulfillment", "Shipped Order Qty",  "O2O已配货订单量",     20, 50, "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+
+        // ─── 11. Shipped Units — O2O已配货商品件数（数量类） ───
+        // Act/LY: integer；vs LY: percent_1dp（今年/去年-1）
+        { 160, "Fulfillment", "Shipped Units",      "O2O已配货商品件数",   20, 60, "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+
+        // ─── 12. Shipped Order Amt — O2O已配货销售金额（金额类） ───
+        // Act/LY: currency；vs LY: percent_1dp（今年/去年-1）
+        { 170, "Fulfillment", "Shipped Order Amt",  "O2O已配货销售金额",   20, 70, "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+    }
+)
