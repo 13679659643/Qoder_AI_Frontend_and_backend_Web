@@ -19,28 +19,22 @@
     "Metric_Format_VsLY",     STRING,     // YOY、同比 行格式
 
 第三轮提示词：
-在RL E2E\RL E2E Traffic_Dashboard\维度复用目录下，我已经完成了一些维度表的设计工作，可服用的如下，以及设计表的DAX语句、SQL语句：
-1、事实表：a05_e2e_paid_media_summary_d；
-2、日期筛选器，Slicer_Time_Frame_Min和Slicer_Time_Frame_Max，与事实表断开维度，用于页面上的Timeframe(Day\Week\Month\Quarter\Year),对应不同的TimeFrame_Value，需要把年月季周都转化为日，去筛选a05_e2e_paid_media_summary_d表中的data_date字段。
-3、Platform筛选器，Slicer_Platform_Selection，对应四个平台。对应事实表中的a05_e2e_paid_media_summary_data_d[platform]；一对多事实表，模型会自动筛选事实表；
-4、Store Name筛选器，表Slicer_Store_Name，对应a05_e2e_paid_media_summary_data_d[store_name]；一对多事实表，模型会自动筛选事实表；
-5、trans_cycle筛选器，对应事实表中的a05_e2e_paid_media_summary_data_d[trans_cycle]；一对多事实表，模型会自动筛选事实表；
-6、Currency筛选器，断开连接，仅金额类指标乘以汇率固定为7；
-7、指标列维度，RL E2E\RL E2E Traffic_Dashboard\KPI Progress\Dim_ColMetric_KPI by Platform，Dim_ColMetric_KPI by Platform，包含15个指标，YOY%采用在末尾加不同数量的空格区分。
-
-在RL E2E\RL E2E Traffic_Dashboard\KPI Progress目录下，输出KPI by Platform矩阵的powerbi解决方案。
-1、矩阵的行是Store_Name,直接复用店铺维度表Slicer_Store_Name的Store_ID字段。
-2、矩阵的列格式是：Dim_ColMetric_KPI by Platform维度表的Metric_Name字段，使用Metric_ID进行路由分发。
-3、指标口径文档RL E2E\RL E2E Traffic_Dashboard\口径文档\KPI Progress.md中的子模块五：KPI by Platform部分，本次矩阵只关注子模块五的口径，一切指标都按照子模块五的口径进行计算，不懂就问。
-4、可以参考RL E2E\RL E2E Traffic_Dashboard\Category Growth\KPI_Breakdown_matrix_solution解决方案、RL E2E\RL E2E Traffic_Operation\Overview\TTL汇总\KPIs Overview_matrix_solution解决方案。
-5、KPI by Platform解决方案中只需要包括以下内容就行：
-度量：KPI by Platform Base Value、KPI by Platform Cell Value、KPI by Platform Cell Display、KPI by Platform Cell Font Color、KPI by Platform Cell Background Color、KPI by Platform Cell SVG Icon
-清单：度量值清单与 Display Folder、指标口径来源对照、血缘关系图（Lineage Diagram）
-6、因为我们需要计算本期和同期的值，所以KPI by Platform Base Value可以考虑拆分为KPI by Platform Current Base Value和KPI by Platform vsLP Base Value两个子项会不会更好维护一些。vx LP 上期值根据当前时间往前推一年就行了，比如当前时间是2025-10-24到2025-10-31，那么vs LP 上期值就是2024-10-24到2024-10-31。你有更好的度量模型方案也可以提供。
-7、KPI by Platform Cell Font Color区别总计行和其他行，总计行字体颜色为黑色#252423，其他行字体颜色为5F6165（深灰）。通过ISINSCOPE('Slicer_Store_Name'[store_name])进行层级判断。
-8、KPI by Platform Cell Background Color区别总计行和其他行，总计行背景颜色为#E6D9C7（中米色），其他行背景颜色为白色#FFFFFF。
-9、KPI by Platform Cell SVG Icon只关注YOY%指标，其他指标不关注SVG Icon。SVG Icon就使用KPI Breakdown Cell SVG Icon中的图标。
-10、一切口径以指标口径文档RL E2E\RL E2E Traffic_Dashboard\口径文档\KPI Progress.md中的子模块五：KPI by Platform部分为准，不懂就问。
+在RL E2E\RL E2E BOSS Dashboard\维度复用目录下，我已经完成了一些维度表的设计工作，都是可服用的如下，以及设计表的DAX语句、SQL语句：
+1、事实表，powerbi中命名为：a02_e2e_boss_performance_summary_d；
+2、日期筛选器，Slicer_Time_Frame_Min和Slicer_Time_Frame_Max，与事实表断开维度，Slicer_Time_Frame用于页面上的Timeframe(Day\Week\Month\Quarter\Year)筛选,通过关联Slicer_Time_Frame_Min和Slicer_Time_Frame_Max对应不同的TimeFrame_Value，需要把年月季周都转化为日，去筛选a02_e2e_boss_performance_summary_d表中的data_date字段。
+3、Currency筛选器，断开连接，仅金额类指标除以汇率固定为7；
+4、事实表数据字典：RL E2E\RL E2E BOSS Dashboard\参考文件\a02_e2e_boss_performance_summary_d_数据字典.md
+5、指标列维度，RL E2E\RL E2E BOSS Dashboard\Overview\BOSS Core KPI\Dim_ColKPIs_BossCoreKPI_Overview，列有两级，第一级为store_name对应a02_e2e_boss_performance_summary_d[store_name]，第二级为Act、LY、vs LY，对应口径文档RL E2E\RL E2E BOSS Dashboard\口径文档\Overview.md中的子模块一：BOSS Core KPI口径。
+6、行维度，RL E2E\RL E2E BOSS Dashboard\Overview\BOSS Core KPI\Dim_RowKPIs_BossCoreKPI_Overview，包含Sales和Fulfillment分组，Sales分组下包括：SLS、Demand SLS、SLS Penetration、Return、Return%；Fulfillment分组下包括：Fulfillment%、Request Order Qty、Request Units、Request Order Amt、Shipped Order Qty、Shipped Units、Shipped Order Amt。
+需求：
+在RL E2E\RL E2E BOSS Dashboard\Overview\BOSS Core KPI目录下，输出Overview_KPIs_BossCoreKPI矩阵的powerbi解决方案。
+1、本次矩阵只关注子模块一：BOSS Core KPI口径，一切指标都按照子模块一的口径进行计算，不懂就问。
+2、可以参考RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS\KPIs_matrix_solution.md解决方案。
+3、BOSS Core KPI Cell Font Color仅对vs LY指标启用正/负/零三色，使用Dim_ColKPIs_BossCoreKPI_Overview中的Metric_ColorPositive、Metric_ColorNegative、Metric_ColorZero、Metric_ColorDefault字段，区别总计行和其他行，总计行字体颜色为黑色#252423，其他行字体颜色为5F6165（深灰）。通过ISINSCOPE('Dim_RowKPIs_BossCoreKPI_Overview'[KPIName])进行层级判断。
+4、BOSS Core KPI Cell Background Color区别总计行和其他行，总计行背景颜色为#E6D9C7（中米色），其他行背景颜色为白色#FFFFFF。
+5、BOSS Core KPI Cell SVG Icon只关注vs LY列指标，其他指标不关注，SVG Icon就使用KPI Breakdown Cell SVG Icon中的图标。
+6、输出的dax必须带有必要注释信息，指标名称的注释需要有指标名称和指标名称中文一起，例如："SLS O2O销售净额"、"SLS O2O销售净额（去年同期）"、"SLS O2O销售净额（与去年同期对比）"。
+7、一切口径以指标口径文档RL E2E\RL E2E BOSS Dashboard\口径文档\Overview.md中的子模块一：BOSS Core KPI部分为准，不懂就问。
 
 第二轮提示：
 
