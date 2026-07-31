@@ -22,7 +22,7 @@ Dim_ColKPIs_BossCoreKPI_Overview =
 //   vs LY  → 与去年同比值（vs LY）
 //              - 金额类（行维度 Metric_IsCurrencyAmount=TRUE）：今年 / 去年 - 1（percent_1dp）
 //              - 数量类（integer）：今年 / 去年 - 1（percent_1dp）
-//              - 比率类（SLS Penetration / Return% / Fulfillment%）：今年 - 去年（delta_bp，×100 转 bp）
+//              - 比率类（SLS Penetration / Return% / Fulfillment%）：今年 - 去年（delta_bp，×10000 转 bp）
 //
 // 格式类型说明（由行维度 Dim_RowKPIs_BossCoreKPI_Overview 的三个字段决定）:
 //   Metric_Format_Act   → 当期 行格式

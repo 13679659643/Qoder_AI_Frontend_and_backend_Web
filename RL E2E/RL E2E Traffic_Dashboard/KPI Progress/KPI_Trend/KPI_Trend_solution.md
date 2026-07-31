@@ -107,7 +107,7 @@ New Customer% Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0%;#,##0%;0%")
+            FORMAT(__Value, "#,##0%;-#,##0%;0%")
         )
 ```
 
@@ -144,7 +144,7 @@ Media Contribution to New Customer Acquisition% Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0%;#,##0%;0%")
+            FORMAT(__Value, "#,##0%;-#,##0%;0%")
         )
 ```
 
@@ -277,7 +277,7 @@ Acceleration SLS MOB% Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0%;#,##0%;0%")
+            FORMAT(__Value, "#,##0%;-#,##0%;0%")
         )
 ```
 
@@ -342,7 +342,7 @@ Acceleration Cost MOB% Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0%;#,##0%;0%")
+            FORMAT(__Value, "#,##0%;-#,##0%;0%")
         )
 ```
 

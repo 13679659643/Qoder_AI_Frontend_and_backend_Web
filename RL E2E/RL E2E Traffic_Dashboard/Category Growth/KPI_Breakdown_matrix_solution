@@ -392,7 +392,7 @@ KPI Breakdown Cell Display =
 //   decimal_pt_1 → pt 点数1位小数 → Cost% vs SLS%
 //                  格式："#,##0.0pt;-#,##0.0pt;0.0pt"（不含正号）
 //   percent_1dp  → 百分比1位小数 → SLS% / Cost MOB% 系列
-//                  格式：#,##0.0%;#,##0.0%;0.0%
+//                  格式：#,##0.0%;-#,##0.0%;0.0%
 //   decimal_1dp  → 数值1位小数 → ROI / New Customer Cost% 系列
 //                  格式：#,##0.0
 // 依赖: [KPI Breakdown Cell Value], Dim_ColMetric_KpiBreakdown[MetricFormat]
@@ -410,7 +410,7 @@ KPI Breakdown Cell Display =
                     // ─── pt 点数（Cost% vs SLS%）──
                     "decimal_pt_1", FORMAT(__Value, "#,##0.0pt;-#,##0.0pt;0.0pt"),
                     // ─── 百分比（SLS% / Cost MOB%）──
-                    "percent_1dp",  FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%"),
+                    "percent_1dp",  FORMAT(__Value, "#,##0.0%;-#,##0.0%;0.0%"),
                     // ─── 数值（ROI / New Customer Cost%）──
                     "decimal_1dp",  FORMAT(__Value, "#,##0.0"),
                     // ─── 默认 ───

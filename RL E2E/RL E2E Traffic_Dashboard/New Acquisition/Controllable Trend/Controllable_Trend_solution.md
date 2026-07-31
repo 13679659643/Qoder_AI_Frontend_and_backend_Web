@@ -94,7 +94,7 @@ Controllable% Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0%;#,##0%;0%")
+            FORMAT(__Value, "#,##0%;-#,##0%;0%")
         )
 ```
 
@@ -165,7 +165,7 @@ Uncontrollable% Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0%;#,##0%;0%")
+            FORMAT(__Value, "#,##0%;-#,##0%;0%")
         )
 ```
 
@@ -427,7 +427,7 @@ Cost amt Un controllable% Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0%;#,##0%;0%")
+            FORMAT(__Value, "#,##0%;-#,##0%;0%")
         )
 ```
 

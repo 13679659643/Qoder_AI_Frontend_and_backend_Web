@@ -36,7 +36,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -66,7 +66,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -79,7 +79,7 @@
 | **计算公式** | Cost ACH% − SLS ACH% |
 | **数据底表** | (3. Cost ACH% — 花费进度达成) 减 (5. SLS ACH% — 目标达成率) |
 | **筛选条件** | 派生：Cost ACH% − SLS ACH%，无独立底表取数，根据 Cost ACH% 行和 SLS ACH% 行生成 |
-| **数据类型** | delta_bp      → 增减基点整数： → +120bp / -80bp（基点，含正负号，值×100 转 bp）,乘以100的操作可以放在Cell Display度量中实现 |        
+| **数据类型** | delta_bp      → 增减基点整数： → +120bp / -80bp（基点，含正负号，值×10000 转 bp）,乘以100的操作可以放在Cell Display度量中实现 |        
 | **数据格式** | `+#,##0bp;-#,##0bp;0bp` |
 
 ---
@@ -95,7 +95,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -127,7 +127,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -139,7 +139,7 @@
 | **计算公式** |  当期值 - 去年同期值 |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"` |
-| **数据类型** | delta_bp      → 增减基点整数： → +120bp / -80bp（基点，含正负号，值×100 转 bp）,乘以100的操作可以放在Cell Display度量中实现 |        
+| **数据类型** | delta_bp      → 增减基点整数： → +120bp / -80bp（基点，含正负号，值×10000 转 bp）,乘以100的操作可以放在Cell Display度量中实现 |        
 | **数据格式** | `+#,##0bp;-#,##0bp;0bp` |
 
 ---
@@ -157,7 +157,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -186,7 +186,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -202,7 +202,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -218,7 +218,7 @@
 | **Store SLS MOB%计算** | `net_sales_amt（framework='Acceleration'）/ net_sales_amt（全部 framework）` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -230,7 +230,7 @@
 | **计算公式** | 当期值 - 去年同期值 |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
-| **数据类型** | delta_bp      → 增减基点整数： → +120bp / -80bp（基点，含正负号，值×100 转 bp）,乘以100的操作可以放在Cell Display度量中实现 |        
+| **数据类型** | delta_bp      → 增减基点整数： → +120bp / -80bp（基点，含正负号，值×10000 转 bp）,乘以100的操作可以放在Cell Display度量中实现 |        
 | **数据格式** | `+#,##0bp;-#,##0bp;0bp` |
 
 ---
@@ -248,7 +248,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -280,7 +280,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -297,7 +297,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -325,7 +325,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND framework='Acceleration' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -341,7 +341,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND framework='Acceleration' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -357,7 +357,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | 分子：`customer_type='ALL' AND framework='Acceleration' AND page_type="1"`；分母：`customer_type='ALL' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -369,7 +369,7 @@
 | **计算公式** | 当期值占比 - 去年同期占比 |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | 分子：`customer_type='ALL' AND framework='Acceleration' AND page_type="1"`；分母：`customer_type='ALL' AND page_type="1"` |
-| **数据类型** | delta_bp      → 增减基点整数： → +120bp / -80bp（基点，含正负号，值×100 转 bp）,乘以100的操作可以放在Cell Display度量中实现 |        
+| **数据类型** | delta_bp      → 增减基点整数： → +120bp / -80bp（基点，含正负号，值×10000 转 bp）,乘以100的操作可以放在Cell Display度量中实现 |        
 | **数据格式** | `+#,##0bp;-#,##0bp;0bp` |
 
 ---
@@ -386,7 +386,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
 ---
 
@@ -502,7 +502,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"`，按 platform 分组 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 | **相关字段格式** | 去年同期值(Media Cost Rate vs LP)：percent_1dp、同比(YOY%)：percent_1dp |
 
 ---
@@ -535,7 +535,7 @@
 | **Store SLS MOB%计算** | `net_sales_amt（framework='Acceleration'）/ net_sales_amt（全部 framework）` |
 | **筛选条件** | `customer_type='ALL' AND page_type="1"`，按 platform 分组 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 | **相关字段格式** | 去年同期值(± Acceleration cost MOB% vs. store SLS MOB% vs LP)：percent_1dp、(YOY%  )：percent_1dp |
 
 ---
@@ -551,7 +551,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
 | **筛选条件** | `customer_type='NEW' AND page_type="1"`，按 platform 分组 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%` |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 | **相关字段格式** | 去年同期值(Media Contribution to New Customer Acquisition% vs LP)：percent_1dp、(YOY%   )：percent_1dp |
 
 ---

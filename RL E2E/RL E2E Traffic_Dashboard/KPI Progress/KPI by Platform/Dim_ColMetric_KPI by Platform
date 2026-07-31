@@ -14,7 +14,7 @@ Dim_ColMetric_KPI by Platform =
 //   decimal_2             → 1,000.00
 //   percent_1dp           → 1,000.0%
 //   delta_pct_1dp         → +14.5%（含正负号）
-//   delta_bp_1dp          → +120.5bp / -80.0bp（基点，含正负号，值×100 转 bp）
+//   delta_bp_1dp          → +120.5bp / -80.0bp（基点，含正负号，值×10000 转 bp）
 //
 // 颜色说明：
 //   仅 YOY 行启用条件颜色（正/负/零）

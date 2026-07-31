@@ -50,7 +50,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d`                                                                                      |
 | **筛选条件** | `customer_type='ALL' AND page_type=2` AND `Total`='Total'，按Brand-Category-Framework排列组合 六种动态行维度 分组 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号                                                                         |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%`                                                                                            |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%`                                                                                            |
 
 ---
 
@@ -66,7 +66,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d`                                                                            |
 | **筛选条件** | `customer_type='ALL' AND page_type=2` AND channel in ('直通车','引力魔方','全站推') AND `Total`='Total' |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号                                                               |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%`                                                                                  |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%`                                                                                  |
 
 ---
 
@@ -82,7 +82,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d`                                                        |
 | **筛选条件** | `customer_type='ALL' AND page_type=2` AND channel in ('直通车') AND `Total`='Total' |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号                                           |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%`                                                              |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%`                                                              |
 
 ---
 
@@ -98,7 +98,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d`                                                          |
 | **筛选条件** | `customer_type='ALL' AND page_type=2` AND channel in ('引力魔方') AND `Total`='Total' |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号                                             |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%`                                                                |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%`                                                                |
 
 ---
 
@@ -114,7 +114,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d`                                                        |
 | **筛选条件** | `customer_type='ALL' AND page_type=2` AND channel in ('全站推') AND `Total`='Total' |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号                                           |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%`                                                              |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%`                                                              |
 
 ---
 
@@ -315,7 +315,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d`                                                                                      |
 | **筛选条件** | `customer_type='ALL' AND page_type=2` AND `Total`='Total'，按Brand-Category-Framework排列组合 六种动态行维度 分组 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号                                                                         |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%`                                                                                            |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%`                                                                                            |
 
 ---
 
@@ -331,7 +331,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d`                                                                    |
 | **筛选条件** | `customer_type='ALL' AND page_type=2` AND channel in ('快车','触点','海投') AND `Total`='Total' |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号                                                       |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%`                                                                          |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%`                                                                          |
 
 ---
 
@@ -347,7 +347,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d`                                                      |
 | **筛选条件** | `customer_type='ALL' AND page_type=2` AND channel in ('快车') AND `Total`='Total' |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号                                         |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%`                                                            |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%`                                                            |
 
 ---
 
@@ -363,7 +363,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d`                                                      |
 | **筛选条件** | `customer_type='ALL' AND page_type=2` AND channel in ('触点') AND `Total`='Total' |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号                                         |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%`                                                            |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%`                                                            |
 
 ---
 
@@ -379,7 +379,7 @@
 | **数据底表** | `a05_e2e_paid_media_summary_d`                                                      |
 | **筛选条件** | `customer_type='ALL' AND page_type=2` AND channel in ('海投') AND `Total`='Total' |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号                                         |
-| **数据格式** | `#,##0.0%;#,##0.0%;0.0%`                                                            |
+| **数据格式** | `#,##0.0%;-#,##0.0%;0.0%`                                                            |
 
 ---
 

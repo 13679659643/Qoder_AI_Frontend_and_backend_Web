@@ -133,7 +133,7 @@ Dim_RowKPIs_BossCoreKPI_Overview（断开维度，行头）      Dim_ColKPIs_Bos
 | ----------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------- |
 | Slicer_Time_Frame_Min                           | 断开维度，SELECTEDVALUE 读取 TimeFrame_Min                          | `data_date >= __TimeMin`          |
 | Slicer_Time_Frame_Max                           | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max                          | `data_date <= __TimeMax`          |
-| Dim_ColKPIs_BossCoreKPI_Overview[StoreGroup_ID] | 断开维度，SELECTEDVALUE 读取 StoreGroup_ID                          | `store_name = __StoreName`        |
+| Dim_ColKPIs_BossCoreKPI_Overview[StoreGroup_ID] | 断开维度，SELECTEDVALUE 读取 StoreGroup_ID，空时返回所有店铺汇总    | `__StoreFilterTable`（自适应单店铺/多店铺） |
 | Dim_RowKPIs_BossCoreKPI_Overview[KPI_CalcType]  | 断开维度，SELECTEDVALUE 读取 KPI_CalcType                           | `calc_type = __CalcType`          |
 | Slicer_Fulfillment_Calc_Type                    | 1:N 关系，模型自动筛选 fulfillment_calc_type                        | 无需显式处理                        |
 | Slicer_Currency_Selection                       | 断开维度，SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol | 金额类指标 ÷ Currency_ExchangeRate |
@@ -155,7 +155,7 @@ vs LY 时间段：EDATE(__TimeMin, -12) ~ EDATE(__TimeMax, -12)
 | -------------- | --------------------------------- | ------------------ | -------- |
 | 金额类（5 个） | 今年 / 去年 − 1                  | percent_1dp        | 14.5%    |
 | 数量类（4 个） | 今年 / 去年 − 1                  | percent_1dp        | 8.3%     |
-| 比率类（3 个） | 今年 − 去年（差值，×100 转 bp） | delta_bp           | +120bp   |
+| 比率类（3 个） | 今年 − 去年（差值，×10000 转 bp） | delta_bp           | +120bp   |
 
 金额类 KPI：SLS / Demand SLS / Return / Request Order Amt / Shipped Order Amt
 数量类 KPI：Request Order Qty / Request Units / Shipped Order Qty / Shipped Units
@@ -187,7 +187,7 @@ BOSS Core KPI Act Base Value =
     VAR __RowKPIID = SELECTEDVALUE('Dim_RowKPIs_BossCoreKPI_Overview'[RowKPI_ID])
     VAR __CalcType = SELECTEDVALUE('Dim_RowKPIs_BossCoreKPI_Overview'[KPI_CalcType])
     VAR __IsCurrencyAmount = SELECTEDVALUE('Dim_RowKPIs_BossCoreKPI_Overview'[Metric_IsCurrencyAmount], FALSE)
-    VAR __StoreName = SELECTEDVALUE('Dim_ColKPIs_BossCoreKPI_Overview'[StoreGroup_ID])
+ 	VAR __StoreNames = VALUES('Dim_ColKPIs_BossCoreKPI_Overview'[StoreGroup_ID])
     // ── 时间筛选：本期 ──
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
@@ -202,7 +202,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_net_sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -211,7 +211,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -221,7 +221,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -229,7 +229,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -239,7 +239,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_return_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -248,7 +248,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_return_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -256,7 +256,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -270,7 +270,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -278,7 +278,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_order_cnt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -288,7 +288,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_order_cnt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -297,7 +297,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_qty]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -306,7 +306,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -315,7 +315,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -324,7 +324,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_qty]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -333,7 +333,7 @@ BOSS Core KPI Act Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -382,7 +382,7 @@ BOSS Core KPI LY Base Value =
     VAR __RowKPIID = SELECTEDVALUE('Dim_RowKPIs_BossCoreKPI_Overview'[RowKPI_ID])
     VAR __CalcType = SELECTEDVALUE('Dim_RowKPIs_BossCoreKPI_Overview'[KPI_CalcType])
     VAR __IsCurrencyAmount = SELECTEDVALUE('Dim_RowKPIs_BossCoreKPI_Overview'[Metric_IsCurrencyAmount], FALSE)
-    VAR __StoreName = SELECTEDVALUE('Dim_ColKPIs_BossCoreKPI_Overview'[StoreGroup_ID])
+	VAR __StoreNames = VALUES('Dim_ColKPIs_BossCoreKPI_Overview'[StoreGroup_ID])
     // ── 时间筛选：去年同期，往前推一年 ──
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
@@ -398,7 +398,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_net_sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -406,7 +406,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -414,7 +414,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -422,7 +422,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -431,7 +431,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_return_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -439,7 +439,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_return_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -447,7 +447,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -460,7 +460,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -468,7 +468,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_order_cnt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -477,7 +477,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_order_cnt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -485,7 +485,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_qty]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -493,7 +493,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -501,7 +501,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -509,7 +509,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_qty]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -517,7 +517,7 @@ BOSS Core KPI LY Base Value =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_sales_amt]),
             'a02_e2e_boss_performance_summary_d'[calc_type] = __CalcType,
-            'a02_e2e_boss_performance_summary_d'[store_name] = __StoreName,
+            'a02_e2e_boss_performance_summary_d'[store_name] IN  __StoreNames,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -560,7 +560,7 @@ BOSS Core KPI vs LY Base Value =
 // 口径来源: Overview.md 子模块一 BOSS Core KPI 的 vs LY 值
 // 派生规则:
 //   - 金额类/数量类（Metric_Format_VsLY = percent_1dp）：今年 / 去年 − 1（增长率）
-//   - 比率类（Metric_Format_VsLY = delta_bp）：今年 − 去年（差值，展示时 ×100 转 bp）
+//   - 比率类（Metric_Format_VsLY = delta_bp）：今年 − 去年（差值，展示时 ×10000 转 bp）
 // 注: vs LY 同比值不受 Currency 切片器影响（同比为比率/差值，无金额单位）
 //     因此 Act / LY 中已应用的汇率换算在相除/相减时自动抵消
 // ========================================
@@ -573,7 +573,7 @@ BOSS Core KPI vs LY Base Value =
 
     // ── vs LY 派生计算 ──
     // percent_1dp（金额类/数量类）：今年 / 去年 − 1
-    // delta_bp（比率类）：今年 − 去年（差值，展示时 ×100 转 bp 在 Cell Display 中实现）
+    // delta_bp（比率类）：今年 − 去年（差值，展示时 ×10000 转 bp 在 Cell Display 中实现）
     VAR __VSLYGrowth =
         IF(
             ISBLANK(__LYValue) || __LYValue = 0,
@@ -627,9 +627,9 @@ BOSS Core KPI Cell Display =
 // 格式类型（严格遵循口径文档 Overview.md 子模块一数据类型定义）:
 //   currency       → 货币符号 + 千分位整数：¥1,000        格式串: #,##0
 //   integer        → 整数千分位：1,000                      格式串: #,##0
-//   percent_1dp    → 百分比一位小数，不含正号：14.5%         格式串: #,##0.0%;#,##0.0%;0.0%
+//   percent_1dp    → 百分比一位小数，不含正号：14.5%         格式串: #,##0.0%
 //   delta_bp       → 增减基点整数，含正负号：+120bp         格式串: +#,##0bp;-#,##0bp;0bp
-//                    （值×100 转 bp 的操作在此处实现）
+//                    （一个百分点是100bp，值×10000 转 bp 的操作在此处实现）
 // ========================================
     VAR __Value = [BOSS Core KPI Cell Value]
     VAR __ColType = SELECTEDVALUE('Dim_ColKPIs_BossCoreKPI_Overview'[ColType])
@@ -657,10 +657,10 @@ BOSS Core KPI Cell Display =
                     FORMAT(__Value, "#,##0"),                                                                 // 1,000
                 // ─── 百分比（不含正号）──────────────────────
                 "percent_1dp",
-                    FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%"),                                                // 14.5%
-                // ─── 增减基点（含正负号，值×100 转 bp）─────
+                    FORMAT(__Value, "#,##0.0%"),                                                // 14.5%
+                // ─── 增减基点（含正负号，值×10000 转 bp）─────__Value 是小数格式，需要乘以 10000 转换为基点 (如 0.012 -> 120bp)
                 "delta_bp",
-                    IF(ROUND(__Value * 100, 0) > 0, "+", "") & FORMAT(__Value * 100, "#,##0bp;-#,##0bp;0bp"), // +120bp
+                    IF(ROUND(__Value * 10000, 0) > 0, "+", "") & FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp"), // +120bp
                 // ─── 默认 ─────────────────────────────────
                 FORMAT(__Value, "#,##0.00")
             )
@@ -700,11 +700,16 @@ BOSS Core KPI Cell Font Color =
     VAR __ColorZero = SELECTEDVALUE('Dim_ColKPIs_BossCoreKPI_Overview'[Metric_ColorZero], "#E1C233")
     VAR __ColorDefault = SELECTEDVALUE('Dim_ColKPIs_BossCoreKPI_Overview'[Metric_ColorDefault], "#5F6165")
 
-    RETURN
+    RETURN 
         SWITCH(
             TRUE(),
             // ─── KPIGroup 行（总计行）：统一黑色 #252423 ───
-            NOT __IsKPIRow,                              "#252423",
+            NOT __IsKPIRow && __ColType <> "vs LY",          "#252423",
+            // ─── 卡片图：启用正/负/零三色 ───
+            NOT __IsKPIRow && __ColType = "vs LY" && ISBLANK(__Value),   __ColorDefault,
+            NOT __IsKPIRow && __ColType = "vs LY" && __Value > 0,        __ColorPositive,   // 正值：绿
+            NOT __IsKPIRow && __ColType = "vs LY" && __Value < 0,        __ColorNegative,   // 负值：红
+            NOT __IsKPIRow && __ColType = "vs LY" && __Value = 0,        __ColorZero,       // 零值：黄
             // ─── KPI 行 + 非 vs LY 列：深灰 #5F6165 ───
             __IsKPIRow && __ColType <> "vs LY",          "#5F6165",
             // ─── KPI 行 + vs LY 列：启用正/负/零三色 ───
@@ -815,26 +820,7 @@ BOSS Core KPI Cell SVG Icon =
 
 ---
 
-## 6. 指标口径来源对照
-
-| RowKPI_ID | KPIName           | KPIName_CN        | 口径文档出处  | 计算公式                                                                        | 统计字段                                                              | calc_type   | Format_Act/LY | Format_VsLY | IsCurrencyAmount |
-| --------- | ----------------- | ----------------- | ------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ----------- | ------------- | ----------- | ---------------- |
-| 10        | SLS               | O2O销售净额       | 子模块一 §1  | SUM(o2o_net_sales_amt)                                                          | o2o_net_sales_amt                                                     | payment     | currency      | percent_1dp | TRUE             |
-| 20        | Demand SLS        | O2O退前销售额     | 子模块一 §2  | SUM(o2o_sales_amt)                                                              | o2o_sales_amt                                                         | payment     | currency      | percent_1dp | TRUE             |
-| 30        | SLS Penetration   | O2O销售渗透率     | 子模块一 §3  | SUM(o2o_sales_amt) / SUM(sales_amt)                                             | o2o_sales_amt / sales_amt                                             | payment     | percent_1dp   | delta_bp    | FALSE            |
-| 40        | Return            | O2O退货金额       | 子模块一 §4  | SUM(o2o_return_amt)                                                             | o2o_return_amt                                                        | payment     | currency      | percent_1dp | TRUE             |
-| 50        | Return%           | O2O退货率（金额） | 子模块一 §5  | SUM(o2o_return_amt) / SUM(o2o_sales_amt)                                        | o2o_return_amt / o2o_sales_amt                                        | payment     | percent_1dp   | delta_bp    | FALSE            |
-| 110       | Fulfillment%      | O2O订单履约率     | 子模块一 §6  | SUM(o2o_fulfillment_shipped_order_cnt) / SUM(o2o_fulfillment_request_order_cnt) | o2o_fulfillment_shipped_order_cnt / o2o_fulfillment_request_order_cnt | fulfillment | percent_1dp   | delta_bp    | FALSE            |
-| 120       | Request Order Qty | O2O销售订单量     | 子模块一 §7  | SUM(o2o_fulfillment_request_order_cnt)                                          | o2o_fulfillment_request_order_cnt                                     | fulfillment | integer       | percent_1dp | FALSE            |
-| 130       | Request Units     | O2O商品销售件数   | 子模块一 §8  | SUM(o2o_fulfillment_request_qty)                                                | o2o_fulfillment_request_qty                                           | fulfillment | integer       | percent_1dp | FALSE            |
-| 140       | Request Order Amt | O2O销售金额       | 子模块一 §9  | SUM(o2o_fulfillment_request_sales_amt)                                          | o2o_fulfillment_request_sales_amt                                     | fulfillment | currency      | percent_1dp | TRUE             |
-| 150       | Shipped Order Qty | O2O已配货订单量   | 子模块一 §10 | SUM(o2o_fulfillment_shipped_order_cnt)                                          | o2o_fulfillment_shipped_order_cnt                                     | fulfillment | integer       | percent_1dp | FALSE            |
-| 160       | Shipped Units     | O2O已配货商品件数 | 子模块一 §11 | SUM(o2o_fulfillment_shipped_qty)                                                | o2o_fulfillment_shipped_qty                                           | fulfillment | integer       | percent_1dp | FALSE            |
-| 170       | Shipped Order Amt | O2O已配货销售金额 | 子模块一 §12 | SUM(o2o_fulfillment_shipped_sales_amt)                                          | o2o_fulfillment_shipped_sales_amt                                     | fulfillment | currency      | percent_1dp | TRUE             |
-
----
-
-## 7. 血缘关系图（Lineage Diagram）
+## 6. 血缘关系图（Lineage Diagram）
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -914,60 +900,20 @@ BOSS Core KPI Cell SVG Icon =
 
 ---
 
-## 8. 关键设计说明
+## 7. 关键设计说明
 
-### 8.1 vs LY 派生计算分类
-
-| RowKPI_ID | KPIName           | 派生方式               | Metric_Format_VsLY | 数据类型 |
-| --------- | ----------------- | ---------------------- | ------------------ | -------- |
-| 10        | SLS               | 当期/同期 − 1（%）    | percent_1dp        | 金额类   |
-| 20        | Demand SLS        | 当期/同期 − 1（%）    | percent_1dp        | 金额类   |
-| 30        | SLS Penetration   | 当期值 − 同期值（bp） | delta_bp           | 比率类   |
-| 40        | Return            | 当期/同期 − 1（%）    | percent_1dp        | 金额类   |
-| 50        | Return%           | 当期值 − 同期值（bp） | delta_bp           | 比率类   |
-| 110       | Fulfillment%      | 当期值 − 同期值（bp） | delta_bp           | 比率类   |
-| 120       | Request Order Qty | 当期/同期 − 1（%）    | percent_1dp        | 数量类   |
-| 130       | Request Units     | 当期/同期 − 1（%）    | percent_1dp        | 数量类   |
-| 140       | Request Order Amt | 当期/同期 − 1（%）    | percent_1dp        | 金额类   |
-| 150       | Shipped Order Qty | 当期/同期 − 1（%）    | percent_1dp        | 数量类   |
-| 160       | Shipped Units     | 当期/同期 − 1（%）    | percent_1dp        | 数量类   |
-| 170       | Shipped Order Amt | 当期/同期 − 1（%）    | percent_1dp        | 金额类   |
-
-### 8.2 层级判断与颜色配置矩阵
-
-| 行层级                                | ISINSCOPE(KPIName) | 含义   | Font Color                                                                 | Background Color  |
-| ------------------------------------- | ------------------ | ------ | -------------------------------------------------------------------------- | ----------------- |
-| KPIGroup 行（如 Sales / Fulfillment） | FALSE              | 总计行 | #252423（黑色）                                                            | #E6D9C7（中米色） |
-| KPI 行（如 SLS / Demand SLS）         | TRUE               | 其他行 | vs LY 列：正#1A9018/负#D64550/零#E1C233/默认#5F6165其他列：#5F6165（深灰） | #FFFFFF（白色）   |
-
-### 8.3 筛选器公用说明
+### 7.1 筛选器公用说明
 
 - **Slicer_Time_Frame_Min/Max**：断开维度，SELECTEDVALUE 读取时间范围，用于 `data_date` 筛选
 - **Slicer_Currency_Selection**：断开维度，仅金额类指标（`Metric_IsCurrencyAmount=TRUE`）÷ `Currency_ExchangeRate`，非金额类指标不受汇率影响
 - **Slicer_Fulfillment_Calc_Type**：1:N 关系，模型自动筛选 `fulfillment_calc_type`
-- **无 Slicer_Store_Name 筛选器**：store_name 筛选仅通过列维度 `Dim_ColKPIs_BossCoreKPI_Overview[StoreGroup_ID]` 实现
-
-### 8.4 货币转换与 vs LY 的关系
-
-- Act / LY 中金额类指标已应用汇率换算（÷ __FXRate）
-- vs LY 为同比值（比率或差值），汇率在相除/相减时自动抵消，因此 vs LY 不受 Currency 切片器影响
-- 这一设计与口径文档 §"派生指标" 中"vs LY（同比）、占比等附属指标为派生指标，依据基础指标计算生成"一致
-
-### 8.5 delta_bp 颜色统一规则
-
-所有 vs LY 为 delta_bp 类型的 KPI（SLS Penetration / Return% / Fulfillment%）统一采用：
-
-- 正值（>0）→ 绿色 #1A9018
-- 负值（<0）→ 红色 #D64550
-- 零值（=0）→ 黄色 #E1C233
-
-不区分"越好/越坏"方向，与 Dim_ColKPIs_BossCoreKPI_Overview 中颜色字段设计一致。
+- **无 Slicer_Store_Name 筛选器**：store_name 筛选通过列维度 `Dim_ColKPIs_BossCoreKPI_Overview[StoreGroup_ID]` 实现，采用 `__StoreFilterTable` 自适应机制（见 8.6）
 
 ---
 
-## 9. 验证方法
+## 8. 验证方法
 
-### 9.1 矩阵结构验证
+### 8.1 矩阵结构验证
 
 | 验证项 | 方法                                                                        |
 | ------ | --------------------------------------------------------------------------- |
@@ -976,7 +922,7 @@ BOSS Core KPI Cell SVG Icon =
 | 行排序 | KPIGroup 按 KPIGroup_Sort（Sales=10, Fulfillment=20），KPI 按 KPIName_Sort  |
 | 列排序 | StoreGroup 按 StoreGroup_Sort（10/20/30/40/50/60），ColName 按 ColName_Sort |
 
-### 9.2 数据验证 SQL
+### 8.2 数据验证 SQL
 
 ```sql
 -- SLS O2O销售净额（TM 店铺，本期）
@@ -1003,7 +949,7 @@ WHERE calc_type = 'payment'
   AND store_name = 'TM'
   AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
 
--- SLS Penetration vs LY = SLS_Penetration_Act - SLS_Penetration_LY（delta_bp，×100 转 bp）
+-- SLS Penetration vs LY = SLS_Penetration_Act - SLS_Penetration_LY（delta_bp，×10000 转 bp）
 
 -- Fulfillment% O2O订单履约率（TM 店铺，本期）
 SELECT
@@ -1013,24 +959,4 @@ WHERE calc_type = 'fulfillment'
   AND store_name = 'TM'
   AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
 ```
-
-### 9.3 颜色与图标验证
-
-| 验证项                   | 方法                                                                                            |
-| ------------------------ | ----------------------------------------------------------------------------------------------- |
-| KPIGroup 行字体颜色      | 确认 Sales / Fulfillment 分组标题行所有列字体均为#252423                                        |
-| KPIGroup 行背景色        | 确认 Sales / Fulfillment 分组标题行所有列背景均为#E6D9C7                                        |
-| KPI 行 Act/LY 列字体颜色 | 确认所有 KPI 行的 Act / LY 列字体均为#5F6165                                                    |
-| KPI 行 vs LY 列字体颜色  | 确认 vs LY > 0 为#1A9018，< 0 为 #D64550，= 0 为 #E1C233                                        |
-| SVG 图标                 | 确认仅 vs LY 列 + KPI 行显示圆形图标，其他位置空白                                              |
-| 金额类指标切换币种       | SLS / Demand SLS / Return / Request Order Amt / Shipped Order Amt 切换 RMB↔USD 数值变化（÷7） |
-| vs LY 不受币种影响       | 切换 RMB↔USD 时 vs LY 列数值保持不变                                                           |
-
-### 9.4 vs LY 验证
-
-验证 vs LY 值时，将 SQL 中的日期范围往前推一年（EDATE -12），对比 DAX 计算结果：
-
-- 金额类/数量类：`今年 / 去年 - 1`（percent_1dp 格式）
-- 比率类：`今年 - 去年`（差值，展示时 ×100 转 bp，格式 `+#,##0bp;-#,##0bp;0bp`）
-
 ---
