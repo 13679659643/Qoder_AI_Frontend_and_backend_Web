@@ -36,12 +36,141 @@
 6、输出的dax必须带有必要注释信息，指标名称的注释需要有指标名称和指标名称中文一起，例如："SLS O2O销售净额"、"SLS O2O销售净额（去年同期）"、"SLS O2O销售净额（与去年同期对比）"。
 7、一切口径以指标口径文档RL E2E\RL E2E BOSS Dashboard\口径文档\Overview.md中的子模块一：BOSS Core KPI部分为准，不懂就问。
 
-第二轮提示：
+第四轮提示：
+根据这个文件RL E2E\RL E2E BOSS Dashboard\Overview\BOSS Core KPI\Overview_KPIs_BossCoreKPI_matrix_solution.md。
+1、把其中的Demand SLS — O2O退前销售额的逻辑提取为独立度量值，只输出Value和Display度量，我用于饼图；
+2、新增TY Demand SLS、LY Demand SLS、TY SLS Penetration、LY SLS Penetration度量的Value和Display度量，我用于柱状图和趋势图；这里分别对应：Demand SLS — O2O退前销售额Act值、Demand SLS — O2O退前销售额去年同期值LY、SLS Penetration — O2O销售渗透率Act值、SLS Penetration — O2O销售渗透率去年同期值LY。
+3、基于需求2，Demand SLS的Display格式为：currency_M_K_Int_0db，参考以下我写的DAX：
+New Customer No. Display = 
+// ========================================
+// 度量值: New Customer No. Display
+// Display Folder: KPI Trend
+// 用途: 新客数量格式化显示（K/M 单位切换）
+// 依赖: [New Customer No. Value], Slicer_Currency_Selection
+// 格式类型: currency_M_K_Int_0db
+//   值 < 1,000        → 货币符号 + 千分位整数：¥999
+//   1,000 ≤ 值 < 1M   → 货币符号 + K 单位（1位小数）：¥1.5K
+//   值 ≥ 1,000,000    → 货币符号 + M 单位（1位小数）：¥1.5M
+// ========================================
+    VAR __Value = [New Customer No. Value]
+    VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",
+            IF(
+                __Value < 1000,
+                __CurrencySymbol & FORMAT(__Value, "#,##0"),
+                IF(
+                    __Value < 1000000,
+                    __CurrencySymbol & FORMAT(__Value / 1000, "#,##0.0") & "K",
+                    __CurrencySymbol & FORMAT(__Value / 1000000, "#,##0.0") & "M"
+                )
+            )
+        )
+4、基于需求2，SLS Penetration的Display格式为：percent_0dp，参考以下我写的DAX：
+Controllable% Display = 
+// ========================================
+// 度量值: Controllable% Display
+// Display Folder: Controllable Trend
+// 用途: 可控花费占比格式化显示
+// 依赖: [Controllable% Value]
+// 格式类型: percent_0dp → 百分比整数，不含正号
+// 格式串: #,##0%;#,##0%;0%
+// ========================================
+    VAR __Value = [Controllable% Value]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",
+            FORMAT(__Value, "#,##0%;-#,##0%;0%")
+        )
+5、基于需求2新增的四个度量，根据所选timeframe聚合，如果是Month，则聚合在月粒度，展示所选时间范围每月的聚合值；如果是Year，则聚合在年粒度，展示所选时间范围每年的聚合值。
+柱形图 + 趋势图，无需矩阵 SWITCH 路由分发，每个指标独立编写 Value / Display 度量，参考以下dax：
+Controllable% Value = 
+// ========================================
+// 度量值: Controllable% Value
+// Display Folder: Controllable Trend
+// 用途: 可控花费占比趋势值（矩阵柱形图/趋势图 Y 轴）
+// 口径来源: New Acquisition实际使用版本.md 子模块三 §2
+// 计算公式: 可控广告 Cost / TTL Cost
+//   分子: cost_amt（is_controllable_channel="1"）
+//   分母: cost_amt（is_controllable_channel IN {"0","1"}）
+// 筛选条件: customer_type='ALL' AND page_type="1"
+// 数据类型: percent_0dp → 百分比整数，不含正号
+// 矩阵场景: 同时应用全局月份筛选 + X轴当前月份筛选
+// ========================================
+    // 1. 获取起止切片器选择的全局范围
+    VAR __TimeMin = SELECTEDVALUE(Slicer_Month_Period_Min[TimeFrame_Min])
+    VAR __TimeMax = SELECTEDVALUE(Slicer_Month_Period_Max[TimeFrame_Max])
+    // 2. 获取柱形图 X 轴当前遍历的月份的自然日范围
+    VAR __CurrentMonthMin = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Min])
+    VAR __CurrentMonthMax = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Max])
+    // ── 分子：可控广告 Cost（is_controllable_channel="1"）──
+    VAR __ControllableCost =
+        CALCULATE(
+            SUM('a05_e2e_paid_media_summary_d'[cost_amt]),
+            'a05_e2e_paid_media_summary_d'[customer_type] = "ALL",
+            'a05_e2e_paid_media_summary_d'[is_controllable_channel] = "1",
+            'a05_e2e_paid_media_summary_d'[page_type] = "1",
+            // 3. 全局切片器筛选：限制事实表数据在选定的起止月份范围内
+            'a05_e2e_paid_media_summary_d'[data_date] >= __TimeMin,
+            'a05_e2e_paid_media_summary_d'[data_date] <= __TimeMax,
+            // 4. X轴上下文筛选：限制事实表数据仅属于当前X轴遍历的那个月
+            'a05_e2e_paid_media_summary_d'[data_date] >= __CurrentMonthMin,
+            'a05_e2e_paid_media_summary_d'[data_date] <= __CurrentMonthMax
+        )
+    // ── 分母：TTL Cost（is_controllable_channel IN {"0","1"}）──
+    VAR __TotalCost =
+        CALCULATE(
+            SUM('a05_e2e_paid_media_summary_d'[cost_amt]),
+            'a05_e2e_paid_media_summary_d'[customer_type] = "ALL",
+            'a05_e2e_paid_media_summary_d'[is_controllable_channel] IN {"0", "1"},
+            'a05_e2e_paid_media_summary_d'[page_type] = "1",
+            'a05_e2e_paid_media_summary_d'[data_date] >= __TimeMin,
+            'a05_e2e_paid_media_summary_d'[data_date] <= __TimeMax,
+            'a05_e2e_paid_media_summary_d'[data_date] >= __CurrentMonthMin,
+            'a05_e2e_paid_media_summary_d'[data_date] <= __CurrentMonthMax
+        )
+    RETURN
+        DIVIDE(__ControllableCost, __TotalCost)
+和参考dax不同的是，这里不仅只有月份的x轴维度，按所选 `timeframe` (财日/周/月/季/年) 分组，这里的全局日期筛选是Slicer_Time_Frame_Min、Slicer_Time_Frame_Max，趋势图和柱形图的x日期使用的是Slicer_Time_Frame维度表。
+6、判断当前柱形图X轴的日/周/月/季/年是否落在起止切片器选定的范围内参考以下dax：
+IsMonthVisible = 
+	/*
+	功能：判断当前柱形图X轴的月份是否落在起止切片器选定的范围内
+	返回：1（显示）或0（隐藏）
+	*/
+	// 步骤1：获取起始切片器选中的月份Key。
+	// 若未选择，默认取主表的最小Key，确保全部显示
+	VAR MinKey = IF(
+	    ISFILTERED(Slicer_Month_Period_Min[TimeFrame_Value]),
+	    MIN(Slicer_Month_Period_Min[TimeFrame_Key]),
+	    MIN(Slicer_Month_Period[TimeFrame_Key])
+	)
+	// 步骤2：获取结束切片器选中的月份Key。
+	// 若未选择，默认取主表的最大Key，确保全部显示
+	VAR MaxKey = IF(
+	    ISFILTERED(Slicer_Month_Period_Max[TimeFrame_Value]),
+	    MAX(Slicer_Month_Period_Max[TimeFrame_Key]),
+	    MAX(Slicer_Month_Period[TimeFrame_Key])
+	)
+	// 步骤3：获取当前筛选上下文（柱状图X轴遍历的当前行）的月份Key
+	VAR CurrentKey = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Key])
+	// 步骤4：判断当前月份Key是否在 [MinKey, MaxKey] 区间内
+	RETURN
+	    IF(
+	        CurrentKey >= MinKey && CurrentKey <= MaxKey,
+	        1,  // 在范围内：柱子显示
+	        0   // 不在范围内：柱子隐藏
+	    )
+7、不懂就问，输出在RL E2E\RL E2E BOSS Dashboard\Overview\Sales 分组目录下，包括五个度量值：Demand SLS、TY Demand SLS、LY Demand SLS、TY SLS Penetration、LY SLS Penetration 的Value和Display度量，参考dax只供参考，提供解决思路。
 
-第三轮提示：
+
+第五轮提示：
 
 不懂就问。
 
-第四轮提示:
+第六轮提示:
 
-第五轮提示：
+第七轮提示：

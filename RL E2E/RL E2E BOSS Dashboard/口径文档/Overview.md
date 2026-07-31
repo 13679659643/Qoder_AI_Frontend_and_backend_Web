@@ -645,8 +645,8 @@
 | **统计字段** | `o2o_sales_amt` / `sales_amt` |
 | **数据底表** | `a02_e2e_boss_performance_summary_d` |
 | **筛选条件** | `calc_type = fulfillment`，按 `timeframe` 分组 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%;-#,##0%;0%` |
 
 ### 2.1 SLS Penetration LY — O2O销售渗透率（趋势）（对比去年同期）
 
@@ -658,8 +658,8 @@
 | **计算公式** | 去年同期 sum(o2o_sales_amt) / sum(sales_amt) |
 | **数据底表** | `a02_e2e_boss_performance_summary_d` |
 | **筛选条件** | `calc_type = fulfillment`，按 `timeframe` 分组，取去年同期 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%;-#,##0%;0%` |
 
 ---
 
