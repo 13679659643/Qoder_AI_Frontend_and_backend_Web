@@ -168,8 +168,9 @@ IsMonthVisible =
 
 
 第五轮提示：
-
-不懂就问。
+1、通过Slicer_Time_Frame去筛选Slicer_Time_Frame_Min、Slicer_Time_Frame_Max，然后全局日期筛选是Slicer_Time_Frame_Min、Slicer_Time_Frame_Max，趋势图和柱形图的x日期使用的是Slicer_Time_Frame维度表的TimeFrame_Value字段。
+2、饼图按 store_name 分组，展示各店铺 Demand SLS 占总盘的比例。这里的店铺，我会使用事实表的store_name 字段，用到饼图的图例中，会天然的自带store_name 维度分组。
+3、目前天维度是自然日，周/月/季/年是按财年来的，也就是财年的2026年1月，不一定是20260101到20260131，对应的去年范围也不是20250101到20250131。我把周/月/季/年转化为天范围计算当期值，不会有问题，但是计算去年同期值时，需要根据财年的定义，取去年同期的自然日范围。我的理解对不对，也就是我现在的计算方法是有问题的，我感觉你的语义B是对的，财历映射，通过上一个财周/月/财季/财年去获取到当时的天维度，再做事实表的筛选。
 
 第六轮提示:
 

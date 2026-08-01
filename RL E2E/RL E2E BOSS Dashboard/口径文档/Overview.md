@@ -615,7 +615,7 @@
 | **计算公式** | sum(o2o_sales_amt) |
 | **统计字段** | `o2o_sales_amt` |
 | **数据底表** | `a02_e2e_boss_performance_summary_d` |
-| **筛选条件** | `calc_type = fulfillment`，按 `timeframe` 分组 |
+| **筛选条件** | `calc_type = payment`，按 `timeframe` 分组 |
 | **数据类型** | currency_M_K_Int_0db → 货币符号由币种切片器决定，千分位整数,需要在Cell Display度量中拼接币种符号，需要判断是否带K、M、或者就是千分位整数，如果值小于1000，就直接表示为千分位整数，如果值大于等于1000，就表示为带K、M的格式，1K为一千，1M为一百万，都采用千分位的格式 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
 
@@ -628,7 +628,7 @@
 | **业务定义** | 取去年同期O2O退前销售额趋势变化 |
 | **计算公式** | 去年同期 sum(o2o_sales_amt) |
 | **数据底表** | `a02_e2e_boss_performance_summary_d` |
-| **筛选条件** | `calc_type = fulfillment`，按 `timeframe` 分组，取去年同期 |
+| **筛选条件** | `calc_type = payment`，按 `timeframe` 分组，取去年同期 |
 | **数据类型** | currency_M_K_Int_0db → 货币符号由币种切片器决定，千分位整数,需要在Cell Display度量中拼接币种符号，需要判断是否带K、M、或者就是千分位整数，如果值小于1000，就直接表示为千分位整数，如果值大于等于1000，就表示为带K、M的格式，1K为一千，1M为一百万，都采用千分位的格式 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
 
@@ -644,7 +644,7 @@
 | **计算公式** | sum(o2o_sales_amt) / sum(sales_amt) |
 | **统计字段** | `o2o_sales_amt` / `sales_amt` |
 | **数据底表** | `a02_e2e_boss_performance_summary_d` |
-| **筛选条件** | `calc_type = fulfillment`，按 `timeframe` 分组 |
+| **筛选条件** | `calc_type = payment`，按 `timeframe` 分组 |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%;-#,##0%;0%` |
 
@@ -657,7 +657,7 @@
 | **业务定义** | 取去年同期O2O销售渗透率趋势变化 |
 | **计算公式** | 去年同期 sum(o2o_sales_amt) / sum(sales_amt) |
 | **数据底表** | `a02_e2e_boss_performance_summary_d` |
-| **筛选条件** | `calc_type = fulfillment`，按 `timeframe` 分组，取去年同期 |
+| **筛选条件** | `calc_type = payment`，按 `timeframe` 分组，取去年同期 |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%;-#,##0%;0%` |
 

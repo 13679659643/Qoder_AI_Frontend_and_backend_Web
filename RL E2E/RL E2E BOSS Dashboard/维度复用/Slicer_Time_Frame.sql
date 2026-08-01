@@ -41,7 +41,7 @@ SELECT
 	  AND natural_date <= (SELECT MAX(data_date) FROM `indep_rl_ads`.a02_e2e_boss_performance_summary_d)
 	GROUP BY financial_year, financial_month_num
 	UNION ALL
-	-- 季度维度数据抽取
+	-- 季度数据抽取
 	SELECT 
 	    'Quarter' AS TimeFrame_ID,                                                      -- 时间框架ID：季
 	    '季' AS TimeFrame_Label,                                                        -- 时间框架标签：季
