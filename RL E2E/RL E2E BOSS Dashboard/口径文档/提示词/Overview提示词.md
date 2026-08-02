@@ -1,4 +1,4 @@
-第一轮提示词：
+# 第一轮提示词：
 参考D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\Category Growth\Dim_ColMetric_KpiBreakdown，
 1、设计矩阵的行维度文件Dim_RowKPIs_BossCoreKPI_Overview，包含Sales和Fulfillment分组，Sales分组下包括：SLS、Demand SLS、SLS Penetration、Return、Return%；Fulfillment分组下包括：Fulfillment%、Request Order Qty、Request Units、Request Order Amt、Shipped Order Qty、Shipped Units、Shipped Order Amt；新增"Metric_IsCurrencyAmount", BOOLEAN, 仅金额类才会涉及到汇率转化，Currency筛选器改变时，vs LY同比值，不受影响，以及货币符号的拼接，根据Slicer_Currency_Selection表得到具体的Currency_ExchangeRate，除以得到的固定值，转化为美元，输出文件在RL E2E\RL E2E BOSS Dashboard\Overview\BOSS Core KPI目录下，命名为Dim_RowKPIs_BossCoreKPI_Overview。
 2、设计矩阵的列维度文件Dim_ColKPIs_BossCoreKPI_Overview，包含TM、JD、RLE_CN、DY_Family、DY_W、DY_MN六个店铺分组，对应事实表的store_name字段，每个店铺分组下，都包括，Act、LY、vs LY，对应指标的实际值、去年值、与去年同比值；MetricName 追加空格实现同名区分；说明: Power BI Sort by Column 要求同名字段只能绑定一个排序值，通过追加空格使各平台同名值在底层字符串不同，从而支持独立排序；不同分组之间间隔10，便于后续拓展字段无缝接入。输出文件在RL E2E\RL E2E BOSS Dashboard\Overview\BOSS Core KPI目录下，命名为Dim_ColKPIs_BossCoreKPI_Overview。
@@ -6,7 +6,7 @@
 
 
 
-第二轮提示词:
+# 第二轮提示词:
 1、去除Dim_ColKPIs_BossCoreKPI_Overview中StoreGroup字段的空格，这个不需要同名区分靠空格；
 2、Dim_RowKPIs_BossCoreKPI_Overview中移除一下三个冗余的字段：
     "Metric_Numerator",       STRING,    // 分子字段名（派生指标用）
@@ -18,7 +18,7 @@
     "Metric_Format_LY",       STRING,     // 去年同期 行格式（与本期格式一致）
     "Metric_Format_VsLY",     STRING,     // YOY、同比 行格式
 
-第三轮提示词：
+# 第三轮提示词：
 在RL E2E\RL E2E BOSS Dashboard\维度复用目录下，我已经完成了一些维度表的设计工作，都是可服用的如下，以及设计表的DAX语句、SQL语句：
 1、事实表，powerbi中命名为：a02_e2e_boss_performance_summary_d；
 2、日期筛选器，Slicer_Time_Frame_Min和Slicer_Time_Frame_Max，与事实表断开维度，Slicer_Time_Frame用于页面上的Timeframe(Day\Week\Month\Quarter\Year)筛选,通过关联Slicer_Time_Frame_Min和Slicer_Time_Frame_Max对应不同的TimeFrame_Value，需要把年月季周都转化为日，去筛选a02_e2e_boss_performance_summary_d表中的data_date字段。
@@ -36,7 +36,7 @@
 6、输出的dax必须带有必要注释信息，指标名称的注释需要有指标名称和指标名称中文一起，例如："SLS O2O销售净额"、"SLS O2O销售净额（去年同期）"、"SLS O2O销售净额（与去年同期对比）"。
 7、一切口径以指标口径文档RL E2E\RL E2E BOSS Dashboard\口径文档\Overview.md中的子模块一：BOSS Core KPI部分为准，不懂就问。
 
-第四轮提示：
+# 第四轮提示：
 根据这个文件RL E2E\RL E2E BOSS Dashboard\Overview\BOSS Core KPI\Overview_KPIs_BossCoreKPI_matrix_solution.md。
 1、把其中的Demand SLS — O2O退前销售额的逻辑提取为独立度量值，只输出Value和Display度量，我用于饼图；
 2、新增TY Demand SLS、LY Demand SLS、TY SLS Penetration、LY SLS Penetration度量的Value和Display度量，我用于柱状图和趋势图；这里分别对应：Demand SLS — O2O退前销售额Act值、Demand SLS — O2O退前销售额去年同期值LY、SLS Penetration — O2O销售渗透率Act值、SLS Penetration — O2O销售渗透率去年同期值LY。
@@ -167,11 +167,19 @@ IsMonthVisible =
 7、不懂就问，输出在RL E2E\RL E2E BOSS Dashboard\Overview\Sales 分组目录下，包括五个度量值：Demand SLS、TY Demand SLS、LY Demand SLS、TY SLS Penetration、LY SLS Penetration 的Value和Display度量，参考dax只供参考，提供解决思路。
 
 
-第五轮提示：
+# 第五轮提示：
 1、通过Slicer_Time_Frame去筛选Slicer_Time_Frame_Min、Slicer_Time_Frame_Max，然后全局日期筛选是Slicer_Time_Frame_Min、Slicer_Time_Frame_Max，趋势图和柱形图的x日期使用的是Slicer_Time_Frame维度表的TimeFrame_Value字段。
 2、饼图按 store_name 分组，展示各店铺 Demand SLS 占总盘的比例。这里的店铺，我会使用事实表的store_name 字段，用到饼图的图例中，会天然的自带store_name 维度分组。
 3、目前天维度是自然日，周/月/季/年是按财年来的，也就是财年的2026年1月，不一定是20260101到20260131，对应的去年范围也不是20250101到20250131。我把周/月/季/年转化为天范围计算当期值，不会有问题，但是计算去年同期值时，需要根据财年的定义，取去年同期的自然日范围。我的理解对不对，也就是我现在的计算方法是有问题的，我感觉你的语义B是对的，财历映射，通过上一个财周/月/财季/财年去获取到当时的天维度，再做事实表的筛选。
 
-第六轮提示:
+# 第六轮提示:
+1、口径文档：RL E2E\RL E2E BOSS Dashboard\口径文档\Overview.md
+2、Value和Display单独输出度量，不使用Switch路由，参考文件：RL E2E\RL E2E BOSS Dashboard\Overview\Sales\Overview_Sales_DemandSLS_SLSPenetration_solution.md
+3、计算口径文档中子模块五：Fulfillment% by Label的Fulfillment% — O2O订单履约率，单独输出Value和Display度量；这里我的度量会用于条形图，按 `brand` 分组，我会使用'a02_e2e_boss_performance_summary_d'[brand]字段用于图例分组，这样图表天然自带brand分组字段属性。
+4、计算口径文档中子模块六：Order Processing Efficiency by Label的两个指标，Avg. No. of Store Passed Before Order Got Accepted — O2O平均订单流转次数和Avg. Processing Time — O2O平均订单流转时长，单独输出Value和Display度量。这里我的度量会用于条形图，按 `brand` 分组，我会使用'a02_e2e_boss_fulfillment_request_data_d'[brand]字段用于图例分组，这样图表天然brand自带分组字段属性。
+5、计算口径文档中子模块七：Penalty by Platform的所有指标，单独输出Value和Display度量，按 `shop_info_id/shop_name` 分组，我会使用Slicer_Store_Name[Store_ID]一对多关联事实表a02_e2e_boss_performance_summary_d[store_name],这里我用堆积柱形图，横轴使用Slicer_Store_Name[Store_ID]，这样图表天然自带store_name分组字段属性。
+6、不涉及上期值，所以不需要计算去年同期值。只关注当期值，
+7、不懂就问，输出方案文件在RL E2E\RL E2E BOSS Dashboard\Overview\Fulfillment分组目录下，
+
 
 第七轮提示：
