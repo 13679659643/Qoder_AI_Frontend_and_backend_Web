@@ -1,0 +1,17 @@
+Tooltip_Display = 
+	// 获取当前 X 轴的值
+	VAR CurrentMonth = SELECTEDVALUE('Slicer_Time_Frame'[TimeFrame_Value])
+
+    // 获取四个度量值的当前值
+    VAR TY_Demand = [TY Demand SLS Display]
+    VAR LY_Demand = [LY Demand SLS Display]
+    VAR TY_Pen = [TY SLS Penetration Display]
+    VAR LY_Pen = [LY SLS Penetration Display]
+
+    // 使用 UNICHAR(10) 在 DAX 中代表回车换行符，强制文本在工具提示卡片中另起一行。
+	RETURN
+	CurrentMonth & ":" & UNICHAR(10) & 
+	"TY Demand SLS" & TY_Demand & UNICHAR(10) & 
+	"LY Demand SLS" & LY_Demand & UNICHAR(10) & 
+	"TY SLS Penetration" & TY_Pen & UNICHAR(10) &  
+	"LY SLS Penetration" & LY_Pen & UNICHAR(10)

@@ -228,7 +228,7 @@ Fulfillment% by label Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0.0%;-#,##0.0%;0.0%")
+            FORMAT(__Value, "#,##0%;-#,##0%;0%")
         )
 ```
 
@@ -413,7 +413,15 @@ Penalty Amt Display =
         IF(
             ISBLANK(__Value),
             "-",
-            __CurrencySymbol & FORMAT(__Value, "#,##0")
+            IF(
+                __Value < 1000,
+                __CurrencySymbol & FORMAT(__Value, "#,##0"),
+                IF(
+                    __Value < 1000000,
+                    __CurrencySymbol & FORMAT(__Value / 1000, "#,##0.0") & "K",
+                    __CurrencySymbol & FORMAT(__Value / 1000000, "#,##0.0") & "M"
+                )
+            )
         )
 ```
 
@@ -461,7 +469,15 @@ OOS Penalty Amt Display =
         IF(
             ISBLANK(__Value),
             "-",
-            __CurrencySymbol & FORMAT(__Value, "#,##0")
+            IF(
+                __Value < 1000,
+                __CurrencySymbol & FORMAT(__Value, "#,##0"),
+                IF(
+                    __Value < 1000000,
+                    __CurrencySymbol & FORMAT(__Value / 1000, "#,##0.0") & "K",
+                    __CurrencySymbol & FORMAT(__Value / 1000000, "#,##0.0") & "M"
+                )
+            )
         )
 ```
 
@@ -509,7 +525,15 @@ Delay Penalty Amt Display =
         IF(
             ISBLANK(__Value),
             "-",
-            __CurrencySymbol & FORMAT(__Value, "#,##0")
+            IF(
+                __Value < 1000,
+                __CurrencySymbol & FORMAT(__Value, "#,##0"),
+                IF(
+                    __Value < 1000000,
+                    __CurrencySymbol & FORMAT(__Value / 1000, "#,##0.0") & "K",
+                    __CurrencySymbol & FORMAT(__Value / 1000000, "#,##0.0") & "M"
+                )
+            )
         )
 ```
 
