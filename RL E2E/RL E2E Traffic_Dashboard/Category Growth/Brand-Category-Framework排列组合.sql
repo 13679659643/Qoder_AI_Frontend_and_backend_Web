@@ -99,6 +99,7 @@
 	    -- 公式为：Scenario_Sort * 1000000 + L1_Sort * 100000 + L2_Sort * 10000 + L3_Sort
 	    CAST(Scenario_Sort * 1000000 + L1_Sort * 100000 + L2_Sort * 10000 + L3_Sort AS INT) AS ID_Sort 
 	FROM Ranked_Data
+	WHERE `Level 1` IS NOT NULL AND `Level 2` IS NOT NULL AND `Level 3` IS NOT NULL
 	-- 按照指定的排序编号以及各维度字段进行排序输出
 	ORDER BY 
 	    Scenario_Sort, 

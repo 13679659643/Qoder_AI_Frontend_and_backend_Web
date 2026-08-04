@@ -457,7 +457,7 @@ Cost% 直通车 Value =
 // 数据底表: a05_e2e_paid_media_keyword_data_d
 // 筛选条件: channel='直通车'
 // 数据类型: percent_1dp → 百分比一位小数，不含正号
-// 说明: 分母用 REMOVEFILTERS 移除行维度（category/plan_name/keyword_name）
+// 说明: 分母用 REMOVEFILTERS 移除行维度（customer_type/category/plan_name/keyword_name）
 //       卡片图场景下无行维度，REMOVEFILTERS 不影响结果，但保证矩阵场景兼容
 // ========================================
     // ── 时间筛选：本期 ──
@@ -479,6 +479,7 @@ Cost% 直通车 Value =
             'a05_e2e_paid_media_keyword_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_keyword_data_d'[data_date] <= __TimeMax,
             REMOVEFILTERS(
+                'a05_e2e_paid_media_keyword_data_d'[customer_type],
                 'a05_e2e_paid_media_keyword_data_d'[category],
                 'a05_e2e_paid_media_keyword_data_d'[plan_name],
                 'a05_e2e_paid_media_keyword_data_d'[keyword_name]
@@ -743,7 +744,7 @@ ROI 直通车 Display =
 #8 和 #12 的分母是"该广告点位合计"，需要移除所有行维度：
 
 - **#8 引力魔方**：`REMOVEFILTERS(crowed_layer, crowed_type, crowed_name)`
-- **#12 直通车**：`REMOVEFILTERS(category, plan_name, keyword_name)`
+- **#12 直通车**：`REMOVEFILTERS(customer_type, category, plan_name, keyword_name)`
 
 卡片图场景下无行维度，REMOVEFILTERS 不影响结果；但保证将来用于矩阵/表格时也能正确计算占比。
 

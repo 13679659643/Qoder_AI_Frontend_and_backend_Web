@@ -79,8 +79,10 @@ KPI Breakdown Base Value =
     VAR __IsLevel1 = ISINSCOPE('Brand->Category->Framework'[Level 1])
     VAR __IsLevel2 = ISINSCOPE('Brand->Category->Framework'[Level 2])
     VAR __IsLevel3 = ISINSCOPE('Brand->Category->Framework'[Level 3])
+    // Total行：所有层级ISINSCOPE （Total 为 TRUE+ Level 1/2/3为 FALSE）
+    VAR __IsTotalRow = __IsTotal && NOT __IsLevel1 && NOT __IsLevel2 && NOT __IsLevel3
     // 总计行：所有层级（Total + Level 1/2/3）ISINSCOPE 都为 FALSE
-    VAR __IsTotalRow = NOT __IsTotal && NOT __IsLevel1 && NOT __IsLevel2 && NOT __IsLevel3
+    VAR __IsTotalTTL = NOT __IsTotal && NOT __IsLevel1 && NOT __IsLevel2 && NOT __IsLevel3
 
     // ── 列上下文 ──
     VAR __ColID      = SELECTEDVALUE(Dim_ColMetric_KpiBreakdown[ColMetric_ID])
@@ -158,7 +160,7 @@ KPI Breakdown Base Value =
 
     // ── 公共筛选参数（所有指标共用）──
     // page_type=2、Total='Total' 固定筛选（事实表 Total 字段整列值为 "Total"）
-    // data_date 由 Slicer_Time_Frame_Min/Max 断开维度传递（TimeFrame_Min/Max → data_date 字符串筛选）
+    // data_date 由 Slicer_Time_Frame 断开维度传递（TimeFrame_Min/Max → data_date 字符串筛选）
     // pbi表字段的文本类型需要切换为日期类型，才能与事实表日期字段匹配
     VAR __TimeMin = MIN(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = MAX(Slicer_Time_Frame_Max[TimeFrame_Max])
@@ -279,7 +281,7 @@ KPI Breakdown Base Value =
     VAR __CostMOB_Pct  = DIVIDE(__Cost_ALL, __Cost_ALL_TTL)
     VAR __NetSales_Pct = DIVIDE(__NetSales_ALL, __NetSales_ALL_TTL)
     VAR __CostVsSLS =
-        IF(__IsTotalRow,
+        IF(__IsTotalRow || __IsTotalTTL,
             0,                                              // Total 行 = 0pt
             (__CostMOB_Pct - __NetSales_Pct) * 100          // 明细行：差值 × 100
         )
@@ -287,18 +289,18 @@ KPI Breakdown Base Value =
     // ── SLS%（退后销售额占比）──
     // Total 行 = 100%；明细行 = 分组 sales / TTL sales
     VAR __SLS_Pct =
-        IF(__IsTotalRow, 1, DIVIDE(__NetSales_ALL, __NetSales_ALL_TTL))
+        IF(__IsTotalRow || __IsTotalTTL, 1, DIVIDE(__NetSales_ALL, __NetSales_ALL_TTL))
 
     // ── Cost MOB% Total（三渠道花费占比）──
     // Total 行 = 100%；明细行 = 分组三渠道 cost / TTL 三渠道 cost
     VAR __CostMOB_Total =
-        IF(__IsTotalRow, 1, DIVIDE(__Cost_ALL, __Cost_ALL_TTL))
+        IF(__IsTotalRow || __IsTotalTTL, 1, DIVIDE(__Cost_ALL, __Cost_ALL_TTL))
 
     // ── Cost MOB% 渠道（直通车/引力魔方/全站推 或 快车/触点/海投）──
     // Total 行：渠道 cost / 三渠道总 cost（分母为三渠道汇总）
     // 明细行：分组渠道 cost / 移除分组渠道 TTL cost（分母为当前渠道 TTL）
     VAR __CostMOB_Channel =
-        IF(__IsTotalRow,
+        IF(__IsTotalRow || __IsTotalTTL,
             DIVIDE(__Cost_ALL, __Cost_ALL_TTL),              // Total 行：渠道 cost / 三渠道总 cost
             DIVIDE(__Cost_ALL, __Cost_ALL_Channel_TTL)       // 明细行：分组渠道 cost / TTL 渠道 cost
         )
