@@ -133,7 +133,7 @@
 
 > **分组维度**: 按 `failure_remark` 分类 + `store_region` 或 `store_type` 分组
 
-### 1. Unfulfilled Order — O2O失败订单数
+### 1. Unfulfilled Order — O2O失败订单数，这个不同于其他指标在于，这里需要输出四个子指标项：Rejected Order by Store、Cancelled Order by Overdue、Cancelled Order by Customer、Cancelled Order by Other，四个的子指标项的计算口径是一致的，只是分类不同，即四个Value+四个Display度量。
 
 | 项目 | 内容 |
 |---|---|
@@ -144,25 +144,42 @@
 | **统计字段** | `order_code`（去重计数） |
 | **数据底表** | `t01_o2o_fulfillment_order_detail_d` |
 | **筛选条件** | Unfulfilled Order Scope 在 PBI 上实现；按 `failure_remark` + `store_region` 或 `store_type` 聚合 |
-| **聚合步骤** | Step 1: 所选时间范围 `data_date`，取订单号（`order_code`）+商品（`ext_code2`）粒度，按照 `etl_time` 取最新一条数据；Step 2: 按照 `failure_remark` + `region` 或 `store_type` 对数据进行聚合 |
+| **聚合步骤** | 根据所选时间范围 data_date ∈ [__TimeMin, __TimeMax]（全局时间范围）， 按照 `failure_remark`分类对order_code进行去重计数 ， `region` 或 `store_type` 分组维度我会拉取数据表中的字段到柱形图或者折线图上，无需在PBI中添加分组维度，天然自带分组属性 |
 | **failure_remark 分类逻辑** | - Rejected Order by Store：`failure_remark` in ('门店拒绝接单','门店接单后取消配货')<br>- Cancelled Order by Overdue：`failure_remark` in ('待接单超时','门店接单后超时未处理','接单超时')<br>- Cancelled Order by Customer：`failure_remark` in ('顾客取消订单','消费者取消')<br>- Cancelled Order by Other：`failure_remark` not in ('门店拒绝接单','门店接单后取消配货','待接单超时','门店接单后超时未处理','接单超时','顾客取消订单','消费者取消') |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 
-### 1.1 Unfulfilled Order Share — O2O失败订单数占比
+### 1.1 Unfulfilled Order Share — O2O失败订单数占比，这里也是需要输出四个子指标项：Rejected Order Share by Store、Cancelled Order Share by Overdue、Cancelled Order Share by Customer、Cancelled Order Share by Other，四个的子指标项的计算口径是一致的，只是分类不同，即四个Value+四个Display度量。
 
 | 项目 | 内容 |
 |---|---|
 | **指标名称** | Unfulfilled Order Share |
 | **指标名称中文** | O2O失败订单数占比 |
 | **业务定义** | 每个 reject reason 占所有拒单数量的比例 |
-| **计算公式** | 当前 reject reason 的 count(distinct order_code) / 所有 reject reason 的 count(distinct order_code) |
+| **计算公式** | 当前 reject reason 的 count(distinct order_code) / 所有 reject reason 的 count(distinct order_code)，这里使用四个指标相加作为分母，不使用REMOVEFILTERS函数 |
 | **分子** | `order_code`（当前 reject reason） |
 | **分母** | `order_code`（所有 reject reason） |
 | **数据底表** | `t01_o2o_fulfillment_order_detail_d` |
 | **筛选条件** | Unfulfilled Order Scope 在 PBI 上实现；按 `failure_remark` + `store_region` 或 `store_type` 聚合 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%` |
+
+---
+
+### 1.2 Unfulfilled Order Tooltip Display
+
+| 项目 | 内容 |
+|---|---|
+| **指标名称** | Unfulfilled Order Tooltip Display |
+| **指标名称中文** | Unfulfilled Order工具提示 |
+| **业务定义** | 工具提示 |
+| **计算公式** | 拼接当前分组维度字段，这里暂时使用order_type + "失败订单数" + "占比" |
+| **格式** | order_type：{order_type}
+Rejected by Store：{Rejected Order by Store} 占比：{Rejected Order Share by Store}
+Cancelled by Overdue：{Cancelled Order by Overdue} 占比：{Cancelled Order Share by Overdue}
+Cancelled by Customer：{Cancelled Order by Customer} 占比：{Cancelled Order Share by Customer}
+Cancelled by Other：{Cancelled Order by Other} 占比：{Cancelled Order Share by Other}
+这里记得换行，共五行 |
 
 ---
 
