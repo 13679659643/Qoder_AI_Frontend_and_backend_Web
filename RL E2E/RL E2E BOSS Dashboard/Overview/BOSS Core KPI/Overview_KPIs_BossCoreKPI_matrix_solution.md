@@ -118,7 +118,7 @@ Dim_RowKPIs_BossCoreKPI_Overview（断开维度，行头）      Dim_ColKPIs_Bos
 
 ```
 [BOSS Core KPI Act Base Value]    ← 本期基础值（按 RowKPI_ID 路由，应用时间/store_name/calc_type/汇率筛选）
-[BOSS Core KPI LY Base Value]     ← 去年同期基础值（财历映射：Day 用 EDATE -12，其他粒度用 Key 偏移查找）
+[BOSS Core KPI LY Base Value]     ← 去年同期基础值（财历映射：直接读日期表 TimeFrame_Min_LY/TimeFrame_Max_LY）
 [BOSS Core KPI vs LY Base Value]  ← vs LY 派生（按 Metric_Format_VsLY 分支：金额/数量类=今年/去年-1，比率类=今年-去年）
 [BOSS Core KPI Cell Value]        ← 对外值 = 按 ColType 选择 Act / LY / vs LY
 [BOSS Core KPI Cell Display]      ← 格式化显示文本（按 Metric_Format_Act/LY/VsLY 选择格式）
@@ -140,31 +140,27 @@ Dim_RowKPIs_BossCoreKPI_Overview（断开维度，行头）      Dim_ColKPIs_Bos
 
 ### 3.4 vs LY 时间偏移规则（财历映射）
 
-**背景**：周/月/季/年粒度按财年定义（财年2026 ≠ 公历2026），如财年2026 = 2025-03-30 ~ 2026-03-28。EDATE -12 基于公历自然日偏移，会因闰年星期错位导致 LY 范围与"去年同编号财周/月/季/年"差1天。因此 LY 必须采用**财历映射**：通过 TimeFrame_Key 偏移查找去年同期同编号时间段的自然日范围。
+**背景**：周/月/季/年粒度按财年定义（财年2026 ≠ 公历2026），如财年2026 = 2025-03-30 ~ 2026-03-28。EDATE -12 基于公历自然日偏移，会因闰年星期错位导致 LY 范围与"去年同编号财周/月/季/年"差1天。因此 LY 必须采用**财历映射**：取去年同期同编号时间段的自然日范围。
 
-**Key 偏移规则**（基于 Slicer_Time_Frame.sql 定义）：
+**当前实现**：日期表 `indep_rl_dim.dim_t00_bi_fiscal_calendar` 已内置 LY 字段，无需再做 Key 偏移查找或 EDATE -12 推导，DAX 直接读取即可。字段映射如下：
 
-| TimeFrame_ID | TimeFrame_Key 公式 | LY Key 计算 | 示例 |
-|--------------|-------------------|-------------|------|
-| Day | `date_key`（如 20251024） | 用 EDATE -12（自然日无财历概念） | 2025-10-24 → 2024-10-24 |
-| Week | `financial_year * 100 + financial_week_num` | `Key - 100` | 202614 → 202514 |
-| Month | `financial_year * 100 + financial_month_num` | `Key - 100` | 202610 → 202510 |
-| Quarter | `financial_year * 100 + financial_quarter_num` | `Key - 100` | 202603 → 202503 |
-| Year | `financial_year` | `Key - 1` | 2026 → 2025 |
+| 日期表字段（dim_t00_bi_fiscal_calendar） | 模型字段（Slicer_Time_Frame_Min/Max） | 含义 |
+|------------------------------------------|----------------------------------------|------|
+| timeframe_min                            | TimeFrame_Min                          | 当前时间段起始自然日 |
+| timeframe_max                            | TimeFrame_Max                          | 当前时间段结束自然日 |
+| ly_timeframe_value                       | TimeFrame_Value_LY                     | 去年同期时间段名称 |
+| ly_timeframe_key                         | TimeFrame_Key_LY                       | 去年同期时间段 Key |
+| ly_timeframe_min                         | TimeFrame_Min_LY                       | 去年同期起始自然日 |
+| ly_timeframe_max                         | TimeFrame_Max_LY                       | 去年同期结束自然日 |
 
 **查找流程**（卡片图场景：仅全局日期筛选，无 X 轴）：
 
 ```
-1. 从 Slicer_Time_Frame_Min[TimeFrame_ID] 读取当前粒度（Min/Max 同粒度）
-2. 全局 LY 起始日：
-   - 从 Min 切片器读 TimeFrame_Key，按规则计算 LY Key
-   - 在 Slicer_Time_Frame_Min 表查找 [TimeFrame_ID] + [LY Key] 匹配行
-   - 读取该行 TimeFrame_Min（LY 起始日）
-3. 全局 LY 结束日：
-   - 从 Max 切片器读 TimeFrame_Key（与 Min 的 Key 不同，独立计算），按规则计算 LY Key
-   - 在 Slicer_Time_Frame_Max 表查找 [TimeFrame_ID] + [LY Key] 匹配行
-   - 读取该行 TimeFrame_Max（LY 结束日）
-4. 用 LY 自然日范围 [__LYTimeMin, __LYTimeMax] 筛选事实表 data_date
+1. 全局 LY 起始日: 直接从 Min 切片器当前行读取 TimeFrame_Min_LY
+   __LYTimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min_LY])
+2. 全局 LY 结束日: 直接从 Max 切片器当前行读取 TimeFrame_Max_LY
+   __LYTimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LY])
+3. 用 LY 自然日范围 [__LYTimeMin, __LYTimeMax] 筛选事实表 data_date
 ```
 
 **示例**（Min = 2026 Week14, Max = 2026 Week19）：
@@ -174,20 +170,16 @@ Dim_RowKPIs_BossCoreKPI_Overview（断开维度，行头）      Dim_ColKPIs_Bos
   __TimeMin = Min 切片器 TimeFrame_Min = 2025-06-29
   __TimeMax = Max 切片器 TimeFrame_Max = 2025-08-09
 
-LY 财历映射:
-  Min LY Key = 202614 - 100 = 202514
-    → 查 Slicer_Time_Frame_Min 表 Week + Key=202514 → TimeFrame_Min=2024-06-30（假设）
-  Max LY Key = 202619 - 100 = 202519
-    → 查 Slicer_Time_Frame_Max 表 Week + Key=202519 → TimeFrame_Max=2024-08-04（假设）
-  __LYTimeMin = 2024-06-30
-  __LYTimeMax = 2024-08-04
+LY 财历映射（直接读取日期表内置字段）:
+  __LYTimeMin = Slicer_Time_Frame_Min[TimeFrame_Min_LY] = 2024-06-30（日期表 ly_timeframe_min）
+  __LYTimeMax = Slicer_Time_Frame_Max[TimeFrame_Max_LY] = 2024-08-04（日期表 ly_timeframe_max）
 ```
 
 **关键差异**：
 - EDATE -12（错误）：2024-06-29 ~ 2024-08-09（公历偏移，可能跨财周）
-- 财历映射（正确）：2024-06-30 ~ 2024-08-04（去年同编号财周的完整定义范围）
+- 财历映射（正确）：2024-06-30 ~ 2024-08-04（去年同编号财周的完整定义范围，由日期表内置）
 
-**数据要求**：Slicer_Time_Frame(_Min/_Max) 表需包含至少2年历史数据（当前年 + 去年同期）。若数据历史不足1年，LY 查找返回 BLANK，卡片显示"-"，属可接受行为。
+**数据要求**：日期表 `indep_rl_dim.dim_t00_bi_fiscal_calendar` 需包含至少2年历史数据（当前年 + 去年同期），且 ly_timeframe_min / ly_timeframe_max 字段已预计算。若数据历史不足1年，LY 字段返回 BLANK，卡片显示"-"，属可接受行为。
 
 ### 3.5 vs LY 派生计算分类
 
@@ -406,77 +398,34 @@ BOSS Core KPI Act Base Value =
 ### 4.2 BOSS Core KPI LY Base Value（去年同期基础值，财历映射）
 
 ```dax
-BOSS Core KPI LY Base Value = 
+BOSS Core KPI LY Base Value =
 // ========================================
 // 度量值: BOSS Core KPI LY Base Value
 // Display Folder: Base Metrics
 // 用途: 根据 RowKPI_ID 路由到去年同期（LY）基础值
 // 依赖: 'Dim_RowKPIs_BossCoreKPI_Overview'[RowKPI_ID],
 //       'Dim_ColKPIs_BossCoreKPI_Overview'[StoreGroup_ID],
-//       Slicer_Time_Frame_Min/Max[TimeFrame_ID, TimeFrame_Key, TimeFrame_Min, TimeFrame_Max],
+//       Slicer_Time_Frame_Min/Max[TimeFrame_Min_LY, TimeFrame_Max_LY],
 //       a02_e2e_boss_performance_summary_d
 // 口径来源: Overview.md 子模块一 BOSS Core KPI 的 LY 值
-// 时间偏移: 财历映射（Day 粒度用 EDATE -12，Week/Month/Quarter/Year 用 Key 偏移查找）
-//   - 全局 LY 起始日: 从 Slicer_Time_Frame_Min 查 LY 同编号时间段的 TimeFrame_Min
-//   - 全局 LY 结束日: 从 Slicer_Time_Frame_Max 查 LY 同编号时间段的 TimeFrame_Max
-//   - Min/Max 各自独立算 LY Key（Key 不同，LY Key 也不同）
+// 时间偏移: 财历映射（直接读取日期表内置的 LY 字段）
+//   - 日期表 indep_rl_dim.dim_t00_bi_fiscal_calendar 已内置 LY 字段:
+//     ly_timeframe_min / ly_timeframe_max（去年同期自然日范围）
+//   - 全局 LY 起始日: 直接 SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min_LY])
+//   - 全局 LY 结束日: 直接 SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LY])
+//   - 无需再做 TimeFrame_Key 偏移计算或 EDATE -12 推导
 // 金额类指标 ÷ __FXRate（汇率换算），与 Act 保持一致
 // 卡片图场景: 仅全局日期筛选，无 X 轴
-// 前提: Slicer_Time_Frame(_Min/_Max) 表需包含去年同期数据，否则返回 BLANK
+// 前提: 日期表需包含去年同期数据，否则返回 BLANK
 // ========================================
     VAR __RowKPIID = SELECTEDVALUE('Dim_RowKPIs_BossCoreKPI_Overview'[RowKPI_ID])
     VAR __CalcType = SELECTEDVALUE('Dim_RowKPIs_BossCoreKPI_Overview'[KPI_CalcType])
     VAR __IsCurrencyAmount = SELECTEDVALUE('Dim_RowKPIs_BossCoreKPI_Overview'[Metric_IsCurrencyAmount], FALSE)
     VAR __StoreNames = VALUES('Dim_ColKPIs_BossCoreKPI_Overview'[StoreGroup_ID])
-    // ── 1. 读取全局粒度（Min/Max 同粒度，从 Min 切片器读取）──
-    VAR __GlobalTFID = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_ID])
-    // ── 2. 全局 LY 起始日（从 Min 切片器查找）──
-    VAR __GlobalMinKey = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Key])
-    VAR __GlobalMinValue = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
-    VAR __LY_GlobalMinKey =
-        SWITCH(
-            __GlobalTFID,
-            "Year",   __GlobalMinKey - 1,
-            "Week",   __GlobalMinKey - 100,
-            "Month",  __GlobalMinKey - 100,
-            "Quarter", __GlobalMinKey - 100,
-            BLANK()  // Day 走 EDATE 分支
-        )
-    VAR __LYTimeMin =
-        IF(
-            __GlobalTFID = "Day",
-            EDATE(__GlobalMinValue, -12),
-            CALCULATE(
-                MIN(Slicer_Time_Frame_Min[TimeFrame_Min]),  // 读 TimeFrame_Min 字段（起始日）
-                ALL(Slicer_Time_Frame_Min),
-                Slicer_Time_Frame_Min[TimeFrame_ID] = __GlobalTFID,
-                Slicer_Time_Frame_Min[TimeFrame_Key] = __LY_GlobalMinKey
-            )
-        )
-    // ── 3. 全局 LY 结束日（从 Max 切片器查找，独立算 LY Key）──
-    VAR __GlobalMaxKey = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Key])
-    VAR __GlobalMaxValue = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
-    VAR __LY_GlobalMaxKey =
-        SWITCH(
-            __GlobalTFID,  // Min/Max 同粒度
-            "Year",   __GlobalMaxKey - 1,
-            "Week",   __GlobalMaxKey - 100,
-            "Month",  __GlobalMaxKey - 100,
-            "Quarter", __GlobalMaxKey - 100,
-            BLANK()
-        )
-    VAR __LYTimeMax =
-        IF(
-            __GlobalTFID = "Day",
-            EDATE(__GlobalMaxValue, -12),
-            CALCULATE(
-                MAX(Slicer_Time_Frame_Max[TimeFrame_Max]),  // 读 TimeFrame_Max 字段（结束日）
-                ALL(Slicer_Time_Frame_Max),
-                Slicer_Time_Frame_Max[TimeFrame_ID] = __GlobalTFID,
-                Slicer_Time_Frame_Max[TimeFrame_Key] = __LY_GlobalMaxKey
-            )
-        )
-    // ── 4. 汇率 ──
+    // ── 1. 直接读取日期表内置的 LY 时间范围（无需 Key 偏移/EDATE 计算）──
+    VAR __LYTimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min_LY])
+    VAR __LYTimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LY])
+    // ── 2. 汇率 ──
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
     // ═══════════════════════════════════════
@@ -898,7 +847,7 @@ BOSS Core KPI Cell SVG Icon =
 | 序号 | 度量值名称                          | Display Folder | 用途                                                    |
 | ---- | ----------------------------------- | -------------- | ------------------------------------------------------- |
 | 1    | BOSS Core KPI Act Base Value        | Base Metrics   | 本期基础值（12 个 KPI，按 RowKPI_ID 路由）              |
-| 2    | BOSS Core KPI LY Base Value         | Base Metrics   | 去年同期基础值（财历映射：Day EDATE-12 / 其他 Key 偏移）|
+| 2    | BOSS Core KPI LY Base Value         | Base Metrics   | 去年同期基础值（直接读日期表 TimeFrame_Min_LY/TimeFrame_Max_LY）|
 | 3    | BOSS Core KPI vs LY Base Value      | Base Metrics   | vs LY 派生（金额/数量类=今年/去年-1，比率类=今年-去年） |
 | 4    | BOSS Core KPI Cell Value            | Cell Values    | 对外值 = 按 ColType 选择 Act / LY / vs LY               |
 | 5    | BOSS Core KPI Cell Display          | Formatting     | 格式化显示文本（按 ColType 选对应行格式）               |
@@ -997,6 +946,19 @@ BOSS Core KPI Cell SVG Icon =
 - **Slicer_Fulfillment_Calc_Type**：1:N 关系，模型自动筛选 `fulfillment_calc_type`
 - **无 Slicer_Store_Name 筛选器**：store_name 筛选通过列维度 `Dim_ColKPIs_BossCoreKPI_Overview[StoreGroup_ID]` 实现，采用 `__StoreFilterTable` 自适应机制（见 8.6）
 
+### 7.2 日期表内置 LY 字段说明
+
+- **日期表**：`indep_rl_dim.dim_t00_bi_fiscal_calendar` 已内置去年同期（LY）字段，LY 时间范围直接读取，无需在 DAX 中再做 TimeFrame_Key 偏移计算或 EDATE -12 推导
+- **关键字段映射**：
+  - `ly_timeframe_min` → `TimeFrame_Min_LY`（去年同期起始自然日）
+  - `ly_timeframe_max` → `TimeFrame_Max_LY`（去年同期结束自然日）
+  - `ly_timeframe_value` → `TimeFrame_Value_LY`（去年同期时间段名称）
+  - `ly_timeframe_key` → `TimeFrame_Key_LY`（去年同期时间段 Key）
+- **DAX 读取方式**：
+  - `__LYTimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min_LY])`
+  - `__LYTimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LY])`
+- **前提条件**：日期表需包含至少2年历史数据（当前年 + 去年同期），且 `ly_timeframe_min` / `ly_timeframe_max` 字段已预计算。若数据历史不足1年，LY 字段返回 BLANK，卡片显示"-"
+
 ---
 
 ## 8. 验证方法
@@ -1012,15 +974,17 @@ BOSS Core KPI Cell SVG Icon =
 
 ### 8.2 数据验证 SQL
 
-**LY 财历映射验证步骤**（以 Week 粒度为例）：
+**LY 财历映射验证步骤**（以 Week 粒度为例，LY 日期范围直接来自日期表 `indep_rl_dim.dim_t00_bi_fiscal_calendar` 的 `ly_timeframe_min` / `ly_timeframe_max` 字段）：
 
 ```sql
 -- 步骤1: 查 Slicer_Time_Frame_Min/Max 当前选择（假设 Min=2026 Week14, Max=2026 Week19）
--- 步骤2: 计算 LY Key: Min LY Key = 202614 - 100 = 202514, Max LY Key = 202619 - 100 = 202519
--- 步骤3: 查 LY 时间范围
---   SELECT TimeFrame_Min FROM slicer_time_frame WHERE TimeFrame_ID='Week' AND TimeFrame_Key=202514
---   SELECT TimeFrame_Max FROM slicer_time_frame WHERE TimeFrame_ID='Week' AND TimeFrame_Key=202519
+-- 步骤2: LY 日期范围直接读日期表对应行的 ly_timeframe_min / ly_timeframe_max 字段
+--   SELECT ly_timeframe_min, ly_timeframe_max
+--   FROM indep_rl_dim.dim_t00_bi_fiscal_calendar
+--   WHERE timeframe_id='Week' AND timeframe_value='2026 Week14'  -- Min 行
+--      OR timeframe_value='2026 Week19'                          -- Max 行
 --   假设结果: LY Min = '2024-06-30', LY Max = '2024-08-04'
+--   （无需再做 Key - 100 或 EDATE -12 推导，日期表已内置 LY 范围）
 
 -- SLS O2O销售净额（TM 店铺，本期）
 SELECT SUM(o2o_net_sales_amt) AS SLS_Act
@@ -1030,14 +994,14 @@ WHERE calc_type = 'payment'
   AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
   -- 例如 __TimeMin='2025-06-29', __TimeMax='2025-08-09'
 
--- SLS O2O销售净额（TM 店铺，去年同编号财周）
+-- SLS O2O销售净额（TM 店铺，去年同编号财周，LY 范围来自日期表 ly_timeframe_min/ly_timeframe_max）
 SELECT SUM(o2o_net_sales_amt) AS SLS_LY
 FROM a02_e2e_boss_performance_summary_d
 WHERE calc_type = 'payment'
   AND store_name = 'TM'
   AND data_date BETWEEN '2024-06-30' AND '2024-08-04';
   -- 注意: 不是 DATE_SUB('__TimeMin', INTERVAL 12 MONTH) = '2024-06-29'
-  -- 财历映射取去年同编号财周的完整定义范围，可能与 EDATE -12 差1天
+  -- LY 日期范围直接读自日期表 ly_timeframe_min / ly_timeframe_max（去年同编号财周的完整定义范围）
 
 -- SLS vs LY = SLS_Act / SLS_LY - 1（percent_1dp）
 
@@ -1060,13 +1024,13 @@ WHERE calc_type = 'fulfillment'
   AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
 ```
 
-**LY Key 偏移规则速查**：
+**LY 日期范围获取方式说明**：
 
-| TimeFrame_ID | LY Key 计算 | 示例 |
-|--------------|-------------|------|
-| Day | EDATE -12（不走 Key 偏移） | 2025-06-29 → 2024-06-29 |
-| Week | Key - 100 | 202614 → 202514 |
-| Month | Key - 100 | 202610 → 202510 |
-| Quarter | Key - 100 | 202603 → 202503 |
-| Year | Key - 1 | 2026 → 2025 |
+| TimeFrame_ID | LY 范围获取方式 | 说明 |
+|--------------|-----------------|------|
+| Day          | 直接读日期表 `ly_timeframe_min` / `ly_timeframe_max` | 日期表已内置，无需 EDATE -12 |
+| Week         | 直接读日期表 `ly_timeframe_min` / `ly_timeframe_max` | 日期表已内置，无需 Key - 100 |
+| Month        | 直接读日期表 `ly_timeframe_min` / `ly_timeframe_max` | 日期表已内置，无需 Key - 100 |
+| Quarter      | 直接读日期表 `ly_timeframe_min` / `ly_timeframe_max` | 日期表已内置，无需 Key - 100 |
+| Year         | 直接读日期表 `ly_timeframe_min` / `ly_timeframe_max` | 日期表已内置，无需 Key - 1 |
 ---

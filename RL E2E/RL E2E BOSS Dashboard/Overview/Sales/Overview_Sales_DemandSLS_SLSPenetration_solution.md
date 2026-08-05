@@ -78,7 +78,7 @@
     │    calc_type="payment", │         │    calc_type="payment",                      │
     │    data_date ∈ 全局范围 │         │    data_date ∈ 全局范围 ∩ X轴时间段          │
     │  ) / __FXRate           │         │  ) / __FXRate                                 │
-    │                         │         │  LY 版本: 时间 EDATE -12 偏移                 │
+    │                         │         │  LY 版本: 时间取日期表 LY 字段（TimeFrame_Min/Max_LY）│
     │ store_name 由图例传递   │         │                                              │
     └─────────────────────────┘         ├──────────────────────────────────────────────┤
                                         │ TY/LY SLS Penetration Value                  │
@@ -95,9 +95,9 @@
 
 | 筛选器                   | 饼图 (Demand SLS)        | 柱形图/趋势图 (TY/LY)                          |
 | ------------------------ | ------------------------ | --------------------------------------------- |
-| Slicer_Time_Frame_Min    | `data_date >= __TimeMin` | `data_date >= __TimeMin`（LY 版偏移 -12）     |
-| Slicer_Time_Frame_Max    | `data_date <= __TimeMax` | `data_date <= __TimeMax`（LY 版偏移 -12）     |
-| Slicer_Time_Frame (X 轴) | 不适用                   | `data_date ∈ [__CurrentTFMin, __CurrentTFMax]`（LY 版偏移 -12） |
+| Slicer_Time_Frame_Min    | `data_date >= __TimeMin` | `data_date >= __TimeMin`（LY 版读 TimeFrame_Min_LY）|
+| Slicer_Time_Frame_Max    | `data_date <= __TimeMax` | `data_date <= __TimeMax`（LY 版读 TimeFrame_Max_LY）|
+| Slicer_Time_Frame (X 轴) | 不适用                   | `data_date ∈ [__CurrentTFMin, __CurrentTFMax]`（LY 版读 TimeFrame_Min/Max_LY） |
 | 事实表[store_name]       | 饼图图例自动传递筛选     | 不筛选（所有店铺汇总）                        |
 | calc_type                | = "payment"              | = "payment"                                   |
 | Slicer_Currency_Selection| 金额类 ÷ __FXRate        | 金额类 ÷ __FXRate；比率类不除（分子分母抵消）|
@@ -123,26 +123,33 @@
 
 ### 3.4 时间偏移规则（LY — 财历映射）
 
-**背景**：周/月/季/年粒度按财年定义（财年2026 ≠ 公历2026），如财年2026 = 2025-03-30 ~ 2026-03-28。EDATE -12 基于公历自然日偏移，会因闰年星期错位导致 LY 范围与"去年同编号财周/月/季/年"差1天。因此 LY 必须采用**财历映射**：通过 TimeFrame_Key 偏移查找去年同期同编号时间段的自然日范围。
+**背景**：周/月/季/年粒度按财年定义（财年2026 ≠ 公历2026），如财年2026 = 2025-03-30 ~ 2026-03-28。EDATE -12 基于公历自然日偏移，会因闰年星期错位导致 LY 范围与"去年同编号财周/月/季/年"差1天。因此 LY 必须采用**财历映射**：取去年同编号时间段的自然日范围。
 
-**Key 偏移规则**（基于 Slicer_Time_Frame.sql 定义）：
+**实现方式（日期表内置 LY 字段，直接读取）**：
 
-| TimeFrame_ID | TimeFrame_Key 公式 | LY Key 计算 | 示例 |
-|--------------|-------------------|-------------|------|
-| Day | `date_key`（如 20250629） | 用 EDATE -12（自然日无财历概念） | 2025-06-29 → 2024-06-29 |
-| Week | `financial_year * 100 + financial_week_num` | `Key - 100` | 202614 → 202514 |
-| Month | `financial_year * 100 + financial_month_num` | `Key - 100` | 202610 → 202510 |
-| Quarter | `financial_year * 100 + financial_quarter_num` | `Key - 100` | 202603 → 202503 |
-| Year | `financial_year` | `Key - 1` | 2026 → 2025 |
+日期表 `indep_rl_dim.dim_t00_bi_fiscal_calendar` 已直接提供去年同期同编号时间段的自然日范围字段，无需再做 TimeFrame_Key 偏移计算或 EDATE -12 计算。LY 相关字段映射如下：
+
+| 日期表字段         | 模型字段名         | 含义                                 |
+|--------------------|--------------------|--------------------------------------|
+| ly_timeframe_value | TimeFrame_Value_LY | 去年同期时间段名称（如 2025 Week14）|
+| ly_timeframe_key   | TimeFrame_Key_LY   | 去年同期时间段 Key（如 202514）     |
+| ly_timeframe_min   | TimeFrame_Min_LY   | 去年同期起始自然日                   |
+| ly_timeframe_max   | TimeFrame_Max_LY   | 去年同期结束自然日                   |
+
+> 字段映射关系（日期表 → 模型字段）：
+> timeframe_id → TimeFrame_ID，timeframe_label → TimeFrame_Label，timeframe_sort → TimeFrame_Sort，
+> timeframe_value → TimeFrame_Value，timeframe_key → TimeFrame_Key，id_sort → ID_Sort，
+> timeframe_min → TimeFrame_Min，timeframe_max → TimeFrame_Max，
+> ly_timeframe_value → TimeFrame_Value_LY，ly_timeframe_key → TimeFrame_Key_LY，
+> ly_timeframe_min → TimeFrame_Min_LY，ly_timeframe_max → TimeFrame_Max_LY。
 
 **查找流程**：
 
 ```
-1. 从当前上下文（X 轴或 Min/Max 切片器）读取 TimeFrame_ID + TimeFrame_Key
-2. 按 Key 偏移规则计算 LY Key（Day 粒度走 EDATE -12 分支）
-3. 在 Slicer_Time_Frame(_Min/_Max) 表中查找 [TimeFrame_ID] + [LY Key] 匹配的行
-4. 读取该行的 TimeFrame_Min（LY 起始日）和 TimeFrame_Max（LY 结束日）
-5. 用 LY 自然日范围筛选事实表 data_date
+1. 从当前上下文（X 轴 Slicer_Time_Frame 或 Min/Max 切片器 Slicer_Time_Frame_Min/Max）直接读取
+   TimeFrame_Min_LY / TimeFrame_Max_LY 字段（去年同期自然日范围）
+2. 用 LY 自然日范围筛选事实表 data_date
+3. 无需再做 Key 偏移计算，无需 EDATE -12 分支
 ```
 
 **示例**（X 轴 = 2026 Week14，TimeFrame_Min=2025-06-29, TimeFrame_Max=2025-07-05）：
@@ -150,11 +157,9 @@
 ```
 TY 聚合: 2025-06-29 ~ 2025-07-05（财周 2026 Week14 的自然日范围）
 
-LY 财历映射:
-  当前 Key = 202614
-  LY Key = 202614 - 100 = 202514
-  在 Slicer_Time_Frame 表查找 TimeFrame_ID="Week" AND TimeFrame_Key=202514
-  → 读取该行的 TimeFrame_Min/TimeFrame_Max（假设为 2024-06-30 ~ 2024-07-06）
+LY 财历映射（直接读取日期表 LY 字段）:
+  读取 Slicer_Time_Frame[TimeFrame_Min_LY] = 2024-06-30（去年同期起始自然日）
+  读取 Slicer_Time_Frame[TimeFrame_Max_LY] = 2024-07-06（去年同期结束自然日）
 LY 聚合: 2024-06-30 ~ 2024-07-06（财周 2025 Week14 的自然日范围）
 ```
 
@@ -162,7 +167,7 @@ LY 聚合: 2024-06-30 ~ 2024-07-06（财周 2025 Week14 的自然日范围）
 - EDATE -12（错误）：2024-06-29 ~ 2024-07-05（公历偏移，可能跨财周）
 - 财历映射（正确）：2024-06-30 ~ 2024-07-06（去年同编号财周的完整定义范围）
 
-**数据要求**：Slicer_Time_Frame 表需包含至少2年历史数据（当前年 + 去年同期）。若数据历史不足1年，LY 查找返回 BLANK，柱子自然不显示，属可接受行为。
+**数据要求**：日期表需包含至少2年历史数据（当前年 + 去年同期），且对应行的 ly_timeframe_min / ly_timeframe_max 不为空。若数据历史不足1年或 LY 字段为空，LY 度量返回 BLANK，柱子自然不显示，属可接受行为。
 
 ### 3.5 格式规范
 
@@ -378,103 +383,29 @@ LY Demand SLS Value =
 // 用途: LY Demand SLS（O2O退前销售额 去年同期值），用于柱形图/趋势图 Y 轴
 // 口径来源: Overview.md 子模块一 BOSS Core KPI - Demand SLS LY（RowKPI_ID=20）
 // 计算公式: SUM(o2o_sales_amt)（去年同期）
-// 时间偏移: 财历映射（Day 粒度用 EDATE -12，Week/Month/Quarter/Year 用 Key 偏移查找）
-//   全局范围:   从 Slicer_Time_Frame_Min/Max 查 LY 同编号时间段的 TimeFrame_Min/Max
-//   X 轴时间段: 从 Slicer_Time_Frame 查 LY 同编号时间段的 TimeFrame_Min/Max
+// 时间偏移: 财历映射（直接读取日期表内置 LY 字段）
+//   日期表 indep_rl_dim.dim_t00_bi_fiscal_calendar 已提供去年同期自然日范围字段:
+//     ly_timeframe_min → TimeFrame_Min_LY（去年同期起始自然日）
+//     ly_timeframe_max → TimeFrame_Max_LY（去年同期结束自然日）
+//   全局范围:   直接读取 Slicer_Time_Frame_Min[TimeFrame_Min_LY] / Slicer_Time_Frame_Max[TimeFrame_Max_LY]
+//   X 轴时间段: 直接读取 Slicer_Time_Frame[TimeFrame_Min_LY] / Slicer_Time_Frame[TimeFrame_Max_LY]
+//   无需再做 TimeFrame_Key 偏移计算或 EDATE -12 计算
 // 筛选条件: 同 TY Demand SLS Value，时间偏移到去年同编号财周/月/季/年
 //   - 所有店铺汇总
 //   - 金额类指标 ÷ __FXRate（汇率换算，与 Act 保持一致）
 // 数据类型: currency_M_K_Int_0db
 // 说明: X 轴仍显示当前 timeframe（如 2026 Week14），柱子聚合的是去年同编号财周（2025 Week14）的数据
-// 前提: Slicer_Time_Frame(_Min/_Max) 表需包含去年同期数据，否则返回 BLANK
+// 前提: 日期表需包含去年同期数据（ly_timeframe_min/ly_timeframe_max 不为空），否则返回 BLANK
 // ========================================
-    // ── 1. 读取全局粒度（Min/Max 同粒度，从 Min 切片器读取）──
-    VAR __GlobalTFID = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_ID])
-    // ── 2. 全局 LY 起始日（从 Min 切片器查找）──
-    VAR __GlobalMinKey = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Key])
-    VAR __GlobalMinValue = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
-    VAR __LY_GlobalMinKey =
-        SWITCH(
-            __GlobalTFID,
-            "Year",   __GlobalMinKey - 1,
-            "Week",   __GlobalMinKey - 100,
-            "Month",  __GlobalMinKey - 100,
-            "Quarter", __GlobalMinKey - 100,
-            BLANK()  // Day 走 EDATE 分支
-        )
-    VAR __LYTimeMin =
-        IF(
-            __GlobalTFID = "Day",
-            EDATE(__GlobalMinValue, -12),
-            CALCULATE(
-                MIN(Slicer_Time_Frame_Min[TimeFrame_Min]),  // 读 TimeFrame_Min 字段（起始日）
-                ALL(Slicer_Time_Frame_Min),
-                Slicer_Time_Frame_Min[TimeFrame_ID] = __GlobalTFID,
-                Slicer_Time_Frame_Min[TimeFrame_Key] = __LY_GlobalMinKey
-            )
-        )
-    // ── 3. 全局 LY 结束日（从 Max 切片器查找，独立算 LY Key）──
-    VAR __GlobalMaxKey = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Key])
-    VAR __GlobalMaxValue = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
-    VAR __LY_GlobalMaxKey =
-        SWITCH(
-            __GlobalTFID,  // Min/Max 同粒度
-            "Year",   __GlobalMaxKey - 1,
-            "Week",   __GlobalMaxKey - 100,
-            "Month",  __GlobalMaxKey - 100,
-            "Quarter", __GlobalMaxKey - 100,
-            BLANK()
-        )
-    VAR __LYTimeMax =
-        IF(
-            __GlobalTFID = "Day",
-            EDATE(__GlobalMaxValue, -12),
-            CALCULATE(
-                MAX(Slicer_Time_Frame_Max[TimeFrame_Max]),  // 读 TimeFrame_Max 字段（结束日）
-                ALL(Slicer_Time_Frame_Max),
-                Slicer_Time_Frame_Max[TimeFrame_ID] = __GlobalTFID,
-                Slicer_Time_Frame_Max[TimeFrame_Key] = __LY_GlobalMaxKey
-            )
-        )
-    // ── 4. X 轴 LY 范围（从 Slicer_Time_Frame 查找）──
-    VAR __CurrentTFID = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])
-    VAR __CurrentTFKey = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Key])
-    VAR __CurrentTFMinValue = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Min])
-    VAR __CurrentTFMaxValue = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Max])
-    VAR __LY_TFKey =
-        SWITCH(
-            __CurrentTFID,
-            "Year",   __CurrentTFKey - 1,
-            "Week",   __CurrentTFKey - 100,
-            "Month",  __CurrentTFKey - 100,
-            "Quarter", __CurrentTFKey - 100,
-            BLANK()  // Day 走 EDATE 分支
-        )
-    VAR __LYCurrentTFMin =
-        IF(
-            __CurrentTFID = "Day",
-            EDATE(__CurrentTFMinValue, -12),
-            CALCULATE(
-                MIN(Slicer_Time_Frame[TimeFrame_Min]),
-                ALL(Slicer_Time_Frame),
-                Slicer_Time_Frame[TimeFrame_ID] = __CurrentTFID,
-                Slicer_Time_Frame[TimeFrame_Key] = __LY_TFKey
-            )
-        )
-    VAR __LYCurrentTFMax =
-        IF(
-            __CurrentTFID = "Day",
-            EDATE(__CurrentTFMaxValue, -12),
-            CALCULATE(
-                MAX(Slicer_Time_Frame[TimeFrame_Max]),
-                ALL(Slicer_Time_Frame),
-                Slicer_Time_Frame[TimeFrame_ID] = __CurrentTFID,
-                Slicer_Time_Frame[TimeFrame_Key] = __LY_TFKey
-            )
-        )
-    // ── 5. 汇率 ──
+    // ── 1. 全局 LY 起止日（直接读取日期表内置 LY 字段）──
+    VAR __LYTimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min_LY])
+    VAR __LYTimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LY])
+    // ── 2. X 轴 LY 范围（直接读取日期表内置 LY 字段）──
+    VAR __LYCurrentTFMin = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Min_LY])
+    VAR __LYCurrentTFMax = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Max_LY])
+    // ── 3. 汇率 ──
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
-    // ── 6. 聚合：LY 全局范围 ∩ LY X 轴时间段 ──
+    // ── 4. 聚合：LY 全局范围 ∩ LY X 轴时间段 ──
     VAR __DemandSLS_LY =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_sales_amt]),
@@ -596,99 +527,26 @@ LY SLS Penetration Value =
 // 用途: LY SLS Penetration（O2O销售渗透率 去年同期值），用于柱形图/趋势图 Y 轴
 // 口径来源: Overview.md 子模块一 BOSS Core KPI - SLS Penetration LY（RowKPI_ID=30）
 // 计算公式: SUM(o2o_sales_amt) / SUM(sales_amt)（去年同期）
-// 时间偏移: 财历映射（Day 粒度用 EDATE -12，Week/Month/Quarter/Year 用 Key 偏移查找）
-//   与 LY Demand SLS Value 一致，详细注释参见该度量
+// 时间偏移: 财历映射（直接读取日期表内置 LY 字段）
+//   日期表 indep_rl_dim.dim_t00_bi_fiscal_calendar 已提供去年同期自然日范围字段:
+//     ly_timeframe_min → TimeFrame_Min_LY（去年同期起始自然日）
+//     ly_timeframe_max → TimeFrame_Max_LY（去年同期结束自然日）
+//   全局范围:   直接读取 Slicer_Time_Frame_Min[TimeFrame_Min_LY] / Slicer_Time_Frame_Max[TimeFrame_Max_LY]
+//   X 轴时间段: 直接读取 Slicer_Time_Frame[TimeFrame_Min_LY] / Slicer_Time_Frame[TimeFrame_Max_LY]
+//   与 LY Demand SLS Value 一致，无需再做 TimeFrame_Key 偏移计算或 EDATE -12 计算
 // 筛选条件: 同 TY SLS Penetration Value，时间偏移到去年同编号财周/月/季/年
 //   - 所有店铺汇总
 //   - 比率类，不除汇率（分子分母同币种，相除自动抵消）
 // 数据类型: percent_0dp → 百分比整数，不含正号
-// 前提: Slicer_Time_Frame(_Min/_Max) 表需包含去年同期数据，否则返回 BLANK
+// 前提: 日期表需包含去年同期数据（ly_timeframe_min/ly_timeframe_max 不为空），否则返回 BLANK
 // ========================================
-    // ── 1. 读取全局粒度（Min/Max 同粒度，从 Min 切片器读取）──
-    VAR __GlobalTFID = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_ID])
-    // ── 2. 全局 LY 起始日（从 Min 切片器查找）──
-    VAR __GlobalMinKey = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Key])
-    VAR __GlobalMinValue = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
-    VAR __LY_GlobalMinKey =
-        SWITCH(
-            __GlobalTFID,
-            "Year",   __GlobalMinKey - 1,
-            "Week",   __GlobalMinKey - 100,
-            "Month",  __GlobalMinKey - 100,
-            "Quarter", __GlobalMinKey - 100,
-            BLANK()  // Day 走 EDATE 分支
-        )
-    VAR __LYTimeMin =
-        IF(
-            __GlobalTFID = "Day",
-            EDATE(__GlobalMinValue, -12),
-            CALCULATE(
-                MIN(Slicer_Time_Frame_Min[TimeFrame_Min]),
-                ALL(Slicer_Time_Frame_Min),
-                Slicer_Time_Frame_Min[TimeFrame_ID] = __GlobalTFID,
-                Slicer_Time_Frame_Min[TimeFrame_Key] = __LY_GlobalMinKey
-            )
-        )
-    // ── 3. 全局 LY 结束日（从 Max 切片器查找，独立算 LY Key）──
-    VAR __GlobalMaxKey = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Key])
-    VAR __GlobalMaxValue = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
-    VAR __LY_GlobalMaxKey =
-        SWITCH(
-            __GlobalTFID,
-            "Year",   __GlobalMaxKey - 1,
-            "Week",   __GlobalMaxKey - 100,
-            "Month",  __GlobalMaxKey - 100,
-            "Quarter", __GlobalMaxKey - 100,
-            BLANK()
-        )
-    VAR __LYTimeMax =
-        IF(
-            __GlobalTFID = "Day",
-            EDATE(__GlobalMaxValue, -12),
-            CALCULATE(
-                MAX(Slicer_Time_Frame_Max[TimeFrame_Max]),
-                ALL(Slicer_Time_Frame_Max),
-                Slicer_Time_Frame_Max[TimeFrame_ID] = __GlobalTFID,
-                Slicer_Time_Frame_Max[TimeFrame_Key] = __LY_GlobalMaxKey
-            )
-        )
-    // ── 4. X 轴 LY 范围（从 Slicer_Time_Frame 查找）──
-    VAR __CurrentTFID = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])
-    VAR __CurrentTFKey = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Key])
-    VAR __CurrentTFMinValue = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Min])
-    VAR __CurrentTFMaxValue = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Max])
-    VAR __LY_TFKey =
-        SWITCH(
-            __CurrentTFID,
-            "Year",   __CurrentTFKey - 1,
-            "Week",   __CurrentTFKey - 100,
-            "Month",  __CurrentTFKey - 100,
-            "Quarter", __CurrentTFKey - 100,
-            BLANK()
-        )
-    VAR __LYCurrentTFMin =
-        IF(
-            __CurrentTFID = "Day",
-            EDATE(__CurrentTFMinValue, -12),
-            CALCULATE(
-                MIN(Slicer_Time_Frame[TimeFrame_Min]),
-                ALL(Slicer_Time_Frame),
-                Slicer_Time_Frame[TimeFrame_ID] = __CurrentTFID,
-                Slicer_Time_Frame[TimeFrame_Key] = __LY_TFKey
-            )
-        )
-    VAR __LYCurrentTFMax =
-        IF(
-            __CurrentTFID = "Day",
-            EDATE(__CurrentTFMaxValue, -12),
-            CALCULATE(
-                MAX(Slicer_Time_Frame[TimeFrame_Max]),
-                ALL(Slicer_Time_Frame),
-                Slicer_Time_Frame[TimeFrame_ID] = __CurrentTFID,
-                Slicer_Time_Frame[TimeFrame_Key] = __LY_TFKey
-            )
-        )
-    // ── 5. 分子：o2o_sales_amt（去年同期）──
+    // ── 1. 全局 LY 起止日（直接读取日期表内置 LY 字段）──
+    VAR __LYTimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min_LY])
+    VAR __LYTimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LY])
+    // ── 2. X 轴 LY 范围（直接读取日期表内置 LY 字段）──
+    VAR __LYCurrentTFMin = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Min_LY])
+    VAR __LYCurrentTFMax = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Max_LY])
+    // ── 3. 分子：o2o_sales_amt（去年同期）──
     VAR __Numerator =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_sales_amt]),
@@ -698,7 +556,7 @@ LY SLS Penetration Value =
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYCurrentTFMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYCurrentTFMax
         )
-    // ── 6. 分母：sales_amt（去年同期）──
+    // ── 4. 分母：sales_amt（去年同期）──
     VAR __Denominator =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[sales_amt]),
@@ -800,16 +658,19 @@ WHERE calc_type = 'payment'
   AND data_date BETWEEN '2025-06-29' AND '2025-07-05';
 
 -- LY Demand SLS（去年同编号财周，所有店铺汇总）
--- 步骤1: 计算 LY Key = 202614 - 100 = 202514
--- 步骤2: 查 Slicer_Time_Frame 表 TimeFrame_ID='Week' AND TimeFrame_Key=202514
---        得到 LY 的 TimeFrame_Min/Max（假设为 2024-06-30 ~ 2024-07-06）
--- 步骤3: 用 LY 自然日范围筛选事实表
+-- LY 日期范围直接来自日期表 indep_rl_dim.dim_t00_bi_fiscal_calendar 的 LY 字段:
+--   ly_timeframe_min → TimeFrame_Min_LY（去年同期起始自然日）
+--   ly_timeframe_max → TimeFrame_Max_LY（去年同期结束自然日）
+-- 步骤1: 读取 Slicer_Time_Frame[TimeFrame_Min_LY] / Slicer_Time_Frame[TimeFrame_Max_LY]
+--        （如 X 轴 = 2026 Week14，LY 字段假设为 2024-06-30 ~ 2024-07-06）
+-- 步骤2: 用 LY 自然日范围筛选事实表
 SELECT SUM(o2o_sales_amt) AS DemandSLS_LY
 FROM a02_e2e_boss_performance_summary_d
 WHERE calc_type = 'payment'
   AND data_date BETWEEN '2024-06-30' AND '2024-07-06';
   -- 注意: 不是 DATE_SUB('2025-06-29', INTERVAL 12 MONTH) = '2024-06-29'
-  -- 财历映射取去年同编号财周的完整定义范围，可能与 EDATE -12 差1天
+  -- LY 日期范围直接取自日期表的 ly_timeframe_min / ly_timeframe_max 字段，
+  -- 为去年同编号财周的完整定义范围，可能与 EDATE -12 差1天
 
 -- TY SLS Penetration（某周，所有店铺汇总）
 SELECT
@@ -819,6 +680,8 @@ WHERE calc_type = 'payment'
   AND data_date BETWEEN '2025-06-29' AND '2025-07-05';
 
 -- LY SLS Penetration（去年同编号财周，所有店铺汇总）
+-- LY 日期范围直接来自日期表 indep_rl_dim.dim_t00_bi_fiscal_calendar 的 LY 字段
+-- （ly_timeframe_min / ly_timeframe_max，对应模型字段 TimeFrame_Min_LY / TimeFrame_Max_LY）
 SELECT
   SUM(o2o_sales_amt) / SUM(sales_amt) AS SLS_Penetration_LY
 FROM a02_e2e_boss_performance_summary_d
@@ -826,15 +689,14 @@ WHERE calc_type = 'payment'
   AND data_date BETWEEN '2024-06-30' AND '2024-07-06';
 ```
 
-**LY Key 偏移规则速查**：
+**LY 字段读取速查**（日期表 `indep_rl_dim.dim_t00_bi_fiscal_calendar` 内置 LY 字段，无需 Key 偏移计算）：
 
-| TimeFrame_ID | LY Key 计算 | 示例 |
-|--------------|-------------|------|
-| Day | EDATE -12（不走 Key 偏移） | 2025-06-29 → 2024-06-29 |
-| Week | Key - 100 | 202614 → 202514 |
-| Month | Key - 100 | 202610 → 202510 |
-| Quarter | Key - 100 | 202603 → 202503 |
-| Year | Key - 1 | 2026 → 2025 |
+| 模型字段名         | 日期表字段         | 含义                                 | 读取方式                                              |
+|--------------------|--------------------|--------------------------------------|-------------------------------------------------------|
+| TimeFrame_Min_LY   | ly_timeframe_min   | 去年同期起始自然日                   | SELECTEDVALUE(Slicer_Time_Frame(_Min/_Max)[TimeFrame_Min_LY]) |
+| TimeFrame_Max_LY   | ly_timeframe_max   | 去年同期结束自然日                   | SELECTEDVALUE(Slicer_Time_Frame(_Min/_Max)[TimeFrame_Max_LY]) |
+| TimeFrame_Value_LY | ly_timeframe_value | 去年同期时间段名称（如 2025 Week14）| 可选，用于核对/展示                                   |
+| TimeFrame_Key_LY   | ly_timeframe_key   | 去年同期时间段 Key（如 202514）     | 可选，用于核对                                        |
 
 ### 7.3 饼图占比验证
 
@@ -856,9 +718,9 @@ GROUP BY store_name;
 
 1. **粒度联动假设**：本方案假设 `Slicer_Time_Frame_Min` 和 `Slicer_Time_Frame_Max` 切片器受同一粒度选择器联动筛选（保持同粒度）。若两者粒度不一致，`IsTimeFrameVisible` 返回 0 隐藏所有柱子。请在报表层配置粒度联动。
 
-2. **LY 财历映射（重要）**：周/月/季/年粒度按财年定义（财年2026 ≠ 公历2026），LY 不能用 EDATE -12（公历自然日偏移会因闰年星期错位差1天）。本方案采用财历映射：通过 TimeFrame_Key 偏移（Week/Month/Quarter: Key-100，Year: Key-1）在 Slicer_Time_Frame(_Min/_Max) 表中查找去年同编号时间段的自然日范围。Day 粒度无财历概念，仍用 EDATE -12。
-   - **数据要求**：Slicer_Time_Frame 表需包含至少2年历史数据（当前年 + 去年同期）。若数据历史不足1年，LY 查找返回 BLANK，柱子不显示，属可接受行为。
-   - **与原矩阵方案差异**：原矩阵 `BOSS Core KPI LY Base Value` 使用 EDATE -12，存在周/季/年粒度下 LY 范围与去年同编号财周/月/季/年差1天的潜在问题。本方案修正了此问题，如需统一口径，建议同步更新矩阵方案。
+2. **LY 财历映射（重要）**：周/月/季/年粒度按财年定义（财年2026 ≠ 公历2026），LY 不能用 EDATE -12（公历自然日偏移会因闰年星期错位差1天）。本方案采用财历映射：日期表 `indep_rl_dim.dim_t00_bi_fiscal_calendar` 已内置 LY 字段（`ly_timeframe_min` / `ly_timeframe_max`，对应模型字段 `TimeFrame_Min_LY` / `TimeFrame_Max_LY`），直接读取即可获得去年同编号时间段的自然日范围，无需再做 TimeFrame_Key 偏移计算，也无需 Day 粒度的 EDATE -12 分支。
+   - **数据要求**：日期表需包含至少2年历史数据（当前年 + 去年同期），且对应行的 `ly_timeframe_min` / `ly_timeframe_max` 不为空。若数据历史不足1年或 LY 字段为空，LY 度量返回 BLANK，柱子不显示，属可接受行为。
+   - **与原矩阵方案差异**：原矩阵 `BOSS Core KPI LY Base Value` 使用 EDATE -12，存在周/季/年粒度下 LY 范围与去年同编号财周/月/季/年差1天的潜在问题。本方案通过日期表内置 LY 字段修正了此问题，如需统一口径，建议同步更新矩阵方案。
 
 3. **饼图 store_name 传递**：饼图图例直接使用事实表 `store_name` 字段，度量值无需显式筛选。若事实表存在 store_name 为空的行，会在饼图中显示为空标签，建议在数据预处理或视觉对象筛选器中过滤。
 
@@ -868,7 +730,8 @@ GROUP BY store_name;
 
 6. **与矩阵方案的关系**：本方案度量值独立于矩阵的 `BOSS Core KPI Act/LY Base Value`，不复用矩阵的 SWITCH 路由。两套度量值可并存，分别服务饼图/柱形图/趋势图与矩阵视觉对象。
 
-7. **LY Key 偏移的边界情况**：
-   - Week Key = `financial_year * 100 + financial_week_num`，财年范围 1~53，Key-100 假设去年同周编号存在。若去年是短财年（如只有52周），而今年有 Week53，LY 查找会返回 BLANK。
-   - Month/Quarter Key 同理，假设去年同编号月/季存在（财历定义稳定，通常成立）。
-   - Year Key = `financial_year`，Key-1 即上一年，无边界问题。
+7. **LY 字段的边界情况**（日期表 `indep_rl_dim.dim_t00_bi_fiscal_calendar` 内置 LY 字段）：
+   - LY 字段（`ly_timeframe_min` / `ly_timeframe_max` 等）由日期表在 ETL/建模阶段预先计算并写入，模型层直接读取，不再依赖运行时 Key 偏移。
+   - 若去年是短财年（如只有52周）而今年有 Week53，日期表中该行的 `ly_timeframe_min` / `ly_timeframe_max` 可能为空（取决于日期表生成逻辑），LY 度量会返回 BLANK，柱子不显示。
+   - Month/Quarter/Year 同理，依赖日期表中 LY 字段的完整性（财历定义稳定，通常成立）。
+   - 建议在日期表生成逻辑中确保 LY 字段对齐"去年同编号时间段"的语义，避免短财年/跨年场景下的空值。
