@@ -966,6 +966,59 @@ Failed Request Display =
         IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0"))
 ```
 
+### 4.37 Failed Request Ratio Value
+
+```dax
+Failed Request Ratio Value =
+// ========================================
+// 度量值: Failed Request Ratio Value
+// Display Folder: PB Location
+// 用途: 单个 failure_reason 维度占总失败次数的百分比
+// 口径来源: PB Location.md 子模块四 - Failed Request (扩展)
+// 计算公式: SUM(request_times) / 移除 failure_reason 后的 SUM(request_times)
+// 筛选条件:
+//   - data_date ∈ [__TimeMin, __TimeMax]（全局时间范围）
+//   - store_region/store_type 由视觉对象图例自动传递
+//   - 分母通过 REMOVEFILTERS 移除 failure_reason 维度影响
+// 数据类型: decimal (0~1)
+// ========================================
+    VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+    VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+    // 分子: 当前 failure_reason 上下文下的失败次数
+    VAR __Numerator =
+        CALCULATE(
+            SUM('a02_e2e_boss_fulfillment_fail_reason_d'[request_times]),
+            'a02_e2e_boss_fulfillment_fail_reason_d'[data_date] >= __TimeMin,
+            'a02_e2e_boss_fulfillment_fail_reason_d'[data_date] <= __TimeMax
+        )
+    // 分母: 移除 failure_reason 维度影响后的总失败次数
+    VAR __Denominator =
+        CALCULATE(
+            SUM('a02_e2e_boss_fulfillment_fail_reason_d'[request_times]),
+            'a02_e2e_boss_fulfillment_fail_reason_d'[data_date] >= __TimeMin,
+            'a02_e2e_boss_fulfillment_fail_reason_d'[data_date] <= __TimeMax,
+            REMOVEFILTERS('a02_e2e_boss_fulfillment_fail_reason_d'[failure_reason])
+        )
+    VAR __Result =
+        DIVIDE(__Numerator, __Denominator, 0)
+    RETURN __Result
+```
+### 4.38 Failed Request Ratio Display
+
+```dax
+Failed Request Ratio Display =
+// ========================================
+// 度量值: Failed Request Ratio Display
+// Display Folder: PB Location
+// 用途: 单个 failure_reason 占总失败次数的百分比 格式化显示
+// 依赖: [Failed Request Ratio Value]
+// 格式类型: decimal (0~1) → #,##0%
+// ========================================
+    VAR __Value = [Failed Request Ratio Value]
+    RETURN
+        IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0%"))
+```
+
 ---
 
 ## 5. 度量值清单与 Display Folder
