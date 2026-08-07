@@ -73,33 +73,74 @@
 
 > **分组维度**: 按 `category_summary` 分组（仅看 M/W POLO）
 
-### 1. Unfulfilled Order — O2O失败订单数
+### 1. Total Unfulfilled Order — O2O失败订单数（W Polo + M Polo）
 
 | 项目 | 内容 |
 |---|---|
 | **指标名称** | Unfulfilled Order |
-| **指标名称中文** | O2O失败订单数 |
-| **业务定义** | 订单维度去重统计，根据订单付款时间，统计配货状态是配货失败的订单量 by category 拆分统计（仅看 M/W POLO） |
+| **指标名称中文** | O2O失败订单数（W Polo + M Polo） |
+| **业务定义** | 订单维度去重统计，根据订单付款时间，统计配货状态是配货失败的订单量 by category 拆分统计（仅看 W Polo + M Polo） |
 | **计算公式** | sum(o2o_fulfillment_unshipped_order_cnt) |
 | **统计字段** | `o2o_fulfillment_unshipped_order_cnt` |
 | **数据底表** | `a02_e2e_boss_performance_summary_d` |
-| **筛选条件** | `calc_type = fulfillment`；`brand` in ("1. W Polo", "2. M Polo")；按 `category_summary` 分组 |
+| **筛选条件** | `calc_type = fulfillment`；`brand` in ("W Polo", "M Polo")；图表按 `category_summary` 分组，category_summary我会直接拉取事实表中的对应字段，对模型天然自带筛选和分组属性，所以这里计算总值需要REMOVEFILTERS移除a02_e2e_boss_performance_summary_d[category]字段的影响。 |
 | **聚合粒度** | 根据所选时间范围 `data_date`，聚合在 `category_summary` 粒度 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 
-### 1.1 Unfulfilled Order Share — O2O失败订单数占比
+### 1.1 W Polo Unfulfilled Order — O2O失败订单数（W Polo）
+
+| 项目 | 内容 |
+|---|---|
+| **指标名称** | Unfulfilled Order |
+| **指标名称中文** | O2O失败订单数（W Polo） |
+| **业务定义** | 订单维度去重统计，根据订单付款时间，统计配货状态是配货失败的订单量 by category 拆分统计（仅看 W Polo） |
+| **计算公式** | sum(o2o_fulfillment_unshipped_order_cnt) |
+| **统计字段** | `o2o_fulfillment_unshipped_order_cnt` |
+| **数据底表** | `a02_e2e_boss_performance_summary_d` |
+| **筛选条件** | `calc_type = fulfillment`；`brand` in ("W Polo")；按 `category_summary` 分组，category_summary我会直接拉取事实表中的对应字段，对模型天然自带筛选和分组属性。 |
+| **聚合粒度** | 根据所选时间范围 `data_date`，聚合在 `category_summary` 粒度 |
+| **数据类型** | integer → 整数，千分位整数 |
+| **数据格式** | `#,##0` |
+
+### 1.2 M Polo Unfulfilled Order — O2O失败订单数（M Polo）
+
+| 项目 | 内容 |
+|---|---|
+| **指标名称** | Unfulfilled Order |
+| **指标名称中文** | O2O失败订单数（M Polo） |
+| **业务定义** | 订单维度去重统计，根据订单付款时间，统计配货状态是配货失败的订单量 by category 拆分统计（仅看 M Polo） |
+| **计算公式** | sum(o2o_fulfillment_unshipped_order_cnt) |
+| **统计字段** | `o2o_fulfillment_unshipped_order_cnt` |
+| **数据底表** | `a02_e2e_boss_performance_summary_d` |
+| **筛选条件** | `calc_type = fulfillment`；`brand` in ("M Polo")；按 `category_summary` 分组，category_summary我会直接拉取事实表中的对应字段，对模型天然自带筛选和分组属性。 |
+| **聚合粒度** | 根据所选时间范围 `data_date`，聚合在 `category_summary` 粒度 |
+| **数据类型** | integer → 整数，千分位整数 |
+| **数据格式** | `#,##0` |
+
+### 1.3 W Polo Unfulfilled Order Share — W Polo O2O失败订单数占比
 
 | 项目 | 内容 |
 |---|---|
 | **指标名称** | Unfulfilled Order Share |
-| **指标名称中文** | O2O失败订单数占比 |
+| **指标名称中文** | W Polo O2O失败订单数占比 |
 | **业务定义** | 每个 `category_summary` 占 W Polo + M Polo 总和的比例 |
-| **计算公式** | 当前 category_summary 的 sum(o2o_fulfillment_unshipped_order_cnt) / W Polo + M Polo 所有 category_summary 的 sum(o2o_fulfillment_unshipped_order_cnt) |
-| **分子** | `o2o_fulfillment_unshipped_order_cnt`（当前 category_summary） |
-| **分母** | `o2o_fulfillment_unshipped_order_cnt`（W Polo + M Polo 所有 category_summary） |
-| **数据底表** | `a02_e2e_boss_performance_summary_d` |
-| **筛选条件** | `calc_type = fulfillment`；`brand` in ("1. W Polo", "2. M Polo")；按 `category_summary` 分组 |
+| **计算公式** | W Polo Unfulfilled Order / Total Unfulfilled Order |
+| **分子** | [M Polo Unfulfilled Order]这里是1.1 W Polo Unfulfilled Order — O2O失败订单数（W Polo）已经计算好的度量 |
+| **分母** | [Total Unfulfilled Order]这里是1. Total Unfulfilled Order — O2O失败订单数（W Polo + M Polo）已经计算好的度量 |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%` |
+
+### 1.4 M Polo Unfulfilled Order Share — M Polo O2O失败订单数占比
+
+| 项目 | 内容 |
+|---|---|
+| **指标名称** | Unfulfilled Order Share |
+| **指标名称中文** | M Polo O2O失败订单数占比 |
+| **业务定义** | 每个 `category_summary` 占 W Polo + M Polo 总和的比例 |
+| **计算公式** | M Polo Unfulfilled Order / Total Unfulfilled Order |
+| **分子** | [M Polo Unfulfilled Order]这里是1.2 M Polo Unfulfilled Order — O2O失败订单数（M Polo）已经计算好的度量 |
+| **分母** | [Total Unfulfilled Order]这里是1. Total Unfulfilled Order — O2O失败订单数（W Polo + M Polo）已经计算好的度量 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%` |
 
@@ -756,7 +797,7 @@
 | 规则项 | 说明 |
 |---|---|
 | **数据底表** | `a02_e2e_boss_performance_summary_d`、`a02_e2e_boss_fulfillment_request_data_d` |
-| **筛选逻辑** | 统一包含 `calc_type = payment` 或 `calc_type = fulfillment`；M/W POLO 子板块需追加 `brand in ("1. W Polo", "2. M Polo")` |
+| **筛选逻辑** | 统一包含 `calc_type = payment` 或 `calc_type = fulfillment`；M/W POLO 子板块需追加 `brand in ("W Polo", "M Polo")` |
 | **货币转换规则** | 数据源默认为 RMB，转化为美元需要除以固定值 7 |
 | **派生指标** | LY（去年同期）、vs LY（同比）、占比等为派生指标，依据基础指标计算生成；vs LY 同比口径统一为 `今年 / 去年 − 1`（金额/数量类）或 `今年 − 去年`（差值，bp 指标，展示时 ×100 转 bp，仅用于率类指标） |
 | **分组维度** | 根据 `brand`、`product_type`、`category_summary`、`category` 分组；`brand` 粒度行支持展开看 `product_type` → `category_summary` → `category` 粒度明细数据 |

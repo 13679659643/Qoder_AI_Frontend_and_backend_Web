@@ -21,6 +21,10 @@
 输出新的解决方案在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance By Location目录下，命名为PB_Location_Sales_detail_ms.md
 
 # 第五轮提示：
+逻辑文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\口径文档\PB Location.md，从子模块五：BOSS Performance Details的6. Fulfillment% — O2O订单履约率开始。
+列指标文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance By Location\Dim_ColMetric_Fulfillment_PB_Location.md，
+参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance By Location\PB_Location_Sales_detail_ms.md
+输出新的解决方案在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance By Location目录下，命名为PB_Location_Fulfillment_detail_ms.md，需要注意最后三个库存数量指标，根据所选时间范围的期末库存，即统计结束时间的期末库存数量，需要根据筛选日期，只要最后一天的数据。
 
 
 # 第六轮提示:

@@ -1024,7 +1024,7 @@ Cancelled by Other：{Cancelled Order by Other} 占比：{Cancelled Order Share 
 | **业务定义** | 根据订单付款时间，统计订单流转到门店的次数（不去重） by region/store type/store 拆分统计 |
 | **计算公式** | sum(o2o_fulfillment_request_failed_times) |
 | **统计字段** | `o2o_fulfillment_request_failed_times` |
-| **数据底表** | `a02_e2e_boss_performance_summary_d` |
+| **数据底表** | `a02_e2e_boss_fulfillment_request_data_d` |
 | **筛选条件** | `calc_type = fulfillment`，按 `store_region` 或 `store_type` 分组（支持展开到 `shop_code`） |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
@@ -1041,7 +1041,7 @@ Cancelled by Other：{Cancelled Order by Other} 占比：{Cancelled Order Share 
 | **计算公式** | sum(o2o_fulfillment_request_failed_times) / sum(o2o_fulfillment_request_times) |
 | **分子** | `o2o_fulfillment_request_failed_times` |
 | **分母** | `o2o_fulfillment_request_times` |
-| **数据底表** | `a02_e2e_boss_performance_summary_d` |
+| **数据底表** | `a02_e2e_boss_fulfillment_request_data_d` |
 | **筛选条件** | `calc_type = fulfillment`，按 `store_region` 或 `store_type` 分组（支持展开到 `shop_code`） |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%` |
@@ -1058,7 +1058,7 @@ Cancelled by Other：{Cancelled Order by Other} 占比：{Cancelled Order Share 
 | **计算公式** | sum(stock_qty) |
 | **统计字段** | `stock_qty` |
 | **数据底表** | `a02_e2e_boss_performance_summary_d` |
-| **筛选条件** | `calc_type = fulfillment`，选择 Region 则聚合在 `store_region` 粒度；选择 Store Type 则聚合在 `store_type` 粒度（支持展开到 `shop_code`） |
+| **筛选条件** | `calc_type = fulfillment`，选择 Region 则聚合在 `store_region` 粒度；选择 Store Type 则聚合在 `store_type` 粒度（支持展开到 `shop_code`），根据所选时间范围的期末库存，即统计结束时间的期末库存数量，需要根据筛选日期，只要最后一天的数据。 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 
@@ -1074,7 +1074,7 @@ Cancelled by Other：{Cancelled Order by Other} 占比：{Cancelled Order Share 
 | **计算公式** | sum(bsr_stock_qty) |
 | **统计字段** | `bsr_stock_qty` |
 | **数据底表** | `a02_e2e_boss_performance_summary_d` |
-| **筛选条件** | `calc_type = fulfillment`，按 `store_region` 或 `store_type` 分组（支持展开到 `shop_code`） |
+| **筛选条件** | `calc_type = fulfillment`，按 `store_region` 或 `store_type` 分组（支持展开到 `shop_code`），根据所选时间范围的期末库存，即统计结束时间的期末库存数量，需要根据筛选日期，只要最后一天的数据。 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 
@@ -1090,7 +1090,7 @@ Cancelled by Other：{Cancelled Order by Other} 占比：{Cancelled Order Share 
 | **计算公式** | sum(seasonal_stock_qty) |
 | **统计字段** | `seasonal_stock_qty` |
 | **数据底表** | `a02_e2e_boss_performance_summary_d` |
-| **筛选条件** | `calc_type = fulfillment`，按 `store_region` 或 `store_type` 分组（支持展开到 `shop_code`） |
+| **筛选条件** | `calc_type = fulfillment`，按 `store_region` 或 `store_type` 分组（支持展开到 `shop_code`） ，根据所选时间范围的期末库存，即统计结束时间的期末库存数量，需要根据筛选日期，只要最后一天的数据。|
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 

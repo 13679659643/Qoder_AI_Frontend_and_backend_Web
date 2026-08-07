@@ -59,81 +59,81 @@ DATATABLE(
         // Act/LY: percent_1dp；vs LY: delta_bp（今年-去年，差值bp）
         // ════════════════════════════════════════════════════════════════
         { 1,  "Fulfillment%",             "1-Act",    10, 1,  "Act",   "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 2,  "Fulfillment%",             "2-LY",     10, 2,  "LY",    "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 3,  "Fulfillment%",             "3-vs LY",  10, 3,  "vs LY", "fulfillment", "delta_bp",    "delta_bp",    "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 2,  "Fulfillment%",             "2-LY",     10, 200,  "LY",    "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 3,  "Fulfillment%",             "3-vs LY",  10, 300,  "vs LY", "fulfillment", "delta_bp",    "delta_bp",    "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Request Order 分组 — O2O销售订单量/件数/金额（数量/金额类）
         // Act/LY: integer 或 currency；vs LY: percent_1dp
         // ════════════════════════════════════════════════════════════════
         { 4,  "Request Order",            "4-Orders",  20, 11, "Orders", "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 5,  "Request Order",            "5-LY",      20, 12, "LY",     "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 6,  "Request Order",            "6-vs LY",   20, 13, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 5,  "Request Order",            "5-LY",      20, 200, "LY",     "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 6,  "Request Order",            "6-vs LY",   20, 300, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 7,  "Request Order",            "7-Units",   20, 14, "Units",  "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 8,  "Request Order",            "8-LY",      20, 15, "LY",     "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 9,  "Request Order",            "9-vs LY",   20, 16, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 8,  "Request Order",            "8-LY",      20, 200, "LY",     "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 9,  "Request Order",            "9-vs LY",   20, 300, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 10, "Request Order",            "10-Amt",    20, 17, "Amt",    "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 11, "Request Order",            "11-LY",     20, 18, "LY",     "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 12, "Request Order",            "12-vs LY",  20, 19, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 11, "Request Order",            "11-LY",     20, 200, "LY",     "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 12, "Request Order",            "12-vs LY",  20, 300, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Shipped Order 分组 — O2O已配货订单量/件数/金额（数量/金额类）
         // Act/LY: integer 或 currency；vs LY: percent_1dp
         // ════════════════════════════════════════════════════════════════
-        { 13, "Shipped Order",            "13-Orders", 30, 21, "Orders", "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 14, "Shipped Order",            "14-LY",     30, 22, "LY",     "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 15, "Shipped Order",            "15-vs LY",  30, 23, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 16, "Shipped Order",            "16-Units",  30, 24, "Units",  "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 17, "Shipped Order",            "17-LY",     30, 25, "LY",     "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 18, "Shipped Order",            "18-vs LY",  30, 26, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 19, "Shipped Order",            "19-Amt",    30, 27, "Amt",    "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 20, "Shipped Order",            "20-LY",     30, 28, "LY",     "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 21, "Shipped Order",            "21-vs LY",  30, 29, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 13, "Shipped Order",            "13-Orders", 30, 11, "Orders", "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 14, "Shipped Order",            "14-LY",     30, 200, "LY",     "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 15, "Shipped Order",            "15-vs LY",  30, 300, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 16, "Shipped Order",            "16-Units",  30, 14, "Units",  "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 17, "Shipped Order",            "17-LY",     30, 200, "LY",     "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 18, "Shipped Order",            "18-vs LY",  30, 300, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 19, "Shipped Order",            "19-Amt",    30, 17, "Amt",    "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 20, "Shipped Order",            "20-LY",     30, 200, "LY",     "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 21, "Shipped Order",            "21-vs LY",  30, 300, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Unfulfillment% 分组 — O2O订单未履约率（比率类）
         // Act/LY: percent_1dp；vs LY: delta_bp
         // ════════════════════════════════════════════════════════════════
-        { 22, "Unfulfillment%",           "22-Act",    40, 31, "Act",   "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 23, "Unfulfillment%",           "23-LY",     40, 32, "LY",    "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 24, "Unfulfillment%",           "24-vs LY",  40, 33, "vs LY", "fulfillment", "delta_bp",    "delta_bp",    "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 22, "Unfulfillment%",           "22-Act",    40, 1, "Act",   "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 23, "Unfulfillment%",           "23-LY",     40, 200, "LY",    "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 24, "Unfulfillment%",           "24-vs LY",  40, 300, "vs LY", "fulfillment", "delta_bp",    "delta_bp",    "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Unfulfilled Order 分组 — O2O失败订单数/件数/金额（数量/金额类）
         // Act/LY: integer 或 currency；vs LY: percent_1dp
         // ════════════════════════════════════════════════════════════════
-        { 25, "Unfulfilled Order",        "25-Orders", 50, 41, "Orders", "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 26, "Unfulfilled Order",        "26-LY",     50, 42, "LY",     "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 27, "Unfulfilled Order",        "27-vs LY",  50, 43, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 28, "Unfulfilled Order",        "28-Units",  50, 44, "Units",  "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 29, "Unfulfilled Order",        "29-LY",     50, 45, "LY",     "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 30, "Unfulfilled Order",        "30-vs LY",  50, 46, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 31, "Unfulfilled Order",        "31-Amt",    50, 47, "Amt",    "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 32, "Unfulfilled Order",        "32-LY",     50, 48, "LY",     "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 33, "Unfulfilled Order",        "33-vs LY",  50, 49, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 25, "Unfulfilled Order",        "25-Orders", 50, 11, "Orders", "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 26, "Unfulfilled Order",        "26-LY",     50, 200, "LY",     "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 27, "Unfulfilled Order",        "27-vs LY",  50, 300, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 28, "Unfulfilled Order",        "28-Units",  50, 14, "Units",  "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 29, "Unfulfilled Order",        "29-LY",     50, 200, "LY",     "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 30, "Unfulfilled Order",        "30-vs LY",  50, 300, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 31, "Unfulfilled Order",        "31-Amt",    50, 17, "Amt",    "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 32, "Unfulfilled Order",        "32-LY",     50, 200, "LY",     "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 33, "Unfulfilled Order",        "33-vs LY",  50, 300, "vs LY",  "fulfillment", "percent_1dp", "percent_1dp", "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Rejected Order 分组 — 拒单订单量与拒单率
         // ════════════════════════════════════════════════════════════════
-        { 34, "Rejected Order",           "34-Orders",  60, 51, "Orders",  "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 34, "Rejected Order",           "34-Orders",  60, 11, "Orders",  "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 35, "Rejected Order",           "35-Reject%", 60, 52, "Reject%", "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Cancelled Order by Overdue 分组 — 超时订单量与超时率
         // ════════════════════════════════════════════════════════════════
-        { 36, "Cancelled Order by Overdue", "36-Orders",  70, 61, "Orders",   "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 36, "Cancelled Order by Overdue", "36-Orders",  70, 11, "Orders",   "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 37, "Cancelled Order by Overdue", "37-Overdue%", 70, 62, "Overdue%", "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Cancelled Order by Customer 分组 — 顾客取消订单量与顾客取消率
         // ════════════════════════════════════════════════════════════════
-        { 38, "Cancelled Order by Customer", "38-Orders",  80, 71, "Orders",    "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 38, "Cancelled Order by Customer", "38-Orders",  80, 11, "Orders",    "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 39, "Cancelled Order by Customer", "39-Customer%", 80, 72, "Customer%", "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Others 分组 — 其他失败订单量与失败率
         // ════════════════════════════════════════════════════════════════
-        { 40, "Others",                  "40-Orders",  90, 81, "Orders",  "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 40, "Others",                  "40-Orders",  90, 11, "Orders",  "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 41, "Others",                  "41-Others%", 90, 82, "Others%", "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
@@ -145,8 +145,8 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         // Inventory 分组 — 商品库存件数 (Total/BSR/Seasonal)
         // ════════════════════════════════════════════════════════════════
-        { 44, "Inventory",               "44-Total",    110, 101, "Total",    "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 45, "Inventory",               "45-BSR",      110, 102, "BSR",      "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 46, "Inventory",               "46-Seasonal", 110, 103, "Seasonal", "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+        { 44, "Inventory",               "44-Total Units",    110, 101, "Total Units",    "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 45, "Inventory",               "45-BSR Units",      110, 102, "BSR Units",      "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 46, "Inventory",               "46-Seasonal Units", 110, 103, "Seasonal Units", "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" }
     }
 )
