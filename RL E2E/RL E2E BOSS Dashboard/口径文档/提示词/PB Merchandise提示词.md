@@ -12,7 +12,14 @@
 
 
 # 第三轮提示词：
-
+口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\口径文档\PB Merchandise.md，只关注子模块三：BOSS Performance Details的4. Avg. No. of Store Passed Before Order Got Accepted — O2O平均订单流转次数开始。
+列指标文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance by Merchandise\Dim_ColMetric_Fulfillment_PB_Merchandise.md，
+解决方案参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance By Location\PB_Location_Fulfillment_detail_ms.md
+输出新的解决方案在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance by Merchandise目录下，命名为PB_Merchandise_Fulfillment_detail_ms.md，事实表分组字段表格行/列直接拉取，模型自动传递筛选DAX 无需显式处理；
+需要注意最后一个Product Volume指标：
+库存：sum(stock_qty) 【看所选时间范围的期末库存】，库存需要根据筛选日期，只要最后一天的数据。
+销量：sum(o2o_fulfillment_shipped_qty) 【看所有时间范围的销量总和】，销量整个筛选周期的数据聚合。
+不懂就问。
 
 # 第四轮提示：
 
