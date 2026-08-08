@@ -101,10 +101,10 @@
 > 比率类 · SUM(o2o_fulfillment_shipped_order_cnt) / SUM(o2o_fulfillment_request_order_cnt)
 > 比率类不除汇率（数量类相除自动抵消）
 
-### 4.1 Fulfillment% by Label Value
+### 4.1 PBM Fulfillment% by Label Value
 
 ```dax
-Fulfillment% by Label Value =
+PBM Fulfillment% by Label Value =
 // ========================================
 // 度量值: Fulfillment% by Label Value
 // Display Folder: PB Merchandise
@@ -141,10 +141,10 @@ Fulfillment% by Label Value =
     RETURN DIVIDE(__Numerator, __Denominator)
 ```
 
-### 4.2 Fulfillment% by Label Display
+### 4.2 PBM Fulfillment% by Label Display
 
 ```dax
-Fulfillment% by Label Display =
+PBM Fulfillment% by Label Display =
 // ========================================
 // 度量值: Fulfillment% by Label Display
 // Display Folder: PB Merchandise

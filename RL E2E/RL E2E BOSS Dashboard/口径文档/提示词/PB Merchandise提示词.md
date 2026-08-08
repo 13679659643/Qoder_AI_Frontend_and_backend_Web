@@ -6,6 +6,9 @@
 
 
 # 第二轮提示词:
+口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\口径文档\PB Merchandise.md，只关注子模块三：BOSS Performance Details的4. Avg. No. of Store Passed Before Order Got Accepted — O2O平均订单流转次数开始。
+参考列指标文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance By Location\Dim_ColMetric_Fulfillment_PB_Location.md，其中需要注意的是ColType同名的列类型标识，对应ColName_Sort值一样，以参考文档为准。
+输出新的解决方案在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance by Merchandise目录下，命名为Dim_ColMetric_Fulfillment_PB_Merchandise.md，注意分组和指标根据口径文档中的来，4和5为Order Processing Efficiency分组；Fulfillment%分组：6、6.1、6.2；Request Order：7、7.1、7.2、8、8.1、8.2、9、9.1、9.2；Shipped Order：10、10.1、10.2、11、11.1、11.2、12、12.1、12.2；Unfulfillment%：13、13.1、13.2、14、14.1、14.2；Unfulfilled Order：15、15.1、15.2、16、16.1、16.2；Product Volume：17，这个分组下就只有这一个子项。
 
 
 # 第三轮提示词：

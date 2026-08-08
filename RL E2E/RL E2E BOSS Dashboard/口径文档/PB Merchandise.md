@@ -294,11 +294,11 @@
 
 ---
 
-### 5. Avg. Processing Time — O2O平均订单流转时长
+### 5. Avg. Processing Time(Hour) — O2O平均订单流转时长
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | Avg. Processing Time |
+| **指标名称** | Avg. Processing Time(Hour) |
 | **指标名称中文** | O2O平均订单流转时长 |
 | **业务定义** | 剔除换货的订单，根据订单的付款时间和订单最后一次配货失败/配货完成的时间，统计订单商品的平均流转时长（统计配货成功和配货失败的订单）by label/product type/category/subcategory 拆分统计 |
 | **计算公式** | sum(o2o_fulfillment_request_duration) / sum(o2o_fulfillment_request_sku_qty) |
@@ -783,7 +783,7 @@
 | **指标名称中文** | SKU商品的数量 |
 | **业务定义** | 在售卖的 sku 商品数量 by label/product type/category/subcategory 拆分统计 |
 | **计算公式** | sum(stock_qty) + sum(o2o_fulfillment_shipped_qty) |
-| **统计字段** | `stock_qty`（库存）+ `o2o_fulfillment_shipped_qty`（销量） |
+| **统计字段** | `stock_qty`（库存需要根据筛选日期，只要最后一天的数据）+ `o2o_fulfillment_shipped_qty`（销量整个筛选周期的数据聚合） |
 | **数据底表** | `a02_e2e_boss_performance_summary_d` |
 | **筛选条件** | `calc_type = fulfillment`，按 `brand` 分组（`brand` 行支持展开到 `product_type` → `category_summary` → `category`） |
 | **聚合粒度** | 根据所选时间范围 `data_date`，聚合在 `brand` 粒度；库存：sum(stock_qty)【看所选时间范围的库存】；销量：sum(o2o_fulfillment_shipped_qty)【看所有时间范围的】 |

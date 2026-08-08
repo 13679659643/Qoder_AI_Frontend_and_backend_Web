@@ -4,7 +4,7 @@ Dim_ColKPIs_BossCoreKPI_Overview =
 // 类型: 维度表（Dim_ 前缀），断开维度
 // 用途: 定义 BOSS Core KPI 矩阵的列维度（StoreGroup > ColName）
 // 范围: 子模块一 BOSS Core KPI
-// 说明: 6 个店铺分组（TM / JD / RLE_CN / DY_Family / DY_W / DY_MN）
+// 说明: 6 个店铺分组（TM / JD / RLE_CN / DY_Family / DY_W / DY_M）
 //       每个店铺分组下 3 列：Act / LY / vs LY
 //       共 18 个列指标，对应事实表 store_name 字段筛选
 //
@@ -14,7 +14,7 @@ Dim_ColKPIs_BossCoreKPI_Overview =
 //   RLE_CN    → 小红书中文店
 //   DY_Family → 抖音家庭号
 //   DY_W      → 抖音 W 店
-//   DY_MN     → 抖音 MN 店
+//   DY_M     → 抖音 MN 店
 //
 // 列类型说明（ColType）:
 //   Act    → 实际值（当期）
@@ -47,16 +47,16 @@ Dim_ColKPIs_BossCoreKPI_Overview =
 //   RLE_CN     → 2 个空格
 //   DY_Family  → 3 个空格
 //   DY_W       → 4 个空格
-//   DY_MN      → 5 个空格
+//   DY_M      → 5 个空格
 //   注: StoreGroup 字段为分组标题，本身各店铺值已天然不同（TM≠JD≠RLE_CN...），
 //       无需追加空格区分；同店铺内 Act / LY / vs LY 因基础字符串不同天然区分，
 //       追加空格数与所属店铺一致即可。
 //
 // 排序规则（不同店铺分组之间间隔 10，便于后续拓展字段无缝接入）:
-//   StoreGroup_Sort:  TM=10, JD=20, RLE_CN=30, DY_Family=40, DY_W=50, DY_MN=60
+//   StoreGroup_Sort:  TM=10, JD=20, RLE_CN=30, DY_Family=40, DY_W=50, DY_M=60
 //   ColName_Sort:     全局唯一，按店铺倍数区分，组内 Act/LY/vs LY 间隔 1
 //                     TM=1,2,3  JD=11,12,13  RLE_CN=21,22,23
-//                     DY_Family=31,32,33  DY_W=41,42,43  DY_MN=51,52,53
+//                     DY_Family=31,32,33  DY_W=41,42,43  DY_M=51,52,53
 //   说明: 跨店铺间隔 10 通过 StoreGroup_Sort 步长 10 与 ColName_Sort 步长 10 体现；
 //         同店铺内 3 列通过 ColName_Sort 末位 1,2,3 体现。
 //
@@ -72,7 +72,7 @@ Dim_ColKPIs_BossCoreKPI_Overview =
 //   默认：#5f6165 深灰
 // ========================================
 DATATABLE(
-    "StoreGroup_ID",         STRING,    // 店铺分组标识（TM / JD / RLE_CN / DY_Family / DY_W / DY_MN）
+    "StoreGroup_ID",         STRING,    // 店铺分组标识（TM / JD / RLE_CN / DY_Family / DY_W / DY_M）
     "ColMetric_ID",          INTEGER,   // 主键标识（全局唯一）
     "StoreGroup",            STRING,    // Level 1: 店铺分组名（__SelR1），各店铺值天然不同，不加空格
     "ColName",               STRING,    // Level 2: 列名（Act / LY / vs LY，__SelR2），同名区分靠空格
@@ -120,10 +120,10 @@ DATATABLE(
         { "DY_W", 15, "DY_W", "vs LY    ",  50, 43, "vs LY", "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
-        // DY_MN 店铺分组（ColName 5 个空格，StoreGroup_Sort = 60）
+        // DY_M 店铺分组（ColName 5 个空格，StoreGroup_Sort = 60）
         // ════════════════════════════════════════════════════════════════
-        { "DY_MN", 16, "DY_MN", "Act     ",    60, 51, "Act",   "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "DY_MN", 17, "DY_MN", "LY     ",     60, 52, "LY",    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "DY_MN", 18, "DY_MN", "vs LY     ",  60, 53, "vs LY", "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+        { "DY_M", 16, "DY_M", "Act     ",    60, 51, "Act",   "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "DY_M", 17, "DY_M", "LY     ",     60, 52, "LY",    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "DY_M", 18, "DY_M", "vs LY     ",  60, 53, "vs LY", "#1A9018", "#D64550", "#E1C233", "#5f6165" }
     }
 )
