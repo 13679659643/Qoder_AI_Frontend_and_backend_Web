@@ -14,7 +14,7 @@ Slicer_Is_Employee_Selection =
 	    "IsEmployee_IsActive", BOOLEAN,   // 是否激活状态，控制该身份选项是否可用
 	    "IsEmployee_Group", STRING,       // 分组标识，用于对相关身份进行逻辑分组
 	    // 自定义扩展字段 - 根据业务需求添加
-	    "IsEmployee_Code", STRING,       // 业务代码：对应图片中的Yes、No字段值
+	    "IsEmployee_Code", INTEGER,       // 业务代码：对应图片中的Yes、No字段值
 	    // 数据行
 	    {
 	        // 格式说明：每个花括号{}包含一行数据，顺序与上方字段定义一致
@@ -27,7 +27,7 @@ Slicer_Is_Employee_Selection =
 	            TRUE,                    // 默认选中
 	            TRUE,                    // 激活状态，当前可用
 	            "用户身份标识",          // 分组
-	            "Yes"                    // 业务代码，对应源系统字段值
+	            1                    // 业务代码，对应源系统字段值
 	        },
 	        // No - 非员工
 	        {
@@ -38,7 +38,7 @@ Slicer_Is_Employee_Selection =
 	            FALSE,                   // 非默认选项
 	            TRUE,                    // 激活状态，当前可用
 	            "用户身份标识",          // 分组
-	            "No"                     // 业务代码，对应源系统字段值
+	            0                     // 业务代码，对应源系统字段值
 	        }
 	    }
 	)

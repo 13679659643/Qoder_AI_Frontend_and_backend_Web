@@ -1,0 +1,9 @@
+IsMemberFilter = 
+DATATABLE(
+    "Label", STRING,
+    "IsMember", INTEGER,
+    {
+        {"TTL VIC", 0},
+        {"Member VIC", 1}
+    }
+)
