@@ -7,7 +7,12 @@
 Monthly TAR ACH% 、Yearly TAR ACH% 、TAR ACH% 之类的逻辑暂时还没有，先保持子指标占位，等有了逻辑再回来填充，数据格式为percent_1dp：`+#,##0.0%;-#,##0.0%;0.0%`。
 
 # 第二轮提示词:
-指标名称需要区分Net和Demand，例如：DCom Member SLS（Net） — DCom会员净销售额、DCom Member SLS（Demand） — DCom会员净销售额。
+口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Member.md
+参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance by Merchandise\PB_Merchandise_Trend.md
+独立输出每个指标的Value和Display度量，本次指标用于卡片图，没用任何x轴的维度，不懂就问，不要访问其他没有提到过的文件，参考文件中提到过的依赖文件除外。
+分组维度直接拉取事实表字段实现自动传递，模型自动传递筛选，DAX 无需显式处理。
+需要注意的是，口径中的一些指标存在两种数据格式，需要输出为两个不同的Display度量，例如：DCom New Member Recruitment vs LY（Net/Demand）percent_1dp和DCom New Member Recruitment vs LY（Net/Demand）delta_pct_1dp。
+输出新的解决方案在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Member目录下，命名为Customer_Member_Indicator.md
 
 
 # 第三轮提示词：

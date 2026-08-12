@@ -20,7 +20,7 @@
 
 ---
 
-## 子模块一：Performance Indicator
+## 所有指标：Performance Indicator
 
 > **无分组维度**: 只受到筛选器影响，没有分组维度，用于制作卡片图。按 Net / Demand 维度区分。
 
@@ -28,7 +28,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom New Member Recruitment |
+| **指标名称** | DCom New Member Recruitment（Net/Demand） |
 | **指标名称中文** | DCom新增会员数 |
 | **业务定义** | 注册日期在指定日期范围内的会员人数 |
 | **计算公式** | count(distinct user_id) |
@@ -43,7 +43,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom New Member Recruitment vs LY |
+| **指标名称** | DCom New Member Recruitment vs LY（Net/Demand） |
 | **指标名称中文** | DCom新增会员数同比 |
 | **业务定义** | DCom新增会员数今年较去年同期的变化率 |
 | **计算公式** | 今年 / 去年 - 1 |
@@ -57,7 +57,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom New Member Recruitment vs LP |
+| **指标名称** | DCom New Member Recruitment vs LP（Net/Demand） |
 | **指标名称中文** | DCom新增会员数环比 |
 | **业务定义** | DCom新增会员数当期较上期的变化率 |
 | **计算公式** | 当期 / 上期 - 1 |
@@ -73,7 +73,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom Member SLS |
+| **指标名称** | DCom Member SLS Net |
 | **指标名称中文** | DCom会员净销售额 |
 | **业务定义** | 统计周期内下单时是会员的净销售额 |
 | **计算公式** | sum(member_net_pay_amt) |
@@ -88,7 +88,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom Member SLS vs LY |
+| **指标名称** | DCom Member SLS Net vs LY |
 | **指标名称中文** | DCom会员净销售额同比 |
 | **业务定义** | DCom会员净销售额今年较去年同期的变化率 |
 | **计算公式** | 今年 / 去年 - 1 |
@@ -102,7 +102,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom Member SLS vs LP |
+| **指标名称** | DCom Member SLS Net vs LP |
 | **指标名称中文** | DCom会员净销售额环比 |
 | **业务定义** | DCom会员净销售额当期较上期的变化率 |
 | **计算公式** | 当期 / 上期 - 1 |
@@ -118,7 +118,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom Member SLS% |
+| **指标名称** | DCom Member SLS% Net |
 | **指标名称中文** | DCom会员净销售额占比 |
 | **业务定义** | 统计周期内会员净销售额/全店净销售额 |
 | **计算公式** | 分子：sum(member_net_pay_amt) where is_member = 1；分母：sum(net_pay_amt) |
@@ -134,7 +134,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom Member SLS% vs LY |
+| **指标名称** | DCom Member SLS% Net vs LY |
 | **指标名称中文** | DCom会员净销售额占比同比 |
 | **业务定义** | DCom会员净销售额占比今年较去年同期的变化（差值） |
 | **计算公式** | 今年 - 去年（差值，展示时 ×100 转 pts） |
@@ -148,7 +148,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom Member SLS% vs LP |
+| **指标名称** | DCom Member SLS% Net vs LP |
 | **指标名称中文** | DCom会员净销售额占比环比 |
 | **业务定义** | DCom会员净销售额占比当期较上期的变化（差值） |
 | **计算公式** | 当期 - 上期（差值，展示时 ×100 转 pts） |
@@ -164,7 +164,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom Member SLS |
+| **指标名称** | DCom Member SLS Demand |
 | **指标名称中文** | DCom会员净销售额 |
 | **业务定义** | 统计周期内下单时是会员的销售额 |
 | **计算公式** | sum(member_pay_amt) |
@@ -179,7 +179,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom Member SLS vs LY |
+| **指标名称** | DCom Member SLS Demand vs LY |
 | **指标名称中文** | DCom会员净销售额同比 |
 | **业务定义** | DCom会员净销售额今年较去年同期的变化率 |
 | **计算公式** | 今年 / 去年 - 1 |
@@ -193,7 +193,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom Member SLS vs LP |
+| **指标名称** | DCom Member SLS Demand vs LP |
 | **指标名称中文** | DCom会员净销售额环比 |
 | **业务定义** | DCom会员净销售额当期较上期的变化率 |
 | **计算公式** | 当期 / 上期 - 1 |
@@ -209,7 +209,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom Member SLS% |
+| **指标名称** | DCom Member SLS% Demand |
 | **指标名称中文** | DCom会员净销售额占比 |
 | **业务定义** | 统计周期内会员销售额/全店销售额 |
 | **计算公式** | 分子：sum(member_pay_amt) where is_member = 1；分母：sum(pay_amt) |
@@ -225,7 +225,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom Member SLS% vs LY |
+| **指标名称** | DCom Member SLS% Demand vs LY |
 | **指标名称中文** | DCom会员净销售额占比同比 |
 | **业务定义** | DCom会员净销售额占比今年较去年同期的变化（差值） |
 | **计算公式** | 今年 - 去年（差值，展示时 ×100 转 pts） |
@@ -239,7 +239,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| **指标名称** | DCom Member SLS% vs LP |
+| **指标名称** | DCom Member SLS% Demand vs LP |
 | **指标名称中文** | DCom会员净销售额占比环比 |
 | **业务定义** | DCom会员净销售额占比当期较上期的变化（差值） |
 | **计算公式** | 当期 - 上期（差值，展示时 ×100 转 pts） |
