@@ -21,9 +21,9 @@ Slicer_Store_Name：D:\Users\QiYe\BaoZun\Project\Qoder_AI_Frontend_and_backend_W
 9、分组维度直接拉取事实表字段实现自动传递，模型自动传递筛选，DAX 无需显式处理，不懂就问。输出新的解决方案在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC KPI目录下，命名为VIC_KPIs_Table.md
 
 # 第二轮提示词:
-1、列指标维度表：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance by Merchandise\Dim_ColMetric_Fulfillment_PB_Merchandise.md，我已经调整了，以我调整后的为准，没有​percent_1dp_signed、percent_1dp_nosign这两个格式，百分比是percent_1dp → 百分比，保留一位小数，不含正号、delta_pct_1dp → 百分比，保留一位小数，含正号：+14.5% / -3.2%，具体查看口径文档，调整给出的解决方案中的相关部分。
-2、关键特殊逻辑四：Rolling 12 个财月分母，理解错误，Rolling 12 个财月 = 当前月 + 往前 11 个月，共 12 个月，指这十二个月的​count(distinct user_id)汇总。
-3、
+1、列指标维度表：D:\Users\QiYe\BaoZun\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC KPI\Dim_ColMetric_VIC_KPIs.md，我已经调整了，以我调整后的为准，没有​percent_1dp_signed、percent_1dp_nosign这两个格式，百分比是percent_1dp → 百分比，保留一位小数，不含正号、delta_pct_1dp → 百分比，保留一位小数，含正号：+14.5% / -3.2%，具体查看口径文档，调整给出的解决方案中的相关部分。
+2、关键特殊逻辑四：Rolling 12 个财月分母，理解错误，Rolling 12 个财月 = 当前月 + 往前 11 个月，共 12 个月，指这十二个月的​count(distinct user_id)汇总。只有VIC Retention%指标用到了，分母里面。
+3、不懂就问。
 
 # 第三轮提示词：
 
