@@ -27,6 +27,14 @@ Slicer_Store_Name：D:\Users\QiYe\BaoZun\Project\Qoder_AI_Frontend_and_backend_W
 
 # 第三轮提示词：
 
+根据D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC KPI\VIC_KPIs_Table.md文件，然后把Metric_ID为1、2、3、6、7、8、10、11、12、14共10个
+指标的逻辑单独提取出来，独立输出每个指标的Value和Display度量，参考D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC KPI\VIC_KPIs_Pie_Chart.md结构，不懂就问。
+注意事项：
+1、关于指标的数据格式，都是不带正号的，这个需要酌情修改，比如Metric_ID = 2，原本的数据格式是delta_pct_1dp，显示格式是百分比，保留一位小数，含正号：+14.5% / -3.2%，需要修改为percent_1dp，百分比，保留一位小数，不含正号：14.5% / - 3.2%，使用FORMAT(__Value, "#,##0.0%")方法；delta_pts数据格式修改为integer_pts → 整数，千分位整数pts, 不含正号，例如：120pts / -80pts,直接使用FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")
+2、现在我的度量值是作用于柱形图，而不是卡片图了，柱形图 X 轴 = Slicer_Time_Frame_VIC_Trend[TimeFrame_Value]，可以参考一下D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance By Location\PB_Location_Trend.md中子模块二：Fulfillment% Trend的实现。
+3、日期表由Slicer_Time_Frame、Slicer_Time_Frame_Max、Slicer_Time_Frame_Min这三张日期维度表，改为对应的Slicer_Time_Frame_VIC_Trend、Slicer_Time_Frame_Max_VIC_Trend、Slicer_Time_Frame_Min_VIC_Trend这三张日期维度表，这是不同的模块，使用不同的日期表避免互相筛选影响，结构都是和之前对应的日期表是一致的，只是改名了。
+结合以上信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC Trend目录下输出新的解决方案文件，命名为VIC_Trend.md
+
 # 第四轮提示：
 
 # 第五轮提示：
