@@ -30,7 +30,7 @@
 
 ## 子模块四：VIC Segment
 
-> **分组维度**: 按 `customer_tier`（T1/T2/T3/T4/T5）分组，这里需要判断在哪一个分组，对应不同的逻辑，固定值：T1：≧ 200K；T2：80-200K；T3：20-80K；T4：5-20K；T5：< 5K
+> **分组维度**: 按 `customer_tier`（T1/T2/T3/T4/T5）分组，固定值：T1：≧ 200K；T2：80-200K；T3：20-80K；T4：5-20K；T5：< 5K;已有DIM_Row_VIC_Tier行维度字段，参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC Segment\DIM_Row_VIC_Tier.md，DIM_Row_VIC_Tier和a03_e2e_customer_data_m表，模型关系为1:N，所以分组维度由模型自动传递，DAX 无需显式处理分组；
 
 ### 0. Tier — 买家分层
 
@@ -39,12 +39,9 @@
 | **指标名称** | Tier |
 | **指标名称中文** | 买家分层 |
 | **业务定义** | 买家分层，固定值：T1：≧ 200K；T2：80-200K；T3：20-80K；T4：5-20K；T5：< 5K |
-| **计算公式** | 固定值 |
-| **数据底表** | a03_e2e_customer_data_m[customer_tier] |
-| **筛选条件** | 无 |
-| **聚合粒度** | 无 |
-| **数据类型** | text → 文本 |
-| **数据格式** | 无 |
+| **计算公式** | a03_e2e_customer_data_m[customer_tier],字段值包括：T1/T2/T3/T4/T5 |
+| **数据底表** | `a03_e2e_customer_data_m` |
+| **筛选条件** | 分组维度由表字段自动传递，DAX 无需显式处理 分组 |
 
 ---
 
@@ -58,7 +55,7 @@
 | **计算公式** | count(distinct user_id) |
 | **统计字段** | `user_id` |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `customer_tier = T1/T2/T3/T4/T5`；`is_member`和`is_employee`筛选 |
+| **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
@@ -74,7 +71,7 @@
 | **业务定义** | 该分层下买家人数和去年的对比 |
 | **计算公式** | 今年 / 去年 - 1 |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `customer_tier = T1/T2/T3/T4/T5`；`is_member`和`is_employee`筛选 |
+| **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%` |
@@ -89,8 +86,8 @@
 | **指标名称中文** | 买家人数占比 |
 | **业务定义** | 该分层下买家人数/总买家数量 |
 | **计算公式** | 分子：count(distinct user_id) where customer_tier = T1/T2/T3/T4/T5；分母：count(distinct user_id) where sum(net_pay_amt) > 0 |
-| **分子** | `user_id`（`customer_tier = T1/T2/T3/T4/T5`） |
-| **分母** | `user_id`（`sum(net_pay_amt) > 0`） |
+| **分子** | `user_id` |
+| **分母** | `user_id`（`net_pay_amt > 0`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
@@ -108,7 +105,7 @@
 | **业务定义** | 该分层下买家人数占比和去年的对比 |
 | **计算公式** | 今年 / 去年 - 1 |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `customer_tier = T1/T2/T3/T4/T5`；`is_member`和`is_employee`筛选 |
+| **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%` |
@@ -123,9 +120,9 @@
 | **指标名称中文** | 净销售额 |
 | **业务定义** | 该分层下买家净销售额 |
 | **计算公式** | Step 1：在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2：再看该 user_id 在所选时间范围对应的 sum(net_pay_amt) |
-| **统计字段** | `net_pay_amt`、`customer_tier` |
+| **统计字段** | `net_pay_amt` |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `is_member`和`is_employee`筛选 |
+| **筛选条件** | 报表上看到的数值 = 实际金额 ÷ 1,000，所以得到的值需要÷1000；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
@@ -141,7 +138,7 @@
 | **业务定义** | 该分层下买家净销售额和去年的对比 |
 | **计算公式** | 今年 / 去年 - 1 |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `customer_tier = T1/T2/T3/T4/T5`；`is_member`和`is_employee`筛选 |
+| **筛选条件** |  `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%` |
@@ -156,8 +153,8 @@
 | **指标名称中文** | 净销售额占比 |
 | **业务定义** | 该分层下买家净销售额/总买家净销售额 |
 | **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_amt)。分母：所选时间范围对应的 sum(net_pay_amt) |
-| **分子** | `net_pay_amt`（`customer_tier = T1/T2/T3/T4/T5`） |
-| **分母** | `net_pay_amt`（全部） |
+| **分子** | `net_pay_amt` |
+| **分母** | `net_pay_amt`（全部，需要移除a03_e2e_customer_data_m中customer_tier字段对表的影响，但同时需要保留外部切片器的影响，我理解使用ALLSELECTED） |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
@@ -172,13 +169,13 @@
 |---|---|
 | **指标名称** | SLS % vs. LY |
 | **指标名称中文** | 净销售额占比YOY |
-| **业务定义** | 该分层下买家净销售额占比和去年的对比 |
-| **计算公式** | 今年 / 去年 - 1 |
+| **业务定义** | 该分层下买家净销售额占比和去年的对比（差值） |
+| **计算公式** | 今年 - 去年（差值，展示时 ×100 转 pts） |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `customer_tier = T1/T2/T3/T4/T5`；`is_member`和`is_employee`筛选 |
+| **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | integer_pts → 整数，千分位整数pts, 不含正号，例如：120pts / -80pts,直接使用FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")，算同比LY：当期值 − 同期值（差值，pts 指标，展示时 ×100 转 pts） |        
+| **数据格式** | `#,##0pts;-#,##0pts;0pts` |
 
 ---
 
@@ -190,8 +187,8 @@
 | **指标名称中文** | 客单价 |
 | **业务定义** | 该分层下净销售金额/净购买买家人数 |
 | **计算公式** | 分子：SLS（Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_amt)）；分母：dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，count(distinct user_id) |
-| **分子** | `net_pay_amt`（分层） |
-| **分母** | `user_id`（分层） |
+| **分子** | `net_pay_amt`、 sum(net_pay_amt)|
+| **分母** | `user_id` 、count(distinct user_id)|
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
@@ -208,8 +205,8 @@
 | **指标名称中文** | 件单价 |
 | **业务定义** | 该分层下净销售金额/商品净出库件数 |
 | **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_amt)。分母：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_qty) |
-| **分子** | `net_pay_amt`（分层） |
-| **分母** | `net_pay_qty`（分层） |
+| **分子** | `net_pay_amt`、sum(net_pay_amt) |
+| **分母** | `net_pay_qty`、sum(net_pay_qty) |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
@@ -226,13 +223,13 @@
 | **指标名称中文** | 客单件 |
 | **业务定义** | 该分层下商品净出库件数/净出库订单数 |
 | **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_qty)。分母：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_order_cnt) |
-| **分子** | `net_pay_qty`（分层） |
-| **分母** | `net_pay_order_cnt`（分层） |
+| **分子** | `net_pay_qty`、sum(net_pay_qty) |
+| **分母** | `net_pay_order_cnt`、sum(net_pay_order_cnt) |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | decimal_1dp → 小数，保留一位小数，千分位 |
-| **数据格式** | `#,##0.0` |
+| **数据类型** | integer → 整数，千分位整数 |
+| **数据格式** | `#,##0` |
 
 ---
 
@@ -244,8 +241,8 @@
 | **指标名称中文** | 购买频次 |
 | **业务定义** | 该分层下净订单数/净购买买家人数 |
 | **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_order_cnt)。分母：dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，count(distinct user_id) |
-| **分子** | `net_pay_order_cnt`（分层） |
-| **分母** | `user_id`（分层） |
+| **分子** | `net_pay_order_cnt`、sum(net_pay_order_cnt) |
+| **分母** | `user_id`、count(distinct user_id) |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
