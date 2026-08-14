@@ -30,7 +30,7 @@
 
 ## 子模块三：VIC Composition & By Recency Repurchase
 
-> **分组维度**: 固定值：R3, R4-6, R7-9, R10-12, TTL,已有DIM_Row_LY_Last_Purchase_Time行维度字段，参考文件：D:\Users\QiYe\BaoZun\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\LY Last Purchase Time\DIM_Row_LY_Last_Purchase_Time.md
+> **分组维度**: 固定值：R3, R4-6, R7-9, R10-12, TTL,已有DIM_Row_LY_Last_Purchase_Time行维度字段，参考文件：D:\Users\QiYe\BaoZun\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\LY Last Purchase Time\DIM_Row_LY_Last_Purchase_Time.md,DIM_Row_LY_Last_Purchase_Time和a03_e2e_customer_data_m表，模型关系为1:N，所以分组维度由模型自动传递，DAX 无需显式处理分组；
 
 ---
 
@@ -41,12 +41,9 @@
 | **指标名称** | LY Last Purchase Time |
 | **指标名称中文** | 去年VIC最后一个订单的购买时间范围 |
 | **业务定义** | R3：上财年 10-12 月；R4-6：上财年 7-9 月；R7-9：上财年 4-6 月；R10-12：上财年 1-3 月 |
-| **计算公式** | 固定值：R3, R4-6, R7-9, R10-12, TTL |
-| **数据底表** | 无（固定维度值） |
-| **筛选条件** | 无 |
-| **聚合粒度** | 无 |
-| **数据类型** | text → 文本 |
-| **数据格式** | 无 |
+| **计算公式** | a03_e2e_customer_data_m[last_fy_last_order_month_type],字段值包括：R3, R4-6, R7-9, R10-12 |
+| **数据底表** | `a03_e2e_customer_data_m` |
+| **筛选条件** | 分组维度由表字段自动传递，DAX 无需显式处理 分组 |
 
 ---
 
@@ -57,11 +54,11 @@
 | **指标名称** | LY VIC No. |
 | **指标名称中文** | 去年VIC人数 |
 | **业务定义** | R3：这一财年的 VIC，且上财年最后一单落在上财年 10-12 月的 VIC 人数；R4-6：这一财年的 VIC，且上财年最后一单落在上财年 7-9 月的 VIC 人数；R7-9：这一财年的 VIC，且上财年最后一单落在上财年 4-6 月的 VIC 人数；R10-12：这一财年的 VIC，且上财年最后一单落在上财年 1-3 月的 VIC 人数 |
-| **计算公式** | Step 1：在 dt = 所选时间范围 end period，筛选 is_fy_vic = 1，框定 user_id 范围；Step 2：当前财年是 VIC 的人里，上财年最后一单分别落在 R3 / R4-6 / R7-9 / R10-12/TTL 的人数，count(distinct user_id) |
+| **计算公式** | count(distinct user_id) |
 | **统计字段** | `user_id` |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `is_member`和`is_employee`筛选 |
-| **聚合粒度** | `platform, shop_info_id` |
+| **筛选条件** | `is_fy_vic = 1`;`is_member`和`is_employee`筛选 |
+| **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 
@@ -74,11 +71,11 @@
 | **指标名称** | VIC Repurchase No. |
 | **指标名称中文** | 复购VIC人数 |
 | **业务定义** | R3：这一财年的 VIC，且上财年最后一单落在上财年 10-12 月，并且所选时间范围 end period 往前推 12 个月有复购的 VIC 人数；R4-6：这一财年的 VIC，且上财年最后一单落在上财年 7-9 月，并且所选时间范围 end period 往前推 12 个月有复购的 VIC 人数；R7-9：这一财年的 VIC，且上财年最后一单落在上财年 4-6 月，并且所选时间范围 end period 往前推 12 个月有复购的 VIC 人数；R10-12：这一财年的 VIC，且上财年最后一单落在上财年 1-3 月，并且所选时间范围 end period 往前推 12 个月有复购的 VIC 人数 |
-| **计算公式** | Step 1：在 dt = 所选时间范围 end period，筛选 is_fy_vic = 1，框定 user_id 范围；Step 2：用 step1 所框定的 user_id，统计 dt = 所选时间范围 end period 对应的 sum(last_12m_net_pay_amt)；Step 3：根据 当前财年是 VIC 的人里，上财年最后一单分别落在 R3 / R4-6 / R7-9 / R10-12/TTL 的人数，count(distinct user_id) where sum(last_12m_net_pay_amt) > 0 |
-| **统计字段** | `user_id`、`last_12m_net_pay_amt` |
+| **计算公式** | count(distinct user_id) |
+| **统计字段** | `user_id` |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `is_member`和`is_employee`筛选 |
-| **聚合粒度** | `platform, shop_info_id` |
+| **筛选条件** | `is_fy_vic = 1`;`last_12m_net_pay_amt` > 0;`is_member`和`is_employee`筛选 |
+| **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 
@@ -91,11 +88,11 @@
 | **指标名称** | VIC Retention No. |
 | **指标名称中文** | 留存VIC人数 |
 | **业务定义** | R3：这一财年的 VIC，且上财年最后一单落在上财年 10-12 月，并且所选时间范围 end period 往前推 12 个月留存为 VIC 的人数；R4-6：这一财年的 VIC，且上财年最后一单落在上财年 7-9 月，并且所选时间范围 end period 往前推 12 个月留存为 VIC 的人数；R7-9：这一财年的 VIC，且上财年最后一单落在上财年 4-6 月，并且所选时间范围 end period 往前推 12 个月留存为 VIC 的人数；R10-12：这一财年的 VIC，且上财年最后一单落在上财年 1-3 月，并且所选时间范围 end period 往前推 12 个月留存为 VIC 的人数 |
-| **计算公式** | Step 1：在 dt = 所选时间范围 end period，筛选 is_fy_retention_vic = 1，框定 user_id 范围；Step 2：根据 当前财年是 VIC 的人里，上财年最后一单分别落在 R3 / R4-6 / R7-9 / R10-12/TTL 的人数，count(distinct user_id) where is_fy_retention_vic = 1 |
-| **统计字段** | `user_id`、`is_fy_retention_vic` |
+| **计算公式** | count(distinct user_id) |
+| **统计字段** | `user_id` |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `is_member`和`is_employee`筛选 |
-| **聚合粒度** | `platform, shop_info_id` |
+| **筛选条件** | `is_fy_retention_vic = 1`;`is_member`和`is_employee`筛选 |
+| **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 
@@ -108,12 +105,12 @@
 | **指标名称** | VIC Repurchase% |
 | **指标名称中文** | 复购VIC占比 |
 | **业务定义** | 该分层下复购 VIC 人数/总 VIC 人数 |
-| **计算公式** | 分子：Repurchase No.；分母：LY VIC No. |
-| **分子** | Repurchase No. |
+| **计算公式** | 分子：VIC Repurchase No.；分母：LY VIC No.;复购VIC人数/去年VIC人数 |
+| **分子** | VIC Repurchase No. |
 | **分母** | LY VIC No. |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
-| **聚合粒度** | `platform, shop_info_id` |
+| **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
 
@@ -129,7 +126,7 @@
 | **计算公式** | 今年 / 去年 - 1 |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
-| **聚合粒度** | `platform, shop_info_id` |
+| **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%` |
 
@@ -142,12 +139,12 @@
 | **指标名称** | VIC Retention% |
 | **指标名称中文** | 留存VIC占比 |
 | **业务定义** | 该分层下留存 VIC 人数/总 VIC 人数 |
-| **计算公式** | 分子：Retention No.；分母：LY VIC No. |
-| **分子** | Retention No. |
+| **计算公式** | 分子：VIC Retention No.；分母：LY VIC No. |
+| **分子** | VIC Retention No. |
 | **分母** | LY VIC No. |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
-| **聚合粒度** | `platform, shop_info_id` |
+| **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
 
@@ -163,7 +160,7 @@
 | **计算公式** | 今年 / 去年 - 1 |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
-| **聚合粒度** | `platform, shop_info_id` |
+| **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%` |
 
@@ -177,7 +174,7 @@
 | **筛选逻辑** | 模块全局影响：除了特殊说明之外的指标不需要判断is_member和is_employee，其余都默认需要判断is_member和is_employee来确定筛选事实表的值  |
 | **货币转换规则** | 数据源默认为 RMB，转化为美元需要除以固定值 7 |
 | **派生指标** | LY（去年同期）、LP（上期）、vs LY（同比）、vs LP（环比）、占比、YOY、vs Store 等为派生指标，依据基础指标计算生成 |
-| **分组维度** | 根据 `platform, shop_info_id`、`timeframe`（Month/Quarter/Year）、`customer_tier`（T1/T2/T3/T4/T5）、`last_fy_last_order_month_type`（R3/R4-6/R7-9/R10-12/TTL）、VIC 类型（New VIC/Retention VIC/Direct VIC/T4-5 Upgrade）分组 |
+| **分组维度** | 根据 `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理、`timeframe`（Month/Quarter/Year）、`customer_tier`（T1/T2/T3/T4/T5）、`last_fy_last_order_month_type`（R3/R4-6/R7-9/R10-12/TTL）、VIC 类型（New VIC/Retention VIC/Direct VIC/T4-5 Upgrade）分组 |
 | **必须遵守** | 口径文档中定义的所有指标，必须遵守其数据类型和数据格式，如果和解决方案中存在争议的，一切以口径文档为准，必须按照口径文档中的格式进行调整 |
 | **DAX 语法规范** | 文本常量必须使用双引号 `" "`，禁止使用单引号；单引号 `' '` 仅用于表名，列名使用方括号 `[ ]`，例如：`[is_vic] = 1` |
 | **pts 与 bp 区别** | pts 指标：值×100 转 pts（基点，含正负号），数据格式 `+#,##0pts;-#,##0pts;0pts`；bp 指标：值×10000 转 bp，数据格式 `+#,##0bp;-#,##0bp;0bp` |

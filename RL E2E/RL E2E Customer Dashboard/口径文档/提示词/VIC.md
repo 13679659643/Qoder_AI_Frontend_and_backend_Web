@@ -36,6 +36,12 @@ Slicer_Store_Name：D:\Users\QiYe\BaoZun\Project\Qoder_AI_Frontend_and_backend_W
 结合以上信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC Trend目录下输出新的解决方案文件，命名为VIC_Trend.md
 
 # 第四轮提示：
+口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\LY Last Purchase Time.md
+参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC KPI\VIC_KPIs_Table.md
+和参考文件不同的是需要独立输出每个指标的Value和Display度量，本次指标用于表格，不是矩阵，可以直接拉取度量值，没用任何x轴，不需要处理x轴上的当前时间，不要访问其他没有提到过的文件，参考文件中提到过的依赖文件除外。
+`platform`、`shop_info_id`、`last_fy_last_order_month_type`分组维度直接拉取事实表字段实现自动传递，模型自动传递筛选，DAX 无需显式处理。
+一切以口径文档为准，不懂就问。
+输出新的解决方案在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\LY Last Purchase Time目录下，命名为LY_Last_Purchase_Time_Table.md
 
 # 第五轮提示：
 
