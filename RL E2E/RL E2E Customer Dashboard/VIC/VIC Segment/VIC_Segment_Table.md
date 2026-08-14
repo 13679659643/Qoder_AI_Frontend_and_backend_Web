@@ -388,7 +388,7 @@ _Customer Total Base Act =
     RETURN
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            // 'a03_e2e_customer_data_m'[net_pay_amt] > 0,
+            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
             'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
@@ -424,7 +424,7 @@ _Customer Total Base LY =
     RETURN
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            // 'a03_e2e_customer_data_m'[net_pay_amt] > 0,
+            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
             'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
@@ -792,20 +792,20 @@ Customer% vs LY Value =
 // 依赖: [_Customer No. Base Act], [_Customer Total Base Act],
 //       [_Customer No. Base LY], [_Customer Total Base LY]
 // 口径来源: 口径文档/VIC Segment.md 指标 4
-// 计算公式: 今年 / 去年 - 1
+// 计算公式: 去年买家人数，customer_tier=T1-T5 / 去年买家总人数
 //   今年 Customer% = _Customer No. Base Act / _Customer Total Base Act
 //   去年 Customer% = _Customer No. Base LY / _Customer Total Base LY
 // 边界处理: 去年% 为 0 或 BLANK 时返回 BLANK
 // 时间偏移: 去年 = LY end period
 // ========================================
-    VAR __PctAct = DIVIDE([_Customer No. Base Act], [_Customer Total Base Act])
-    VAR __PctLY = DIVIDE([_Customer No. Base LY], [_Customer Total Base LY])
+   VAR LYCustomer =  DIVIDE([_Customer No. Base LY],[_Customer Total Base LY])
+   VAR ActCustomer = DIVIDE([_Customer No. Base Act],[_Customer Total Base Act])
 
-    RETURN
+   RETURN
         IF(
-            ISBLANK(__PctLY) || __PctLY = 0,
+            ISBLANK(LYCustomer),
             BLANK(),
-            DIVIDE(__PctAct, __PctLY) - 1
+            ActCustomer - LYCustomer
         )
 ```
 
@@ -1094,7 +1094,7 @@ Customer% vs LY Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0.0%")
+            FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")
         )
 ```
 
@@ -1293,7 +1293,7 @@ Customer% vs LY Value Cell SVG Icon =
         "data:image/svg+xml;utf8," &
         "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
         "<circle cx='8' cy='8' r='7' fill='%234CAF50'/>" &
-        "<path d='M8 12 L8 5 M5 7 L8 4 L11 7' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/     >" &
+        "<path d='M8 12 L8 5 M5 7 L8 4 L11 7' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/>" &
         "</svg>"
     VAR __RedSVG =
         "data:image/svg+xml;utf8," &
@@ -1343,7 +1343,7 @@ SLS% vs LY Value Cell SVG Icon =
         "data:image/svg+xml;utf8," &
         "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
         "<circle cx='8' cy='8' r='7' fill='%234CAF50'/>" &
-        "<path d='M8 12 L8 5 M5 7 L8 4 L11 7' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/     >" &
+        "<path d='M8 12 L8 5 M5 7 L8 4 L11 7' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/>" &
         "</svg>"
     VAR __RedSVG =
         "data:image/svg+xml;utf8," &
