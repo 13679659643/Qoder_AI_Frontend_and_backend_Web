@@ -472,9 +472,10 @@ VIC Breakdown Act Base Value =
             1,  __SLS_Act,
             23, __SLS_Act,
             // ── SLS% Act（New VIC=4, Retention VIC=26）──
-            // 分子分母同除 FXRate 等价于不除，但保持口径清晰
-            4,  DIVIDE(__SLS_Act, __SLS_Act),  // 占位，实际在 Base Value 中单独计算（分母为全客）
-            26, DIVIDE(__SLS_Act, __SLS_Act),  // 占位，实际在 Base Value 中单独计算（分母为全客）
+            // 占位: SLS% 的实际计算在 Base Value 总路由中通过 Store Base Value 获取全客分母后完成
+            //       此处返回 BLANK() 避免混淆，总路由不会通过此路径取 SLS% 的值
+            4,  BLANK(),
+            26, BLANK(),
             // ── ACV Act（New VIC=7, Retention VIC=29）──
             7,  DIVIDE(__SLS_Act, __UserCount_Act),
             29, DIVIDE(__SLS_Act, __UserCount_Act),
@@ -622,9 +623,9 @@ VIC Breakdown LY Base Value =
             // ── SLS LY ──
             1,  __SLS_LY,
             23, __SLS_LY,
-            // ── SLS% LY（占位，实际在 Base Value 中单独计算）──
-            4,  DIVIDE(__SLS_LY, __SLS_LY),
-            26, DIVIDE(__SLS_LY, __SLS_LY),
+            // ── SLS% LY（占位: SLS% 的实际计算在总路由中完成，此处返回 BLANK()）──
+            4,  BLANK(),
+            26, BLANK(),
             // ── ACV LY ──
             7,  DIVIDE(__SLS_LY, __UserCount_LY),
             29, DIVIDE(__SLS_LY, __UserCount_LY),
@@ -770,9 +771,9 @@ VIC Breakdown LP Base Value =
             // ── SLS LP ──
             1,  __SLS_LP,
             23, __SLS_LP,
-            // ── SLS% LP（占位，实际在 Base Value 中单独计算）──
-            4,  DIVIDE(__SLS_LP, __SLS_LP),
-            26, DIVIDE(__SLS_LP, __SLS_LP),
+            // ── SLS% LP（占位: SLS% 的实际计算在总路由中完成，此处返回 BLANK()）──
+            4,  BLANK(),
+            26, BLANK(),
             // ── ACV LP ──
             7,  DIVIDE(__SLS_LP, __UserCount_LP),
             29, DIVIDE(__SLS_LP, __UserCount_LP),
@@ -814,31 +815,48 @@ VIC Breakdown Store Base Value =
 //   - 全客 AUR = sum(net_pay_amt) ÷ FXRate / sum(net_pay_qty)（is_xxx_vic in (0,1)）
 //   - 全客 Freq. = sum(net_pay_order_cnt) / count(distinct user_id)（is_xxx_vic in (0,1)）
 //   - 同时也用于 SLS% 的分母（全客 sum(net_pay_amt)）
-// 参数 __PeriodType: Act / LY / LP（用于切换时间区间）
+// 时间区间路由（关键修正）:
+//   - 本度量值被总路由通过 CALCULATE + [Metric_ID]=x 调用，外层会覆盖 Metric_ID
+//   - 维度表中 Metric_ID 与 ColType 一一绑定，覆盖 Metric_ID 后 SELECTEDVALUE(ColType)
+//     会读到新 Metric_ID 对应行的 ColType，而非外层期望的区间
+//   - 因此本度量值内部直接按 Metric_ID 推导时间区间，不读 ColType：
+//       * Metric_ID 5/27（SLS% vs LY 分母）→ LY 区间
+//       * Metric_ID 6/28（SLS% vs LP 分母）→ LP 区间
+//       * 其他（4/26 SLS% Act 分母、10/14/18/22/32/36/40/44 vs Store 分母）→ Act 区间
 // ========================================
-    // 本度量值通过 SELECTEDVALUE 读取当前 Metric_ID，并根据 ColType 判断时间区间
-    // 由于 vs Store 分子用 Act，分母也用 Act；vs LY 分子用 Act，分母用 LY；vs LP 同理
-    // 但 vs Store 的分母始终用 Act 时间区间（全客 ACV/UPT/AUR/Freq. 的 Act 值）
-    // SLS% 的分母也用对应时间区间（Act/LY/LP）
-    // 因此本度量值返回 Act 时间区间的全客值，LY/LP 全客值通过参数化 CALCULATE 实现
+    // 本度量值内部按 Metric_ID 推导时间区间（不依赖 ColType，避免外层覆盖 Metric_ID 后冲突）
+    // vs Store 分母（10/14/18/22/32/36/40/44）→ Act 区间
+    // SLS% Act 分母（4/26）→ Act 区间
+    // SLS% vs LY 分母（5/27）→ LY 区间
+    // SLS% vs LP 分母（6/28）→ LP 区间
     VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_New_Retention_VIC'[Metric_ID])
     VAR __VICType = SELECTEDVALUE('Dim_ColMetric_New_Retention_VIC'[VICType])
-    VAR __ColType = SELECTEDVALUE('Dim_ColMetric_New_Retention_VIC'[ColType])
-    // ── 时间筛选：根据 ColType 选择区间 ──
-    // vs Store → Act 区间；vs LY → LY 区间；vs LP → LP 区间；Act → Act 区间
+    // ── 时间筛选：按 Metric_ID 推导区间（不能读 ColType）──
+    // 关键修正: 维度表中 Metric_ID 与 ColType 一一绑定，外层总路由覆盖 Metric_ID 后，
+    //          SELECTEDVALUE(ColType) 会读到新 Metric_ID 对应行的 ColType，而非外层期望的区间。
+    //          因此 Store Base Value 内部直接按 Metric_ID 推导时间区间：
+    //   - Metric_ID 5/27（SLS% vs LY 分母）→ LY 区间
+    //   - Metric_ID 6/28（SLS% vs LP 分母）→ LP 区间
+    //   - 其他（4/26 SLS% Act 分母、10/14/18/22/32/36/40/44 vs Store 分母）→ Act 区间
     VAR __PeriodMin =
-        SWITCH(
-            __ColType,
-            "vs LY", SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min_LY]),
-            "vs LP", SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min_LP]),
-            SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min])  // Act / vs Store
+        IF(
+            __MetricID IN {5, 27},
+            SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min_LY]),
+            IF(
+                __MetricID IN {6, 28},
+                SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min_LP]),
+                SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min])  // Act / vs Store
+            )
         )
     VAR __PeriodMax =
-        SWITCH(
-            __ColType,
-            "vs LY", SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max_LY]),
-            "vs LP", SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max_LP]),
-            SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max])  // Act / vs Store
+        IF(
+            __MetricID IN {5, 27},
+            SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max_LY]),
+            IF(
+                __MetricID IN {6, 28},
+                SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max_LP]),
+                SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max])  // Act / vs Store
+            )
         )
     // ── 人群筛选 ──
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
@@ -1003,9 +1021,13 @@ VIC Breakdown Base Value =
 
     // ═══════════════════════════════════════
     // SLS% 计算（分子: is_xxx_vic=1 的 SLS；分母: is_xxx_vic in (0,1) 的 SLS）
-    // 通过 Store Base Value 获取全客分母（Metric_ID=4/26 触发 Store SLS）
+    // 关键修正: 不能再用 [Metric_ID]=4 + [ColType]="vs LP" 这种冲突筛选
+    //          （维度表中 Metric_ID=4 的 ColType 恒为 "Act"，冲突筛选会导致 SELECTEDVALUE 返回 BLANK）
+    // 正确做法: 按 VICType 映射到对应 SLS% Metric_ID（New VIC: 4/5/6, Retention VIC: 26/27/28），
+    //          Store Base Value 内部会按 Metric_ID 自动推导时间区间，不再需要外层覆盖 ColType
     // ═══════════════════════════════════════
     VAR __IsSLSPct = __MetricID IN {4, 5, 6, 26, 27, 28}
+    // SLS% 分子（is_xxx_vic=1）对应的 SLS Act Metric_ID
     VAR __SLSActMetricID =
         SWITCH(
             __MetricID,
@@ -1016,8 +1038,16 @@ VIC Breakdown Base Value =
             27, 23,  // SLS% vs LY (Retention VIC) → SLS Act (Retention VIC)
             28, 23   // SLS% vs LP (Retention VIC) → SLS Act (Retention VIC)
         )
+    // SLS% 分母（全客 SLS）对应的各时间区间 Metric_ID
+    // 关键: SLS% vs LY = SLS%(Act) - SLS%(LY)，分母 Act 部分用 Act 区间全客 SLS，分母 LY 部分用 LY 区间全客 SLS
+    //       SLS% vs LP = SLS%(Act) - SLS%(LP)，分母 Act 部分用 Act 区间全客 SLS，分母 LP 部分用 LP 区间全客 SLS
+    // 因此分母 Act 部分始终用 SLS% Act 的 Metric_ID（4/26），分母 LY/LP 部分用当前 Metric_ID（5/27 或 6/28）
+    VAR __SLSPctActMetricID =  // SLS% Act 的 Metric_ID（用于分母 Act 部分调用 Store Base Value）
+        IF(__MetricID IN {4, 5, 6}, 4, 26)
+    // Store Base Value 内部按 Metric_ID 推导时间区间：
+    //   4/26 → Act 区间；5/27 → LY 区间；6/28 → LP 区间
 
-    // SLS% 分子（is_xxx_vic=1 的 SLS，Act/LY/LP 区间由 ColType 决定）
+    // SLS% 分子（is_xxx_vic=1 的 SLS，Act/LY/LP 区间由各自 Base Value 度量值内部处理）
     VAR __SLSNumeratorAct =
         IF(
             __IsSLSPct,
@@ -1047,14 +1077,16 @@ VIC Breakdown Base Value =
         )
 
     // SLS% 分母（全客 SLS，通过 Store Base Value 获取）
+    // 分母 Act 部分始终用 SLS% Act 的 Metric_ID（4/26）→ Store Base Value 路由到 Act 区间
+    // 分母 LY 部分用当前 Metric_ID（5/27）→ Store Base Value 路由到 LY 区间
+    // 分母 LP 部分用当前 Metric_ID（6/28）→ Store Base Value 路由到 LP 区间
     VAR __SLSDenominatorAct =
         IF(
             __IsSLSPct,
             CALCULATE(
                 [VIC Breakdown Store Base Value],
                 REMOVEFILTERS('Dim_ColMetric_New_Retention_VIC'),
-                'Dim_ColMetric_New_Retention_VIC'[Metric_ID] = 4,  // 触发 SLS% 分母逻辑
-                'Dim_ColMetric_New_Retention_VIC'[ColType] = "Act"
+                'Dim_ColMetric_New_Retention_VIC'[Metric_ID] = __SLSPctActMetricID  // 4/26 → Act 区间
             )
         )
     VAR __SLSDenominatorLY =
@@ -1063,8 +1095,7 @@ VIC Breakdown Base Value =
             CALCULATE(
                 [VIC Breakdown Store Base Value],
                 REMOVEFILTERS('Dim_ColMetric_New_Retention_VIC'),
-                'Dim_ColMetric_New_Retention_VIC'[Metric_ID] = 4,
-                'Dim_ColMetric_New_Retention_VIC'[ColType] = "vs LY"
+                'Dim_ColMetric_New_Retention_VIC'[Metric_ID] = __MetricID  // 5/27 → LY 区间
             )
         )
     VAR __SLSDenominatorLP =
@@ -1073,8 +1104,7 @@ VIC Breakdown Base Value =
             CALCULATE(
                 [VIC Breakdown Store Base Value],
                 REMOVEFILTERS('Dim_ColMetric_New_Retention_VIC'),
-                'Dim_ColMetric_New_Retention_VIC'[Metric_ID] = 4,
-                'Dim_ColMetric_New_Retention_VIC'[ColType] = "vs LP"
+                'Dim_ColMetric_New_Retention_VIC'[Metric_ID] = __MetricID  // 6/28 → LP 区间
             )
         )
 
@@ -1203,8 +1233,7 @@ VIC Breakdown Base Value =
             CALCULATE(
                 [VIC Breakdown Store Base Value],
                 REMOVEFILTERS('Dim_ColMetric_New_Retention_VIC'),
-                'Dim_ColMetric_New_Retention_VIC'[Metric_ID] = __MetricID,
-                'Dim_ColMetric_New_Retention_VIC'[ColType] = "vs Store"
+                'Dim_ColMetric_New_Retention_VIC'[Metric_ID] = __MetricID  // 10/14/18/22/32/36/40/44 → Act 区间
             )
         )
     VAR __VsStoreResult =
@@ -1589,7 +1618,11 @@ VIC Breakdown Cell Background Color =
 
 7. **REMOVEFILTERS 机制**：派生指标（vs LY / vs LP / vs Store / SLS% / SLS% vs LY / SLS% vs LP）的取值必须先 `REMOVEFILTERS('Dim_ColMetric_New_Retention_VIC')` 再应用目标 Metric_ID，否则矩阵行标题保留的筛选器会导致冲突返回 BLANK。这与 VIC_KPIs_Table.md 的总路由范式完全一致。
 
-8. **SLS% 计算的特殊处理**：SLS% 的分母为全客 `sum(net_pay_amt)`（`is_xxx_vic in (0,1)`），通过 `[VIC Breakdown Store Base Value]` 获取。SLS% vs LY / vs LP 的分母也需要对应时间区间的全客 SLS，通过 `ColType` 字段路由到 LY/LP 区间。
+8. **SLS% 计算的特殊处理**：SLS% 的分母为全客 `sum(net_pay_amt)`（`is_xxx_vic in (0,1)`），通过 `[VIC Breakdown Store Base Value]` 获取。SLS% vs LY / vs LP 的分母需要对应时间区间的全客 SLS：
+   - **分母 Act 部分**：用 SLS% Act 的 Metric_ID（4/26）调用 Store Base Value → Store Base Value 内部 4/26 ∉ {5,27,6,28} → Act 区间
+   - **分母 LY 部分**：用当前 Metric_ID（5/27）调用 Store Base Value → Store Base Value 内部 5/27 ∈ {5,27} → LY 区间
+   - **分母 LP 部分**：用当前 Metric_ID（6/28）调用 Store Base Value → Store Base Value 内部 6/28 ∈ {6,28} → LP 区间
+   - **关键修正**：不能用 `[Metric_ID]=4, [ColType]="vs LP"` 这种冲突筛选（维度表中 Metric_ID=4 的 ColType 恒为 "Act"，不存在同时满足两个条件的行，SELECTEDVALUE 返回 BLANK）。Store Base Value 内部直接按 Metric_ID 推导时间区间，不读 ColType。
 
 9. **Metric_ID 编码规则**：
    - New VIC 分组：1-22（SLS 1-3 / SLS% 4-6 / ACV 7-10 / UPT 11-14 / AUR 15-18 / Freq. 19-22）

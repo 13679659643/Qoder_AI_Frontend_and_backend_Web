@@ -81,3 +81,7 @@ Slicer_Store_Name：D:\Users\QiYe\BaoZun\Project\Qoder_AI_Frontend_and_backend_W
 在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC Breakdown目录下输出新的解决方案文件，命名为VIC_Breakdown_ms.md。
 
 # 第八轮提示：
+现在我要制作柱形图，柱形图 X 轴 = Slicer_Time_Frame_VIC_Breakdown[TimeFrame_Value]，参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC Trend\VIC_Trend.md
+把Metric_ID为1、4、23、26共四个指标的逻辑单独提取出来，独立输出每个指标的Value和Display度量，不懂就问。
+格式调整说明：1和23为SLS指标，格式调整为currency_k→ 货币符号 + 千位缩写：¥1k / $5k，使用__CurrencySymbol & FORMAT(__Value / 1000, "#,##0") & "k"；4和26为SLS%指标，格式不变percent_0dp。
+结合以上信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC Breakdown目录下输出新的解决方案文件，命名为VIC_Breakdown_Trend.md
