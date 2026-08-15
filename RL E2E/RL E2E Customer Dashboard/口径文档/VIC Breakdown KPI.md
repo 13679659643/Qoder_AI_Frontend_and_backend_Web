@@ -30,7 +30,7 @@
 
 ## 子模块五：DCom VIC Breakdown
 
-> **分组维度**: 按 VIC 类型（New VIC / Retention VIC）区分，按 `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 分组
+> **分组维度**: 按 VIC 类型（New VIC / Retention VIC）区分，都是基于dt = 所选时间范围end period的情况下，New VIC和Retention VIC的区别仅在于is_new_vic = 1和is_retention_vic = 1的筛选条件。其他的，按 `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理分组。
 
 ### 1. SLS（Net_New VIC） — 净销售额
 
@@ -42,7 +42,7 @@
 | **计算公式** | Step 1：在 dt = 所选时间范围 end period，筛选 is_new_vic = 1，框定 user_id 范围；Step 2：再看该 user_id 在所选时间范围对应的 sum(net_pay_amt) |
 | **统计字段** | `net_pay_amt`、`is_new_vic` |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `is_member`和`is_employee`筛选 |
+| **筛选条件** | `is_new_vic` = 1；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
@@ -58,8 +58,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ### 1.2 SLS vs LP（Net_New VIC） — 净销售额环比
 
@@ -72,8 +72,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ---
 
@@ -86,12 +86,12 @@
 | **业务定义** | New VIC 买家净销售额/总买家净销售额 |
 | **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 is_new_vic = 1，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_amt)。分母：所选时间范围对应的 sum(net_pay_amt) |
 | **分子** | `net_pay_amt`（`is_new_vic = 1`） |
-| **分母** | `net_pay_amt`（全部） |
+| **分母** | `net_pay_amt`（`is_new_vic in (0, 1)`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%` |
 
 ### 2.1 SLS% vs LY（Net_New VIC） — 净销售额占比同比
 
@@ -136,8 +136,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
-| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
+| **数据类型** | currency_decimal_1dp  → 货币符号 + 千分位一位小数：¥1,000.0 / $1,000.0 |
+| **数据格式** | `#,##0.0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0.0")` 拼接币种符号） |
 
 ### 3.1 ACV vs LY（Net_New VIC） — 客单价同比
 
@@ -150,8 +150,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ### 3.2 ACV vs LP（Net_New VIC） — 客单价环比
 
@@ -164,8 +164,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ### 3.3 ACV vs Store（Net_New VIC） — 客单价对比全客
 
@@ -175,11 +175,13 @@
 | **指标名称中文** | 客单价对比全客 |
 | **业务定义** | New VIC 客单价相对全客客单价的变化率 |
 | **计算公式** | New VIC ACV / 全客 ACV - 1 |
+| **分子** | New VIC ACV：`net_pay_amt`（`is_new_vic = 1`）；全客 ACV：`net_pay_amt`（`is_new_vic in (0, 1)`） |
+| **分母** | New VIC ACV：`user_id`（`is_new_vic = 1`）；全客 ACV：`user_id`（`is_new_vic in (0, 1)`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
+| **筛选条件** | New VIC ACV：`is_new_vic = 1`、`is_member`和`is_employee`筛选；全客 ACV：`is_new_vic in (0, 1)`、`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ---
 
@@ -210,8 +212,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ### 4.2 UPT vs LP（Net_New VIC） — 客单件环比
 
@@ -224,8 +226,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ### 4.3 UPT vs Store（Net_New VIC） — 客单件对比全客
 
@@ -235,11 +237,13 @@
 | **指标名称中文** | 客单件对比全客 |
 | **业务定义** | New VIC 客单件相对全客客单件的变化率 |
 | **计算公式** | New VIC UPT / 全客 UPT - 1 |
+| **分子** | New VIC UPT：`net_pay_qty`（`is_new_vic = 1`）；全客 UPT：`net_pay_qty`（`is_new_vic in (0, 1)`） |
+| **分母** | New VIC UPT：`net_pay_order_cnt`（`is_new_vic = 1`）；全客 UPT：`net_pay_order_cnt`（`is_new_vic in (0, 1)`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
+| **筛选条件** | New VIC UPT：`is_new_vic = 1`、`is_member`和`is_employee`筛选；全客 UPT：`is_new_vic in (0, 1)`、`is_member`和`is_employee`筛选； |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ---
 
@@ -256,8 +260,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
-| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
+| **数据类型** | currency_decimal_1dp  → 货币符号 + 千分位一位小数：¥1,000.0 / $1,000.0 |
+| **数据格式** | `#,##0.0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0.0")` 拼接币种符号） |
 
 ### 5.1 AUR vs LY（Net_New VIC） — 件单价同比
 
@@ -270,8 +274,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ### 5.2 AUR vs LP（Net_New VIC） — 件单价环比
 
@@ -284,8 +288,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ### 5.3 AUR vs Store（Net_New VIC） — 件单价对比全客
 
@@ -295,11 +299,13 @@
 | **指标名称中文** | 件单价对比全客 |
 | **业务定义** | New VIC 件单价相对全客件单价的变化率 |
 | **计算公式** | New VIC AUR / 全客 AUR - 1 |
+| **分子** | New VIC AUR：`net_pay_amt`（`is_new_vic = 1`）；全客 AUR：`net_pay_amt`（`is_new_vic in (0, 1)`） |
+| **分母** | New VIC AUR：`net_pay_qty`（`is_new_vic = 1`）；全客 AUR：`net_pay_qty`（`is_new_vic in (0, 1)`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ---
 
@@ -330,8 +336,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ### 6.2 Freq. vs LP（Net_New VIC） — 购买频次环比
 
@@ -344,8 +350,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ### 6.3 Freq. vs Store（Net_New VIC） — 购买频次对比全客
 
@@ -355,11 +361,13 @@
 | **指标名称中文** | 购买频次对比全客 |
 | **业务定义** | New VIC 购买频次相对全客购买频次的变化率 |
 | **计算公式** | New VIC Freq. / 全客 Freq. - 1 |
+| **分子** | New VIC Freq.：`net_pay_order_cnt`（`is_new_vic = 1`）；全客 Freq.：`net_pay_order_cnt`（`is_new_vic in (0, 1)`） |
+| **分母** | New VIC Freq.：`user_id`（`is_new_vic = 1`）；全客 Freq.：`user_id`（`is_new_vic in (0, 1)`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `is_new_vic = 1`；`is_member`和`is_employee`筛选 |
+| **筛选条件** | New VIC Freq.：`is_new_vic = 1`；`is_member`和`is_employee`筛选；全客 Freq.：`is_new_vic in (0, 1)`；`is_member`和`is_employee`筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ---
 

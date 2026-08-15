@@ -52,7 +52,32 @@ Slicer_Store_Name：D:\Users\QiYe\BaoZun\Project\Qoder_AI_Frontend_and_backend_W
 输出新的解决方案在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC Segment目录下，命名为VIC_Segment_Table.md
 
 # 第六轮提示:
+参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC KPI\Dim_ColMetric_VIC_KPIs.md
+口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\VIC Breakdown KPI.md
+1、需要新增一个大的分组，New VIC / Retention VIC，两个分组的指标一模一样，都为口径文档中的全部指标，唯一区别是New VIC的筛选条件是is_new_vic = 1，Retention VIC的筛选条件是is_retention_vic = 1；全客的筛选：New VIC的筛选条件是is_new_vic in (0, 1)，Retention VIC的筛选条件是is_retention_vic in (0, 1)。
+2、主指标，比如SLS都是fixed_black、子指标比如SLS vs LY都是pos_neg_zero颜色格式。
+3、严格按照口径文档的数据格式为准，口径文档中是delta_pct_0dp，最终就是以delta_pct_0dp为准。
+你看如何设计Dim_ColMetric_New_Retention_VIC,输出在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC Breakdown目录下，命名为Dim_ColMetric_New_Retention_VIC.md。
 
+ 
 # 第七轮提示：
+矩阵解决方案参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC KPI\VIC_KPIs_Table.md
+列指标维度表：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC Breakdown\Dim_ColMetric_New_Retention_VIC.md
+口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\VIC Breakdown KPI.md
+1、行维度直接拉取的事实表字段，由表字段自动传递，DAX 无需显式处理。
+2、VIC Breakdown 专用日期表，与其他模块隔离：Slicer_Time_Frame_VIC_Breakdown、Slicer_Time_Frame_Min_VIC_Breakdown、Slicer_Time_Frame_Max_VIC_Breakdown；原日期表Slicer_Time_Frame对应Slicer_Time_Frame_VIC_Breakdown、Slicer_Time_Frame_Max对应Slicer_Time_Frame_Max_VIC_Breakdown、Slicer_Time_Frame_Min对应Slicer_Time_Frame_Min_VIC_Breakdown。
+3、都是基于dt = 所选时间范围end period的情况下，New VIC和Retention VIC的区别仅在于is_new_vic = 1和is_retention_vic = 1的筛选条件。
+4、直接读取 Slicer_Time_Frame_Max_VIC_Breakdown 内置的 `Last_Fiscal_Month_*` 系列字段：
+- 本期：`Last_Fiscal_Month_Min` ~ `Last_Fiscal_Month_Max`
+- LY：`Last_Fiscal_Month_Min_LY` ~ `Last_Fiscal_Month_Max_LY`
+- LP：`Last_Fiscal_Month_Min_LP` ~ `Last_Fiscal_Month_Max_LP`
+- 无需 EDATE -12 或 Key 偏移计算
+5、vs Store 全客分母用 is_xxx_vic in (0,1) + is_member/is_employee 切片器筛选（统一）
+6、货币转换
+- 金额类（SLS/ACV/AUR）÷ Currency_ExchangeRate （RMB=1, USD=7）
+- 比率类不除（分子分母同币种抵消）
+- SLS% 占比不除
+7、 SWITCH 动态路由度量值链（按 Metric_ID 分发），一切以口径文档为准，不懂就问。
+在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC Breakdown目录下输出新的解决方案文件，命名为VIC_Breakdown_ms.md。
 
 # 第八轮提示：
