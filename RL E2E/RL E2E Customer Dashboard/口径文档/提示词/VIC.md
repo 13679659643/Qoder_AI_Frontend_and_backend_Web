@@ -85,3 +85,21 @@ Slicer_Store_Name：D:\Users\QiYe\BaoZun\Project\Qoder_AI_Frontend_and_backend_W
 把Metric_ID为1、4、23、26共四个指标的逻辑单独提取出来，独立输出每个指标的Value和Display度量，不懂就问。
 格式调整说明：1和23为SLS指标，格式调整为currency_k→ 货币符号 + 千位缩写：¥1k / $5k，使用__CurrencySymbol & FORMAT(__Value / 1000, "#,##0") & "k"；4和26为SLS%指标，格式不变percent_0dp。
 结合以上信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\VIC Breakdown目录下输出新的解决方案文件，命名为VIC_Breakdown_Trend.md
+
+# 第九轮提示：
+口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Class x Label Drilldown.md。
+dt = 所选时间范围 end period，可以参考以下文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\4 VIC Segment\VIC_Segment_Table.md。
+dt = 所选时间范围，dt ∈ [__TimeMin, __TimeMax]（全局时间范围），可以参考以下文件的用法：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Member\Customer_Member_Indicator.md
+独立输出每个指标的Value和Display度量，四个指标对应四个Value和四个Display，本次指标用于条形图和表格，不是矩阵，可以直接拉取度量值，没用任何x轴，不需要处理x轴上的当前时间，不要访问其他没有提到过的文件，参考文件中提到过的依赖文件除外。
+需要确认两点:
+1、我理解分组字段会自动进行模型的筛选。platform, shop_info_id,, tier直接拉取`a03_e2e_customer_data_m`表，category_summary, framework,product_id拉取`t05_customer_order_data_d`表中的字段,这是否可行。
+2、条形图我拉取`t05_customer_order_data_d`表中的category_summary，我点击某个条形柱子，是否可以联动其他分组的表格。相当于做了一个category_summary的筛选，其他分组的表格会根据这个筛选结果进行刷新。
+结合以上信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\6 Class x Label Drilldown目录下输出新的解决方案文件，命名为Class_x_Label_Drilldown_list.md
+
+# 第十轮提示：
+1、a03_e2e_customer_data_m 和 t05_customer_order_data_d 之间是否有 user_id 模型关系（影响分组字段跨表自动传递），这两个表没有模型之间的关联，user_id之间是多对多的关系，不符合模型的常规关联关系。
+Slicer_Platform_Selection[Platform_ID]和a03_e2e_customer_data_m [platform]关系为1：N，即一对多。
+Slicer_Platform_Selection[Platform_ID]和t05_customer_order_data_d [platform]关系为1：N，即一对多。
+Slicer_Store_Name[Store_ID]和a03_e2e_customer_data_m [shop_name_en]关系为1：N，即一对多。
+Slicer_Store_Name[Store_ID]和t05_customer_order_data_d [shop_name]关系为1：N，即一对多。
+2、t05_customer_order_data_d表的日期字段使用dt。
