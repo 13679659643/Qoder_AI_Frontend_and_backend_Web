@@ -103,3 +103,5 @@ Slicer_Platform_Selection[Platform_ID]和t05_customer_order_data_d [platform]关
 Slicer_Store_Name[Store_ID]和a03_e2e_customer_data_m [shop_name_en]关系为1：N，即一对多。
 Slicer_Store_Name[Store_ID]和t05_customer_order_data_d [shop_name]关系为1：N，即一对多。
 2、t05_customer_order_data_d表的日期字段使用dt。
+
+# 第十一轮提示：
