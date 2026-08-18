@@ -80,7 +80,7 @@
 | Quarter | 选择单个季度且不跨财年 | New Customer No.（quarter actual） | SUM(DISTINCT `year_new_customer_cnt`) | 季度实际 / 年度目标值 |
 | Quarter | 跨财年 | — | — | **留空**，跨财年不计算 Yearly TAR ACH% |
 | Year | 选择单个财年 | New Customer No.（year actual） | SUM(DISTINCT `year_new_customer_cnt`) | 年度实际 / 年度目标值 |
-| Year | 选择多个财年 | — | — | **留空**，多年不计算 Yearly TAR ACH% |
+| Year | 选择多个财年 | New Customer No.（year actual） | `SUM(DISTINCT year_new_customer_cnt)` | 年度实际 / 年度目标值 |
 
 ---
 
