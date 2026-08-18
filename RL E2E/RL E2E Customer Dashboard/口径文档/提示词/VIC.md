@@ -105,3 +105,13 @@ Slicer_Store_Name[Store_ID]和t05_customer_order_data_d [shop_name]关系为1：
 2、t05_customer_order_data_d表的日期字段使用dt。
 
 # 第十一轮提示：
+Slicer_Time_Frame_Max维度表：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\Slicer_Time_Frame\Slicer_Time_Frame_Max.sql
+Slicer_Time_Frame_Min维度表：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\Slicer_Time_Frame\Slicer_Time_Frame_Min.sql
+Slicer_Time_Frame维度表：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\Slicer_Time_Frame\Slicer_Time_Frame.sql
+实际值口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\VIC KPI.md
+解决方案：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\1 VIC KPI\VIC_KPIs_Table.md
+目标值口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\TAR_ACH_Calculation_Spec.md
+我已经补充了TAR ACH%的目标值的取数逻辑，请在我补充的基础上，根据实际值的取数逻辑，完善解决方案的取数逻辑。之前我是用1占位，现在补充完整得口径，涉及到四个指标。
+实际值得逻辑是已经写好了得，不要修改，我写的是正确的，请根据我的实际值逻辑，完善解决方案中实际值的取数逻辑部分就行。
+判断是否是选择单个财月/年，我理解，可以直接判断Slicer_Time_Frame[TimeFrame_ID]是否等于"Month"或者"Year"、并且Slicer_Time_Frame_Min[TimeFrame_Value]和Slicer_Time_Frame_Max[TimeFrame_Value]是否相等,我这里使用了两个切片器来实现日期区间的效果，所以可以直接判断是否相等，如果相等，说明是选择了单个财月/年，比如Slicer_Time_Frame_Min[TimeFrame_Value]="2027-04"，Slicer_Time_Frame_Max[TimeFrame_Value]="2027-04"，说明是选择了2027年4月。
+目标值没有`is_member`和`is_employee`筛选，不懂就问，确保逻辑正确。

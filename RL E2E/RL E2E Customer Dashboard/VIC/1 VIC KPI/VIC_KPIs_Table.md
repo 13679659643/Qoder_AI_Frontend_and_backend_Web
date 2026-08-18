@@ -221,7 +221,7 @@ Dim_ColMetric_VIC_KPIs（断开维度，列头）
 | 27        | Direct VIC No. Share vs LY    | 比率类 vs LY             | 今年 - 去年（差值） | delta_pts     |
 | 28        | Direct VIC No. Share vs LP    | 比率类 vs LP             | 当期 - 上期（差值） | delta_pts     |
 
-> **TAR ACH% 类指标**（Metric_ID 4, 5, 9, 13）：占位值为 1，待逻辑确认后再填充。
+> **TAR ACH% 类指标**（Metric_ID 4, 5, 9, 13）：实际值 / 目标值，目标值取自 a03_e2e_customer_fcst_data_m，仅单选财月/财年时有值（Metric_ID=9 额外要求 Store 单选）。
 
 ### 3.6 Share 类指标计算（分母为 end period 当月 is_vic=1）
 
@@ -233,7 +233,37 @@ Dim_ColMetric_VIC_KPIs（断开维度，列头）
 
 > **VIC Retention% 分母特殊**：分母为 Rolling 12 个财月区间 `is_vic=1` 的 DISTINCTCOUNT user_id，详见 1.4 节。
 
-### 3.7 格式规范（按 Metric_Format 单字段分发）
+### 3.7 TAR ACH% 类指标计算（实际值 / 目标值）
+
+> 公式：`TAR ACH% = 实际值 / 目标值`
+> 目标值来源：`a03_e2e_customer_fcst_data_m`（日期字段 `data_date`，目标值无 is_member / is_employee 筛选）
+> 目标值时间范围：`data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`（全局时间范围）
+> 行维度 platform / shop_info_id 通过共享维度表自动传递到目标值表
+
+| Metric_ID | 指标 | 实际值来源 | 目标值字段 | 目标值聚合 | 触发条件 |
+| --------- | ---- | ---------- | ---------- | ---------- | -------- |
+| 4  | VIC Monthly TAR ACH% | VIC No. Act（Metric_ID=1） | `vic_customer_cnt` | SUM | Month/Year 单选 |
+| 5  | VIC Yearly TAR ACH% | VIC No. Act（Metric_ID=1） | `year_vic_customer_cnt` | SUM(DISTINCT) | Month/Year 单选 |
+| 9  | VIC Retention% TAR ACH% | VIC Retention% Act（Metric_ID=6） | `year_vic_retention_percent` | DISTINCT（无 SUM） | Month/Year 单选且 Store 单选 |
+| 13 | T4-5 Upgrade No. TAR ACH% | T4-5 Upgrade No. Act（Metric_ID=10） | `year_upgrade_customer_cnt` | SUM(DISTINCT) | Month/Year 单选 |
+
+**单选判定规则**：
+- `Slicer_Time_Frame[TimeFrame_ID] ∈ {"Month", "Year"}`（时间粒度为月或年，排除 Quarter）
+- `Slicer_Time_Frame_Min[TimeFrame_Value] = Slicer_Time_Frame_Max[TimeFrame_Value]`（Min/Max 切片器选中值相等）
+- 两个条件同时满足时为单选，否则留空（BLANK）
+
+**目标值聚合方式说明**：
+- `SUM(field)`：月度目标值字段（`vic_customer_cnt`），按当前行维度粒度直接 SUM 汇总
+- `SUM(DISTINCT field)`：年度目标值字段（`year_vic_customer_cnt` / `year_upgrade_customer_cnt`），每个 shop 同年唯一，先按 platform/shop_info_id 分组 DISTINCT 去重，再 SUM 汇总到当前行维度粒度
+- `DISTINCT(field)`：百分比目标值字段（`year_vic_retention_percent`），无 SUM，按 platform/shop_info_id 分组后 DISTINCT 取值（要求 Store 单选，否则多 shop 无法取单一百分比）
+
+**非触发场景（留空）**：
+- Quarter 粒度选择
+- 多选（Min/Max TimeFrame_Value 不相等）
+- 跨财年选择
+- Metric_ID=9 时 Store 未单选
+
+### 3.8 格式规范（按 Metric_Format 单字段分发）
 
 | Metric_Format     | 格式串                                                                                 | 示例                    | 适用指标                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------- |
@@ -257,16 +287,16 @@ Dim_ColMetric_VIC_KPIs（断开维度，列头）
 | 1         | VIC No.           | 1-VIC No.                        | Act              | 1. VIC No.                        | is_vic=1                                                    | a03_e2e_customer_data_m |
 | 2         | VIC No.           | 2-VIC No. vs LY                  | vs LY            | 1.1 VIC No. vs LY                 | —                                                          | 派生                    |
 | 3         | VIC No.           | 3-VIC No. vs LP                  | vs LP            | 1.2 VIC No. vs LP                 | —                                                          | 派生                    |
-| 4         | VIC No.           | 4-VIC Monthly TAR ACH%           | TAR ACH% Monthly | 1.3 VIC Monthly TAR ACH%          | —                                                          | 占位=1                  |
-| 5         | VIC No.           | 5-VIC Yearly TAR ACH%            | TAR ACH% Yearly  | 1.4 VIC Yearly TAR ACH%           | —                                                          | 占位=1                  |
+| 4         | VIC No.           | 4-VIC Monthly TAR ACH%           | TAR ACH% Monthly | 1.3 VIC Monthly TAR ACH%          | 实际值: Metric_ID=1；目标值: SUM(vic_customer_cnt)        | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
+| 5         | VIC No.           | 5-VIC Yearly TAR ACH%            | TAR ACH% Yearly  | 1.4 VIC Yearly TAR ACH%           | 实际值: Metric_ID=1；目标值: SUM(DISTINCT year_vic_customer_cnt) | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
 | 6         | VIC Retention%    | 6-VIC Retention%                 | Act              | 2. VIC Retention%                 | 分子: is_retention_vic=1；分母: is_vic=1（Rolling 12）      | a03_e2e_customer_data_m |
 | 7         | VIC Retention%    | 7-VIC Retention% vs LY           | vs LY            | 2.1 VIC Retention% vs LY          | —                                                          | 派生                    |
 | 8         | VIC Retention%    | 8-VIC Retention% vs LP           | vs LP            | 2.2 VIC Retention% vs LP          | —                                                          | 派生                    |
-| 9         | VIC Retention%    | 9-VIC Retention% TAR ACH%        | TAR ACH%         | 2.3 VIC Retention% TAR ACH%       | —                                                          | 占位=1                  |
+| 9         | VIC Retention%    | 9-VIC Retention% TAR ACH%        | TAR ACH%         | 2.3 VIC Retention% TAR ACH%       | 实际值: Metric_ID=6；目标值: DISTINCT(year_vic_retention_percent) | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
 | 10        | T4-5 Upgrade No.  | 10-T4-5 Upgrade No.              | Act              | 3. T4-5 Upgrade No.               | is_upgrade_vic=1                                            | a03_e2e_customer_data_m |
 | 11        | T4-5 Upgrade No.  | 11-T4-5 Upgrade No. vs LY        | vs LY            | 3.1 T4-5 Upgrade No. vs LY        | —                                                          | 派生                    |
 | 12        | T4-5 Upgrade No.  | 12-T4-5 Upgrade No. vs LP        | vs LP            | 3.2 T4-5 Upgrade No. vs LP        | —                                                          | 派生                    |
-| 13        | T4-5 Upgrade No.  | 13-T4-5 Upgrade No. TAR ACH%     | TAR ACH%         | 3.3 T4-5 Upgrade No. TAR ACH%     | —                                                          | 占位=1                  |
+| 13        | T4-5 Upgrade No.  | 13-T4-5 Upgrade No. TAR ACH%     | TAR ACH%         | 3.3 T4-5 Upgrade No. TAR ACH%     | 实际值: Metric_ID=10；目标值: SUM(DISTINCT year_upgrade_customer_cnt) | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
 | 14        | T4-5 Upgrade No.  | 14-T4-5 Upgrade No. Share        | Share            | 3.4 T4-5 Upgrade No. Share        | 分子: is_upgrade_vic=1；分母: is_vic=1（end period 当月）   | a03_e2e_customer_data_m |
 | 15        | T4-5 Upgrade No.  | 15-T4-5 Upgrade No. Share vs LY  | Share vs LY      | 3.5 T4-5 Upgrade No. Share vs LY  | —                                                          | 派生                    |
 | 16        | T4-5 Upgrade No.  | 16-T4-5 Upgrade No. Share vs LP  | Share vs LP      | 3.6 T4-5 Upgrade No. Share vs LP  | —                                                          | 派生                    |
@@ -741,7 +771,7 @@ VIC KPIs Base Value =
 //   数量类 vs LY 特殊格式: 18（Retention VIC No. vs LY，percent_1dp）
 //   比率类 vs LY: 7（Retention%）, 15（T4-5 Share）, 21（Retention Share）, 27（Direct Share）
 //   比率类 vs LP: 8（Retention%）, 16（T4-5 Share）, 22（Retention Share）, 28（Direct Share）
-//   TAR ACH% 占位: 4, 5, 9, 13 → 返回 1
+//   TAR ACH%: 4, 5, 9, 13 → 实际值 / 目标值（a03_e2e_customer_fcst_data_m）
 //
 // 派生规则:
 //   - 数量类 vs LY: 今年 / 去年 - 1
@@ -751,6 +781,13 @@ VIC KPIs Base Value =
 //     总路由直接取 Act Base Value(Metric_ID=6) - LY Base Value(Metric_ID=6) 做差值
 //   - 比率类（Share）vs LY: 今年 - 去年（差值，×100 转 pts）
 //     分母: end period 当月 is_vic=1 的 Act Base Value（Metric_ID=1）
+//   - TAR ACH%: 实际值 / 目标值
+//     实际值复用 Act Base Value（Metric_ID=1/6/10 按 TAR 指标对应）
+//     目标值取自 a03_e2e_customer_fcst_data_m，data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]
+//     目标值无 is_member / is_employee 筛选
+//     触发条件：Slicer_Time_Frame[TimeFrame_ID] ∈ {"Month","Year"} 且 Min/Max TimeFrame_Value 相等（单选）
+//     Metric_ID=9 额外要求 Slicer_Store_Name[Store_ID] 单选
+//     Quarter 粒度 / 多选 / 跨财年 → 留空（BLANK）
 //
 // REMOVEFILTERS 机制（参考 PB_Merchandise_Fulfillment_detail_ms.md）:
 //   派生行需先 REMOVEFILTERS 清除断开维度的所有筛选，再应用目标 Metric_ID
@@ -989,6 +1026,173 @@ VIC KPIs Base Value =
             - DIVIDE(__ShareNumeratorLP, __ShareDenominatorLP)
         )
 
+    // ═══════════════════════════════════════
+    // TAR ACH% 指标（Metric_ID 4, 5, 9, 13）
+    // 公式：TAR ACH% = 实际值 / 目标值
+    // 目标值来源：a03_e2e_customer_fcst_data_m（日期字段 data_date）
+    // 目标值筛选：data_date ∈ [__TimeMin, __TimeMax]（全局时间范围，由 Slicer_Time_Frame_Min/Max 给定）
+    //   - __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+    //   - __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+    // 目标值无 is_member / is_employee 筛选（口径文档明确）
+    // 行维度 platform / shop_info_id 通过共享维度表自动传递到目标值表
+    // 触发条件：仅选择单个财月/单个财年时有值，多选或 Quarter 粒度时留空
+    //   - 单选判定：Slicer_Time_Frame[TimeFrame_ID] ∈ {"Month","Year"}
+    //     且 Slicer_Time_Frame_Min[TimeFrame_Value] = Slicer_Time_Frame_Max[TimeFrame_Value]
+    //   - Quarter 粒度 / 多选 / 跨财年 → 留空
+    // 目标值字段与聚合方式（按指标区分）：
+    //   - Metric_ID=4 (VIC Monthly TAR ACH%)：SUM(vic_customer_cnt)
+    //   - Metric_ID=5 (VIC Yearly TAR ACH%)：SUM(year_vic_customer_cnt)（口径标注 DISTINCT，year_* 字段为年度目标值，按 platform/shop_info_id 分组后 DISTINCT 取值再 SUM）
+    //   - Metric_ID=9 (VIC Retention% TAR ACH%)：DISTINCT(year_vic_retention_percent)（百分比，无 SUM；仅 Store 单选时有值）
+    //   - Metric_ID=13 (T4-5 Upgrade No. TAR ACH%)：SUM(year_upgrade_customer_cnt)
+    // 实际值取数（复用 Act Base Value，按 Metric_ID 分支）：
+    //   - Metric_ID=4 / 5(Month单选) / 13(Month单选)：VIC No. Act（Metric_ID=1，月度实际值）
+    //   - Metric_ID=5(Year单选) / 13(Year单选)：VIC No. Act（Metric_ID=1，财年实际值 = data_date ∈ 全年区间 DISTINCTCOUNT）
+    //   - Metric_ID=9：VIC Retention% Act（Metric_ID=6，已内化 Rolling 12 分母返回比率）
+    //     分子：Month单选 → VIC Retention% Act(month)；Year单选 → VIC Retention% Act(year)
+    // ═══════════════════════════════════════
+    VAR __IsTARACH = __MetricID IN {4, 5, 9, 13}
+
+    // ── 单选判定：仅选择单个财月/单个财年时才有值 ──
+    VAR __TimeFrameID = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])
+    VAR __TimeFrameValueMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Value])
+    VAR __TimeFrameValueMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Value])
+    VAR __IsSingleMonthOrYear =
+        __TimeFrameID IN {"Month", "Year"}
+        && NOT ISBLANK(__TimeFrameValueMin)
+        && NOT ISBLANK(__TimeFrameValueMax)
+        && __TimeFrameValueMin = __TimeFrameValueMax
+
+    // ── 目标值时间范围：data_date ∈ [__TimeMin, __TimeMax]（全局时间范围）──
+    VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+    VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+
+    // ── Metric_ID=9 专用：Store 单选判定（仅 VIC Retention% TAR ACH% 需要）──
+    VAR __StoreIDCount =
+        CALCULATE(
+            DISTINCTCOUNT(Slicer_Store_Name[Store_ID])
+        )
+    VAR __IsSingleStore = __StoreIDCount = 1
+
+    // ── 目标值计算（按 Metric_ID 路由到对应字段与聚合方式）──
+    // Metric_ID=4: VIC Monthly TAR ACH% → SUM(vic_customer_cnt)
+    VAR __Target_MonthlyVICCnt =
+        IF(
+            __IsTARACH && __MetricID = 4 && __IsSingleMonthOrYear,
+            CALCULATE(
+                SUM('a03_e2e_customer_fcst_data_m'[vic_customer_cnt]),
+                'a03_e2e_customer_fcst_data_m'[data_date] >= __TimeMin,
+                'a03_e2e_customer_fcst_data_m'[data_date] <= __TimeMax
+            )
+        )
+
+    // Metric_ID=5: VIC Yearly TAR ACH% → SUM(DISTINCT year_vic_customer_cnt)
+    //   口径标注 SUM(DISTINCT year_vic_customer_cnt)：year_* 字段为年度目标值，按 platform/shop_info_id 分组后
+    //   每个 shop 的 year_vic_customer_cnt 是该 shop 全年目标值（同 shop 同年唯一），
+    //   DISTINCT 去重后再 SUM 汇总到当前行维度粒度
+    //   实现方式：SUMMARIZE 按 platform/shop_info_id/year_vic_customer_cnt 分组去重，再 SUMX 求和
+    //   （DISTINCT 返回表非标量，不能在 SUMX 内当值用，用 SUMMARIZE 分组等价实现 DISTINCT 去重后再 SUM）
+    VAR __Target_YearlyVICCnt =
+        IF(
+            __IsTARACH && __MetricID = 5 && __IsSingleMonthOrYear,
+            CALCULATE(
+                SUMX(
+                    SUMMARIZE(
+                        'a03_e2e_customer_fcst_data_m',
+                        'a03_e2e_customer_fcst_data_m'[platform],
+                        'a03_e2e_customer_fcst_data_m'[shop_info_id],
+                        'a03_e2e_customer_fcst_data_m'[year_vic_customer_cnt]
+                    ),
+                    'a03_e2e_customer_fcst_data_m'[year_vic_customer_cnt]
+                ),
+                'a03_e2e_customer_fcst_data_m'[data_date] >= __TimeMin,
+                'a03_e2e_customer_fcst_data_m'[data_date] <= __TimeMax
+            )
+        )
+
+    // Metric_ID=9: VIC Retention% TAR ACH% → DISTINCT(year_vic_retention_percent)
+    //   百分比目标值，无 SUM；仅 Store 单选时有值
+    //   按 platform/shop_info_id 分组后 DISTINCT 取值（同 shop 同年唯一）
+    VAR __Target_YearlyRetentionPct =
+        IF(
+            __IsTARACH && __MetricID = 9 && __IsSingleMonthOrYear && __IsSingleStore,
+            CALCULATE(
+                DISTINCT('a03_e2e_customer_fcst_data_m'[year_vic_retention_percent]),
+                'a03_e2e_customer_fcst_data_m'[data_date] >= __TimeMin,
+                'a03_e2e_customer_fcst_data_m'[data_date] <= __TimeMax
+            )
+        )
+
+    // Metric_ID=13: T4-5 Upgrade No. TAR ACH% → SUM(DISTINCT year_upgrade_customer_cnt)
+    //   口径标注 SUM(DISTINCT year_upgrade_customer_cnt)，逻辑同 Metric_ID=5
+    //   实现方式：SUMMARIZE 按 platform/shop_info_id/year_upgrade_customer_cnt 分组去重，再 SUMX 求和
+    VAR __Target_YearlyUpgradeCnt =
+        IF(
+            __IsTARACH && __MetricID = 13 && __IsSingleMonthOrYear,
+            CALCULATE(
+                SUMX(
+                    SUMMARIZE(
+                        'a03_e2e_customer_fcst_data_m',
+                        'a03_e2e_customer_fcst_data_m'[platform],
+                        'a03_e2e_customer_fcst_data_m'[shop_info_id],
+                        'a03_e2e_customer_fcst_data_m'[year_upgrade_customer_cnt]
+                    ),
+                    'a03_e2e_customer_fcst_data_m'[year_upgrade_customer_cnt]
+                ),
+                'a03_e2e_customer_fcst_data_m'[data_date] >= __TimeMin,
+                'a03_e2e_customer_fcst_data_m'[data_date] <= __TimeMax
+            )
+        )
+
+    // ── 实际值取数（复用 Act Base Value，按 Metric_ID 分支）──
+    // 实际值 Metric_ID 映射（严格遵循口径文档"实际值"字段）：
+    //   - Metric_ID=4 (VIC Monthly TAR ACH%)：VIC No. Act（Metric_ID=1，月度实际值）
+    //   - Metric_ID=5 (VIC Yearly TAR ACH%)：VIC No. Act（Metric_ID=1）
+    //       Month 单选 → 当月实际值；Year 单选 → 全年实际值（end period 为该年最后一月，全年区间由 Slicer_Time_Frame_Max 在 Year 粒度下提供）
+    //   - Metric_ID=9 (VIC Retention% TAR ACH%)：VIC Retention% Act（Metric_ID=6，已内化 Rolling 12 分母返回比率）
+    //       Month 单选 → VIC Retention% Act(month)；Year 单选 → VIC Retention% Act(year)
+    //   - Metric_ID=13 (T4-5 Upgrade No. TAR ACH%)：T4-5 Upgrade No. Act（Metric_ID=10）
+    VAR __ActMetricID_ForTAR =
+        SWITCH(__MetricID,
+            4, 1,   // VIC Monthly TAR ACH% → VIC No. Act
+            5, 1,   // VIC Yearly TAR ACH% → VIC No. Act
+            9, 6,   // VIC Retention% TAR ACH% → VIC Retention% Act
+            13, 10  // T4-5 Upgrade No. TAR ACH% → T4-5 Upgrade No. Act
+        )
+
+    // 取实际值（REMOVEFILTERS 清除断开维度筛选，再应用目标 Metric_ID）
+    VAR __ActualValue_ForTAR =
+        IF(
+            __IsTARACH && __IsSingleMonthOrYear,
+            CALCULATE(
+                [VIC KPIs Act Base Value],
+                REMOVEFILTERS('Dim_ColMetric_VIC_KPIs'),
+                'Dim_ColMetric_VIC_KPIs'[Metric_ID] = __ActMetricID_ForTAR
+            )
+        )
+
+    // ── TAR ACH% 计算：实际值 / 目标值 ──
+    //   非触发场景（Quarter / 多选 / 跨财年 / Store未单选[Metric_ID=9]）→ BLANK()
+    VAR __TARACH_MonthlyVIC =
+        IF(
+            __MetricID = 4 && __IsSingleMonthOrYear,
+            DIVIDE(__ActualValue_ForTAR, __Target_MonthlyVICCnt)
+        )
+    VAR __TARACH_YearlyVIC =
+        IF(
+            __MetricID = 5 && __IsSingleMonthOrYear,
+            DIVIDE(__ActualValue_ForTAR, __Target_YearlyVICCnt)
+        )
+    VAR __TARACH_RetentionPct =
+        IF(
+            __MetricID = 9 && __IsSingleMonthOrYear && __IsSingleStore,
+            DIVIDE(__ActualValue_ForTAR, __Target_YearlyRetentionPct)
+        )
+    VAR __TARACH_UpgradeCnt =
+        IF(
+            __MetricID = 13 && __IsSingleMonthOrYear,
+            DIVIDE(__ActualValue_ForTAR, __Target_YearlyUpgradeCnt)
+        )
+
     RETURN
         SWITCH(
             __MetricID,
@@ -1021,11 +1225,11 @@ VIC KPIs Base Value =
             22, __ShareVsLPResult,               // Retention VIC No. Share vs LP
             27, __ShareVsLYResult,               // Direct VIC No. Share vs LY
             28, __ShareVsLPResult,               // Direct VIC No. Share vs LP
-            // ─── TAR ACH% 占位（值为 1，待逻辑确认后填充）───
-            4,  1,                               // VIC Monthly TAR ACH%
-            5,  1,                               // VIC Yearly TAR ACH%
-            9,  1,                               // VIC Retention% TAR ACH%
-            13, 1,                               // T4-5 Upgrade No. TAR ACH%
+            // ─── TAR ACH%（实际值 / 目标值，仅单选财月/财年时有值）───
+            4,  __TARACH_MonthlyVIC,             // VIC Monthly TAR ACH%
+            5,  __TARACH_YearlyVIC,              // VIC Yearly TAR ACH%
+            9,  __TARACH_RetentionPct,           // VIC Retention% TAR ACH%（额外要求 Store 单选）
+            13, __TARACH_UpgradeCnt,             // T4-5 Upgrade No. TAR ACH%
             BLANK()
         )
 ```
@@ -1188,7 +1392,7 @@ VIC KPIs Cell Background Color =
 | 1    | VIC KPIs Act Base Value        | Base Metrics   | 本期基础值（end period 当月 DISTINCTCOUNT）；Metric_ID=6 特殊：内化 Rolling 12 分母返回 VIC Retention% 比率                                |
 | 2    | VIC KPIs LY Base Value         | Base Metrics   | 去年同期基础值（财历映射 Last_Fiscal_Month_*_LY）；Metric_ID=6 特殊：内化 Rolling 12 LY 分母返回 VIC Retention% LY 比率                    |
 | 3    | VIC KPIs LP Base Value         | Base Metrics   | 上期基础值（财历映射 Last_Fiscal_Month_*_LP）；Metric_ID=6 特殊：内化 Rolling 12 LP 分母返回 VIC Retention% LP 比率                        |
-| 4    | VIC KPIs Base Value            | Base Metrics   | 总路由（含 vs LY / vs LP / TAR ACH% / Share 派生 + REMOVEFILTERS）；VIC Retention% 派生直接取 Act/LY/LP Base Value(Metric_ID=6) 做比率差值 |
+| 4    | VIC KPIs Base Value            | Base Metrics   | 总路由（含 vs LY / vs LP / TAR ACH% / Share 派生 + REMOVEFILTERS）；VIC Retention% 派生直接取 Act/LY/LP Base Value(Metric_ID=6) 做比率差值；TAR ACH% = 实际值(Act Base Value) / 目标值(a03_e2e_customer_fcst_data_m)，仅单选财月/财年时有值 |
 | 5    | VIC KPIs Cell Value            | Cell Values    | 对外值 = Base Value                                                                                                                        |
 | 6    | VIC KPIs Cell Display          | Formatting     | 格式化显示文本（按 Metric_Format 单字段分发）                                                                                              |
 | 7    | VIC KPIs Cell Font Color       | Formatting     | 字体颜色（按 Metric_ColorRule 分发）                                                                                                       |
@@ -1294,7 +1498,26 @@ VIC KPIs Cell Background Color =
    - **内化实现**：Rolling 12 分母逻辑已内化于 `[VIC KPIs Act Base Value]` / `[VIC KPIs LY Base Value]` / `[VIC KPIs LP Base Value]` 的 `Metric_ID=6` 分支，返回 VIC Retention% 比率（DIVIDE(分子, 分母)），不再单列 Rolling12 度量值
    - 总路由 `[VIC KPIs Base Value]` 的 VIC Retention% vs LY / vs LP 派生：直接取 Act Base Value(Metric_ID=6) - LY/LP Base Value(Metric_ID=6) 做比率差值
 5. **Share 类分母（end period 当月 is_vic=1）**：与 VIC Retention% 分母不同，Share 类指标（T4-5 Upgrade No. Share / Retention VIC No. Share / Direct VIC No. Share）的分母使用 end period 当月 `is_vic=1` 的人数，等价于 VIC No. Act（Metric_ID=1）。
-6. **TAR ACH% 占位**：Metric_ID 4, 5, 9, 13 为占位指标，值固定为 1，待口径文档逻辑确认后再填充。
+6. **TAR ACH% 完整取数逻辑（实际值 / 目标值）**：Metric_ID 4, 5, 9, 13 为目标达成率指标，公式 = 实际值 / 目标值。
+
+   - **实际值**：复用 Act Base Value（REMOVEFILTERS + 目标 Metric_ID）
+     - Metric_ID=4/5：VIC No. Act（Metric_ID=1）
+     - Metric_ID=9：VIC Retention% Act（Metric_ID=6，已内化 Rolling 12 分母返回比率）
+     - Metric_ID=13：T4-5 Upgrade No. Act（Metric_ID=10）
+   - **目标值**：取自 `a03_e2e_customer_fcst_data_m`，日期字段 `data_date`
+     - 时间范围：`data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`（全局时间范围）
+     - **无 is_member / is_employee 筛选**（口径文档明确）
+     - 行维度 platform / shop_info_id 通过共享维度表自动传递
+     - 字段与聚合方式：
+       - Metric_ID=4：`SUM(vic_customer_cnt)`（月度目标值）
+       - Metric_ID=5：`SUM(DISTINCT year_vic_customer_cnt)`（年度目标值，按 platform/shop_info_id 分组 DISTINCT 后 SUM）
+       - Metric_ID=9：`DISTINCT(year_vic_retention_percent)`（百分比，无 SUM，仅 Store 单选时有值）
+       - Metric_ID=13：`SUM(DISTINCT year_upgrade_customer_cnt)`（年度目标值，聚合同 Metric_ID=5）
+   - **触发条件（仅单选时有值，否则留空 BLANK）**：
+     - `Slicer_Time_Frame[TimeFrame_ID] ∈ {"Month", "Year"}`（排除 Quarter 粒度）
+     - `Slicer_Time_Frame_Min[TimeFrame_Value] = Slicer_Time_Frame_Max[TimeFrame_Value]`（Min/Max 选中值相等）
+     - Metric_ID=9 额外要求 `Slicer_Store_Name[Store_ID]` 单选（DISTINCTCOUNT = 1）
+   - **非触发场景**：Quarter 粒度 / 多选 / 跨财年 / Metric_ID=9 时 Store 未单选 → 返回 BLANK()
 7. **Retention VIC No. vs LY 特殊格式**：Metric_ID 18（Retention VIC No. vs LY）的计算方式仍是 `今年 / 去年 - 1`（数量类），但数据格式为 `percent_1dp`（不含正号），严格遵循口径文档 4.1 的数据类型定义。
 8. **格式字段精简（关键调整）**：
 

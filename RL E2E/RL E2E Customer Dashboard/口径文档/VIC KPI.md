@@ -86,8 +86,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_vic = 1`；`is_member`和`is_employee`筛选   |
 | **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id` |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，含正负号 |
-| **数据格式** | "#,##0.0%" |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%` |
 
 ### 1.4 VIC Yearly TAR ACH% — 年度目标达成率
 
@@ -100,8 +100,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_vic = 1`；`is_member`和`is_employee`筛选   |
 | **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id` |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，含正负号 |
-| **数据格式** | "#,##0.0%" |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%` |
 
 ---
 
@@ -160,8 +160,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** |  `is_member`和`is_employee`筛选  |
 | **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id` |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，含正负号 |
-| **数据格式** | "#,##0.0%" |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%` |
 
 ---
 
@@ -219,8 +219,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_upgrade_vic = 1`； `is_member`和`is_employee`筛选  |
 | **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id` |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，含正负号 |
-| **数据格式** | "#,##0.0%" |
+| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
+| **数据格式** | `#,##0.0%` |
 
 ### 3.4 T4-5 Upgrade No. Share — T4-5升级占比
 
