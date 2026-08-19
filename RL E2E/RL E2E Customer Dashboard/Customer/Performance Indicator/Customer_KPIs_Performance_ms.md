@@ -330,17 +330,19 @@ Customer Performance Act Base Value =
 // ========================================
 
 // ── 行维度路由：Net / Demand ──
+// 注意：VALUES 返回"表"（单行单列），SELECTEDVALUE 返回"标量值"，
+//       后续做字符串比较（__RowCode = "Net"）必须用标量，故用 SELECTEDVALUE
 VAR __RowCode =
     IF(
         HASONEVALUE('Dim_RowMetric_Customer_Net_Demand'[Row_Code]),
-        VALUES('Dim_RowMetric_Customer_Net_Demand'[Row_Code]),
+        SELECTEDVALUE('Dim_RowMetric_Customer_Net_Demand'[Row_Code]),
         "Net"   // 不选/多选时默认 Net
     )
 
 // ── 客户类型路由：New / Existing / All ──
 VAR __IsSingleCustomerType = HASONEVALUE(Slicer_Customer_Type_Selection[Customer_Type_ID])
 VAR __CustomerType =
-    IF(__IsSingleCustomerType, VALUES(Slicer_Customer_Type_Selection[Customer_Type_ID]), "All")
+    IF(__IsSingleCustomerType, SELECTEDVALUE(Slicer_Customer_Type_Selection[Customer_Type_ID]), "All")
 VAR __IsAll = (__CustomerType = "All")
 
 // ── 列维度路由：Metric_ID ──
@@ -355,61 +357,66 @@ VAR __StartPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Ma
 // ═══════════════════════════════════════════════════════════════
 // New/Existing user_id 集合（在 start_period 内判定）
 // All 返回空表，后续用 __IsAll 分支不应用 TREATAS
+//
+// 关键技术点（DAX 表类型约束）:
+//   1. SWITCH 只能返回标量值，不能返回表 → 必须用 IF 嵌套
+//   2. IF 返回表时，两个分支必须返回"列结构完全一致"的表
+//      - {} 字面量创建的空表列名是 "Value"
+//      - VALUES(user_id) 创建的表列名是 "user_id"
+//      列名不匹配时，引擎把 IF 当作标量函数处理 → 报错
+//      "该表达式引用多列。多列不能转换为标量值"
+//   3. 解决: 用 FILTER(VALUES(user_id), FALSE()) 创建与目标表列名
+//      相同的空表，确保 IF 两分支结构一致
 // ═══════════════════════════════════════════════════════════════
+VAR __EmptyUsers = FILTER(VALUES('a03_e2e_customer_data_m'[user_id]), FALSE())   // 列名为 user_id 的空表
+
+VAR __Users_New_Net =
+    CALCULATETABLE(
+        VALUES('a03_e2e_customer_data_m'[user_id]),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
+    )
+VAR __Users_New_Demand =
+    CALCULATETABLE(
+        VALUES('a03_e2e_customer_data_m'[user_id]),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[pay_amt] > 0,
+        'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
+    )
+VAR __Users_Existing_Net =
+    CALCULATETABLE(
+        VALUES('a03_e2e_customer_data_m'[user_id]),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
+    )
+VAR __Users_Existing_Demand =
+    CALCULATETABLE(
+        VALUES('a03_e2e_customer_data_m'[user_id]),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[pay_amt] > 0,
+        'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
+    )
 VAR __TargetUserIDs =
-    IF(
-        NOT __IsAll,
-        SWITCH(
-            __CustomerType,
-            "New",
-                SWITCH(
-                    __RowCode,
-                    "Net",
-                        CALCULATETABLE(
-                            VALUES('a03_e2e_customer_data_m'[user_id]),
-                            'a03_e2e_customer_data_m'[is_member] = 0,
-                            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
-                            'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-                            'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
-                        ),
-                    "Demand",
-                        CALCULATETABLE(
-                            VALUES('a03_e2e_customer_data_m'[user_id]),
-                            'a03_e2e_customer_data_m'[is_member] = 0,
-                            'a03_e2e_customer_data_m'[pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
-                            'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-                            'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
-                        ),
-                        {}   // 兜底空表
-                ),
-            "Existing",
-                SWITCH(
-                    __RowCode,
-                    "Net",
-                        CALCULATETABLE(
-                            VALUES('a03_e2e_customer_data_m'[user_id]),
-                            'a03_e2e_customer_data_m'[is_member] = 0,
-                            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-                            'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
-                        ),
-                    "Demand",
-                        CALCULATETABLE(
-                            VALUES('a03_e2e_customer_data_m'[user_id]),
-                            'a03_e2e_customer_data_m'[is_member] = 0,
-                            'a03_e2e_customer_data_m'[pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-                            'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
-                        ),
-                        {}
-                ),
-                {}
-        ),
-        {}   // All 返回空表
+    // 用 UNION+FILTER 替代嵌套 IF，确保 VAR 解析为表类型
+    // 原因: 嵌套 IF 返回表时 DAX 引擎会把表达式降级为标量，导致 TREATAS 报错
+    //       "TREATAS 函数要求参数使用一个表表达式，实际使用的却是字符串或数值表达式"
+    //       UNION/FILTER 始终返回表类型，规避类型推断问题
+    UNION(
+        FILTER(__Users_New_Net,         NOT __IsAll && __CustomerType = "New"      && __RowCode = "Net"),
+        FILTER(__Users_New_Demand,      NOT __IsAll && __CustomerType = "New"      && __RowCode = "Demand"),
+        FILTER(__Users_Existing_Net,    NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Net"),
+        FILTER(__Users_Existing_Demand, NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Demand"),
+        FILTER(__EmptyUsers,            __IsAll)
     )
 
 // ═══════════════════════════════════════════════════════════════
@@ -866,17 +873,18 @@ Customer Performance LY Base Value =
 // ========================================
 
 // ── 行维度路由：Net / Demand ──
+// 注意：VALUES 返回"表"，SELECTEDVALUE 返回"标量值"，字符串比较需用标量
 VAR __RowCode =
     IF(
         HASONEVALUE('Dim_RowMetric_Customer_Net_Demand'[Row_Code]),
-        VALUES('Dim_RowMetric_Customer_Net_Demand'[Row_Code]),
+        SELECTEDVALUE('Dim_RowMetric_Customer_Net_Demand'[Row_Code]),
         "Net"
     )
 
 // ── 客户类型路由：New / Existing / All ──
 VAR __IsSingleCustomerType = HASONEVALUE(Slicer_Customer_Type_Selection[Customer_Type_ID])
 VAR __CustomerType =
-    IF(__IsSingleCustomerType, VALUES(Slicer_Customer_Type_Selection[Customer_Type_ID]), "All")
+    IF(__IsSingleCustomerType, SELECTEDVALUE(Slicer_Customer_Type_Selection[Customer_Type_ID]), "All")
 VAR __IsAll = (__CustomerType = "All")
 
 // ── 列维度路由：Metric_ID ──
@@ -889,60 +897,52 @@ VAR __StartPeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month
 VAR __StartPeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max_LY])
 
 // ── New/Existing user_id 集合（在 start_period LY 内判定）──
+// 注意：SWITCH 不能返回表，IF 返回表需两分支列结构一致，用 FILTER(VALUES,FALSE) 造同结构空表
+VAR __EmptyUsers_LY = FILTER(VALUES('a03_e2e_customer_data_m'[user_id]), FALSE())
+VAR __Users_New_Net_LY =
+    CALCULATETABLE(
+        VALUES('a03_e2e_customer_data_m'[user_id]),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
+    )
+VAR __Users_New_Demand_LY =
+    CALCULATETABLE(
+        VALUES('a03_e2e_customer_data_m'[user_id]),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[pay_amt] > 0,
+        'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
+    )
+VAR __Users_Existing_Net_LY =
+    CALCULATETABLE(
+        VALUES('a03_e2e_customer_data_m'[user_id]),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
+    )
+VAR __Users_Existing_Demand_LY =
+    CALCULATETABLE(
+        VALUES('a03_e2e_customer_data_m'[user_id]),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[pay_amt] > 0,
+        'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
+    )
 VAR __TargetUserIDs_LY =
-    IF(
-        NOT __IsAll,
-        SWITCH(
-            __CustomerType,
-            "New",
-                SWITCH(
-                    __RowCode,
-                    "Net",
-                        CALCULATETABLE(
-                            VALUES('a03_e2e_customer_data_m'[user_id]),
-                            'a03_e2e_customer_data_m'[is_member] = 0,
-                            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
-                            'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
-                            'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
-                        ),
-                    "Demand",
-                        CALCULATETABLE(
-                            VALUES('a03_e2e_customer_data_m'[user_id]),
-                            'a03_e2e_customer_data_m'[is_member] = 0,
-                            'a03_e2e_customer_data_m'[pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
-                            'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
-                            'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
-                        ),
-                        {}
-                ),
-            "Existing",
-                SWITCH(
-                    __RowCode,
-                    "Net",
-                        CALCULATETABLE(
-                            VALUES('a03_e2e_customer_data_m'[user_id]),
-                            'a03_e2e_customer_data_m'[is_member] = 0,
-                            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
-                            'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
-                        ),
-                    "Demand",
-                        CALCULATETABLE(
-                            VALUES('a03_e2e_customer_data_m'[user_id]),
-                            'a03_e2e_customer_data_m'[is_member] = 0,
-                            'a03_e2e_customer_data_m'[pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
-                            'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
-                        ),
-                        {}
-                ),
-                {}
-        ),
-        {}
+    // UNION+FILTER 确保返回表类型，避免 IF 返回表被降级为标量
+    UNION(
+        FILTER(__Users_New_Net_LY,         NOT __IsAll && __CustomerType = "New"      && __RowCode = "Net"),
+        FILTER(__Users_New_Demand_LY,      NOT __IsAll && __CustomerType = "New"      && __RowCode = "Demand"),
+        FILTER(__Users_Existing_Net_LY,     NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Net"),
+        FILTER(__Users_Existing_Demand_LY, NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Demand"),
+        FILTER(__EmptyUsers_LY,            __IsAll)
     )
 
 // ═══ Metric_ID=1: DCom SLS LY ═══
@@ -1372,17 +1372,18 @@ Customer Performance LP Base Value =
 // ========================================
 
 // ── 行维度路由：Net / Demand ──
+// 注意：VALUES 返回"表"，SELECTEDVALUE 返回"标量值"，字符串比较需用标量
 VAR __RowCode =
     IF(
         HASONEVALUE('Dim_RowMetric_Customer_Net_Demand'[Row_Code]),
-        VALUES('Dim_RowMetric_Customer_Net_Demand'[Row_Code]),
+        SELECTEDVALUE('Dim_RowMetric_Customer_Net_Demand'[Row_Code]),
         "Net"
     )
 
 // ── 客户类型路由：New / Existing / All ──
 VAR __IsSingleCustomerType = HASONEVALUE(Slicer_Customer_Type_Selection[Customer_Type_ID])
 VAR __CustomerType =
-    IF(__IsSingleCustomerType, VALUES(Slicer_Customer_Type_Selection[Customer_Type_ID]), "All")
+    IF(__IsSingleCustomerType, SELECTEDVALUE(Slicer_Customer_Type_Selection[Customer_Type_ID]), "All")
 VAR __IsAll = (__CustomerType = "All")
 
 // ── 列维度路由：Metric_ID ──
@@ -1395,60 +1396,52 @@ VAR __StartPeriodMin_LP = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month
 VAR __StartPeriodMax_LP = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max_LP])
 
 // ── New/Existing user_id 集合（在 start_period LP 内判定）──
+// 注意：SWITCH 不能返回表，IF 返回表需两分支列结构一致，用 FILTER(VALUES,FALSE) 造同结构空表
+VAR __EmptyUsers_LP = FILTER(VALUES('a03_e2e_customer_data_m'[user_id]), FALSE())
+VAR __Users_New_Net_LP =
+    CALCULATETABLE(
+        VALUES('a03_e2e_customer_data_m'[user_id]),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
+    )
+VAR __Users_New_Demand_LP =
+    CALCULATETABLE(
+        VALUES('a03_e2e_customer_data_m'[user_id]),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[pay_amt] > 0,
+        'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
+    )
+VAR __Users_Existing_Net_LP =
+    CALCULATETABLE(
+        VALUES('a03_e2e_customer_data_m'[user_id]),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
+    )
+VAR __Users_Existing_Demand_LP =
+    CALCULATETABLE(
+        VALUES('a03_e2e_customer_data_m'[user_id]),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[pay_amt] > 0,
+        'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
+    )
 VAR __TargetUserIDs_LP =
-    IF(
-        NOT __IsAll,
-        SWITCH(
-            __CustomerType,
-            "New",
-                SWITCH(
-                    __RowCode,
-                    "Net",
-                        CALCULATETABLE(
-                            VALUES('a03_e2e_customer_data_m'[user_id]),
-                            'a03_e2e_customer_data_m'[is_member] = 0,
-                            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
-                            'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
-                            'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
-                        ),
-                    "Demand",
-                        CALCULATETABLE(
-                            VALUES('a03_e2e_customer_data_m'[user_id]),
-                            'a03_e2e_customer_data_m'[is_member] = 0,
-                            'a03_e2e_customer_data_m'[pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
-                            'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
-                            'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
-                        ),
-                        {}
-                ),
-            "Existing",
-                SWITCH(
-                    __RowCode,
-                    "Net",
-                        CALCULATETABLE(
-                            VALUES('a03_e2e_customer_data_m'[user_id]),
-                            'a03_e2e_customer_data_m'[is_member] = 0,
-                            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
-                            'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
-                        ),
-                    "Demand",
-                        CALCULATETABLE(
-                            VALUES('a03_e2e_customer_data_m'[user_id]),
-                            'a03_e2e_customer_data_m'[is_member] = 0,
-                            'a03_e2e_customer_data_m'[pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
-                            'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
-                            'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
-                        ),
-                        {}
-                ),
-                {}
-        ),
-        {}
+    // UNION+FILTER 确保返回表类型，避免 IF 返回表被降级为标量
+    UNION(
+        FILTER(__Users_New_Net_LP,         NOT __IsAll && __CustomerType = "New"      && __RowCode = "Net"),
+        FILTER(__Users_New_Demand_LP,      NOT __IsAll && __CustomerType = "New"      && __RowCode = "Demand"),
+        FILTER(__Users_Existing_Net_LP,     NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Net"),
+        FILTER(__Users_Existing_Demand_LP, NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Demand"),
+        FILTER(__EmptyUsers_LP,            __IsAll)
     )
 
 // ═══ Metric_ID=1: DCom SLS LP ═══
