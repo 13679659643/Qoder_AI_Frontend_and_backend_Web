@@ -15,6 +15,7 @@
 |--------|----------|----------|----------|----------|--------|------|
 | etl_time | String | etl时间 | | | | |
 | dt | String | 数据日期 | 是 | | | |
+| data_date | String | 数据月份(财月第一天) | | | | |
 | data_month | String | 数据月份 | | | 07_Oct | |
 | data_month_name | String | 数据月份名称 | | | 2026财年7月 | |
 | data_quarter | String | 数据季度 | | | 3 | |
@@ -31,6 +32,7 @@
 | shop_info_id | bigint | 店铺唯一键 | 是 | | | |
 | shop_id | String | 店铺ID | | | | |
 | shop_name | String | 店铺名称 | | | | |
+| shop_name_en | String | 店铺英文名称 | | | | |
 | shop_code | String | 店铺code | | | | |
 | pay_amt | decimal(19, 5) | 购买金额 | | demand sales | | |
 | pay_order_cnt | bigint | 购买订单数 | | demand sales | | |
@@ -42,16 +44,22 @@
 | last_12m_net_pay_order_cnt | bigint | 过去12个月net购买订单数 | | | | |
 | last_12m_net_pay_qty | bigint | 过去12个月net购买商品数量 | | | | |
 | last_period_customer_tier | String | 上个周期vic等级 | | T1～T5 | | |
+| is_last_period_vic | int | 是否是上个周期vic | | 1:是；0:否 | | |
 | last_24m_12m_net_pay_amt | decimal(19, 5) | 过去24~12个月net购买金额 | | | | |
 | last_24m_12m_net_pay_order_cnt | bigint | 过去24~12个月net购买订单数 | | | | |
 | last_24m_12m_net_pay_qty | bigint | 过去24~12个月net购买商品数量 | | | | |
 | is_vic | int | 是否是vic | | 1:是；0:否 | | |
-| is_last_period_vic | int | 是否是上个周期vic | | 1:是；0:否 | | |
 | customer_tier | String | 用户等级 | | T1～T5 | | |
 | is_new_vic | int | 是否是new vic | | 1:是；0:否 | | |
 | is_direct_vic | int | 是否是direct vic | | 1:是；0:否 | | |
 | is_upgrade_vic | int | 是否是upgrade vic | | 1:是；0:否 | | |
 | is_retention_vic | int | 是否是retention vic | | 1:是；0:否 | | |
+| lp_12m_pay_amt | decimal(19, 5) | 前12个月购买金额 | | 不包括当月 | | |
+| lp_12m_pay_order_cnt | bigint | 前12个月购买订单数 | | 不包括当月 | | |
+| lp_12m_pay_qty | bigint | 前12个月购买商品数量 | | 不包括当月 | | |
+| lp_12m_net_pay_amt | decimal(19, 5) | 前12个月net购买金额 | | 不包括当月 | | |
+| lp_12m_net_pay_order_cnt | bigint | 前12个月net购买订单数 | | 不包括当月 | | |
+| lp_12m_net_pay_qty | bigint | 前12个月net购买商品数量 | | 不包括当月 | | |
 | last_fy_net_pay_amt | decimal(19, 5) | 上个财年net购买金额 | | | | |
 | last_fy_net_pay_order_cnt | bigint | 上个财年net购买订单数 | | | | |
 | last_fy_net_pay_qty | bigint | 上个财年net购买商品数量 | | | | |

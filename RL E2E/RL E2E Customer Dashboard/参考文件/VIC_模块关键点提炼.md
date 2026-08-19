@@ -413,7 +413,56 @@ CALCULATE(
     'a03_e2e_customer_fcst_data_m'[data_date] <= __TimeMax
 )
 ```
+### 10 vs LY / vs LP 时间偏移规则（区间对称映射）
 
+本期区间 = `[Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`
+
+LY/LP 区间按对称原则构造（起始端读 Min 切片器 LY/LP，结束端读 Max 切片器 LY/LP）：
+
+- **LY 区间** = `[Slicer_Time_Frame_Min[TimeFrame_Min_LY], Slicer_Time_Frame_Max[TimeFrame_Max_LY]]`
+- **LP 区间** = `[Slicer_Time_Frame_Min[TimeFrame_Min_LP], Slicer_Time_Frame_Max[TimeFrame_Max_LP]]`
+
+### 11. DCom 新客判定 = Step1 + Step2 交集，且Step1 和 Step2 period无交集关系
+
+来源：Customer_KPIs_ms.md
+```dax
+// ═══════════════════════════════════════
+// Step 1: 本期区间内 net_pay_amt>0 AND is_member=0 的 user_id 集合
+//   使用 SUMMARIZE 返回单列表，便于后续 INTERSECT
+// ═══════════════════════════════════════
+VAR __Step1Users =
+    CALCULATETABLE(
+        SUMMARIZE(
+            'a03_e2e_customer_data_m',
+            'a03_e2e_customer_data_m'[user_id]
+        ),
+        'a03_e2e_customer_data_m'[is_member] = 0,
+        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
+        'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
+        'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
+    )
+// ═══════════════════════════════════════
+// Step 2: start_period 区间内 last_12m_net_pay_amt=0 的 user_id 集合
+//   新客判定字段 lp_12m_net_pay_amt 对应数据字典字段 last_12m_net_pay_amt
+// ═══════════════════════════════════════
+VAR __Step2Users =
+    CALCULATETABLE(
+        SUMMARIZE(
+            'a03_e2e_customer_data_m',
+            'a03_e2e_customer_data_m'[user_id]
+        ),
+        'a03_e2e_customer_data_m'[last_12m_net_pay_amt] = 0,
+        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
+        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
+    )
+// ═══════════════════════════════════════
+// 交集（Step1 ∩ Step2）— DCom New Customer No.
+// ═══════════════════════════════════════
+VAR __NewCustomerCnt_Act =
+    COUNTROWS(
+        INTERSECT(__Step1Users, __Step2Users)
+    )
+```
 ---
 
 ## 七、派生指标分类与计算方式

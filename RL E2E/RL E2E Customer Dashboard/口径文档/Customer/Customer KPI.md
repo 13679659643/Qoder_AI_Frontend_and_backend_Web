@@ -27,7 +27,7 @@
 | **VIC 定义** | 在指定日期范围往前 Rolling 12 个财月，net sales >= 20k 的买家 |
 | **Tier 分层定义** | T1：≧ 200K；T2：80-200K；T3：20-80K；T4：5-20K；T5：< 5K |
 | **Recency 分层定义** | R3：上财年 10-12 月；R4-6：上财年 7-9 月；R7-9：上财年 4-6 月；R10-12：上财年 1-3 月；TTL：全部 |
-| **start_period说明** | `data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]`，所选时间范围的最后一个财月,Slicer_Time_Frame_Min维度表已经给出了具体的Last_Fiscal_Month、Last_Fiscal_Month_Min等字段，只关注Slicer_Time_Frame_Min值,比如2026-09，只关注2023-09；2026 Q2，只关注2026-06；财年2026，对应最后一个财月只关注2026-12，然后都转化为具体的天维度范围； |
+| **start_period说明** | `data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]`，所选时间范围的第一个财月,Slicer_Time_Frame_Min维度表已经给出了具体的First_Fiscal_Month、First_Fiscal_Month_Min等字段，只关注Slicer_Time_Frame_Min值,比如2026-09，只关注2023-09；2026 Q2，只关注2026-04；财年2026，对应最后一个财月只关注2026-01，然后都转化为具体的天维度范围； |
 | **end period说明** | `data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]`，所选时间范围的最后一个财月,Slicer_Time_Frame_Max维度表已经给出了具体的Last_Fiscal_Month、Last_Fiscal_Month_Min等字段，只关注Slicer_Time_Frame_Max值,比如2026-09，只关注2023-09；2026 Q2，只关注2026-06；财年2026，对应最后一个财月只关注2026-12，然后都转化为具体的天维度范围； |
 | **data_date = 所选时间范围** | `data_date` ∈ `[__TimeMin, __TimeMax]`（全局时间范围），Slicer_Time_Frame_Min 和 Slicer_Time_Frame_Max 维度表已经给出具体的 TimeFrame_Min 和 TimeFrame_Max 值；`data_date = 所选时间范围` 即 `data_date ∈ [TimeFrame_Min, TimeFrame_Max]`，TimeFrame_Min从Slicer_Time_Frame_Min表取值，TimeFrame_Max从Slicer_Time_Frame_Max表取值|
 | **platform, shop_info_id维度分组说明** | 在没有特殊说明的情况下，由表字段自动传递，DAX 无需显式处理分组|
@@ -104,8 +104,8 @@
 | TimeFrame | 选择范围 | 分子 | 分母 | 说明 |
 |---|---|---|---|---|
 | Month | 选择单个财月 | New Customer No.（month actual） | `SUM(new_customer_cnt)` | 实际值 / 月度目标值 |
-| Month | 选择多个财月 | — | — | **留空**，多个月不计算 Monthly TAR ACH% |
-| Month | 选择多个财月且跨财年 | — | — | **留空** |
+| Month | 选择多个财月 |  New Customer No.（month actual） | `SUM(new_customer_cnt)` | 实际值 / 月度目标值 |
+| Month | 选择多个财月且跨财年 |  New Customer No.（month actual） | `SUM(new_customer_cnt)` | 实际值 / 月度目标值 |
 | Quarter | 任意选择范围 | — | — | **留空**，Quarter 下不计算 Monthly TAR ACH% |
 | Year | 任意选择范围 | — | — | **留空**，Year 下不计算 Monthly TAR ACH% |
 
@@ -131,9 +131,10 @@
 | TimeFrame | 选择范围 | 分子 | 分母 | 说明 |
 |---|---|---|---|---|
 | Month | 选择单个财月 | New Customer No.（month actual） | `SUM(DISTINCT year_new_customer_cnt)` | 单月实际 / 年度目标值 |
-| Month | 选择多个财月 | — | — | **留空**，多个月不计算 Yearly TAR ACH% |
+| Month | 选择多个财月 |  New Customer No.（month actual） | `SUM(DISTINCT year_new_customer_cnt)` | 单月实际 / 年度目标值 |
 | Month | 选择多个财月且跨财年 | — | — | **留空** |
 | Quarter | 选择单个季度且不跨财年 | New Customer No.（quarter actual） | `SUM(DISTINCT year_new_customer_cnt)` | 季度实际 / 年度目标值 |
+| Quarter | 选择多个季度且不跨财年 | New Customer No.（quarter actual） | `SUM(DISTINCT year_new_customer_cnt)` | 季度实际 / 年度目标值 |
 | Quarter | 跨财年 | — | — | **留空**，跨财年不计算 Yearly TAR ACH% |
 | Year | 选择单个财年 | New Customer No.（year actual） | `SUM(DISTINCT year_new_customer_cnt)` | 年度实际 / 年度目标值 |
 | Year | 选择多个财年 | New Customer No.（year actual） | `SUM(DISTINCT year_new_customer_cnt)` | 年度实际 / 年度目标值 |
