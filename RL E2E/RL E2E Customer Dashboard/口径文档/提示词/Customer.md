@@ -19,7 +19,7 @@
 # Customer_KPIs第三轮提示词：
 1、Slicer_Time_Frame_Min.sql 已扩展 First_Fiscal_Month 系列字段。
 2、a03_e2e_customer_data_m_数据字典新增：data_date、shop_name_en、lp_12m_pay_amt、lp_12m_pay_order_cnt、lp_12m_pay_qty、lp_12m_net_pay_amt、lp_12m_net_pay_order_cnt、lp_12m_net_pay_qty等字段。严格按照口径文档中的内容使用lp_12m_net_pay_amt字段。
-3、DCom 新客判定 = Step1 + Step2 交集：Slicer_Time_Frame_Min 和 Slicer_Time_Frame_Max 是两个独立切片器（用户分别选起始时间段和结束时间段）,slicer所选时间区间（data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]）内首次发生付费且非会员（net_pay_amt > 0，is_member = 0），且该用户的历史start_period（data_date ∈ Slicer_Time_Frame_Min[First_Fiscal_Month_Min], Slicer_Time_Frame_Min[First_Fiscal_Month_Max]）完全落在所选时间区间内，并在该首财月内无 12 个月累计消费记录（lp_12m_net_pay_amt = 0）,我理解start_period 是 slicer 区间的子集，技术实现上可以“合并区间”，用于判断 lp_12m_net_pay_amt = 0 的行，一定也在 slicer 区间内。
+3、DCom 新客判定 = Step1 + Step2 交集：Slicer_Time_Frame_Min 和 Slicer_Time_Frame_Max 是两个独立切片器（用户分别选起始时间段和结束时间段）,slicer所选时间区间（data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]）内首次发生付费且非会员（net_pay_amt > 0，is_member = 0），且该用户的历史start_period（data_date ∈ [Slicer_Time_Frame_Min[First_Fiscal_Month_Min], Slicer_Time_Frame_Min[First_Fiscal_Month_Max]]）完全落在所选时间区间内，并在该首财月内无 12 个月累计消费记录（lp_12m_net_pay_amt = 0）,我理解start_period 是 slicer 区间的子集，技术实现上可以“合并区间”，用于判断 lp_12m_net_pay_amt = 0 的行，一定也在 slicer 区间内。
 总结:技术上实现直接等价于 = data_date ∈ start_period and net_pay_amt > 0 and is_member = 0 and lp_12m_net_pay_amt = 0
 4、解决方式是独立的，给你的参考文件是帮助你写方案，不要把相关依赖说明写入方案文件中，比如：
 本方案无 IsMemberFilter / Slicer_Is_Employee_Selection（Customer KPI 口径固定 `is_member = 0`，无 `is_employee` 筛选）
@@ -33,11 +33,22 @@
 - Metric_ID=10: Customer% Yearly TAR ACH% → SUM(DISTINCT year_new_customer_percent)
 
 
-# 第三轮提示词：
-"Metric_IsCurrencyAmount",BOOLEAN,    // 是否金额类（TRUE 才涉及汇率换算与币种符号拼接）
-Slicer_Time_Frame_Min 和 Slicer_Time_Frame_Max 是两个独立切片器（用户分别选起始时间段和结束时间段）
+# Performance Indicator第三轮提示词：
+1、参考文件：
+Customer_Type维度表路径，断开连接，无关系连接，仅通过 SELECTEDVALUE 读取：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\Slicer_Customer_Type_Selection
+列指标维度表：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Customer KPIs\Dim_ColMetric_Customer_KPIs.md
+矩阵解决方案文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Customer KPIs\Customer_KPIs_ms.md
+Slicer_Currency_Selection：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\Slicer_Currency_Selection
+New Existing All口径详情说明，其他类似指标可借鉴：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\New Existing All口径.md
+Performance Indicator模块口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\Performance Indicator.md
+
+2、D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Performance Indicator目录下新增文件Dim_RowMetric_Customer_Net_Demand.md，Dim_RowMetric_Customer_Net_Demand维度表，包括Net和Demand两部分，对应口径中Net / Demand 维度区分，Net和Demand指标个数、逻辑都一致，区别仅在于字段，比如：Net部分字段为net_pay_amt、net_pay_qty、net_pay_order_cnt，Demand部分字段为pay_amt、pay_qty、pay_order_cnt。通过 SELECTEDVALUE 读取，实现我选择Net就使用Net的逻辑，选择Demand就使用Demand的逻辑。
+
+3、参考列指标维度表Dim_ColMetric_Customer_KPIs，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Performance Indicator目录下生成新的列指标维度表Dim_ColMetric_Customer_Performance_Indicator.md，包括DCom SLS、Customer No.、ACV、AUR、Freq.、UPT六个大的分组，每个分组下有三个指标，一个本身实际值、一个vs LY、一个vs LP，输出文件Dim_ColMetric_Customer_KPIs_Performance.md在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Performance Indicator目录下。此外，需要新增一个判断金额类的字段，"Metric_IsCurrencyAmount",BOOLEAN,    // 是否金额类（TRUE 才涉及汇率换算与币种符号拼接）。数据格式、类型以口径文档的为准。
+
+4、Slicer_Time_Frame_Min 和 Slicer_Time_Frame_Max 是两个独立切片器（用户分别选起始时间段和结束时间段）
 实际值时间口径 ：按所选时间范围 区间聚合 （ data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]] ）
-新客判定 ：Step 1 + Step 2 交集。
-- Step 1：在所选时间范围（区间）内 net_pay_amt > 0 AND is_member = 0 的 user_id 。
-- Step 2：在 start_period（即 data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max] ）内 lp_12m_net_pay_amt = 0 的 user_id 。
-- 这里你修正了 start_period 定义 = 第一个财月（不是最后一个），使用 Slicer_Time_Frame_Min 的 First_Fiscal_Month_Min/Max 系列字段
+start_period（data_date ∈ [Slicer_Time_Frame_Min[First_Fiscal_Month_Min], Slicer_Time_Frame_Min[First_Fiscal_Month_Max]]）
+start_period（第一个财月）是 slicer 区间的子集；
+
+综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Performance Indicator目录下，输出Prformance Indicator模块矩阵解决方案文件，命名为Customer_KPIs_Performance_ms.md；其中通过Dim_RowMetric_Customer_Net_Demand维度表实现Net / Demand 逻辑区分。通过Slicer_Customer_Type_Selection区别New、Existing、All逻辑，Slicer_Customer_Type_Selection中Customer_Type_ID只有New和Existing，这里需要判断一下，如果不选或者多选、全选，就是ALL的逻辑，单选New或者单选Existing对应New和Existing的逻辑。你看如何设计更优，给出解决方案。口径文档中有关New、Existing、All逻辑不清楚的可以参考D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\New Existing All口径.md文件，这是关于用户数和净销售额的详细定义，其余ACV\AUR等指标都是类似逻辑处理。

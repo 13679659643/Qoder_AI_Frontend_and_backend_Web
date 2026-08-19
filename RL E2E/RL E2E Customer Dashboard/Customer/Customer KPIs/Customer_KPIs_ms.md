@@ -989,6 +989,8 @@ Customer KPIs Cell Display =
                     IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%;-#,##0%;0%"),                                    // +15% / -3% / 0%
                 "percent_2dp",
                     FORMAT(__Value, "#,##0.00%"),                                                                       // 14.50%
+                "delta_pct_0dp",
+                    IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%"),        // +15% / -3%
                 "delta_pct_2dp",
                     IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0.00%"),                                            // +14.50%
                 "delta_pts_2dp",

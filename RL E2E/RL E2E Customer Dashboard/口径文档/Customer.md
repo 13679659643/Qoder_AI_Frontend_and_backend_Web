@@ -62,8 +62,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | 同 DCom New Customer No. |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **附属指标数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **附属指标数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ### 1.2 DCom New Customer No. vs LP — DCom新客数环比
 
@@ -76,8 +76,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | 同 DCom New Customer No. |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
-| **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
-| **数据格式** | `#,##0.0%` |
+| **附属指标数据类型** | delta_pct_0dp → 百分比整数，含正号：+15% / -3% |
+| **附属指标数据格式** | IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%") |
 
 ### 1.3 Customer Monthly TAR ACH% — 月度新客户目标达成率
 

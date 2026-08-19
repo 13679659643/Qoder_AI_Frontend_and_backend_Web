@@ -67,8 +67,8 @@ DATATABLE(
         // 颜色规则: Act=固定黑；vs LY/vs LP/TAR ACH% Monthly/TAR ACH% Yearly=正负零三色
         // ════════════════════════════════════════════════════════════════
         { 1,  "Customer No.", "1-DCom New Customer No.",            10, 100, "Act",              "integer",       "fixed_black",   "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 2,  "Customer No.", "2-DCom New Customer No. vs LY",     10, 200, "vs LY",            "delta_pct_1dp", "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 3,  "Customer No.", "3-DCom New Customer No. vs LP",     10, 300, "vs LP",            "delta_pct_1dp", "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 2,  "Customer No.", "2-DCom New Customer No. vs LY",     10, 200, "vs LY",            "delta_pct_0dp", "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 3,  "Customer No.", "3-DCom New Customer No. vs LP",     10, 300, "vs LP",            "delta_pct_0dp", "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 4,  "Customer No.", "4-Customer Monthly TAR ACH%",       10, 400, "TAR ACH% Monthly", "percent_1dp",   "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 5,  "Customer No.", "5-Customer Yearly TAR ACH%",        10, 410, "TAR ACH% Yearly",  "percent_1dp",   "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
