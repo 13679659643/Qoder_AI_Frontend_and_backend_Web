@@ -4,8 +4,6 @@
 > created: 2026-08-19
 > type: 度量值开发 + 可视化构建
 > 口径来源: 口径文档/Customer/Customer KPI.md（子模块一 Customer KPI，2 个 KPI 分组共 10 列指标）
-> 口径来源（TAR ACH%）: 口径文档/Customer/Customer_TAR_ACH_Calculation_Spec.md（4 个达成率口径）
-> 参考实现: VIC/1 VIC KPI/VIC_KPIs_Table.md（目标值标准逻辑、SWITCH 路由范式）
 > 列指标维度表: Dim_ColMetric_Customer_KPIs（10 行，2 个 KPI 分组）
 
 ---
@@ -14,130 +12,102 @@
 
 为 Customer Dashboard - Customer Tab 实现 Customer KPIs 矩阵：
 
-- **行**：无行维度表，直接拉取事实表字段（`platform` / `shop_info_id`），天然实现行维度分组和筛选，DAX 无需显式处理（用户第 6 条提示明确要求）
+- **行**：无行维度表，直接拉取事实表字段（`platform` / `shop_info_id`），天然实现行维度分组和筛选，DAX 无需显式处理
 - **列**：`Dim_ColMetric_Customer_KPIs` 的两级层级 `KPIGroup`（父）> `ColName`（子）
   - 2 个 KPI 分组：Customer No. / Customer%
   - 共 10 列指标（每组 5 列）
 - **值**：SWITCH 动态路由，按 `Metric_ID` 分发到 Act / vs LY / vs LP / TAR ACH% Monthly / TAR ACH% Yearly
-- **口径**：一切以口径文档 Customer KPI.md 和 Customer_TAR_ACH_Calculation_Spec.md 为准
+- **口径**：一切以口径文档 Customer KPI.md 为准
 - **筛选器**：
   - Slicer_Time_Frame（断开维度，读取 `TimeFrame_ID` 判断 Month/Quarter/Year 粒度）
-  - Slicer_Time_Frame_Min（断开维度，读取 `TimeFrame_Min`、`TimeFrame_Value`、`First_Fiscal_Month_Min/Max`）
-  - Slicer_Time_Frame_Max（断开维度，读取 `TimeFrame_Max`、`TimeFrame_Value`、`Last_Fiscal_Month_Min_LY/Max_LY/Min_LP/Max_LP`）
-  - Slicer_Platform_Selection / Slicer_Store_Name（断开维度，行维度直接拉事实表字段实现自动传递）
-  - Slicer_Currency_Selection（断开维度，本方案无金额类指标，不参与汇率换算）
-  - 本方案无 IsMemberFilter / Slicer_Is_Employee_Selection（Customer KPI 口径固定 `is_member = 0`，无 `is_employee` 筛选）
+  - Slicer_Time_Frame_Min（断开维度，读取 `TimeFrame_Min`、`TimeFrame_Value`、`First_Fiscal_Month_Min/Max` 及 LY/LP 系列）
+  - Slicer_Time_Frame_Max（断开维度，读取 `TimeFrame_Max`、`TimeFrame_Value` 及 LY/LP 系列）
+  - Slicer_Platform_Selection / Slicer_Store_Name（断开维度，行维度直接拉事实表字段实现自动传递；Customer% TAR ACH% 系列需 SELECTEDVALUE 判定 Store 单选）
 
-### 1.1 关键特殊逻辑一：实际值 = 所选时间范围区间聚合（非 end period 当月）
+### 1.1 实际值 = 所选时间范围区间聚合
 
-口径文档 Customer KPI.md 全局逻辑明确：
+口径文档全局逻辑明确：
 
 > **聚合粒度**: 数字卡片：所选时间范围 `data_date`；表格：所选时间范围 `data_date`，按对应维度聚合
 
-即实际值的取数区间为：
+即实际值的取数区间为：`data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`（全局时间范围）。
 
-- `data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`（全局时间范围）
-- 不是 VIC 方案的 end period 当月（`Last_Fiscal_Month_Min/Max`）
+**LY/LP 区间**按对称原则构造（起始端读 Min 切片器 LY/LP，结束端读 Max 切片器 LY/LP）：
+- LY 区间 = `[Slicer_Time_Frame_Min[TimeFrame_Min_LY], Slicer_Time_Frame_Max[TimeFrame_Max_LY]]`
+- LP 区间 = `[Slicer_Time_Frame_Min[TimeFrame_Min_LP], Slicer_Time_Frame_Max[TimeFrame_Max_LP]]`
 
-**LY/LP 区间**：直接读取 `Slicer_Time_Frame_Min[TimeFrame_Min_LY/Max_LY/Min_LP/Max_LP]` 与 `Slicer_Time_Frame_Max[TimeFrame_Min_LY/Max_LY/Min_LP/Max_LP]`？——否，`Slicer_Time_Frame_Min/Max` 的每行已自带 LY/LP 字段，且 `TimeFrame_Min` / `TimeFrame_Max` 是当前时间段起止日，`TimeFrame_Min_LY` / `TimeFrame_Max_LY` / `TimeFrame_Min_LP` / `TimeFrame_Max_LP` 是同一时间段对应的 LY/LP 起止日。
+### 1.2 DCom 新客判定 = Step1 + Step2 交集（合并区间简化实现）
 
-由于本方案是「区间聚合」语义（不是 end period），实际值的 LY/LP 区间应由 Min 切片器 LY/LP 区间与 Max 切片器 LY/LP 区间取**全集**（因为区间端点由两个切片器共同决定）。但实际上 Slicer_Time_Frame_Min 和 Slicer_Time_Frame_Max 是两个独立切片器（用户分别选起始时间段和结束时间段），LY/LP 字段是每行相对自身的 LY/LP。
+口径文档 1. DCom New Customer No. 筛选条件：
 
-**简化原则**：LY/LP 区间使用 `Slicer_Time_Frame_Min[TimeFrame_Min_LY]` ~ `Slicer_Time_Frame_Max[TimeFrame_Max_LY]`（起始端的 LY 起 + 结束端的 LY 止），LP 同理。这样与"本期区间 = Min 的 TimeFrame_Min 到 Max 的 TimeFrame_Max"在 LY/LP 上保持对称。
+> Step 1：在所选时间范围内筛选 `net_pay_amt > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，`net_pay_amt > 0`）；Step 2：缩小顾客范围至 `lp_12m_net_pay_amt = 0`（`data_date = 所选时间范围 start_period`）；相当于取 Step 1 和 Step 2 的交集，最后 count(distinct user_id)
 
-### 1.2 关键特殊逻辑二：DCom 新客判定 = Step1 + Step2 交集
+由于 start_period（第一个财月）是 slicer 区间的子集，技术实现上可"合并区间"——用于判断 `lp_12m_net_pay_amt = 0` 的行一定也在 slicer 区间内。因此技术实现直接等价于单一筛选：
 
-口径文档 Customer KPI.md 1. DCom New Customer No. 明确：
-
-> **筛选条件** | Step 1：在所选时间范围内筛选 `net_pay_amt > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，`net_pay_amt > 0`）；Step 2：缩小顾客范围至 `lp_12m_net_pay_amt = 0`（`data_date = 所选时间范围 start_period`）；相当于取Step 1和Step 2的交集，最后count(distinct user_id)
-
-**Step 1**（本期时间范围区间聚合）：
-- `data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`
-- `is_member = 0`（Customer KPI 固定非会员）
-- `net_pay_amt > 0`
-
-**Step 2**（start_period 当月，新客判定字段筛选）：
-- `data_date ∈ [Slicer_Time_Frame_Min[First_Fiscal_Month_Min], Slicer_Time_Frame_Min[First_Fiscal_Month_Max]]`（第一个财月区间）
-- `lp_12m_net_pay_amt = 0`
-
-> **字段名澄清**：口径文档写 `lp_12m_net_pay_amt`，数据字典 a03_e2e_customer_data_m 中实际字段为 `last_12m_net_pay_amt`（"过去12个月net购买金额"）。两者语义一致（start_period 往前推 12 个月），DAX 中使用实际字段名 `last_12m_net_pay_amt`。
-
-> **First_Fiscal_Month 字段前提**：Slicer_Time_Frame_Min.sql 当前仅有 `Last_Fiscal_Month` 系列字段（最后一个月）。First_Fiscal_Month（第一个月）需要按以下逻辑在 SQL 中新增（参照 Last_Fiscal_Month 的 CASE WHEN 推导）：
-> - 月粒度：`TimeFrame_Value` 自身就是单月，First = Last = TimeFrame_Value
-> - 季粒度：从 `TimeFrame_Key`（如 `202603`）取年 + 季度首月（Q1=01, Q2=04, Q3=07, Q4=10），即 `CONCAT(LEFT(timeframe_key,4), '-', LPAD((RIGHT(timeframe_key,2)-1)*3+1, 2, '0'))`
-> - 年粒度：`CONCAT(timeframe_key, '-01')`
->
-> 自关联得到 `First_Fiscal_Month_Min/Max` 以及 LY/LP 系列。**实施前需先扩展 Slicer_Time_Frame_Min.sql 增加这些字段**，本方案 DAX 直接引用。
-
-**Step 1 与 Step 2 的交集实现**：口径文档说"取 Step 1 和 Step 2 的交集，最后 count(distinct user_id)"。
-
-由于 Step 1 和 Step 2 时间范围不同，但作用于同一张月度事实表 `a03_e2e_customer_data_m`（按 user_id, data_date 粒度），交集含义为：**同一 user_id 同时在 Step 1 时间范围 net_pay_amt>0 且在 Step 2 时间范围（start_period）lp_12m_net_pay_amt=0**。即等价于：
-
-```sql
--- SQL 等价语义
-SELECT count(distinct t1.user_id)
-FROM (SELECT user_id FROM a03_e2e_customer_data_m
-      WHERE data_date ∈ [本期区间] AND is_member=0 AND net_pay_amt>0) t1
-INNER JOIN (SELECT user_id FROM a03_e2e_customer_data_m
-            WHERE data_date ∈ [start_period 区间] AND lp_12m_net_pay_amt=0) t2
-  ON t1.user_id = t2.user_id
+```
+data_date ∈ start_period AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
 ```
 
-DAX 中通过 `INTERSECT` 两张表的 user_id 集合实现，再对交集做 `COUNTROWS`。
+其中：
+- `start_period` = `data_date ∈ [Slicer_Time_Frame_Min[First_Fiscal_Month_Min], Slicer_Time_Frame_Min[First_Fiscal_Month_Max]]`（第一个财月区间）
+- `net_pay_amt > 0` 来自 Step 1
+- `is_member = 0` 来自 Step 1（Customer KPI 固定非会员）
+- `lp_12m_net_pay_amt = 0` 来自 Step 2（新客判定字段）
 
-### 1.3 关键特殊逻辑三：派生指标分类
+DAX 实现用单一 `CALCULATE(DISTINCTCOUNT(user_id), <上述四条件>)` 即可，无需 INTERSECT 两张表集合。
+
+### 1.3 派生指标分类
 
 | 派生类型 | 计算方式 | 数据格式 | 适用 Metric_ID |
 | --- | --- | --- | --- |
 | **数量类 vs LY**（Customer No.） | 今年 / 去年 - 1 | `delta_pct_1dp`（含正号） | 2 |
 | **数量类 vs LP**（Customer No.） | 当期 / 上期 - 1 | `delta_pct_1dp`（含正号） | 3 |
-| **比率类 vs LY**（Customer%） | 今年 - 去年（差值，×100 转 pts） | `delta_pts` | 7 |
-| **比率类 vs LP**（Customer%） | 当期 - 上期（差值，×100 转 pts） | `delta_pts` | 8 |
+| **比率类 vs LY**（Customer%） | 今年 - 去年（差值，×100 转 pts 在 Cell Display 实现） | `delta_pts` | 7 |
+| **比率类 vs LP**（Customer%） | 当期 - 上期（差值，×100 转 pts 在 Cell Display 实现） | `delta_pts` | 8 |
 | **TAR ACH% Monthly** | 实际值 / 月度目标值 | `percent_1dp`（不含正号） | 4, 9 |
 | **TAR ACH% Yearly** | 实际值 / 年度目标值 | `percent_1dp`（不含正号） | 5, 10 |
 
-### 1.4 关键特殊逻辑四：TAR ACH% 触发条件（用户第 6/7 条提示）
+### 1.4 TAR ACH% 触发条件（按最新口径文档调整）
 
-**单选判定**（用户提示第 6 条）：
-- `Slicer_Time_Frame[TimeFrame_ID] IN {"Month", "Year"}`（时间粒度为月或年，排除 Quarter）
-- `Slicer_Time_Frame_Min[TimeFrame_Value] = Slicer_Time_Frame_Max[TimeFrame_Value]`（Min/Max 切片器选中值相等）
-- 两个条件同时满足时为单选，否则留空（BLANK）
-
-**跨财年判定**（用户提示第 7 条）：
-- 仅在 `Slicer_Time_Frame[TimeFrame_ID] IN {"Month", "Quarter"}` 时判断
-- 比较 `LEFT(Slicer_Time_Frame_Min[TimeFrame_Value], 4)` 与 `LEFT(Slicer_Time_Frame_Max[TimeFrame_Value], 4)` 的年部分
-- 不相等 → 跨财年 → Yearly TAR ACH% 留空（BLANK）
-
-**Customer% 系列额外要求**：Customer% Monthly TAR ACH%（Metric_ID=9）和 Customer% Yearly TAR ACH%（Metric_ID=10）还需 `Slicer_Store_Name[Store_ID]` 单选（DISTINCTCOUNT = 1），否则留空。
-
-**TAR ACH% 计算规则矩阵汇总**：
+**TAR ACH% 计算规则矩阵汇总**（严格按口径文档 Customer KPI.md）：
 
 | Metric_ID | 指标 | TimeFrame | 选择范围 | 分子 | 分母 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 4 | Customer Monthly TAR ACH% | Month | 单选财月 | New Customer No.（month actual） | SUM(new_customer_cnt) | 单月实际 / 月度目标 |
-| 4 | Customer Monthly TAR ACH% | Month | 多选/跨财年 | — | — | 留空 |
+| 4 | Customer Monthly TAR ACH% | Month | 单选财月 | New Customer No.（month actual） | SUM(new_customer_cnt) | 实际值 / 月度目标 |
+| 4 | Customer Monthly TAR ACH% | Month | 多选财月 | New Customer No.（month actual） | SUM(new_customer_cnt) | 实际值 / 月度目标 |
+| 4 | Customer Monthly TAR ACH% | Month | 多选财月且跨财年 | New Customer No.（month actual） | SUM(new_customer_cnt) | 实际值 / 月度目标 |
 | 4 | Customer Monthly TAR ACH% | Quarter/Year | 任意 | — | — | 留空 |
 | 5 | Customer Yearly TAR ACH% | Month | 单选财月 | New Customer No.（month actual） | SUM(DISTINCT year_new_customer_cnt) | 单月实际 / 年度目标 |
-| 5 | Customer Yearly TAR ACH% | Month | 多选不跨财年 | — | — | 留空 |
-| 5 | Customer Yearly TAR ACH% | Month | 跨财年 | — | — | 留空 |
+| 5 | Customer Yearly TAR ACH% | Month | 多选财月 | New Customer No.（month actual） | SUM(DISTINCT year_new_customer_cnt) | 单月实际 / 年度目标 |
+| 5 | Customer Yearly TAR ACH% | Month | 多选财月且跨财年 | — | — | 留空 |
 | 5 | Customer Yearly TAR ACH% | Quarter | 单季不跨财年 | New Customer No.（quarter actual） | SUM(DISTINCT year_new_customer_cnt) | 季度实际 / 年度目标 |
+| 5 | Customer Yearly TAR ACH% | Quarter | 多季不跨财年 | New Customer No.（quarter actual） | SUM(DISTINCT year_new_customer_cnt) | 季度实际 / 年度目标 |
 | 5 | Customer Yearly TAR ACH% | Quarter | 跨财年 | — | — | 留空 |
 | 5 | Customer Yearly TAR ACH% | Year | 单选财年 | New Customer No.（year actual） | SUM(DISTINCT year_new_customer_cnt) | 年度实际 / 年度目标 |
-| 5 | Customer Yearly TAR ACH% | Year | 多选财年 | — | — | 留空 |
+| 5 | Customer Yearly TAR ACH% | Year | 多选财年 | New Customer No.（year actual） | SUM(DISTINCT year_new_customer_cnt) | 年度实际 / 年度目标 |
 | 9 | Customer% Monthly TAR ACH% | Month | 单选财月且 Store 单选 | New Customer%（month actual） | SUM(new_customer_percent) | 单月占比实际 / 月度占比目标 |
 | 9 | Customer% Monthly TAR ACH% | 其他 | — | — | — | 留空 |
-| 10 | Customer% Yearly TAR ACH% | Month | 单选财月且 Store 单选 | New Customer%（month actual） | DISTINCT(year_new_customer_percent) | 单月占比实际 / 年度占比目标 |
-| 10 | Customer% Yearly TAR ACH% | Year | 单选财年且 Store 单选 | New Customer%（year actual） | DISTINCT(year_new_customer_percent) | 年度占比实际 / 年度占比目标 |
+| 10 | Customer% Yearly TAR ACH% | Month | 单选财月且 Store 单选 | New Customer%（month actual） | SUM(DISTINCT year_new_customer_percent) | 单月占比实际 / 年度占比目标 |
+| 10 | Customer% Yearly TAR ACH% | Year | 单选财年且 Store 单选 | New Customer%（year actual） | SUM(DISTINCT year_new_customer_percent) | 年度占比实际 / 年度占比目标 |
 | 10 | Customer% Yearly TAR ACH% | 其他 | — | — | — | 留空 |
 
-> **注意**：Customer% Yearly TAR ACH% 在 Month/Quarter 多选或跨财年时一律留空（口径文档明确"多个月/多年不计算"），Year 单选时才有值。
+**单选/多选判定**：
+- 单选 = `TimeFrame_ID ∈ {"Month","Year"}` 且 `Slicer_Time_Frame_Min[TimeFrame_Value] = Slicer_Time_Frame_Max[TimeFrame_Value]`
+- 多选 = 非单选
 
-### 1.5 关键特殊逻辑五：目标值取数与聚合方式
+**跨财年判定**：
+- 仅在 `TimeFrame_ID ∈ {"Month","Quarter"}` 时判断
+- 比较 `LEFT(Slicer_Time_Frame_Min[TimeFrame_Value], 4)` 与 `LEFT(Slicer_Time_Frame_Max[TimeFrame_Value], 4)` 的年部分
+- 不相等 → 跨财年
+
+**Customer% TAR ACH% 系列额外要求**：`Slicer_Store_Name[Store_ID]` 单选（DISTINCTCOUNT = 1）。
+
+### 1.5 目标值取数与聚合方式
 
 > 公式：`TAR ACH% = 实际值 / 目标值`
 > 目标值来源：`a03_e2e_customer_fcst_data_m`（日期字段 `data_date`）
 > 目标值时间范围：`data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`（全局时间范围，与实际值同区间）
-> 目标值无 is_member / is_employee 筛选（口径文档明确）
+> 目标值无 is_member / is_employee 筛选
 > 行维度 platform / shop_info_id 通过共享维度表自动传递到目标值表
 
 | Metric_ID | 指标 | 实际值来源 | 目标值字段 | 目标值聚合方式 |
@@ -145,12 +115,11 @@ DAX 中通过 `INTERSECT` 两张表的 user_id 集合实现，再对交集做 `C
 | 4  | Customer Monthly TAR ACH% | DCom New Customer No. Act（Metric_ID=1） | `new_customer_cnt` | SUM |
 | 5  | Customer Yearly TAR ACH% | DCom New Customer No. Act（Metric_ID=1） | `year_new_customer_cnt` | SUM(DISTINCT) |
 | 9  | Customer% Monthly TAR ACH% | DCom New Customer% Act（Metric_ID=6） | `new_customer_percent` | SUM |
-| 10 | Customer% Yearly TAR ACH% | DCom New Customer% Act（Metric_ID=6） | `year_new_customer_percent` | DISTINCT（无 SUM） |
+| 10 | Customer% Yearly TAR ACH% | DCom New Customer% Act（Metric_ID=6） | `year_new_customer_percent` | SUM(DISTINCT) |
 
 **目标值聚合方式说明**：
 - `SUM(field)`：月度目标值字段（`new_customer_cnt` / `new_customer_percent`），按当前行维度粒度直接 SUM 汇总
-- `SUM(DISTINCT field)`：年度目标值字段（`year_new_customer_cnt`），每个 shop 同年唯一，先按 platform/shop_info_id 分组 DISTINCT 去重，再 SUM 汇总到当前行维度粒度。实现方式：`SUMX(SUMMARIZE(table, [platform], [shop_info_id], [year_xxx_cnt]), [year_xxx_cnt])`（DISTINCT 返回表非标量，用 SUMMARIZE 等价实现）
-- `DISTINCT(field)`：百分比目标值字段（`year_new_customer_percent`），无 SUM，按 platform/shop_info_id 分组后 DISTINCT 取值（要求 Store 单选，否则多 shop 无法取单一百分比）
+- `SUM(DISTINCT field)`：年度目标值字段（`year_new_customer_cnt` / `year_new_customer_percent`），每个 shop 同年唯一，先按 platform/shop_info_id 分组 DISTINCT 去重，再 SUM 汇总到当前行维度粒度。实现方式：`SUMX(SUMMARIZE(table, [platform], [shop_info_id], [year_xxx_field]), [year_xxx_field])`（DISTINCT 返回表非标量，用 SUMMARIZE 分组等价实现 DISTINCT 去重后再 SUM）
 
 ---
 
@@ -162,7 +131,7 @@ DAX 中通过 `INTERSECT` 两张表的 user_id 集合实现，再对交集做 `C
 | --- | --- | --- |
 | 事实表（实际值） | a03_e2e_customer_data_m | Customer KPI.md 全局逻辑 |
 | 事实表（目标值） | a03_e2e_customer_fcst_data_m | Customer KPI.md 全局逻辑 |
-| 实际值关键字段 | data_date, platform, shop_info_id, user_id, is_member, net_pay_amt, last_12m_net_pay_amt | Customer KPI.md 子模块一 |
+| 实际值关键字段 | data_date, platform, shop_info_id, user_id, is_member, net_pay_amt, lp_12m_net_pay_amt | Customer KPI.md 子模块一 |
 | 目标值关键字段 | data_date, platform, shop_info_id, new_customer_cnt, new_customer_percent, year_new_customer_cnt, year_new_customer_percent | a03_e2e_customer_fcst_data_m 数据字典 |
 
 ### 2.2 维度表清单
@@ -170,14 +139,13 @@ DAX 中通过 `INTERSECT` 两张表的 user_id 集合实现，再对交集做 `C
 | 维度表 | 类型 | 连接方式 |
 | --- | --- | --- |
 | Slicer_Time_Frame | 断开维度 | SELECTEDVALUE 读取 `TimeFrame_ID` 判断 Month/Quarter/Year 粒度 |
-| Slicer_Time_Frame_Min | 断开维度 | SELECTEDVALUE 读取 `TimeFrame_Min` / `TimeFrame_Value`（区间起始日，单选判定）；本方案还需读取 `First_Fiscal_Month_Min/Max`（start_period 第一个财月区间，用于 Step 2 新客判定）；以及 `TimeFrame_Min_LY/Max_LY/Min_LP/Max_LP`（区间聚合的 LY/LP 起止日） |
-| Slicer_Time_Frame_Max | 断开维度 | SELECTEDVALUE 读取 `TimeFrame_Max` / `TimeFrame_Value`（区间结束日，单选判定）；以及 `TimeFrame_Min_LY/Max_LY/Min_LP/Max_LP`（区间聚合的 LY/LP 起止日） |
+| Slicer_Time_Frame_Min | 断开维度 | SELECTEDVALUE 读取 `TimeFrame_Min` / `TimeFrame_Value`（区间起始日，单选判定）；`First_Fiscal_Month_Min/Max`（start_period 第一个财月区间，Step 2 新客判定用）；`TimeFrame_Min_LY/Max_LY/Min_LP/Max_LP`（区间聚合 LY/LP 起止日） |
+| Slicer_Time_Frame_Max | 断开维度 | SELECTEDVALUE 读取 `TimeFrame_Max` / `TimeFrame_Value`（区间结束日，单选判定）；`TimeFrame_Min_LY/Max_LY/Min_LP/Max_LP`（区间聚合 LY/LP 起止日） |
 | Slicer_Platform_Selection | 断开维度 | 行维度直接拉事实表 platform 字段，模型自动传递 |
 | Slicer_Store_Name | 断开维度 | 行维度直接拉事实表 shop_info_id 字段，模型自动传递；Customer% TAR ACH% 系列（Metric_ID=9/10）需 SELECTEDVALUE 判定 Store 单选 |
-| Slicer_Currency_Selection | 断开维度 | 本方案无金额类指标，不参与计算 |
 | Dim_ColMetric_Customer_KPIs | 断开维度 | SELECTEDVALUE 读取 `Metric_ID` / `ColType` / `Metric_Format` / `Metric_ColorRule` / 颜色字段 |
 
-> **行维度处理**：`platform` / `shop_info_id` 直接拉取事实表字段实现自动传递，模型自动传递筛选，DAX 无需显式处理（用户第 6 条提示明确要求）。
+> **行维度处理**：`platform` / `shop_info_id` 直接拉取事实表字段实现自动传递，模型自动传递筛选，DAX 无需显式处理。
 
 ---
 
@@ -209,13 +177,13 @@ Dim_ColMetric_Customer_KPIs（断开维度，列头）
               │    └→ [Customer KPIs Base Value]（总路由）         │
               │         ├→ [Customer KPIs Act Base Value]（本期） │
               │         │     ├ Metric_ID=1: DCom New Customer No. │
-              │         │     │  (Step1+Step2 交集 DISTINCTCOUNT)  │
-              │         │     └ Metric_ID=6: DCom New Customer%    │
-              │         │        (分子 Metric_ID=1 / 分母全部)     │
+              │         │     │  (合并区间 DISTINCTCOUNT)          │
+              │         │     └ Metric_ID=6: DCom New Customer%  │
+              │         │        (分子 Metric_ID=1 / 分母全部)    │
               │         ├→ [Customer KPIs LY Base Value]（去年同期）│
-              │         ├→ [Customer KPIs LP Base Value]（上期）    │
-              │         └→ 派生：vs LY / vs LP / TAR ACH% Monthly / │
-              │            TAR ACH% Yearly（按 Metric_ID 路由）     │
+              │         ├→ [Customer KPIs LP Base Value]（上期）  │
+              │         └→ 派生：vs LY / vs LP / TAR ACH% Monthly /│
+              │            TAR ACH% Yearly（按 Metric_ID 路由）    │
               └────────────────────────────────────────────────────┘
 ```
 
@@ -223,11 +191,11 @@ Dim_ColMetric_Customer_KPIs（断开维度，列头）
 
 ```
 [Customer KPIs Act Base Value]          ← 本期基础值
-                                        ← Metric_ID=1: DCom New Customer No.（Step1+Step2 交集）
+                                        ← Metric_ID=1: DCom New Customer No.（合并区间）
                                         ← Metric_ID=6: DCom New Customer%（分子 Metric_ID=1 / 分母全部）
                                         ← 统一应用 is_member=0、本期区间 data_date 筛选
-[Customer KPIs LY Base Value]           ← 去年同期基础值（LY 区间由 Slicer_Time_Frame_Min/Max 的 TimeFrame_*_LY 字段对称取值）
-[Customer KPIs LP Base Value]           ← 上期基础值（LP 区间由 Slicer_Time_Frame_Min/Max 的 TimeFrame_*_LP 字段对称取值）
+[Customer KPIs LY Base Value]           ← 去年同期基础值（LY 区间对称映射）
+[Customer KPIs LP Base Value]           ← 上期基础值（LP 区间对称映射）
 [Customer KPIs Base Value]              ← 总路由（含 vs LY / vs LP / TAR ACH% Monthly / TAR ACH% Yearly 派生）
                                         ← REMOVEFILTERS 清除断开维度筛选，再应用目标 Metric_ID
                                         ← TAR ACH%: 实际值(Act Base Value) / 目标值(a03_e2e_customer_fcst_data_m)
@@ -275,31 +243,30 @@ LY/LP 区间按对称原则构造（起始端读 Min 切片器 LY/LP，结束端
 
 | Metric_ID | 指标 | 实际值来源 | 目标值字段 | 目标值聚合 | 触发条件 |
 | --- | --- | --- | --- | --- | --- |
-| 4  | Customer Monthly TAR ACH% | DCom New Customer No. Act（Metric_ID=1） | `new_customer_cnt` | SUM | Month/Year 单选 |
-| 5  | Customer Yearly TAR ACH% | DCom New Customer No. Act（Metric_ID=1） | `year_new_customer_cnt` | SUM(DISTINCT) | Month/Year 单选且不跨财年；Year 单选 |
-| 9  | Customer% Monthly TAR ACH% | DCom New Customer% Act（Metric_ID=6） | `new_customer_percent` | SUM | Month 单选且 Store 单选 |
-| 10 | Customer% Yearly TAR ACH% | DCom New Customer% Act（Metric_ID=6） | `year_new_customer_percent` | DISTINCT（无 SUM） | Month/Year 单选且 Store 单选且不跨财年；Year 单选且 Store 单选 |
+| 4  | Customer Monthly TAR ACH% | DCom New Customer No. Act（Metric_ID=1） | `new_customer_cnt` | SUM | Month 任意选择范围都有值；Quarter/Year 留空 |
+| 5  | Customer Yearly TAR ACH% | DCom New Customer No. Act（Metric_ID=1） | `year_new_customer_cnt` | SUM(DISTINCT) | Month 单选/多选不跨财年有值；Quarter 单选/多选不跨财年有值；Year 单选/多选有值；Month/Quarter 跨财年留空 |
+| 9  | Customer% Monthly TAR ACH% | DCom New Customer% Act（Metric_ID=6） | `new_customer_percent` | SUM | Month 单选且 Store 单选有值；其他留空 |
+| 10 | Customer% Yearly TAR ACH% | DCom New Customer% Act（Metric_ID=6） | `year_new_customer_percent` | SUM(DISTINCT) | Month 单选且 Store 单选有值；Year 单选且 Store 单选有值；其他留空 |
 
-**单选判定规则**（用户提示第 6 条）：
-- `Slicer_Time_Frame[TimeFrame_ID] IN {"Month", "Year"}`（时间粒度为月或年，排除 Quarter）
+**单选/多选判定规则**：
+- `Slicer_Time_Frame[TimeFrame_ID] ∈ {"Month", "Year"}`（时间粒度为月或年，排除 Quarter）
 - `Slicer_Time_Frame_Min[TimeFrame_Value] = Slicer_Time_Frame_Max[TimeFrame_Value]`（Min/Max 切片器选中值相等）
-- 两个条件同时满足时为单选，否则留空（BLANK）
+- 两个条件同时满足时为单选，否则为多选
 
-**跨财年判定规则**（用户提示第 7 条）：
-- 仅在 `Slicer_Time_Frame[TimeFrame_ID] IN {"Month", "Quarter"}` 时判断
+**跨财年判定规则**：
+- 仅在 `Slicer_Time_Frame[TimeFrame_ID] ∈ {"Month", "Quarter"}` 时判断
 - 比较 `LEFT(Slicer_Time_Frame_Min[TimeFrame_Value], 4)` 与 `LEFT(Slicer_Time_Frame_Max[TimeFrame_Value], 4)` 的年部分
 - 不相等 → 跨财年 → Yearly TAR ACH%（Metric_ID=5/10）留空（BLANK）
 
 **目标值聚合方式说明**：
 - `SUM(field)`：月度目标值字段（`new_customer_cnt` / `new_customer_percent`），按当前行维度粒度直接 SUM 汇总
-- `SUM(DISTINCT field)`：年度目标值字段（`year_new_customer_cnt`），每个 shop 同年唯一，先按 platform/shop_info_id 分组 DISTINCT 去重，再 SUM 汇总到当前行维度粒度。实现方式：`SUMX(SUMMARIZE(table, [platform], [shop_info_id], [year_xxx_cnt]), [year_xxx_cnt])`
-- `DISTINCT(field)`：百分比目标值字段（`year_new_customer_percent`），无 SUM，按 platform/shop_info_id 分组后 DISTINCT 取值（要求 Store 单选，否则多 shop 无法取单一百分比）
+- `SUM(DISTINCT field)`：年度目标值字段（`year_new_customer_cnt` / `year_new_customer_percent`），每个 shop 同年唯一，先按 platform/shop_info_id 分组 DISTINCT 去重，再 SUM 汇总到当前行维度粒度。实现方式：`SUMX(SUMMARIZE(table, [platform], [shop_info_id], [year_xxx_field]), [year_xxx_field])`
 
 **非触发场景（留空 BLANK）**：
-- Quarter 粒度选择（Monthly TAR ACH% 系列 Metric_ID=4/9 在 Quarter 下永远留空；Yearly TAR ACH% 系列 Metric_ID=5/10 仅在 Quarter 不跨财年时才有值）
-- 多选（Min/Max TimeFrame_Value 不相等）
-- 跨财年选择（Yearly TAR ACH% 系列 Metric_ID=5/10 在 Month/Quarter 跨财年时留空）
-- Customer% TAR ACH% 系列（Metric_ID=9/10）时 Store 未单选
+- Metric_ID=4（Customer Monthly TAR ACH%）：Quarter / Year 粒度 → BLANK
+- Metric_ID=5（Customer Yearly TAR ACH%）：Month 跨财年 / Quarter 跨财年 → BLANK
+- Metric_ID=9（Customer% Monthly TAR ACH%）：非 Month 单选 / Store 未单选 → BLANK
+- Metric_ID=10（Customer% Yearly TAR ACH%）：非 Month/Year 单选 / Store 未单选 / 跨财年 → BLANK
 
 ### 3.7 格式规范（按 Metric_Format 单字段分发）
 
@@ -309,8 +276,6 @@ LY/LP 区间按对称原则构造（起始端读 Min 切片器 LY/LP，结束端
 | `percent_1dp` | `#,##0.0%` | 14.5% | DCom New Customer% Act（Metric_ID=6）/ 4 个 TAR ACH%（Metric_ID=4/5/9/10） |
 | `delta_pct_1dp` | `IF(__Value>0,"+","") & FORMAT(__Value,"#,##0.0%")` | +14.5% / -3.2% | 数量类 vs LY / vs LP（Metric_ID=2/3） |
 | `delta_pts` | `IF(ROUND(__Value*100,0)>0,"+","") & FORMAT(__Value*100,"+#,##0pts;-#,##0pts;0pts")` | +120pts / -80pts / 0pts | 比率类 vs LY / vs LP（Metric_ID=7/8），值×100 转 pts 在 Cell Display 中实现 |
-
-> 注：不存在 `percent_1dp_signed` / `percent_1dp_nosign` 两个格式。所有"不含正号的百分比"统一为 `percent_1dp`，所有"含正号的百分比变化"统一为 `delta_pct_1dp`。TAR ACH% 口径文档标注"含正负号"，但按用户要求统一为 `percent_1dp`（不含正号）。
 
 ---
 
@@ -322,7 +287,7 @@ LY/LP 区间按对称原则构造（起始端读 Min 切片器 LY/LP，结束端
 
 | Metric_ID | KPIGroup | ColName | ColType | 口径文档对应指标 | Act/LP/LY 字段/逻辑 | 数据底表 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Customer No. | 1-DCom New Customer No. | Act | 1. DCom New Customer No. | Step1+Step2 交集（net_pay_amt>0 ∩ last_12m_net_pay_amt=0） | a03_e2e_customer_data_m |
+| 1 | Customer No. | 1-DCom New Customer No. | Act | 1. DCom New Customer No. | 合并区间（start_period 内 net_pay_amt>0 ∩ lp_12m_net_pay_amt=0 ∩ is_member=0） | a03_e2e_customer_data_m |
 | 2 | Customer No. | 2-DCom New Customer No. vs LY | vs LY | 1.1 | — | 派生 |
 | 3 | Customer No. | 3-DCom New Customer No. vs LP | vs LP | 1.2 | — | 派生 |
 | 4 | Customer No. | 4-Customer Monthly TAR ACH% | TAR ACH% Monthly | 1.3 | 实际值: Metric_ID=1；目标值: SUM(new_customer_cnt) | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
@@ -331,7 +296,7 @@ LY/LP 区间按对称原则构造（起始端读 Min 切片器 LY/LP，结束端
 | 7 | Customer% | 7-DCom New Customer% vs LY | vs LY | 2.1 | — | 派生 |
 | 8 | Customer% | 8-DCom New Customer% vs LP | vs LP | 2.2 | — | 派生 |
 | 9 | Customer% | 9-Customer% Monthly TAR ACH% | TAR ACH% Monthly | 2.3 | 实际值: Metric_ID=6；目标值: SUM(new_customer_percent) | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
-| 10 | Customer% | 10-Customer% Yearly TAR ACH% | TAR ACH% Yearly | 2.4 | 实际值: Metric_ID=6；目标值: DISTINCT(year_new_customer_percent) | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
+| 10 | Customer% | 10-Customer% Yearly TAR ACH% | TAR ACH% Yearly | 2.4 | 实际值: Metric_ID=6；目标值: SUM(DISTINCT year_new_customer_percent) | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
 
 ### 4.2 Customer KPIs Act Base Value（本期基础值）
 
@@ -353,13 +318,13 @@ Customer KPIs Act Base Value =
 // 聚合粒度: DISTINCTCOUNT(user_id)
 // 说明:
 //   - Metric_ID=1: DCom New Customer No.
-//     Step 1: 本期区间内 net_pay_amt>0 AND is_member=0 的 user_id 集合
-//     Step 2: start_period 区间内 last_12m_net_pay_amt=0 的 user_id 集合
-//     结果: Step1 ∩ Step2 的 DISTINCTCOUNT
+//     Step1+Step2 合并区间等价实现：
+//       data_date ∈ start_period AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
+//     （start_period 是 slicer 区间的子集，合并区间后单一 CALCULATE 即可）
 //   - Metric_ID=6: DCom New Customer% = DIVIDE(分子 Metric_ID=1, 分母 全部 user_id)
 //     分子: 同 Metric_ID=1（DCom New Customer No.）
 //     分母: 本期区间内 net_pay_amt>0 AND is_member=0 的 user_id 全部计数（不分新老客）
-//   - 字段名: 口径文档写 lp_12m_net_pay_amt，数据字典实际字段为 last_12m_net_pay_amt，DAX 使用实际字段名
+//   - 字段名: 严格按口径文档使用 lp_12m_net_pay_amt
 // ========================================
     VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_Customer_KPIs'[Metric_ID])
 
@@ -372,46 +337,23 @@ Customer KPIs Act Base Value =
     VAR __StartPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max])
 
     // ═══════════════════════════════════════
-    // Step 1: 本期区间内 net_pay_amt>0 AND is_member=0 的 user_id 集合
-    //   使用 SUMMARIZE 返回单列表，便于后续 INTERSECT
+    // DCom New Customer No.（Metric_ID=1）
+    // Step1+Step2 合并区间等价实现：
+    //   data_date ∈ start_period AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
     // ═══════════════════════════════════════
-    VAR __Step1Users =
-        CALCULATETABLE(
-            SUMMARIZE(
-                'a03_e2e_customer_data_m',
-                'a03_e2e_customer_data_m'[user_id]
-            ),
+    VAR __NewCustomerCnt_Act =
+        CALCULATE(
+            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_member] = 0,
             'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-            'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
-            'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
-        )
-
-    // ═══════════════════════════════════════
-    // Step 2: start_period 区间内 last_12m_net_pay_amt=0 的 user_id 集合
-    //   新客判定字段 lp_12m_net_pay_amt 对应数据字典字段 last_12m_net_pay_amt
-    // ═══════════════════════════════════════
-    VAR __Step2Users =
-        CALCULATETABLE(
-            SUMMARIZE(
-                'a03_e2e_customer_data_m',
-                'a03_e2e_customer_data_m'[user_id]
-            ),
-            'a03_e2e_customer_data_m'[last_12m_net_pay_amt] = 0,
+            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
             'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
         )
 
     // ═══════════════════════════════════════
-    // 交集（Step1 ∩ Step2）— DCom New Customer No.
-    // ═══════════════════════════════════════
-    VAR __NewCustomerCnt_Act =
-        COUNTROWS(
-            INTERSECT(__Step1Users, __Step2Users)
-        )
-
-    // ═══════════════════════════════════════
-    // 分母（DCom New Customer%）— 本期区间内 net_pay_amt>0 AND is_member=0 的全部 user_id
+    // 分母（DCom New Customer%，Metric_ID=6 分母）
+    // 本期区间内 net_pay_amt>0 AND is_member=0 的全部 user_id
     // ═══════════════════════════════════════
     VAR __AllCustomerCnt_Act =
         CALCULATE(
@@ -456,10 +398,8 @@ Customer KPIs LY Base Value =
 //   - 本期 LY 区间 = [Slicer_Time_Frame_Min[TimeFrame_Min_LY], Slicer_Time_Frame_Max[TimeFrame_Max_LY]]
 //   - start_period LY 区间 = [First_Fiscal_Month_Min_LY, First_Fiscal_Month_Max_LY]
 // 说明:
-//   - Metric_ID=1: DCom New Customer No. LY（Step1+Step2 交集，时间范围改为 LY）
+//   - Metric_ID=1: DCom New Customer No. LY（Step1+Step2 合并区间，时间范围改为 LY）
 //   - Metric_ID=6: DCom New Customer% LY = DIVIDE(分子, 分母)
-// 注: First_Fiscal_Month_Min_LY/Max_LY 需要在 Slicer_Time_Frame_Min.sql 中扩展 First_Fiscal_Month
-//     系列字段的自关联 LY 推导（参照 Last_Fiscal_Month_Min_LY 的实现方式）
 // ========================================
     VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_Customer_KPIs'[Metric_ID])
 
@@ -472,44 +412,22 @@ Customer KPIs LY Base Value =
     VAR __StartPeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max_LY])
 
     // ═══════════════════════════════════════
-    // Step 1 LY: LY 区间内 net_pay_amt>0 AND is_member=0 的 user_id 集合
+    // DCom New Customer No. LY（Metric_ID=1）
+    // Step1+Step2 合并区间等价实现（LY 版本）：
+    //   data_date ∈ start_period_LY AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
     // ═══════════════════════════════════════
-    VAR __Step1Users_LY =
-        CALCULATETABLE(
-            SUMMARIZE(
-                'a03_e2e_customer_data_m',
-                'a03_e2e_customer_data_m'[user_id]
-            ),
+    VAR __NewCustomerCnt_LY =
+        CALCULATE(
+            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_member] = 0,
             'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-            'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LY,
-            'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LY
-        )
-
-    // ═══════════════════════════════════════
-    // Step 2 LY: start_period LY 区间内 last_12m_net_pay_amt=0 的 user_id 集合
-    // ═══════════════════════════════════════
-    VAR __Step2Users_LY =
-        CALCULATETABLE(
-            SUMMARIZE(
-                'a03_e2e_customer_data_m',
-                'a03_e2e_customer_data_m'[user_id]
-            ),
-            'a03_e2e_customer_data_m'[last_12m_net_pay_amt] = 0,
+            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
             'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
         )
 
     // ═══════════════════════════════════════
-    // 交集 LY — DCom New Customer No. LY
-    // ═══════════════════════════════════════
-    VAR __NewCustomerCnt_LY =
-        COUNTROWS(
-            INTERSECT(__Step1Users_LY, __Step2Users_LY)
-        )
-
-    // ═══════════════════════════════════════
-    // 分母 LY — DCom New Customer% 分母
+    // 分母 LY — DCom New Customer% 分母（LY 区间内全部 user_id）
     // ═══════════════════════════════════════
     VAR __AllCustomerCnt_LY =
         CALCULATE(
@@ -566,44 +484,22 @@ Customer KPIs LP Base Value =
     VAR __StartPeriodMax_LP = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max_LP])
 
     // ═══════════════════════════════════════
-    // Step 1 LP: LP 区间内 net_pay_amt>0 AND is_member=0 的 user_id 集合
+    // DCom New Customer No. LP（Metric_ID=1）
+    // Step1+Step2 合并区间等价实现（LP 版本）：
+    //   data_date ∈ start_period_LP AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
     // ═══════════════════════════════════════
-    VAR __Step1Users_LP =
-        CALCULATETABLE(
-            SUMMARIZE(
-                'a03_e2e_customer_data_m',
-                'a03_e2e_customer_data_m'[user_id]
-            ),
+    VAR __NewCustomerCnt_LP =
+        CALCULATE(
+            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_member] = 0,
             'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-            'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LP,
-            'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LP
-        )
-
-    // ═══════════════════════════════════════
-    // Step 2 LP: start_period LP 区间内 last_12m_net_pay_amt=0 的 user_id 集合
-    // ═══════════════════════════════════════
-    VAR __Step2Users_LP =
-        CALCULATETABLE(
-            SUMMARIZE(
-                'a03_e2e_customer_data_m',
-                'a03_e2e_customer_data_m'[user_id]
-            ),
-            'a03_e2e_customer_data_m'[last_12m_net_pay_amt] = 0,
+            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
             'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
             'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
         )
 
     // ═══════════════════════════════════════
-    // 交集 LP — DCom New Customer No. LP
-    // ═══════════════════════════════════════
-    VAR __NewCustomerCnt_LP =
-        COUNTROWS(
-            INTERSECT(__Step1Users_LP, __Step2Users_LP)
-        )
-
-    // ═══════════════════════════════════════
-    // 分母 LP — DCom New Customer% 分母
+    // 分母 LP — DCom New Customer% 分母（LP 区间内全部 user_id）
     // ═══════════════════════════════════════
     VAR __AllCustomerCnt_LP =
         CALCULATE(
@@ -662,16 +558,21 @@ Customer KPIs Base Value =
 //   - 比率类 vs LY: 今年 - 去年（差值，×100 转 pts 在 Cell Display 实现）
 //   - 比率类 vs LP: 当期 - 上期（差值，×100 转 pts 在 Cell Display 实现）
 //   - TAR ACH% Monthly: 实际值 / 月度目标值（SUM）
-//   - TAR ACH% Yearly: 实际值 / 年度目标值（SUM(DISTINCT) 或 DISTINCT）
+//   - TAR ACH% Yearly: 实际值 / 年度目标值（SUM(DISTINCT)）
 //
-// REMOVEFILTERS 机制（参考 VIC_KPIs_Table.md）:
+// REMOVEFILTERS 机制:
 //   派生行需先 REMOVEFILTERS 清除断开维度的所有筛选，再应用目标 Metric_ID
 //
-// TAR ACH% 触发条件（用户提示第 6/7 条）:
+// TAR ACH% 触发条件（按最新口径文档调整）:
 //   - 单选判定: Slicer_Time_Frame[TimeFrame_ID] ∈ {"Month","Year"} 且 Min/Max TimeFrame_Value 相等
+//   - 多选判定: 非单选（Month/Year 多选也有值，针对 Metric_ID=4/5）
 //   - 跨财年判定: TimeFrame_ID ∈ {"Month","Quarter"} 时比较 Min/Max TimeFrame_Value 年部分
 //   - Customer% TAR ACH% 系列（Metric_ID=9/10）额外要求 Store 单选
-//   - 非触发场景: Quarter 粒度（Monthly TAR 系列）/ 多选 / 跨财年 / Store 未单选 → BLANK()
+//   - 非触发场景:
+//     * Metric_ID=4: Quarter/Year 粒度 → BLANK
+//     * Metric_ID=5: Month 跨财年 / Quarter 跨财年 → BLANK
+//     * Metric_ID=9: 非 Month 单选 / Store 未单选 → BLANK
+//     * Metric_ID=10: 非 Month/Year 单选 / Store 未单选 / 跨财年 → BLANK
 // ========================================
     VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_Customer_KPIs'[Metric_ID])
 
@@ -788,19 +689,25 @@ Customer KPIs Base Value =
     // 目标值筛选：data_date ∈ [__TimeMin, __TimeMax]（全局时间范围）
     //   - __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     //   - __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
-    // 目标值无 is_member / is_employee 筛选（口径文档明确）
+    // 目标值无 is_member / is_employee 筛选
     // 行维度 platform / shop_info_id 通过共享维度表自动传递到目标值表
-    // 触发条件（用户提示第 6/7 条）:
+    // 触发条件（按最新口径文档调整）:
     //   - 单选判定: Slicer_Time_Frame[TimeFrame_ID] ∈ {"Month","Year"}
     //     且 Slicer_Time_Frame_Min[TimeFrame_Value] = Slicer_Time_Frame_Max[TimeFrame_Value]
     //   - 跨财年判定: TimeFrame_ID ∈ {"Month","Quarter"} 时比较 Min/Max TimeFrame_Value 年部分
     //   - Customer% TAR ACH% 系列（Metric_ID=9/10）额外要求 Store 单选
-    //   - 非触发场景: Quarter 粒度（Monthly 系列）/ 多选 / 跨财年 / Store 未单选 → BLANK()
+    //   - 非触发场景:
+    //     * Metric_ID=4: Quarter/Year 粒度 → BLANK
+    //     * Metric_ID=5: Month 跨财年 / Quarter 跨财年 → BLANK
+    //     * Metric_ID=9: 非 Month 单选 / Store 未单选 → BLANK
+    //     * Metric_ID=10: 非 Month/Year 单选 / Store 未单选 / 跨财年 → BLANK
     // 目标值字段与聚合方式（按指标区分）:
     //   - Metric_ID=4 (Customer Monthly TAR ACH%): SUM(new_customer_cnt)
-    //   - Metric_ID=5 (Customer Yearly TAR ACH%): SUM(DISTINCT year_new_customer_cnt)（SUMMARIZE 分组去重 + SUMX 求和）
+    //   - Metric_ID=5 (Customer Yearly TAR ACH%): SUM(DISTINCT year_new_customer_cnt)
+    //     实现: SUMX(SUMMARIZE(table, [platform], [shop_info_id], [year_new_customer_cnt]), [year_new_customer_cnt])
     //   - Metric_ID=9 (Customer% Monthly TAR ACH%): SUM(new_customer_percent)
-    //   - Metric_ID=10 (Customer% Yearly TAR ACH%): DISTINCT(year_new_customer_percent)（百分比，无 SUM；仅 Store 单选时有值）
+    //   - Metric_ID=10 (Customer% Yearly TAR ACH%): SUM(DISTINCT year_new_customer_percent)
+    //     实现: SUMX(SUMMARIZE(table, [platform], [shop_info_id], [year_new_customer_percent]), [year_new_customer_percent])
     // 实际值取数（复用 Act Base Value，按 Metric_ID 分支）:
     //   - Metric_ID=4/5: DCom New Customer No. Act（Metric_ID=1）
     //   - Metric_ID=9/10: DCom New Customer% Act（Metric_ID=6）
@@ -812,12 +719,15 @@ Customer KPIs Base Value =
     VAR __TimeFrameValueMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Value])
     VAR __TimeFrameValueMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Value])
 
-    // ── 单选判定：仅选择单个财月/单个财年时才有值 ──
-    VAR __IsSingleMonthOrYear =
-        __TimeFrameID IN {"Month", "Year"}
+    // ── 单选判定：TimeFrame_ID ∈ {"Month","Year"} 且 Min/Max TimeFrame_Value 相等 ──
+    VAR __IsMonthOrYear = __TimeFrameID IN {"Month", "Year"}
+    VAR __IsSingleSelection =
+        __IsMonthOrYear
         && NOT ISBLANK(__TimeFrameValueMin)
         && NOT ISBLANK(__TimeFrameValueMax)
         && __TimeFrameValueMin = __TimeFrameValueMax
+    // ── 多选判定：非单选（Month/Year 多选也有值，针对 Metric_ID=4/5）──
+    VAR __IsMultiSelection = NOT __IsSingleSelection
 
     // ── 跨财年判定：Month/Quarter 粒度下，比较 Min/Max TimeFrame_Value 的年部分 ──
     VAR __IsMonthOrQuarter = __TimeFrameID IN {"Month", "Quarter"}
@@ -840,25 +750,41 @@ Customer KPIs Base Value =
         )
     VAR __IsSingleStore = __StoreIDCount = 1
 
-    // ── 各 TAR ACH% 触发条件判定 ──
-    // Metric_ID=4: Customer Monthly TAR ACH% — Month/Year 单选
-    VAR __Trigger_MonthlyTAR_CustomerNo = __IsSingleMonthOrYear
-    // Metric_ID=5: Customer Yearly TAR ACH% — Month/Year 单选且不跨财年
-    //   口径文档: Year 单选不跨财年（默认单年）；Month/Quarter 单选不跨财年时才有值；跨财年留空
-    //   Month 多选留空、Year 多选留空
-    VAR __Trigger_YearlyTAR_CustomerNo = __IsSingleMonthOrYear && NOT __IsCrossFiscalYear
-    // Metric_ID=9: Customer% Monthly TAR ACH% — Month 单选且 Store 单选
-    //   口径文档: Month 单选 + Store 单选；Quarter/Year 任意选择范围都留空
+    // ── 各 TAR ACH% 触发条件判定（按最新口径文档）──
+    // Metric_ID=4: Customer Monthly TAR ACH%
+    //   - Month 单选/多选/跨财年都有值
+    //   - Quarter/Year 任意范围留空
+    VAR __Trigger_MonthlyTAR_CustomerNo =
+        (__TimeFrameID = "Month")   // 仅 Month 粒度有值（单选/多选/跨财年都计算）
+    // Metric_ID=5: Customer Yearly TAR ACH%
+    //   - Month 单选/多选不跨财年有值，跨财年留空
+    //   - Quarter 单选/多选不跨财年有值，跨财年留空
+    //   - Year 单选/多选都有值
+    VAR __Trigger_YearlyTAR_CustomerNo =
+        SWITCH(
+            __TimeFrameID,
+            "Month",    NOT __IsCrossFiscalYear,                          // Month 不跨财年有值
+            "Quarter",  NOT __IsCrossFiscalYear,                          // Quarter 不跨财年有值
+            "Year",     TRUE(),                                           // Year 任意选择范围都有值
+            FALSE()                                                       // 其他粒度留空
+        )
+    // Metric_ID=9: Customer% Monthly TAR ACH%
+    //   - 仅 Month 单选 + Store 单选有值
     VAR __Trigger_MonthlyTAR_CustomerPct =
         __TimeFrameID = "Month"
-        && __IsSingleMonthOrYear
+        && __IsSingleSelection
         && __IsSingleStore
-    // Metric_ID=10: Customer% Yearly TAR ACH% — Month/Year 单选且 Store 单选且不跨财年
-    //   口径文档: Month 单选 + Store 单选；Year 单选 + Store 单选；其他留空
+    // Metric_ID=10: Customer% Yearly TAR ACH%
+    //   - Month 单选 + Store 单选有值
+    //   - Year 单选 + Store 单选有值
+    //   - 其他留空
     VAR __Trigger_YearlyTAR_CustomerPct =
-        __IsSingleMonthOrYear
+        __IsSingleSelection
         && __IsSingleStore
-        && NOT __IsCrossFiscalYear
+        && (
+            __TimeFrameID = "Month"
+            || __TimeFrameID = "Year"
+        )
 
     // ── 目标值计算（按 Metric_ID 路由到对应字段与聚合方式）──
     // Metric_ID=4: Customer Monthly TAR ACH% → SUM(new_customer_cnt)
@@ -873,8 +799,7 @@ Customer KPIs Base Value =
         )
 
     // Metric_ID=5: Customer Yearly TAR ACH% → SUM(DISTINCT year_new_customer_cnt)
-    //   口径标注 SUM(DISTINCT year_new_customer_cnt): year_* 字段为年度目标值，
-    //   按 platform/shop_info_id 分组后每个 shop 同年唯一，DISTINCT 去重后再 SUM 汇总
+    //   year_* 字段为年度目标值，按 platform/shop_info_id 分组后每个 shop 同年唯一
     //   实现方式: SUMMARIZE 按 platform/shop_info_id/year_new_customer_cnt 分组去重，再 SUMX 求和
     VAR __Target_YearlyNewCustomerCnt =
         IF(
@@ -950,7 +875,7 @@ Customer KPIs Base Value =
         )
 
     // ── TAR ACH% 计算：实际值 / 目标值 ──
-    //   非触发场景（Quarter 粒度[Monthly 系列] / 多选 / 跨财年 / Store 未单选[Customer% 系列]）→ BLANK()
+    //   非触发场景 → BLANK()
     VAR __TARACH_MonthlyNewCustomer =
         IF(
             __MetricID = 4 && __Trigger_MonthlyTAR_CustomerNo,
@@ -985,13 +910,17 @@ Customer KPIs Base Value =
             // ─── 比率类 vs LY / vs LP（差值，×100 转 pts 在 Cell Display 实现）───
             7,  __PctVsLYResult,                                    // DCom New Customer% vs LY
             8,  __PctVsLPResult,                                    // DCom New Customer% vs LP
-            // ─── TAR ACH% Monthly（实际值 / 月度目标值，仅单选财月/财年时有值）───
+            // ─── TAR ACH% Monthly（实际值 / 月度目标值）───
+            //   Metric_ID=4: Month 单选/多选/跨财年都有值；Quarter/Year 留空
             4,  __TARACH_MonthlyNewCustomer,                       // Customer Monthly TAR ACH%
-            // ─── TAR ACH% Yearly（实际值 / 年度目标值，仅单选财月/财年且不跨财年时有值）───
+            // ─── TAR ACH% Yearly（实际值 / 年度目标值）───
+            //   Metric_ID=5: Month/Quarter 不跨财年有值；Year 任意范围有值；跨财年留空
             5,  __TARACH_YearlyNewCustomer,                        // Customer Yearly TAR ACH%
-            // ─── Customer% TAR ACH% Monthly（实际值 / 月度占比目标值，仅单选财月且 Store 单选时有值）───
+            // ─── Customer% TAR ACH% Monthly（实际值 / 月度占比目标值）───
+            //   Metric_ID=9: 仅 Month 单选 + Store 单选有值
             9,  __TARACH_MonthlyNewCustomerPct,                    // Customer% Monthly TAR ACH%
-            // ─── Customer% TAR ACH% Yearly（实际值 / 年度占比目标值，仅单选财月/财年且 Store 单选且不跨财年时有值）───
+            // ─── Customer% TAR ACH% Yearly（实际值 / 年度占比目标值）───
+            //   Metric_ID=10: Month 单选 + Store 单选 / Year 单选 + Store 单选 有值
             10, __TARACH_YearlyNewCustomerPct,                     // Customer% Yearly TAR ACH%
             BLANK()
         )
@@ -1151,10 +1080,10 @@ Customer KPIs Cell Background Color =
 
 | 序号 | 度量值名称 | Display Folder | 用途 |
 | --- | --- | --- | --- |
-| 1 | Customer KPIs Act Base Value | Base Metrics | 本期基础值（Step1+Step2 交集 DISTINCTCOUNT）；Metric_ID=6 返回 DCom New Customer% 比率 |
+| 1 | Customer KPIs Act Base Value | Base Metrics | 本期基础值（合并区间 DISTINCTCOUNT）；Metric_ID=6 返回 DCom New Customer% 比率 |
 | 2 | Customer KPIs LY Base Value | Base Metrics | 去年同期基础值（区间对称映射 TimeFrame_*_LY） |
 | 3 | Customer KPIs LP Base Value | Base Metrics | 上期基础值（区间对称映射 TimeFrame_*_LP） |
-| 4 | Customer KPIs Base Value | Base Metrics | 总路由（含 vs LY / vs LP / TAR ACH% Monthly / TAR ACH% Yearly 派生 + REMOVEFILTERS）；TAR ACH% = 实际值(Act Base Value) / 目标值(a03_e2e_customer_fcst_data_m)，仅单选财月/财年且有相应触发条件时有值 |
+| 4 | Customer KPIs Base Value | Base Metrics | 总路由（含 vs LY / vs LP / TAR ACH% Monthly / TAR ACH% Yearly 派生 + REMOVEFILTERS）；TAR ACH% = 实际值(Act Base Value) / 目标值(a03_e2e_customer_fcst_data_m)，按口径文档触发条件判定 |
 | 5 | Customer KPIs Cell Value | Cell Values | 对外值 = Base Value |
 | 6 | Customer KPIs Cell Display | Formatting | 格式化显示文本（按 Metric_Format 单字段分发） |
 | 7 | Customer KPIs Cell Font Color | Formatting | 字体颜色（按 Metric_ColorRule 分发） |
@@ -1169,7 +1098,7 @@ Customer KPIs Cell Background Color =
 │                        数据源层                                      │
 │  a03_e2e_customer_data_m（月度事实表）                               │
 │  字段: data_date, platform, shop_info_id, user_id, is_member,       │
-│        net_pay_amt, last_12m_net_pay_amt                            │
+│        net_pay_amt, lp_12m_net_pay_amt                              │
 │                                                                     │
 │  a03_e2e_customer_fcst_data_m（月度目标值事实表）                    │
 │  字段: data_date, platform, shop_info_id,                          │
@@ -1187,8 +1116,11 @@ Customer KPIs Cell Background Color =
 │  │ Customer KPIs         │   │ Customer KPIs         │              │
 │  │ Act Base Value        │   │ LY Base Value         │              │
 │  │ (本期区间聚合)         │   │ (区间对称映射 LY)     │              │
-│  │ Metric_ID=1: Step1   │   │                       │              │
-│  │   +Step2 交集         │   │                       │              │
+│  │ Metric_ID=1: 合并区间 │   │                       │              │
+│  │   (start_period ∩     │   │                       │              │
+│  │    net_pay_amt>0 ∩    │   │                       │              │
+│  │    is_member=0 ∩      │   │                       │              │
+│  │    lp_12m_net_pay_=0)│   │                       │              │
 │  │ Metric_ID=6: 比率     │   │                       │              │
 │  └───────────┬───────────┘   └───────────┬───────────┘              │
 │              │                           │                          │
@@ -1246,55 +1178,41 @@ Customer KPIs Cell Background Color =
 
 ## 7. 注意事项
 
-1. **实际值时间口径（关键逻辑）**：实际值取数按**所选时间范围区间聚合**（`data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`），不是 VIC 方案的 end period 当月。这是与 VIC_KPIs_Table.md 的关键差异。
-2. **DCom 新客判定 Step1 + Step2 交集（关键逻辑）**：
-   - **Step 1**：本期区间内 `net_pay_amt > 0 AND is_member = 0` 的 user_id 集合
-   - **Step 2**：start_period（第一个财月）区间内 `last_12m_net_pay_amt = 0` 的 user_id 集合
-   - **交集**：`INTERSECT(Step1, Step2)` 后 `COUNTROWS`
-   - **start_period 时间范围**：`data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]`（第一个财月区间，不是最后一个）
-3. **字段名澄清**：口径文档写 `lp_12m_net_pay_amt`，数据字典 a03_e2e_customer_data_m 中实际字段名为 `last_12m_net_pay_amt`（"过去12个月net购买金额"），两者语义一致，DAX 使用实际字段名 `last_12m_net_pay_amt`。
-4. **First_Fiscal_Month 字段前提（重要前置工作）**：Slicer_Time_Frame_Min.sql 当前仅有 `Last_Fiscal_Month` 系列字段（最后一个月）。First_Fiscal_Month（第一个月）需要按以下逻辑在 SQL 中新增：
-   - 月粒度：`TimeFrame_Value` 自身就是单月，First = Last = TimeFrame_Value
-   - 季粒度：从 `TimeFrame_Key`（如 `202603`）取年 + 季度首月（Q1=01, Q2=04, Q3=07, Q4=10），即 `CONCAT(LEFT(timeframe_key,4), '-', LPAD((RIGHT(timeframe_key,2)-1)*3+1, 2, '0'))`
-   - 年粒度：`CONCAT(timeframe_key, '-01')`
-   - 自关联得到 `First_Fiscal_Month_Min/Max` 以及 LY/LP 系列（`First_Fiscal_Month_Min_LY/Max_LY/Min_LP/Max_LP`）
-   - **实施前需先扩展 Slicer_Time_Frame_Min.sql 增加这些字段**，本方案 DAX 直接引用
-5. **vs LY / vs LP 区间对称映射**：本期区间 = `[Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`，LY/LP 区间按对称原则构造（起始端读 Min 切片器 LY/LP，结束端读 Max 切片器 LY/LP）：
+1. **实际值时间口径**：实际值取数按**所选时间范围区间聚合**（`data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`）。分母（DCom New Customer% 的全部 user_id）按本期区间聚合；分子（DCom New Customer No.）按 start_period（第一个财月）区间聚合。
+2. **DCom 新客判定 Step1 + Step2 合并区间实现**：
+   - 由于 start_period（第一个财月）是 slicer 区间的子集，技术实现上可"合并区间"
+   - 用于判断 `lp_12m_net_pay_amt = 0` 的行一定也在 slicer 区间内
+   - 技术实现直接等价于单一筛选：`data_date ∈ start_period AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0`
+   - DAX 用单一 `CALCULATE(DISTINCTCOUNT(user_id), <四条件>)` 实现，无需 INTERSECT 两张表集合
+   - start_period 时间范围：`data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]`（第一个财月区间）
+3. **字段名**：严格按口径文档使用 `lp_12m_net_pay_amt`（已在 a03_e2e_customer_data_m 数据字典中扩展）。
+4. **vs LY / vs LP 区间对称映射**：本期区间 = `[Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`，LY/LP 区间按对称原则构造（起始端读 Min 切片器 LY/LP，结束端读 Max 切片器 LY/LP）：
    - LY 区间 = `[Slicer_Time_Frame_Min[TimeFrame_Min_LY], Slicer_Time_Frame_Max[TimeFrame_Max_LY]]`
    - LP 区间 = `[Slicer_Time_Frame_Min[TimeFrame_Min_LP], Slicer_Time_Frame_Max[TimeFrame_Max_LP]]`
-6. **REMOVEFILTERS 机制**：派生指标（vs LY / vs LP / TAR ACH%）的取值必须先 `REMOVEFILTERS('Dim_ColMetric_Customer_KPIs')` 再应用目标 Metric_ID，否则矩阵行标题保留的筛选器会导致冲突返回 BLANK。这与 VIC_KPIs_Table.md 的总路由范式完全一致。
-7. **TAR ACH% 完整取数逻辑（实际值 / 目标值）**：Metric_ID 4, 5, 9, 10 为目标达成率指标，公式 = 实际值 / 目标值。
+   - start_period LY/LP 区间同理：`[First_Fiscal_Month_Min_LY/Max_LY, First_Fiscal_Month_Min_LP/Max_LP]`
+5. **REMOVEFILTERS 机制**：派生指标（vs LY / vs LP / TAR ACH%）的取值必须先 `REMOVEFILTERS('Dim_ColMetric_Customer_KPIs')` 再应用目标 Metric_ID，否则矩阵行标题保留的筛选器会导致冲突返回 BLANK。
+6. **TAR ACH% 完整取数逻辑（实际值 / 目标值）**：Metric_ID 4, 5, 9, 10 为目标达成率指标，公式 = 实际值 / 目标值。
    - **实际值**：复用 Act Base Value（REMOVEFILTERS + 目标 Metric_ID）
      - Metric_ID=4/5：DCom New Customer No. Act（Metric_ID=1）
      - Metric_ID=9/10：DCom New Customer% Act（Metric_ID=6）
    - **目标值**：取自 `a03_e2e_customer_fcst_data_m`，日期字段 `data_date`
      - 时间范围：`data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`（全局时间范围，与实际值同区间）
-     - **无 is_member / is_employee 筛选**（口径文档明确）
+     - **无 is_member / is_employee 筛选**
      - 行维度 platform / shop_info_id 通过共享维度表自动传递
      - 字段与聚合方式：
        - Metric_ID=4：`SUM(new_customer_cnt)`（月度目标值）
        - Metric_ID=5：`SUM(DISTINCT year_new_customer_cnt)`（年度目标值，按 platform/shop_info_id 分组 DISTINCT 后 SUM，用 SUMMARIZE 等价实现）
        - Metric_ID=9：`SUM(new_customer_percent)`（月度占比目标值）
-       - Metric_ID=10：`DISTINCT(year_new_customer_percent)`（年度占比目标值，无 SUM，仅 Store 单选时有值）
-8. **TAR ACH% 触发条件（用户提示第 6/7 条，关键逻辑）**：
-   - **单选判定**：`Slicer_Time_Frame[TimeFrame_ID] ∈ {"Month", "Year"}`（排除 Quarter 粒度）且 `Slicer_Time_Frame_Min[TimeFrame_Value] = Slicer_Time_Frame_Max[TimeFrame_Value]`（Min/Max 切片器选中值相等）
+       - Metric_ID=10：`SUM(DISTINCT year_new_customer_percent)`（年度占比目标值，按 platform/shop_info_id 分组 DISTINCT 后 SUM，用 SUMMARIZE 等价实现）
+7. **TAR ACH% 触发条件（按最新口径文档调整）**：
+   - **单选判定**：`Slicer_Time_Frame[TimeFrame_ID] ∈ {"Month", "Year"}` 且 `Slicer_Time_Frame_Min[TimeFrame_Value] = Slicer_Time_Frame_Max[TimeFrame_Value]`
    - **跨财年判定**：`Slicer_Time_Frame[TimeFrame_ID] ∈ {"Month", "Quarter"}` 时比较 `LEFT(Slicer_Time_Frame_Min[TimeFrame_Value], 4)` 与 `LEFT(Slicer_Time_Frame_Max[TimeFrame_Value], 4)` 的年部分，不相等 → 跨财年
    - **Customer% TAR ACH% 系列**（Metric_ID=9/10）额外要求 `Slicer_Store_Name[Store_ID]` 单选（DISTINCTCOUNT = 1）
-   - **非触发场景**（留空 BLANK）：
-     - Metric_ID=4（Customer Monthly TAR ACH%）：Quarter 粒度 / 多选 → BLANK
-     - Metric_ID=5（Customer Yearly TAR ACH%）：Quarter 跨财年 / Month 跨财年 / 多选 → BLANK；Year 单选或 Month/Quarter 单选不跨财年时有值
-     - Metric_ID=9（Customer% Monthly TAR ACH%）：非 Month 单选 / Store 未单选 → BLANK
-     - Metric_ID=10（Customer% Yearly TAR ACH%）：非 Month/Year 单选 / Store 未单选 / 跨财年 → BLANK
-9. **Customer% TAR ACH% 与 VIC Retention% TAR ACH% 的相似性**：两者都是百分比目标值，要求 Store 单选（DISTINCT 取值），无 SUM。实现方式与 VIC_KPIs_Table.md Metric_ID=9 完全一致。
-10. **行维度处理**：无行维度表，直接拉取事实表字段（`platform` / `shop_info_id`），天然形成筛选与分组，DAX 度量值无需显式处理（用户第 6 条提示明确要求）。模型自动传递筛选，支持 platform 粒度行展开看 shop_info_id 粒度明细数据。
-11. **单一 Metric_Format 字段**：列指标维度表仅保留单个 `Metric_Format` 字段（不再区分 Act/LY/VsLY），因为每个指标对应一个格式。行格式严格遵循口径文档数据类型定义。
-12. **扩展格式支持**：Cell Display 已扩展 `percent_0dp` / `percent_0dp_signed` / `percent_2dp` / `delta_pct_2dp` / `delta_pts_2dp` / `delta_bp` 等格式，便于后续快速调整。如需新增指标使用扩展格式，只需在 `Dim_ColMetric_Customer_KPIs` 的 `Metric_Format` 字段填入对应格式值即可。
-13. **与 VIC_KPIs_Table.md 的关系**：本方案为 Customer Dashboard Customer Tab 的 Customer KPIs 矩阵 SWITCH 路由版本，与 VIC 版本共享相同的架构范式（断开列维度 + SWITCH 动态路由 + REMOVEFILTERS 修复上下文），差异在于：
-    - 行维度仍为 customer 字段（platform / shop_info_id）
-    - 列指标维度表替换为 Dim_ColMetric_Customer_KPIs（10 行 vs 28 行）
-    - 数据底表单一：a03_e2e_customer_data_m（实际值）+ a03_e2e_customer_fcst_data_m（目标值）
-    - 实际值时间口径由"end period 当月 DISTINCTCOUNT"改为"区间聚合 + Step1+Step2 交集"（DCom 新客判定逻辑）
-    - 无 is_member / is_employee 双重人群筛选（Customer KPI 固定 `is_member = 0`，无 `is_employee` 筛选）
-    - TAR ACH% 触发条件新增"跨财年判定"（Month/Quarter 粒度下比较 TimeFrame_Value 年部分）和"Customer% 系列要求 Store 单选"
-    - 派生指标新增 TAR ACH% Monthly / TAR ACH% Yearly 两种类型（VIC 只有 TAR ACH% 一种）
-    - 目标值字段映射到 customer_fcst 表的 new_customer_cnt / new_customer_percent / year_new_customer_cnt / year_new_customer_percent
+   - **非触发场景**（留空 BLANK，按最新口径文档）：
+     - Metric_ID=4（Customer Monthly TAR ACH%）：Quarter / Year 粒度 → BLANK（Month 任意选择范围都有值，含多选和跨财年）
+     - Metric_ID=5（Customer Yearly TAR ACH%）：Month 跨财年 / Quarter 跨财年 → BLANK（Month 不跨财年有值；Quarter 不跨财年有值；Year 任意选择范围有值）
+     - Metric_ID=9（Customer% Monthly TAR ACH%）：非 Month 单选 / Store 未单选 → BLANK（仅 Month 单选 + Store 单选有值）
+     - Metric_ID=10（Customer% Yearly TAR ACH%）：非 Month/Year 单选 / Store 未单选 / 跨财年 → BLANK（Month 单选 + Store 单选 / Year 单选 + Store 单选 有值）
+8. **行维度处理**：无行维度表，直接拉取事实表字段（`platform` / `shop_info_id`），天然形成筛选与分组，DAX 度量值无需显式处理。模型自动传递筛选，支持 platform 粒度行展开看 shop_info_id 粒度明细数据。
+9. **单一 Metric_Format 字段**：列指标维度表仅保留单个 `Metric_Format` 字段（不再区分 Act/LY/VsLY），因为每个指标对应一个格式。行格式严格遵循口径文档数据类型定义。
+10. **扩展格式支持**：Cell Display 已扩展 `percent_0dp` / `percent_0dp_signed` / `percent_2dp` / `delta_pct_2dp` / `delta_pts_2dp` / `delta_bp` 等格式，便于后续快速调整。如需新增指标使用扩展格式，只需在 `Dim_ColMetric_Customer_KPIs` 的 `Metric_Format` 字段填入对应格式值即可。

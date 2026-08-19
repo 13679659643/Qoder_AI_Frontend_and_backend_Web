@@ -1,4 +1,4 @@
-# Customer_KPIs第一轮提示词:
+# Customer第一轮提示词:
 取数逻辑：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\参考文件\Customer 取数逻辑for PBI.xlsx
 只关注sheet页为PBI取数逻辑，其他sheet页为其他取数逻辑，不关注。
 参考模板文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\VIC\VIC Breakdown KPI.md
@@ -29,8 +29,8 @@
 口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\Customer KPI.md
 - Metric_ID=4: Customer Monthly TAR ACH% → SUM(new_customer_cnt)
 - Metric_ID=5: Customer Yearly TAR ACH% → SUM(DISTINCT year_new_customer_cnt)
-- Metric_ID=9: Customer% Monthly TAR ACH% → SUM(new_customer_pct)
-- Metric_ID=10: Customer% Yearly TAR ACH% → SUM(DISTINCT year_new_customer_pct)
+- Metric_ID=9: Customer% Monthly TAR ACH% → SUM(new_customer_percent)
+- Metric_ID=10: Customer% Yearly TAR ACH% → SUM(DISTINCT year_new_customer_percent)
 
 
 # 第三轮提示词：
