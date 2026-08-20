@@ -150,21 +150,26 @@ SLS Breakdown Display =
 // Display Folder: SLS\Display
 // 用途: 按 currency_M_K_Int_0db 格式化显示
 // 格式: < 1K → ¥999；1K~1M → ¥1.5K；≥ 1M → ¥1.5M
+// 汇率换算: Value 度量保留 RMB 原值，Display 层按 Currency_ExchangeRate 换算
+//           RMB: ExchangeRate=1（原值）；USD: ExchangeRate=7（RMB÷7=USD）
 // ========================================
 VAR __Value = [SLS Breakdown Value]
+VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+// ── 汇率换算：RMB → 所选币种 ──
+VAR __ValueInCurrency = DIVIDE(__Value, __ExchangeRate)
 
 RETURN
     IF(
         ISBLANK(__Value),
         "-",
         IF(
-            __Value < 1000,
-            __CurrencySymbol & FORMAT(__Value, "#,##0"),
+            __ValueInCurrency < 1000,
+            __CurrencySymbol & FORMAT(__ValueInCurrency, "#,##0"),
             IF(
-                __Value < 1000000,
-                __CurrencySymbol & FORMAT(__Value / 1000, "#,##0.0") & "K",
-                __CurrencySymbol & FORMAT(__Value / 1000000, "#,##0.0") & "M"
+                __ValueInCurrency < 1000000,
+                __CurrencySymbol & FORMAT(__ValueInCurrency / 1000, "#,##0.0") & "K",
+                __CurrencySymbol & FORMAT(__ValueInCurrency / 1000000, "#,##0.0") & "M"
             )
         )
     )
@@ -383,19 +388,28 @@ RETURN
 
 ```dax
 New Customer SLS Display =
+// ========================================
+// 度量值: New Customer SLS Display
+// Display Folder: SLS\Display
+// 用途: 按 currency_M_K_Int_0db 格式化显示
+// 汇率换算: Value 度量保留 RMB 原值，Display 层按 Currency_ExchangeRate 换算
+// ========================================
 VAR __Value = [New Customer SLS Value]
+VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+VAR __ValueInCurrency = DIVIDE(__Value, __ExchangeRate)
+
 RETURN
     IF(
         ISBLANK(__Value),
         "-",
         IF(
-            __Value < 1000,
-            __CurrencySymbol & FORMAT(__Value, "#,##0"),
+            __ValueInCurrency < 1000,
+            __CurrencySymbol & FORMAT(__ValueInCurrency, "#,##0"),
             IF(
-                __Value < 1000000,
-                __CurrencySymbol & FORMAT(__Value / 1000, "#,##0.0") & "K",
-                __CurrencySymbol & FORMAT(__Value / 1000000, "#,##0.0") & "M"
+                __ValueInCurrency < 1000000,
+                __CurrencySymbol & FORMAT(__ValueInCurrency / 1000, "#,##0.0") & "K",
+                __CurrencySymbol & FORMAT(__ValueInCurrency / 1000000, "#,##0.0") & "M"
             )
         )
     )
@@ -669,19 +683,28 @@ RETURN
 
 ```dax
 Existing Customer SLS Display =
+// ========================================
+// 度量值: Existing Customer SLS Display
+// Display Folder: SLS\Display
+// 用途: 按 currency_M_K_Int_0db 格式化显示
+// 汇率换算: Value 度量保留 RMB 原值，Display 层按 Currency_ExchangeRate 换算
+// ========================================
 VAR __Value = [Existing Customer SLS Value]
+VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+VAR __ValueInCurrency = DIVIDE(__Value, __ExchangeRate)
+
 RETURN
     IF(
         ISBLANK(__Value),
         "-",
         IF(
-            __Value < 1000,
-            __CurrencySymbol & FORMAT(__Value, "#,##0"),
+            __ValueInCurrency < 1000,
+            __CurrencySymbol & FORMAT(__ValueInCurrency, "#,##0"),
             IF(
-                __Value < 1000000,
-                __CurrencySymbol & FORMAT(__Value / 1000, "#,##0.0") & "K",
-                __CurrencySymbol & FORMAT(__Value / 1000000, "#,##0.0") & "M"
+                __ValueInCurrency < 1000000,
+                __CurrencySymbol & FORMAT(__ValueInCurrency / 1000, "#,##0.0") & "K",
+                __CurrencySymbol & FORMAT(__ValueInCurrency / 1000000, "#,##0.0") & "M"
             )
         )
     )
@@ -1343,7 +1366,15 @@ RETURN
     - 每个度量值独立可拉取，无 x 轴依赖
     - 不需要处理 x 轴上的当前时间
     - 行维度（platform / shop_info_id 等）由事实表字段直接拉取，模型自动传递筛选，DAX 无需显式处理
-11. **汇率换算未在 Value 层处理**：本方案 Value 度量保留 RMB 原始值，如需展示美元，由 Display 层（或后续添加 Cell Value 层）按 `Slicer_Currency_Selection[Currency_ExchangeRate]` 换算。当前 Display 层只负责符号拼接，未做汇率除法，如需扩展可参考 Performance Indicator 模块的 Cell Value 实现。
+11. **汇率换算分层处理**（已实现）：
+    - Value 层：始终保留 RMB 原始值，确保 LY/LP/Act 派生计算口径一致
+    - Display 层：仅金额类 SLS（SLS Breakdown / New Customer SLS / Existing Customer SLS）的 3 个 Display 度量做汇率换算
+      - 读取 `Slicer_Currency_Selection[Currency_ExchangeRate]`（RMB=1, USD=7）
+      - `__ValueInCurrency = DIVIDE(__Value, __ExchangeRate)`
+      - 再按 currency_M_K_Int_0db 分级显示拼接 `Currency_Symbol`（¥ / $）
+    - 非金额类 Display（Customer No. Display、vs LY/vs LP Display、Share Display）不做汇率换算
+      - 原因：Customer No. 为人数（integer），vs LY/vs LP/Share 为比率（percent_0dp），均无量纲
+    - 分级判断（< 1K / < 1M / ≥ 1M）基于换算后的币种值，确保 USD 视图下也能正确分级
 12. **DAX 语法规范**（遵循口径文档要求）：
 
     - 文本常量使用双引号 `" "`，禁止单引号
