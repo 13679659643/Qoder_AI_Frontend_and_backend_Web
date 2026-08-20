@@ -13,6 +13,7 @@ xxx Cell Display =
 //   currency              → 货币符号 + 整数千分位：¥1,000 / $1,000（SLS）
 //   currency_decimal_1dp  → 货币符号 + 一位小数千分位：¥1,000.0 / $1,000.0（ACV / AUR）
 //   currency_k            → 货币符号 + 千位缩写：¥1k / $5k
+//   currency_M_K_Int_0db  → 货币符号 + 整数/M/K 单位（0位小数）：¥999\¥1.5K\¥1.5M
 //   percent_0dp           → 百分比整数，不含正号：15%（SLS%）
 //   percent_1dp           → 百分比一位小数：40.5%
 //   percent_2dp           → 百分比两位小数：40.50%
@@ -57,6 +58,17 @@ xxx Cell Display =
 
     "currency_k",
                     __CurrencySymbol & FORMAT(__Value / 1000, "#,##0") & "k",    // ¥1k / $5k
+    
+    "currency_M_K_Int_0db",
+                    IF(
+                __Value < 1000,
+                __CurrencySymbol & FORMAT(__Value, "#,##0"),
+                IF(
+                    __Value < 1000000,
+                    __CurrencySymbol & FORMAT(__Value / 1000, "#,##0.0") & "K",
+                    __CurrencySymbol & FORMAT(__Value / 1000000, "#,##0.0") & "M"
+                )
+            ), // ¥999\¥1.5K\¥1.5M
 
     // ─── 3. 百分比格式（纯显示，不含正负号）───────────────────────
                 "percent_0dp",

@@ -52,3 +52,33 @@ start_period（data_date ∈ [Slicer_Time_Frame_Min[First_Fiscal_Month_Min], Sli
 start_period（第一个财月）是 slicer 区间的子集；
 
 综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Performance Indicator目录下，输出Prformance Indicator模块矩阵解决方案文件，命名为Customer_KPIs_Performance_ms.md；其中通过Dim_RowMetric_Customer_Net_Demand维度表实现Net / Demand 逻辑区分。通过Slicer_Customer_Type_Selection区别New、Existing、All逻辑，Slicer_Customer_Type_Selection中Customer_Type_ID只有New和Existing，这里需要判断一下，如果不选或者多选、全选，就是ALL的逻辑，单选New或者单选Existing对应New和Existing的逻辑。你看如何设计更优，给出解决方案。口径文档中有关New、Existing、All逻辑不清楚的可以参考D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\New Existing All口径.md文件，这是关于用户数和净销售额的详细定义，其余ACV\AUR等指标都是类似逻辑处理。
+
+# Customer Breakdown ms第四轮提示词：
+1、根据D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Performance Indicator\Customer_KPIs_Performance_ms.md解决方案，把其中All 分支的逻辑单独提取出来，也就是本方案不受到`Slicer_Customer_Type_Selection`的影响，逻辑始终为`FALSE` → 不选 / 多选（同时选 New+Existing）/ 全选，统一走 All 分支的情况。
+2、基于1的情况，Net / Demand 字段映射这部分需要保留。
+3、根据D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Performance Indicator\Dim_ColMetric_Customer_KPIs_Performance.md，重新输出一份新的列指标维度表Dim_ColMetric_Customer_Breakdown.md，金额类的数据类型改为这个，currency_M_K_Int_0db，详细信息如下:
+值 < 1,000        → 货币符号 + 千分位整数：¥999;
+1,000 ≤ 值 < 1M   → 货币符号 + K 单位（1位小数）：¥1.5K;
+值 ≥ 1,000,000    → 货币符号 + M 单位（1位小数）：¥1.5M;
+IF(
+                __Value < 1000,
+                __CurrencySymbol & FORMAT(__Value, "#,##0"),
+                IF(
+                    __Value < 1000000,
+                    __CurrencySymbol & FORMAT(__Value / 1000, "#,##0.0") & "K",
+                    __CurrencySymbol & FORMAT(__Value / 1000000, "#,##0.0") & "M"
+                )
+            ), // ¥999\¥1.5K\¥1.5M;
+其余指标不变，此外，ColType中的Act改为对应的分组名称，比如：DCom SLS、Customer No.、ACV、AUR、Freq.、UPT。
+总结：综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Customer Breakdown目录下输出列指标维度表Dim_ColMetric_Customer_Breakdown.md和矩阵解决方案文件Customer_Breakdown_ms.md。区别在于列指标维度表的调整，以及度量只受到net/demand按钮影响，相关维度表可复用，不受到New/Existing的影响了，相当于就是算的Customer Type = ALL的情况；矩阵行维度直接拉取事实表字段实现自动传递，模型自动传递筛选，DAX 无需显式处理，不懂就问。
+
+# Customer Breakdown Trend第五轮提示词：3+6+3+6
+全局影响：
+本方案不受到`Slicer_Customer_Type_Selection`的影响，直接得出单个Customer_Type的度量，受到net/demand按钮影响，相关维度表可复用。
+Slicer_Time_Frame、Slicer_Time_Frame_Min、Slicer_Time_Frame_Max三个日期表，分别改为Slicer_Time_Frame_Customer_Breakdown、Slicer_Time_Frame_Min_Customer_Breakdown、Slicer_Time_Frame_Max_Customer_Breakdown，结构完全一模一样，只是为了避免日期和其他模块相互影响，所有本次方案使用新的日期表。
+根据矩阵解决方案D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Performance Indicator\Customer_KPIs_Performance_ms.md中的逻辑，以及口径文档D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\Customer Breakdown Trend.md中的数据格式、数据类型、附属指标格式、类型，输出以下指标的解决方案：
+1、SLS Breakdown、SLS Breakdown vs LY、SLS Breakdown vs LP 对应DCom SLS — 销售额  All 分支的情况；
+2、New Customer SLS、New Customer SLS vs LY、New Customer SLS vs LP 对应DCom SLS — 新客销售额  New 分支的情况；Existing Customer SLS 对应DCom SLS — 老客销售额  Existing 分支的情况，老客不用计算vs LY和vs LP；New Customer SLS Share — 新客销售额占比：分子原指标，分母 ：New 分支 + Existing 分支；Existing Customer SLS Share — 老客销售额占比：分子原指标，分母 ：New 分支 + Existing 分支；
+3、Customer No. Breakdown、Customer No. Breakdown vs LY、Customer No. Breakdown vs LP 对应Customer No. — 买家人数  All 分支的情况；
+4、New Customer No.、New Customer No. vs LY、New Customer No. vs LP 对应Customer No. — 买家人数  New 分支的情况；Existing Customer No. 对应Customer No. — 买家人数  Existing 分支的情况，老客不用计算vs LY和vs LP；New Customer No. Share — 新客人数占比：分子原指标，分母 ：New 分支 + Existing 分支；Existing Customer No. Share — 老客人数占比：分子原指标，分母 ：New 分支 + Existing 分支；
+综合上述信息，独立输出每个指标的Value和Display度量，共18个指标，本次指标用于条形图和表格，不是矩阵，可以直接拉取度量值，没用任何x轴，不需要处理x轴上的当前时间，不要访问其他没有提到过的文件，参考文件中提到过的依赖文件除外。在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Customer Breakdown Trend目录下输出，命名为Customer Breakdown Trend.md，不懂就问。

@@ -358,15 +358,7 @@ VAR __StartPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Ma
 // New/Existing user_id 集合（在 start_period 内判定）
 // All 返回空表，后续用 __IsAll 分支不应用 TREATAS
 //
-// 关键技术点（DAX 表类型约束）:
-//   1. SWITCH 只能返回标量值，不能返回表 → 必须用 IF 嵌套
-//   2. IF 返回表时，两个分支必须返回"列结构完全一致"的表
-//      - {} 字面量创建的空表列名是 "Value"
-//      - VALUES(user_id) 创建的表列名是 "user_id"
-//      列名不匹配时，引擎把 IF 当作标量函数处理 → 报错
-//      "该表达式引用多列。多列不能转换为标量值"
-//   3. 解决: 用 FILTER(VALUES(user_id), FALSE()) 创建与目标表列名
-//      相同的空表，确保 IF 两分支结构一致
+// 关键技术点（DAX 表类型约束）:UNION+FILTER 替代嵌套 IF，确保 VAR 解析为表类型
 // ═══════════════════════════════════════════════════════════════
 VAR __EmptyUsers = FILTER(VALUES('a03_e2e_customer_data_m'[user_id]), FALSE())   // 列名为 user_id 的空表
 
