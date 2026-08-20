@@ -82,3 +82,4 @@ Slicer_Time_Frame、Slicer_Time_Frame_Min、Slicer_Time_Frame_Max三个日期表
 3、Customer No. Breakdown、Customer No. Breakdown vs LY、Customer No. Breakdown vs LP 对应Customer No. — 买家人数  All 分支的情况；
 4、New Customer No.、New Customer No. vs LY、New Customer No. vs LP 对应Customer No. — 买家人数  New 分支的情况；Existing Customer No. 对应Customer No. — 买家人数  Existing 分支的情况，老客不用计算vs LY和vs LP；New Customer No. Share — 新客人数占比：分子原指标，分母 ：New 分支 + Existing 分支；Existing Customer No. Share — 老客人数占比：分子原指标，分母 ：New 分支 + Existing 分支；
 综合上述信息，独立输出每个指标的Value和Display度量，共18个指标，本次指标用于条形图和表格，不是矩阵，可以直接拉取度量值，没用任何x轴，不需要处理x轴上的当前时间，不要访问其他没有提到过的文件，参考文件中提到过的依赖文件除外。在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Customer Breakdown Trend目录下输出，命名为Customer Breakdown Trend.md，不懂就问。
+记得读取 Currency_ExchangeRate 做汇率换算。
