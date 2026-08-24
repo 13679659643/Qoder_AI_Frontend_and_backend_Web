@@ -83,3 +83,14 @@ Slicer_Time_Frame、Slicer_Time_Frame_Min、Slicer_Time_Frame_Max三个日期表
 4、New Customer No.、New Customer No. vs LY、New Customer No. vs LP 对应Customer No. — 买家人数  New 分支的情况；Existing Customer No. 对应Customer No. — 买家人数  Existing 分支的情况，老客不用计算vs LY和vs LP；New Customer No. Share — 新客人数占比：分子原指标，分母 ：New 分支 + Existing 分支；Existing Customer No. Share — 老客人数占比：分子原指标，分母 ：New 分支 + Existing 分支；
 综合上述信息，独立输出每个指标的Value和Display度量，共18个指标，本次指标用于条形图和表格，不是矩阵，可以直接拉取度量值，没用任何x轴，不需要处理x轴上的当前时间，不要访问其他没有提到过的文件，参考文件中提到过的依赖文件除外。在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Customer Breakdown Trend目录下输出，命名为Customer Breakdown Trend.md，不懂就问。
 记得读取 Currency_ExchangeRate 做汇率换算。
+
+# Class x Label Drilldown第六轮提示词：
+日期表为：Slicer_Time_Frame、Slicer_Time_Frame_Min、Slicer_Time_Frame_Max三个日期表
+口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\Class x Label Drilldown.md、
+参考文件1：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Performance Indicator\Customer_KPIs_Performance_ms.md
+参考文件2：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Customer KPIs\Customer_KPIs_ms.md
+参考文件3：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Customer Breakdown\Customer_Breakdown_ms.md
+参考文件4：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Customer Breakdown Trend\Customer Breakdown Trend.md
+综合以上信息，独立输出每个指标的Value和Display度量，共14个指标，本次指标用于条形图和表格，不是矩阵，可以直接拉取度量值，没用任何x轴，不需要处理x轴上的当前时间，不要访问其他没有提到过的文件，参考文件中提到过的依赖文件除外。涉及金额的记得读取 Currency_ExchangeRate 做汇率换算。本方案不受到`Slicer_Customer_Type_Selection`的影响，不受到net/demand按钮影响。
+`category_summary`和`product_id`可直接拉取事实表的字段。`category_summary`和`product_id`是t05_customer_order_data_d表的字段，a03_e2e_customer_data_m表是汇总维度，没有`category_summary`和`product_id`字段，所以不能直接按`category_summary`和`product_id`分组。t05_customer_order_data_d表的日期字段为dt；a03_e2e_customer_data_m表的日期字段为data_date。
+在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Class x Label Drilldown目录下输出Class x Label Drilldown.md文件，即口径文档中的指标解决方案。
