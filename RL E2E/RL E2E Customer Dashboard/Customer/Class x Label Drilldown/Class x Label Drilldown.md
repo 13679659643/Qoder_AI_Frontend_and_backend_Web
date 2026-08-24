@@ -805,6 +805,117 @@ RETURN
     )
 ```
 
+### 4.15 排序字段（Top 20 排序，指标 9-14）
+
+> 为支持 Top 20 筛选，为指标 9-14 各新增一个 Rank 度量。在条形图/表格的「此页上的筛选器」中添加对应 Rank 度量，设置筛选条件为「小于或等于 20」即可仅显示 Top 20。
+> Rank 按对应 Value 降序排名（值最大 = Rank 1），DENSE 模式（排名无间隔），`ALLSELECTED` 保留外部切片器筛选仅移除图表行维度。
+
+#### 4.15.1 Net_New_Customer No. Rank
+
+```dax
+Net_New_Customer No. Rank =
+// ========================================
+// 度量值: Net_New_Customer No. Rank
+// 用途: 按 Net_New_Customer No. Value 降序排名，支持 Top 20 筛选
+// 排序方向: DESC（值最大 = Rank 1）
+// 排名模式: DENSE（并列排名无间隔）
+// 筛选器上下文: ALLSELECTED 保留外部 product_id 切片器筛选，移除图表行维度
+// 用法: 添加到视觉对象筛选器，条件「小于或等于 20」
+// ========================================
+RANKX(
+    ALLSELECTED('t05_customer_order_data_d'[product_id],t05_customer_order_data_d[brand],t05_customer_order_data_d[product_img_url]),
+    [Net_New_Customer No. Value],
+    ,
+    DESC,
+    DENSE
+)
+```
+
+#### 4.15.2 Net_New_SLS Rank
+
+```dax
+Net_New_SLS Rank =
+// ========================================
+// 度量值: Net_New_SLS Rank
+// 用途: 按 Net_New_SLS Value 降序排名，支持 Top 20 筛选
+// ========================================
+RANKX(
+    ALLSELECTED('t05_customer_order_data_d'[product_id],t05_customer_order_data_d[brand],t05_customer_order_data_d[product_img_url]),
+    [Net_New_SLS Value],
+    ,
+    DESC,
+    DENSE
+)
+```
+
+#### 4.15.3 Net_TTL_Customer No. Rank
+
+```dax
+Net_TTL_Customer No. Rank =
+// ========================================
+// 度量值: Net_TTL_Customer No. Rank
+// 用途: 按 Net_TTL_Customer No. Value 降序排名，支持 Top 20 筛选
+// ========================================
+RANKX(
+    ALLSELECTED('t05_customer_order_data_d'[product_id],t05_customer_order_data_d[brand],t05_customer_order_data_d[product_img_url]),
+    [Net_TTL_Customer No. Value],
+    ,
+    DESC,
+    DENSE
+)
+```
+
+#### 4.15.4 TTL_SLS Rank
+
+```dax
+TTL_SLS Rank =
+// ========================================
+// 度量值: TTL_SLS Rank
+// 用途: 按 TTL_SLS Value 降序排名，支持 Top 20 筛选
+// ========================================
+RANKX(
+    ALLSELECTED('t05_customer_order_data_d'[product_id],t05_customer_order_data_d[brand],t05_customer_order_data_d[product_img_url]),
+    [TTL_SLS Value],
+    ,
+    DESC,
+    DENSE
+)
+```
+
+#### 4.15.5 Net_Existing_Customer No. Rank
+
+```dax
+Net_Existing_Customer No. Rank =
+// ========================================
+// 度量值: Net_Existing_Customer No. Rank
+// 用途: 按 Net_Existing_Customer No. Value 降序排名，支持 Top 20 筛选
+// ========================================
+RANKX(
+    ALLSELECTED('t05_customer_order_data_d'[product_id],t05_customer_order_data_d[brand],t05_customer_order_data_d[product_img_url]),
+    [Net_Existing_Customer No. Value],
+    ,
+    DESC,
+    DENSE
+)
+```
+
+#### 4.15.6 Net_Existing_SLS Rank
+
+```dax
+Net_Existing_SLS Rank =
+// ========================================
+// 度量值: Net_Existing_SLS Rank
+// 用途: 按 Net_Existing_SLS Value 降序排名，支持 Top 20 筛选
+// ========================================
+RANKX(
+    ALLSELECTED('t05_customer_order_data_d'[product_id],t05_customer_order_data_d[brand],t05_customer_order_data_d[product_img_url]),
+    [Net_Existing_SLS Value],
+    ,
+    DESC,
+    DENSE
+)
+```
+
 ---
 
 ## 5. 度量值清单
@@ -839,6 +950,12 @@ RETURN
 | 26 | Net_Existing_Customer No. Display | Display | #,##0 | 整数千分位 |
 | 27 | Net_Existing_SLS Value | Value | currency | Existing 净销售额 by product_id |
 | 28 | Net_Existing_SLS Display | Display | #,##0 | 货币符号 + 汇率换算 |
+| 29 | Net_New_Customer No. Rank | Rank | integer | Top 20 排序（按 Value 降序，指标 9） |
+| 30 | Net_New_SLS Rank | Rank | integer | Top 20 排序（按 Value 降序，指标 10） |
+| 31 | Net_TTL_Customer No. Rank | Rank | integer | Top 20 排序（按 Value 降序，指标 11） |
+| 32 | TTL_SLS Rank | Rank | integer | Top 20 排序（按 Value 降序，指标 12） |
+| 33 | Net_Existing_Customer No. Rank | Rank | integer | Top 20 排序（按 Value 降序，指标 13） |
+| 34 | Net_Existing_SLS Rank | Rank | integer | Top 20 排序（按 Value 降序，指标 14） |
 
 ---
 
@@ -873,3 +990,5 @@ RETURN
 8. **delta_pts 转换规则**：值 × 100 转 pts（基点），格式 `+#,##0pts;-#,##0pts;0pts`，含正负号。如 New Customer% = 0.30，TTL Customer% = 0.25，差值 = 0.05，× 100 = 5pts，显示为 `+5pts`。
 
 9. **BLANK 处理**：所有 Display 度量在 Value 为 BLANK 时显示 `"-"`，避免空白单元格影响可读性。
+
+10. **Top 20 排序（指标 9-14）**：为 Product 子模块的 6 个指标各新增一个 Rank 度量（共 6 个），按对应 Value 降序排名（值最大 = Rank 1，DENSE 模式无间隔）。在条形图/表格的「此页上的筛选器」中添加对应 Rank 度量，设置筛选条件为「小于或等于 20」即可仅显示 Top 20。`ALLSELECTED('t05_customer_order_data_d'[product_id])` 保留外部切片器筛选，仅移除图表行维度筛选，确保排名在当前筛选上下文内计算。
