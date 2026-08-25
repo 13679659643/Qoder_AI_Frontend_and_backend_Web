@@ -94,3 +94,32 @@ Slicer_Time_Frame、Slicer_Time_Frame_Min、Slicer_Time_Frame_Max三个日期表
 综合以上信息，独立输出每个指标的Value和Display度量，共14个指标，本次指标用于条形图和表格，不是矩阵，可以直接拉取度量值，没用任何x轴，不需要处理x轴上的当前时间，不要访问其他没有提到过的文件，参考文件中提到过的依赖文件除外。涉及金额的记得读取 Currency_ExchangeRate 做汇率换算。本方案不受到`Slicer_Customer_Type_Selection`的影响，不受到net/demand按钮影响。
 `category_summary`和`product_id`可直接拉取事实表的字段。`category_summary`和`product_id`是t05_customer_order_data_d表的字段，a03_e2e_customer_data_m表是汇总维度，没有`category_summary`和`product_id`字段，所以不能直接按`category_summary`和`product_id`分组。t05_customer_order_data_d表的日期字段为dt；a03_e2e_customer_data_m表的日期字段为data_date。
 在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Class x Label Drilldown目录下输出Class x Label Drilldown.md文件，即口径文档中的指标解决方案。
+
+# Co-Purchase第七轮提示词：
+口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\Co-Purchase.md
+参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Class x Label Drilldown\Class x Label Drilldown.md
+综合以上信息，独立输出每个指标的Value和Display度量，共6个指标：
+1、Same-Order Cross-Sell：无需使用Dax显示处理筛选，我已经做了模型关系或者直接使用的表字段，关系会自动处理筛选，Class和Label按钮选择不影响度量，所以直接聚合输出就行。
+2、Cross-Order Cross-Sell-Class：无需使用Dax显示处理筛选，但是这里的分母需要移除图表中 `co_category_summary`维度的影响，保留外部 `co_category_summary`筛选。
+3、Cross-Order Cross-Sell-Label：无需使用Dax显示处理筛选，但是这里的分母需要移除图表中 `co_brand`维度的影响，保留外部 `co_brand`筛选。
+4、Product Path 1st Class：无需使用Dax显示处理筛选，我已经做了模型关系或者直接使用的表字段，关系会自动处理筛选，Class和Label按钮选择不影响度量，所以直接聚合输出就行。
+5、Product Path 2st Class：无需使用Dax显示处理筛选，我已经做了模型关系或者直接使用的表字段，关系会自动处理筛选，Class和Label按钮选择不影响度量，所以直接聚合输出就行。
+6、Product Path 3st Class：无需使用Dax显示处理筛选，我已经做了模型关系或者直接使用的表字段，关系会自动处理筛选，Class和Label按钮选择不影响度量，所以直接聚合输出就行。
+在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Co-Purchase目录下输出Co-Purchase Trend.md文件，即口径文档中的指标解决方案。
+
+# Co-Purchase第八轮提示词：
+指标 1、指标 2、指标 3需要调整一下，合并为两个指标就行：
+在按钮选中为Class的情况下，需要通过判断Slicer_Co_Purchase_Type_Selection是否为"Same-Order Cross-Sell"或者"Cross-Order Cross-Sell"，如果是"Same-Order Cross-Sell"，则输出指标 1，否则输出指标 2。
+在按钮选中为Label的情况下，需要通过判断Slicer_Co_Purchase_Type_Selection是否为"Same-Order Cross-Sell"或者"Cross-Order Cross-Sell"，如果是"Same-Order Cross-Sell"，则输出指标 1，否则输出指标 3。
+所以我理解只需要两个指标就行了，分别用于不同的图表对应不同的按钮选择。
+
+
+
+# SVG 热力矩阵图 颜色自适应 圆角第九轮提示词：
+参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\参考文件\SVG 热力矩阵图 颜色自适应 圆角.md
+根据参考文件，分别输出针对度量[Co-Purchase Cross-Sell-Class Value]和度量[Co-Purchase Cross-Sell-Label Value]输出SVG 热力矩阵图 颜色自适应 圆角的代码，注意：
+1、不需要读取百分比切片器,我没有这个。
+2、范围内：背景颜色四段插值（0%→30%→50%→100%），分别对应颜色为#d8dee5（0%）、#95afcf（30%）、#0c2340（50%）、#000000（100%）。
+3、范围内：字体颜色四段插值（0%→30%→50%→100%），分别对应颜色为#737373（0%）、#333333（30%）、#ffffff（50%）、#ffffff（100%）。
+4、需要体现一种渐变效果，比如：0%到30%的颜色渐变为#d8dee5到#95afcf，30%到50%的颜色渐变为#95afcf到#0c2340，50%到100%的颜色渐变为#0c2340到#000000。
+输出两个度量的SVG 热力矩阵图 颜色自适应 圆角代码在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Co-Purchase目录下，命名为Co-Purchase svg.md。

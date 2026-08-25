@@ -31,7 +31,7 @@ DATATABLE(
             TRUE,                  // 默认选中
             TRUE,                  // 激活状态，当前可用
             "客户购买行为",        // 分组
-            "Same-Order Cross-Sell" // 业务代码，对应源系统字段值
+            "same order" // 业务代码，对应源系统字段值
         },
         
         // Cross-Order Cross-Sell - 跨单交叉销售
@@ -43,7 +43,7 @@ DATATABLE(
             FALSE,                 // 非默认选项
             TRUE,                  // 激活状态，当前可用
             "客户购买行为",        // 分组
-            "Cross-Order Cross-Sell" // 业务代码，对应源系统字段值
+            "cross order" // 业务代码，对应源系统字段值
         }
     }
 )
