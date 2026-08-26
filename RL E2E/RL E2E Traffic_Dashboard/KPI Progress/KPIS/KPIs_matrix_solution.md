@@ -156,7 +156,7 @@ KPIs Current Base Value =
     // ── 时间筛选：本期 ──
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
-    // ── 汇率（金额类指标需要除以汇率）──
+    // ── 汇率（金额类指标需要乘以汇率）──
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
     // ═══════════════════════════════════════
@@ -174,7 +174,7 @@ KPIs Current Base Value =
     // 计划 Cost = SUM(fcst_cost_amt)
     VAR __FcstCost_ALL = 
         CALCULATE(
-            SUM('a05_e2e_paid_media_summary_d'[fcst_cost_amt]),
+            SUM('a05_e2e_paid_media_summary_d'[cost_amt]),
             'a05_e2e_paid_media_summary_d'[customer_type] = "ALL",
             'a05_e2e_paid_media_summary_d'[page_type] = "1",
             'a05_e2e_paid_media_summary_d'[data_date] >= __TimeMin,
@@ -192,7 +192,7 @@ KPIs Current Base Value =
     // 计划 Net Sales = SUM(fcst_net_sales_amt)
     VAR __FcstSLS_ALL = 
         CALCULATE(
-            SUM('a05_e2e_paid_media_summary_d'[fcst_net_sales_amt]),
+            SUM('a05_e2e_paid_media_summary_d'[cost_amt]),
             'a05_e2e_paid_media_summary_d'[customer_type] = "ALL",
             'a05_e2e_paid_media_summary_d'[page_type] = "1",
             'a05_e2e_paid_media_summary_d'[data_date] >= __TimeMin,

@@ -51,13 +51,13 @@ Keyword_X_matrix_solution 解决方案：
 度量值（9 个核心 + 9 个 Display + 2 个辅助 = 20 个）
 ├── Keyword X Cost          — SUM(cost_amt) × ExchangeRate（金额类）
 ├── Keyword X Cost%         — DIVIDE(当前行 cost_amt, 总计 cost_amt)（比率类）
-├── Keyword X ROI           — DIVIDE(SUM(sales_amt), SUM(cost_amt))（比率类）
+├── Keyword X ROI           — DIVIDE(SUM(media_sales_order_cnt), SUM(cost_amt))（比率类）
 ├── Keyword X Click         — SUM(click)（计数类）
 ├── Keyword X CPC           — DIVIDE(cost_amt, click)（比率类，不乘汇率）
 ├── Keyword X CTR           — DIVIDE(click, pv)（比率类）
-├── Keyword X CVR           — DIVIDE(sales_order_cnt, click)（比率类）
-├── Keyword X Add to Cart   — SUM(add_cart_cnt)（计数类）
-└── Keyword X CPATC         — DIVIDE(cost_amt, add_cart_cnt)（比率类，不乘汇率）
+├── Keyword X CVR           — DIVIDE(media_sales_order_cnt, click)（比率类）
+├── Keyword X Add to Cart   — SUM(add_cart_num)（计数类）
+└── Keyword X CPATC         — DIVIDE(cost_amt, add_cart_num)（比率类，不乘汇率）
 
 辅助度量值
 ├── Keyword X Cell Font Color       — 总计行 #252423（近黑），其余 #5F6165（深灰）
@@ -120,7 +120,7 @@ Dim_Crowd_Season_C_Label 为单表三列，Power BI 切片器基于同表列自�
 | a05_e2e_paid_media_keyword_data_d      | 关键词粒度事实表 |
 |                                        | 行维度字段：channel / brand / framework / category / season |
 |                                        | 筛选字段：platform / trans_cycle / data_date |
-|                                        | 指标字段：cost_amt / sales_amt / click / pv / add_cart_cnt / sales_order_cnt |
+|                                        | 指标字段：cost_amt / media_sales_order_cnt / click / pv / add_cart_num / media_sales_order_cnt |
 
 2.2 关系配置
 ────────────
@@ -323,9 +323,9 @@ Keyword X ROI =
 // 中文名: 媒体ROI
 // Display Folder: Keyword X
 // 用途: 媒体投资回报率
-// 口径: DIVIDE(SUM(sales_amt), SUM(cost_amt)) = 成交金额 / 花费
+// 口径: DIVIDE(SUM(media_sales_order_cnt), SUM(cost_amt)) = 成交金额 / 花费
 // 类型: 比率类，不乘汇率
-// 数据字典: sales_amt = 成交金额(GMV), cost_amt = 花费
+// 数据字典: media_sales_order_cnt = 成交金额(GMV), cost_amt = 花费
 // 数据格式: #,##0.0（保留一位小数，见 ROI Display）
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
@@ -349,7 +349,7 @@ Keyword X ROI =
 
     VAR __SalesAmt =
         CALCULATE(
-            SUM(a05_e2e_paid_media_keyword_data_d[sales_amt]),
+            SUM(a05_e2e_paid_media_keyword_data_d[media_sales_order_cnt]),
             __PlatformFilter,
             __ChannelScopeFilter,
             a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
@@ -557,9 +557,9 @@ Keyword X CVR =
 // 中文名: 点击转化率
 // Display Folder: Keyword X
 // 用途: 点击转化率（Conversion Rate）
-// 口径: DIVIDE(SUM(sales_order_cnt), SUM(click)) = Orders / Click
+// 口径: DIVIDE(SUM(media_sales_order_cnt), SUM(click)) = Orders / Click
 // 类型: 比率类，不乘汇率
-// 数据字典: sales_order_cnt = 成交订单数, click = 点击量
+// 数据字典: media_sales_order_cnt = 成交订单数, click = 点击量
 // 数据格式: #,##0.0%;#,##0.0%;0.0%（见 CVR Display）
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
@@ -583,7 +583,7 @@ Keyword X CVR =
 
     VAR __Orders =
         CALCULATE(
-            SUM(a05_e2e_paid_media_keyword_data_d[sales_order_cnt]),
+            SUM(a05_e2e_paid_media_keyword_data_d[media_sales_order_cnt]),
             __PlatformFilter,
             __ChannelScopeFilter,
             a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
@@ -619,9 +619,9 @@ Keyword X Add to Cart =
 // 中文名: 加购数
 // Display Folder: Keyword X
 // 用途: 加购数
-// 口径: SUM(add_cart_cnt)
+// 口径: SUM(add_cart_num)
 // 类型: 计数类，不乘汇率
-// 数据字典: add_cart_cnt = 加购数
+// 数据字典: add_cart_num = 加购数
 // 数据格式: #,##0（千分位整数，见 Add to Cart Display）
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
@@ -645,7 +645,7 @@ Keyword X Add to Cart =
 
     RETURN
         CALCULATE(
-            SUM(a05_e2e_paid_media_keyword_data_d[add_cart_cnt]),
+            SUM(a05_e2e_paid_media_keyword_data_d[add_cart_num]),
             __PlatformFilter,
             __ChannelScopeFilter,
             a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
@@ -666,10 +666,10 @@ Keyword X CPATC =
 // 中文名: 加购成本
 // Display Folder: Keyword X
 // 用途: 加购成本（Cost Per Add To Cart）
-// 口径: DIVIDE(SUM(cost_amt), SUM(add_cart_cnt)) = Cost / Add to Cart
+// 口径: DIVIDE(SUM(cost_amt), SUM(add_cart_num)) = Cost / Add to Cart
 // 类型: 比率类，不乘汇率（分子分母同币种，比值无币种维度）
 // 说明: CPATC 显示时带币种符号（SPEC：currency_decimal_1dp），但不做汇率换算
-// 数据字典: cost_amt = 花费, add_cart_cnt = 加购数
+// 数据字典: cost_amt = 花费, add_cart_num = 加购数
 // 数据格式: #,##0.0（带币种符号，保留一位小数，见 CPATC Display）
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
@@ -706,7 +706,7 @@ Keyword X CPATC =
         )
     VAR __AddToCart =
         CALCULATE(
-            SUM(a05_e2e_paid_media_keyword_data_d[add_cart_cnt]),
+            SUM(a05_e2e_paid_media_keyword_data_d[add_cart_num]),
             __PlatformFilter,
             __ChannelScopeFilter,
             a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
@@ -1053,13 +1053,13 @@ Keyword X Cell Background Color =
 |---|-------------|----------|----------------------------------------|------|-----------------------|-------------------------------|
 | 1 | Cost        | 有口径   | SUM(cost_amt)                          | ✅乘 | currency              | 币种符号 + #,##0              |
 | 2 | Cost%       | 有口径   | DIVIDE(当前行 cost_amt, 总计 cost_amt)  | ❌   | percent_1dp           | #,##0.0%;#,##0.0%;0.0%        |
-| 3 | ROI         | 有口径   | DIVIDE(sales_amt, cost_amt)       | ❌   | decimal_1dp           | #,##0.0                       |
+| 3 | ROI         | 有口径   | DIVIDE(media_sales_order_cnt, cost_amt)       | ❌   | decimal_1dp           | #,##0.0                       |
 | 4 | Click       | 有口径   | SUM(click)                             | ❌   | integer               | #,##0                         |
 | 5 | CPC         | 有口径   | DIVIDE(cost_amt, click)                | ❌   | currency_decimal_1dp  | 币种符号 + #,##0.0            |
 | 6 | CTR         | 有口径   | DIVIDE(click, pv)                      | ❌   | percent_1dp           | #,##0.0%;#,##0.0%;0.0%        |
-| 7 | CVR         | 有口径   | DIVIDE(sales_order_cnt, click)   | ❌   | percent_1dp           | #,##0.0%;#,##0.0%;0.0%        |
-| 8 | Add to Cart | 有口径   | SUM(add_cart_cnt)                      | ❌   | integer               | #,##0                         |
-| 9 | CPATC       | 有口径   | DIVIDE(cost_amt, add_cart_cnt)         | ❌   | currency_decimal_1dp  | 币种符号 + #,##0.0            |
+| 7 | CVR         | 有口径   | DIVIDE(media_sales_order_cnt, click)   | ❌   | percent_1dp           | #,##0.0%;#,##0.0%;0.0%        |
+| 8 | Add to Cart | 有口径   | SUM(add_cart_num)                      | ❌   | integer               | #,##0                         |
+| 9 | CPATC       | 有口径   | DIVIDE(cost_amt, add_cart_num)         | ❌   | currency_decimal_1dp  | 币种符号 + #,##0.0            |
 
 口径与格式来源：RL E2E/RL E2E Traffic_Operation/口径文档/Keyword.md
 
@@ -1128,7 +1128,7 @@ channel 同时是行维度第1级，因此采用 FILTER(VALUES()) 交集模式�
 
 9.3 CPC / CPATC 为何不乘汇率但显示带币种符号
 ─────────────────────────────────────────────
-CPC = DIVIDE(cost_amt, click)，CPATC = DIVIDE(cost_amt, add_cart_cnt)，
+CPC = DIVIDE(cost_amt, click)，CPATC = DIVIDE(cost_amt, add_cart_num)，
 分子分母均为同币种原始值（RMB），比值本身无币种维度，无需乘汇率。
 若需展示为特定币种金额，应在分子 cost_amt 上先换算再除（数学等价但不改变比率含义），
 而非除完再乘汇率——除完再乘会引入汇率因子，使比率数值失真。
@@ -1183,7 +1183,7 @@ channel 固定范围筛选在分母中也用 FILTER(ALL()) 模式：
 □ 5.  关系配置：Dim_Date_Current → a05_e2e_paid_media_keyword_data_d 1:*
 □ 6.  Keyword X Cost 口径正确：SUM(cost_amt) * ExchangeRate
 □ 7.  Keyword X Cost% 口径正确：DIVIDE(当前行 cost_amt, 总计 cost_amt)，分母 REMOVEFILTERS 全部 5 个行维度（channel/brand/framework/category/season），不乘汇率
-□ 8.  Keyword X ROI 口径正确：DIVIDE(SUM(sales_amt), SUM(cost_amt))，不乘汇率
+□ 8.  Keyword X ROI 口径正确：DIVIDE(SUM(media_sales_order_cnt), SUM(cost_amt))，不乘汇率
 □ 9.  Keyword X Click / CPC / CTR / CVR / Add to Cart / CPATC 口径正确
 □ 10. Channel 固定范围筛选正确：channel IN {"直通车","引力魔方","全站推"}（FILTER(VALUES()) 交集模式）
 □ 11. Platform ALL 筛选逻辑正确：FILTER platform IN {"TM","JD"}

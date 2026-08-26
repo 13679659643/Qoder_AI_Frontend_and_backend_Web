@@ -5,7 +5,7 @@
 | 属性 | 值 |
 |------|-----|
 | 表名 | a03_e2e_customer_time_ordered_data_m |
-| 表注释 | 用户在当月及后12个月中购买前3单的数据汇总月表 |
+| 表注释 | 用户在固定周期内购买前3单的数据汇总月表 |
 | 是否分区表 | 是 |
 | 备注 | DCom Customer Operation Dashboard看板customer页面Product Path模块取数表 |
 
@@ -32,6 +32,7 @@
 | shop_info_id | bigint | 店铺唯一键 | 是 | | | |
 | shop_id | String | 店铺ID | | | | |
 | shop_name | String | 店铺名称 | | | | |
+| shop_name_en | String | 店铺英文名称 | | | | |
 | shop_code | String | 店铺code | | | | |
 | product_id | String | 商品推广主体ID | 是 | | | |
 | product_name | String | 商品推广主体名称 | | | | |

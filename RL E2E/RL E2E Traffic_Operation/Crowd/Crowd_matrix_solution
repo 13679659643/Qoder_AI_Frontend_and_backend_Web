@@ -187,9 +187,9 @@ Crowd ROI =
 // 中文名: 媒体ROI
 // Display Folder: Crowd
 // 用途: 媒体投资回报率
-// 口径: DIVIDE(SUM(sales_amt), SUM(cost_amt)) = 成交金额 / 花费
+// 口径: DIVIDE(SUM(media_sales_amt), SUM(cost_amt)) = 成交金额 / 花费
 // 类型: 比率类，不乘汇率
-// 数据字典: sales_amt = 成交金额(GMV), cost_amt = 花费
+// 数据字典: media_sales_amt = 成交金额(GMV), cost_amt = 花费
 // 数据格式: #,##0.0（保留一位小数，见 ROI Display）
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
@@ -213,7 +213,7 @@ Crowd ROI =
 
     VAR __SalesAmt =
         CALCULATE(
-            SUM(a05_e2e_paid_media_crowed_data_d[sales_amt]),
+            SUM(a05_e2e_paid_media_crowed_data_d[media_sales_amt]),
             __PlatformFilter,
             __ChannelScopeFilter,
             a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
@@ -421,9 +421,9 @@ Crowd CVR =
 // 中文名: 点击转化率
 // Display Folder: Crowd
 // 用途: 点击转化率（Conversion Rate）
-// 口径: DIVIDE(SUM(sales_order_cnt), SUM(click)) = Orders / Click
+// 口径: DIVIDE(SUM(media_sales_order_cnt), SUM(click)) = Orders / Click
 // 类型: 比率类，不乘汇率
-// 数据字典: sales_order_cnt = 成交订单数, click = 点击量
+// 数据字典: media_sales_order_cnt = 成交订单数, click = 点击量
 // 数据格式: #,##0.0%;#,##0.0%;0.0%（见 CVR Display）
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
@@ -447,7 +447,7 @@ Crowd CVR =
 
     VAR __Orders =
         CALCULATE(
-            SUM(a05_e2e_paid_media_crowed_data_d[sales_order_cnt]),
+            SUM(a05_e2e_paid_media_crowed_data_d[media_sales_order_cnt]),
             __PlatformFilter,
             __ChannelScopeFilter,
             a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
@@ -483,9 +483,9 @@ Crowd Add to Cart =
 // 中文名: 加购数
 // Display Folder: Crowd
 // 用途: 加购数
-// 口径: SUM(add_cart_cnt)
+// 口径: SUM(add_cart_num)
 // 类型: 计数类，不乘汇率
-// 数据字典: add_cart_cnt = 加购数
+// 数据字典: add_cart_num = 加购数
 // 数据格式: #,##0（千分位整数，见 Add to Cart Display）
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
@@ -509,7 +509,7 @@ Crowd Add to Cart =
 
     RETURN
         CALCULATE(
-            SUM(a05_e2e_paid_media_crowed_data_d[add_cart_cnt]),
+            SUM(a05_e2e_paid_media_crowed_data_d[add_cart_num]),
             __PlatformFilter,
             __ChannelScopeFilter,
             a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
@@ -530,10 +530,10 @@ Crowd CPATC =
 // 中文名: 加购成本
 // Display Folder: Crowd
 // 用途: 加购成本（Cost Per Add To Cart）
-// 口径: DIVIDE(SUM(cost_amt), SUM(add_cart_cnt)) = Cost / Add to Cart
+// 口径: DIVIDE(SUM(cost_amt), SUM(add_cart_num)) = Cost / Add to Cart
 // 类型: 比率类，不乘汇率（分子分母同币种，比值无币种维度）
 // 说明: CPATC 显示时带币种符号（SPEC：currency_decimal_1dp），但不做汇率换算
-// 数据字典: cost_amt = 花费, add_cart_cnt = 加购数
+// 数据字典: cost_amt = 花费, add_cart_num = 加购数
 // 数据格式: #,##0.0（带币种符号，保留一位小数，见 CPATC Display）
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
@@ -570,7 +570,7 @@ Crowd CPATC =
         )
     VAR __AddToCart =
         CALCULATE(
-            SUM(a05_e2e_paid_media_crowed_data_d[add_cart_cnt]),
+            SUM(a05_e2e_paid_media_crowed_data_d[add_cart_num]),
             __PlatformFilter,
             __ChannelScopeFilter,
             a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
@@ -846,12 +846,12 @@ Crowd Cell Background Color =
 |---|-------------|----------|----------------------------------------|------|-----------------------|-------------------------------|
 | 1 | Cost        | 有口径   | SUM(cost_amt)                          | ✅乘 | currency              | 币种符号 + #,##0              |
 | 2 | Cost%       | 有口径   | DIVIDE(当前行 cost_amt, 总计 cost_amt)  | ❌   | percent_1dp           | #,##0.0%;#,##0.0%;0.0%        |
-| 3 | ROI         | 有口径   | DIVIDE(sales_amt, cost_amt)              | ❌   | decimal_1dp           | #,##0.0                       |
+| 3 | ROI         | 有口径   | DIVIDE(media_sales_amt, cost_amt)              | ❌   | decimal_1dp           | #,##0.0                       |
 | 4 | Click       | 有口径   | SUM(click)                             | ❌   | integer               | #,##0                         |
 | 5 | CPC         | 有口径   | DIVIDE(cost_amt, click)                | ❌   | currency_decimal_1dp  | 币种符号 + #,##0.0            |
 | 6 | CTR         | 有口径   | DIVIDE(click, pv)                      | ❌   | percent_1dp           | #,##0.0%;#,##0.0%;0.0%        |
-| 7 | CVR         | 有口径   | DIVIDE(sales_order_cnt, click)           | ❌   | percent_1dp           | #,##0.0%;#,##0.0%;0.0%        |
-| 8 | Add to Cart | 有口径   | SUM(add_cart_cnt)                      | ❌   | integer               | #,##0                         |
-| 9 | CPATC       | 有口径   | DIVIDE(cost_amt, add_cart_cnt)         | ❌   | currency_decimal_1dp  | 币种符号 + #,##0.0            |
+| 7 | CVR         | 有口径   | DIVIDE(media_sales_order_cnt, click)           | ❌   | percent_1dp           | #,##0.0%;#,##0.0%;0.0%        |
+| 8 | Add to Cart | 有口径   | SUM(add_cart_num)                      | ❌   | integer               | #,##0                         |
+| 9 | CPATC       | 有口径   | DIVIDE(cost_amt, add_cart_num)         | ❌   | currency_decimal_1dp  | 币种符号 + #,##0.0            |
 
 口径与格式来源：RL E2E/RL E2E Traffic_Operation/口径文档/Keyword.md

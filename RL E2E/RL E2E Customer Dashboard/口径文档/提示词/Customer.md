@@ -122,4 +122,5 @@ Slicer_Time_Frame、Slicer_Time_Frame_Min、Slicer_Time_Frame_Max三个日期表
 2、范围内：背景颜色四段插值（0%→30%→50%→100%），分别对应颜色为#d8dee5（0%）、#95afcf（30%）、#0c2340（50%）、#000000（100%）。
 3、范围内：字体颜色四段插值（0%→30%→50%→100%），分别对应颜色为#737373（0%）、#333333（30%）、#ffffff（50%）、#ffffff（100%）。
 4、需要体现一种渐变效果，比如：0%到30%的颜色渐变为#d8dee5到#95afcf，30%到50%的颜色渐变为#95afcf到#0c2340，50%到100%的颜色渐变为#0c2340到#000000。
+当值为36%的时候，字体颜色和背景色对比不够清晰，字体颜色调整一下，逐渐向白色渐变，背景越深，字体越白。
 输出两个度量的SVG 热力矩阵图 颜色自适应 圆角代码在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Co-Purchase目录下，命名为Co-Purchase svg.md。
