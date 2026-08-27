@@ -18,6 +18,8 @@ select
     shop_name,
     shop_name_en,
     shop_code,
+    brand,
+    category_summary,
     max(case when payment_time_seq = 1 then concat(brand, '_1') else null end) as brand_source,
     max(case when payment_time_seq = 2 then concat(brand, '_2') else null end) as brand_target,
     max(case when payment_time_seq = 1 then concat(category_summary, '_1') else null end) as category_summary_source,
@@ -40,7 +42,9 @@ group by dt,
     shop_id,
     shop_name,
     shop_name_en,
-    shop_code
+    shop_code,
+    brand,
+    category_summary
 
 union all
 
@@ -62,6 +66,8 @@ select
     shop_name,
     shop_name_en,
     shop_code,
+    brand,
+    category_summary,
     max(case when payment_time_seq = 2 then concat(brand, '_2') else null end) as brand_source,
     max(case when payment_time_seq = 3 then concat(brand, '_3') else null end) as brand_target,
     max(case when payment_time_seq = 2 then concat(category_summary, '_2') else null end) as category_summary_source,
@@ -84,7 +90,9 @@ group by dt,
     shop_id,
     shop_name,
     shop_name_en,
-    shop_code
+    shop_code,
+    brand,
+    category_summary
     ")
 in
     源

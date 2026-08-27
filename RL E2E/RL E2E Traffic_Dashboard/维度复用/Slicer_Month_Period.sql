@@ -1,14 +1,24 @@
--- 月维度数据抽取
-	SELECT 
-	    'Month' AS TimeFrame_ID,                                                        -- 时间框架ID：月
-	    '月' AS TimeFrame_Label,                                                        -- 时间框架标签：月
-	    3 AS TimeFrame_Sort,                                                            -- 时间框架排序：3
-	    CONCAT(financial_year, '-', LPAD(financial_month_num, 2, '0')) AS TimeFrame_Value, -- 值：财年-两位财月数（字符串类型）
-	    financial_year * 100 + financial_month_num AS TimeFrame_Key,                    -- 编号：财年*100+财月数（数值类型）
-	    (financial_year * 100 + financial_month_num) * 10 AS ID_Sort,                   -- ID排序：月对应的日期键*10
-	    MIN(natural_date) AS TimeFrame_Min,                                             -- 当前财月范围内最小自然日
-	    MAX(natural_date) AS TimeFrame_Max                                              -- 当前财月范围内最大自然日
-	FROM `indep_rl_dim`.dim_t00_calendar
-	WHERE natural_date >= (SELECT MIN(data_date) FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d)
-	  AND natural_date <= (SELECT MAX(data_date) FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d)
-	GROUP BY financial_year, financial_month_num
+let
+    源 = Odbc.Query("dsn=bytehouse_rl", 
+    "
+    SELECT
+    `etl_time`, -- etl时间
+    `timeframe_id` AS `TimeFrame_ID`, -- 时间框架ID
+    `timeframe_label` AS `TimeFrame_Label`, -- 时间框架标签
+    `timeframe_sort` AS `TimeFrame_Sort`, -- 时间框架排序
+    `timeframe_value` AS `TimeFrame_Value`, -- 当前时间段名称
+    `timeframe_key` AS `TimeFrame_Key`, -- 当前时间段Key
+    `id_sort` AS `ID_Sort`, -- ID排序
+    `timeframe_min` AS `TimeFrame_Min`, -- 当前时间段起始自然日
+    `timeframe_max` AS `TimeFrame_Max`, -- 当前时间段结束自然日
+    `ly_timeframe_value` AS `TimeFrame_Value_LY`, -- 去年同期时间段名称
+    `ly_timeframe_key` AS `TimeFrame_Key_LY`, -- 去年同期时间段Key
+    `ly_timeframe_min` AS `TimeFrame_Min_LY`, -- 去年同期起始自然日
+    `ly_timeframe_max` AS `TimeFrame_Max_LY` -- 去年同期结束自然日
+FROM 
+	    indep_rl_dim.dim_t00_bi_fiscal_calendar
+        ORDER BY ID_Sort DESC
+    "),
+    筛选的行 = Table.SelectRows(源, each ([TimeFrame_ID] = "Month"))
+in
+    筛选的行
