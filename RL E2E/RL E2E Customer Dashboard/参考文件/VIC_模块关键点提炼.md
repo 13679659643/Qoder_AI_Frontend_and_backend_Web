@@ -463,6 +463,33 @@ VAR __NewCustomerCnt_Act =
         INTERSECT(__Step1Users, __Step2Users)
     )
 ```
+
+### 12. 嵌套 IF 返回表时 DAX 引擎会把表达式降级为标量值，导致错误结果
+来源：KPIs Overview_Target_ms.md
+1、platform为单选的情况，其中有特殊值"ALL",表示全选，布尔表达式：
+```dax
+VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+VAR __IsAllPlatform = (__ChannelID = "ALL")
+
+(a05_e2e_paid_media_summary_d[platform] = __ChannelID
+    || ( __IsAllPlatform && a05_e2e_paid_media_summary_d[platform] IN { "TM", "JD" } ))
+```
+2、platform为单选的情况，其中有特殊值"ALL",表示全选，ALL→IN{"TM","JD"}；单平台→=__ChannelID，使用FILTER(ALL) 变量（表筛选器），返回表：
+```dax
+VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+VAR __IsAllPlatform = (__ChannelID = "ALL")
+
+VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_fcst_data_m[platform]),
+            // 如果 __ChannelID = "ALL"，返回 IN {"TM", "JD"}，否则返回 = __ChannelID
+            IF(
+                __ChannelID = "ALL",
+                a05_e2e_paid_media_fcst_data_m[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_fcst_data_m[platform] = __ChannelID
+            )
+        )
+```
 ---
 
 ## 七、派生指标分类与计算方式

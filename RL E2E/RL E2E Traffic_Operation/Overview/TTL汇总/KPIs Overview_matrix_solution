@@ -2,10 +2,40 @@ KPIs Overview_matrix_solution 解决方案：
 
 > status: updated
 > created: 2026-04-21
-> updated: 2026-06-30
+> updated: 2026-08-27
 > complexity: 🔴复杂
 > type: 度量值开发 + 可视化构建
 > naming: 遵循 powerbi_code_copilot/rules/dax-style.md 规范
+
+================================================================================
+变更日志（2026-08-27）
+================================================================================
+
+本次变更基于上一版本（2026-06-30）调整如下：
+
+1. ID7 Acceleration Cost% 数据源切回 product_data_d（此前 2026-06-30 改为 summary_d）
+   - 原因：口径文档明确 Acceleration 系列用 a05_e2e_paid_media_product_data
+   - product_data_d 无 customer_type / page_type 字段，故移除这两项筛选
+   - 新增基础筛选 mix_msg is NULL（分子分母均加），与目标达成方案 ID17 一致
+   - 分子：framework="Acceleration" + mix_msg is NULL
+   - 分母：全部 framework（移除 framework 筛选）+ mix_msg is NULL
+2. ID8 ±Acceleration Cost% vs Net Sales% 派生指标底层计算与格式全面调整
+   - 口径变更：派生指标 = Acceleration Cost% - Acceleration Net Sales%（原为 Acceleration SLS MOB%）
+   - Acceleration Cost% 子计算：product_data_d + mix_msg is NULL（同 ID7）
+   - Acceleration Net Sales% 子计算：product_data_d（无 mix_msg，分子分母无额外筛选）
+     * 分子：framework="Acceleration"（无 mix_msg）
+     * 分母：全部 framework（无 mix_msg）
+   - Base Value 返回值变更：原始小数差值（去掉 ×100）
+     * 原：(__AccCostPct - __AccSLSPct) × 100（返回已 ×100 的 bp 值）
+     * 新：(__AccCostPct - __AccSLSPct)（返回原始小数差值，如 0.103）
+   - 数据类型变更：delta_bp_1dp → delta_bp
+     * delta_bp：__Value ×10000 转 bp，整数位（如 0.103 → 1030bp）
+     * delta_bp_1dp：__Value 本身已是基点值，保留一位小数（已废弃用于 ID8）
+   - Cell Display delta_bp 格式对齐模板：IF(__Value > 0, "+", "") & FORMAT(__Value * 10000, "#,##0") & "bp"
+   - YOY 逻辑：本期原始差值 - 去年原始差值（差值，非增长率），Cell Display ×10000 转 bp
+3. Cell Display 新增拓展格式类型（参考 Cell Display 模板文件）
+   - 新增：percent_0dp、delta_pct_0dp、delta_pts、currency_M_K_Int_0db
+   - delta_bp 格式修正：>= 0 → > 0（零值不加"+"号）
 
 ================================================================================
 变更日志（2026-06-30）
@@ -146,29 +176,24 @@ KPIs Overview Cell Value ── 行路由（This Year / Last Year / YOY）
      精确圈定 TM + JD，避免数据源新增其他 platform 时被误聚合
    - 选择具体平台（TM/JD）→ __ChannelID = "TM"/"JD"，施加 platform = __ChannelID 精确筛选
    - 统一通过 __PlatformFilter 变量传递，SWITCH 分支无需重复写条件判断
-7. 当前 Base Value 全部 9 个分支已填充真实口径，底表统一为 summary_d：
-   - ID 1 Cost: SUM(cost_amt)，customer_type='ALL' AND page_type="1"
-   - ID 2 Cost Rate: SUM(cost_amt)/SUM(net_sales_amt) × 1.13/1.06
-   - ID 3 Cost (Exclude Refund): SUM(cost_amt - red_packet - rebate)
-   - ID 4 Cost Rate (Exclude Refund): ID3 分子 / SUM(net_sales_amt) × 1.13/1.06
-   - ID 5 Net Sales: SUM(net_sales_amt)
-   - ID 6 ROI: SUM(media_sales_amt) / SUM(cost_amt)（分母含红包）
-   - ID 7 Acceleration Cost%: cost_amt(framework='Acceleration') / cost_amt(TTL)
-   - ID 8 ±Acc Cost% vs Net Sales%: (Acc Cost% - Acc SLS MOB%) × 100 转 bp
-   - ID 9 New Customer Cost%: cost_amt(NEW) / cost_amt(NEW+EXISTING)，page_type="2"，channel IN {"直通车","引力魔方"}
+7. 当前 Base Value 全部 9 个分支已填充真实口径，底表混合使用：
+   - ID 1~6, 9: summary_d（cost_amt / net_sales_amt / media_sales_amt / red_packet / rebate）
+   - ID 7 Acceleration Cost%: product_data_d（framework='Acceleration' 分子 / 全部 framework 分母，基础筛选 mix_msg is NULL）
+   - ID 8 ±Acc Cost% vs Net Sales%: product_data_d 派生（Acc Cost% 同 ID7 含 mix_msg is NULL；Acc SLS MOB% 无 mix_msg）
+   - ID 9 New Customer Cost%: summary_d（customer_type='NEW' 分子 / NEW+EXISTING 分母，page_type="2"，channel IN {"直通车","引力魔方"}）
 
-指标口径来源对照（全部 9 个指标已填充真实口径，底表统一为 summary_d）：
-| # | 指标名（英文）                       | 数据类型       | 底表       | 关键字段/计算逻辑                                                          | 业务筛选条件                                          |
-|---|--------------------------------------|---------------|-----------|---------------------------------------------------------------------------|-------------------------------------------------------|
-| 1 | Cost                                 | currency      | summary_d | SUM(cost_amt)                                                             | customer_type='ALL' AND page_type="1"                   |
-| 2 | Cost Rate                            | percent_1dp   | summary_d | SUM(cost_amt) / SUM(net_sales_amt) × 1.13 / 1.06                          | customer_type='ALL' AND page_type="1"                   |
-| 3 | Cost (Exclude Refund)                | currency      | summary_d | SUM(cost_amt - red_packet - rebate)                                       | customer_type='ALL' AND page_type="1"                   |
-| 4 | Cost Rate (Exclude Refund)           | percent_1dp   | summary_d | SUM(cost_amt-red_packet-rebate) / SUM(net_sales_amt) × 1.13 / 1.06        | customer_type='ALL' AND page_type="1"                   |
-| 5 | Net Sales                            | currency      | summary_d | SUM(net_sales_amt)                                                        | customer_type='ALL' AND page_type="1"                   |
-| 6 | ROI                                  | decimal_1dp   | summary_d | SUM(media_sales_amt) / SUM(cost_amt)（分母含红包）                         | customer_type='ALL' AND page_type="1"                   |
-| 7 | Acceleration Cost%                   | percent_1dp   | summary_d | SUM(cost_amt WHERE framework='Acceleration') / SUM(cost_amt TTL)          | customer_type='ALL' AND page_type="1"                   |
-| 8 | ±Acceleration Cost% vs Net Sales%    | delta_bp_1dp  | summary_d | (Acc Cost% - Acc SLS MOB%) × 100 转 bp                                    | customer_type='ALL' AND page_type="1"                   |
-| 9 | New Customer Cost%                   | percent_1dp   | summary_d | SUM(cost_amt WHERE customer_type='NEW') / SUM(cost_amt WHERE NEW+EXISTING) | 分子: customer_type='NEW' AND page_type="2" AND channel IN {"直通车","引力魔方"}; 分母: customer_type IN {"EXISTING","NEW"} AND page_type="2" AND channel IN {"直通车","引力魔方"} |
+指标口径来源对照（全部 9 个指标已填充真实口径，ID 1~6/9 用 summary_d，ID 7/8 用 product_data_d）：
+| # | 指标名（英文）                       | 数据类型       | 底表           | 关键字段/计算逻辑                                                          | 业务筛选条件                                          |
+|---|--------------------------------------|---------------|---------------|---------------------------------------------------------------------------|-------------------------------------------------------|
+| 1 | Cost                                 | currency      | summary_d     | SUM(cost_amt)                                                             | customer_type='ALL' AND page_type="1"                   |
+| 2 | Cost Rate                            | percent_1dp   | summary_d     | SUM(cost_amt) / SUM(net_sales_amt) × 1.13 / 1.06                          | customer_type='ALL' AND page_type="1"                   |
+| 3 | Cost (Exclude Refund)                | currency      | summary_d     | SUM(cost_amt - red_packet - rebate)                                       | customer_type='ALL' AND page_type="1"                   |
+| 4 | Cost Rate (Exclude Refund)           | percent_1dp   | summary_d     | SUM(cost_amt-red_packet-rebate) / SUM(net_sales_amt) × 1.13 / 1.06        | customer_type='ALL' AND page_type="1"                   |
+| 5 | Net Sales                            | currency      | summary_d     | SUM(net_sales_amt)                                                        | customer_type='ALL' AND page_type="1"                   |
+| 6 | ROI                                  | decimal_1dp   | summary_d     | SUM(media_sales_amt) / SUM(cost_amt)（分母含红包）                         | customer_type='ALL' AND page_type="1"                   |
+| 7 | Acceleration Cost%                   | percent_1dp   | product_data_d| SUM(cost_amt[framework='Acc']) / SUM(cost_amt[全部framework])             | 基础筛选 mix_msg is NULL（分子分母均加）；product_data_d 无 customer_type/page_type |
+| 8 | ±Acceleration Cost% vs Net Sales%    | delta_bp       | product_data_d| (Acc Cost% - Acc Net Sales%) 原始小数差值，Cell Display ×10000 转 bp          | Acc Cost%部分: mix_msg is NULL；Acc Net Sales%部分: 无 mix_msg |
+| 9 | New Customer Cost%                   | percent_1dp   | summary_d     | SUM(cost_amt WHERE customer_type='NEW') / SUM(cost_amt WHERE NEW+EXISTING) | 分子: customer_type='NEW' AND page_type="2" AND channel IN {"直通车","引力魔方"}; 分母: customer_type IN {"EXISTING","NEW"} AND page_type="2" AND channel IN {"直通车","引力魔方"} |
 
 ================================================================================
 1. 构建行维度字段 DIM_RowKPIs_Overview
@@ -204,14 +229,23 @@ DIM_ColMetric_Overview =
 //       Cost Rate (Exclude Refund)，移除 Cost Rate (include Refund)，
 //       New Customer Cost% 调整至列尾（ID 9）
 //
-// 格式类型清单：
-//   currency      → ¥1,000 / $1,000（货币符号由币种切片器决定）
-//   integer       → 1,000
-//   decimal_1dp   → 1,000.0
-//   decimal_2     → 1,000.00
-//   percent_1dp   → 40.5%
-//   delta_pct_1dp → +14.5%（含正负号）
-//   delta_bp_1dp  → +120.5bp / -80.0bp（基点，含正负号，值×100 转 bp）
+// 格式类型清单（参考 Cell Display 模板文件）：
+//   integer               → 整数千分位：1,000
+//   decimal_1dp           → 小数一位小数千分位：1,000.0
+//   decimal_2dp           → 小数两位小数千分位：1,000.00
+//   currency              → 货币符号 + 整数千分位：¥1,000 / $1,000
+//   currency_decimal_1dp  → 货币符号 + 一位小数千分位：¥1,000.0 / $1,000.0
+//   currency_k            → 货币符号 + 千位缩写：¥1k / $5k
+//   currency_M_K_Int_0db  → 货币符号 + 整数/M/K 单位（0位小数）：¥999 / ¥1.5K / ¥1.5M
+//   percent_0dp           → 百分比整数，不含正号：15%
+//   percent_1dp           → 百分比一位小数：40.5%
+//   percent_2dp           → 百分比两位小数：40.50%
+//   delta_pct_0dp         → 百分比整数变化，含正号：+15% / -3%
+//   delta_pct_1dp         → 百分比一位小数变化，含正号：+14.5% / -3.2%
+//   delta_pct_2dp         → 百分比两位小数变化，含正号：+14.50%
+//   delta_pts             → 增减基点整数（小数×100 转 pts）：+120pts / -80pts / 0pts
+//   delta_bp              → 增减基点整数（小数×10000 转 bp）：+120bp / -80bp
+//   delta_bp_1dp          → 增减基点一位小数（值本身已是基点）：+120.5bp / -80.0bp
 //
 // 颜色说明：
 //   仅 YOY 行启用条件颜色（正/负/零）
@@ -242,7 +276,7 @@ DATATABLE(
         { 5,  "Net Sales",                           50,  "currency",    "currency",    "delta_pct_1dp",  TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 6,  "ROI",                                 60,  "decimal_1dp", "decimal_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 7,  "Acceleration Cost%",                  70,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 8,  "±Acceleration Cost% vs Net Sales%",   80,  "delta_bp_1dp","delta_bp_1dp","delta_bp_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 8,  "±Acceleration Cost% vs Net Sales%",   80,  "delta_bp",    "delta_bp",    "delta_bp",    FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 9,  "New Customer Cost%",                  90,  "percent_1dp", "percent_1dp", "delta_pct_1dp",  FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" }
     }
 )
@@ -630,58 +664,108 @@ KPIs Overview Base Value =
 
         // ═══════════════════════════════════════════════════════
         // ID 7: Acceleration Cost% — 第二品类花费%
-        // 口径: SUM(cost_amt WHERE framework='Acceleration') / SUM(cost_amt WHERE 全部 framework)
-        // 筛选: customer_type='ALL' AND page_type="1"
+        // 口径: SUM(cost_amt[framework='Acceleration']) / SUM(cost_amt[全部 framework])
+        // 数据源: product_data_d（非 summary_d）；product_data_d 无 customer_type / page_type 字段
+        // 基础筛选: mix_msg is NULL（分子分母均加）；分子加 framework="Acceleration"，分母移除 framework
         // 数据类型: percent_1dp
         // ═══════════════════════════════════════════════════════
-        7, VAR __AccFilter =
+        7, // 分子：mix_msg is NULL + framework="Acceleration"
+           VAR __AccFilter_product =
                FILTER(
-                   a05_e2e_paid_media_summary_d,
-                   a05_e2e_paid_media_summary_d[customer_type] = "ALL"
-                       && a05_e2e_paid_media_summary_d[page_type] = "1"
-                       && a05_e2e_paid_media_summary_d[framework] = "Acceleration"
-                       && a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+                   a05_e2e_paid_media_product_data_d,
+                   ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
+                       && a05_e2e_paid_media_product_data_d[framework] = "Acceleration"
+                       && a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
                        && (
                            __IsAllPlatform
-                               && a05_e2e_paid_media_summary_d[platform] IN {"TM", "JD"}
+                               && a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"}
                            || NOT __IsAllPlatform
-                               && a05_e2e_paid_media_summary_d[platform] = __ChannelID
+                               && a05_e2e_paid_media_product_data_d[platform] = __ChannelID
                        )
                )
-           VAR __AccCost = CALCULATE(SUM(a05_e2e_paid_media_summary_d[cost_amt]), __AccFilter)
-           VAR __TTLCost = CALCULATE(SUM(a05_e2e_paid_media_summary_d[cost_amt]), __BaseFilter_ALL)
+           // 分母：mix_msg is NULL + 全部 framework（移除 framework 筛选）
+           VAR __TTLFilter_product =
+               FILTER(
+                   a05_e2e_paid_media_product_data_d,
+                   ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
+                       && a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+                       && (
+                           __IsAllPlatform
+                               && a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"}
+                           || NOT __IsAllPlatform
+                               && a05_e2e_paid_media_product_data_d[platform] = __ChannelID
+                       )
+               )
+           VAR __AccCost = CALCULATE(SUM(a05_e2e_paid_media_product_data_d[cost_amt]), __AccFilter_product)
+           VAR __TTLCost = CALCULATE(SUM(a05_e2e_paid_media_product_data_d[cost_amt]), __TTLFilter_product)
            RETURN DIVIDE(__AccCost, __TTLCost),
 
         // ═══════════════════════════════════════════════════════
         // ID 8: ±Acceleration Cost% vs Net Sales% — 第二品类花费% vs Net Sales%
-        // 口径: 派生指标 = (Acceleration Cost% - Acceleration SLS MOB%) × 100 转 bp
-        //   - Acceleration Cost% = cost_amt(Acc) / cost_amt(TTL)
-        //   - Acceleration SLS MOB% = net_sales_amt(Acc) / net_sales_amt(TTL)
-        // 本期返回 bp 差值；YOY 行在 Cell Value 层计算同比增长率
-        // 筛选: customer_type='ALL' AND page_type="1"
-        // 数据类型: delta_bp_1dp
+        // 口径: 派生指标 = Acceleration Cost% - Acceleration Net Sales%（原始小数差值，Cell Display 层 ×10000 转 bp）
+        //   - Acceleration Cost% = cost_amt(Acc) / cost_amt(TTL) → product_data_d + mix_msg is NULL
+        //   - Acceleration Net Sales% = net_sales_amt(Acc) / net_sales_amt(TTL) → product_data_d（无 mix_msg，分子分母无额外筛选）
+        // 本期返回原始小数差值；YOY 行 = 本期bp - 去年bp（差值，非增长率）
+        // 数据类型: delta_bp（值×10000 转 bp，整数位）
         // ═══════════════════════════════════════════════════════
-        8, VAR __AccFilter =
+        8, // ── Acceleration Cost% 部分：mix_msg is NULL + framework="Acceleration" ──
+           VAR __AccCostFilter_product =
                FILTER(
-                   a05_e2e_paid_media_summary_d,
-                   a05_e2e_paid_media_summary_d[customer_type] = "ALL"
-                       && a05_e2e_paid_media_summary_d[page_type] = "1"
-                       && a05_e2e_paid_media_summary_d[framework] = "Acceleration"
-                       && a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
+                   a05_e2e_paid_media_product_data_d,
+                   ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
+                       && a05_e2e_paid_media_product_data_d[framework] = "Acceleration"
+                       && a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
                        && (
                            __IsAllPlatform
-                               && a05_e2e_paid_media_summary_d[platform] IN {"TM", "JD"}
+                               && a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"}
                            || NOT __IsAllPlatform
-                               && a05_e2e_paid_media_summary_d[platform] = __ChannelID
+                               && a05_e2e_paid_media_product_data_d[platform] = __ChannelID
                        )
                )
-           VAR __AccCost = CALCULATE(SUM(a05_e2e_paid_media_summary_d[cost_amt]), __AccFilter)
-           VAR __TTLCost = CALCULATE(SUM(a05_e2e_paid_media_summary_d[cost_amt]), __BaseFilter_ALL)
+           VAR __TTLCostFilter_product =
+               FILTER(
+                   a05_e2e_paid_media_product_data_d,
+                   ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
+                       && a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+                       && (
+                           __IsAllPlatform
+                               && a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"}
+                           || NOT __IsAllPlatform
+                               && a05_e2e_paid_media_product_data_d[platform] = __ChannelID
+                       )
+               )
+           VAR __AccCost = CALCULATE(SUM(a05_e2e_paid_media_product_data_d[cost_amt]), __AccCostFilter_product)
+           VAR __TTLCost = CALCULATE(SUM(a05_e2e_paid_media_product_data_d[cost_amt]), __TTLCostFilter_product)
            VAR __AccCostPct = DIVIDE(__AccCost, __TTLCost)                      // Acceleration Cost%
-           VAR __AccSLS = CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]), __AccFilter)
-           VAR __TTLSLS = CALCULATE(SUM(a05_e2e_paid_media_summary_d[net_sales_amt]), __BaseFilter_ALL)
-           VAR __AccSLSPct = DIVIDE(__AccSLS, __TTLSLS)                         // Acceleration SLS MOB%
-           RETURN (__AccCostPct - __AccSLSPct) * 100,                          // 差值×100 转 bp
+
+           // ── Acceleration SLS MOB% 部分：无 mix_msg 筛选 + framework="Acceleration" ──
+           VAR __AccSLSFilter_product =
+               FILTER(
+                   a05_e2e_paid_media_product_data_d,
+                   a05_e2e_paid_media_product_data_d[framework] = "Acceleration"
+                       && a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+                       && (
+                           __IsAllPlatform
+                               && a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"}
+                           || NOT __IsAllPlatform
+                               && a05_e2e_paid_media_product_data_d[platform] = __ChannelID
+                       )
+               )
+           VAR __TTLSLSFilter_product =
+               FILTER(
+                   a05_e2e_paid_media_product_data_d,
+                   a05_e2e_paid_media_product_data_d[trans_cycle] = __TransCycle
+                       && (
+                           __IsAllPlatform
+                               && a05_e2e_paid_media_product_data_d[platform] IN {"TM", "JD"}
+                           || NOT __IsAllPlatform
+                               && a05_e2e_paid_media_product_data_d[platform] = __ChannelID
+                       )
+               )
+           VAR __AccSLS = CALCULATE(SUM(a05_e2e_paid_media_product_data_d[net_sales_amt]), __AccSLSFilter_product)
+           VAR __TTLSLS = CALCULATE(SUM(a05_e2e_paid_media_product_data_d[net_sales_amt]), __TTLSLSFilter_product)
+           VAR __AccSLSPct = DIVIDE(__AccSLS, __TTLSLS)                         // Acceleration Net Sales%
+           RETURN (__AccCostPct - __AccSLSPct),                                // 原始小数差值（Cell Display 层 ×10000 转 bp）
 
         // ═══════════════════════════════════════════════════════
         // ID 9: New Customer Cost% — 招募新客花费占比
@@ -797,7 +881,9 @@ KPIs Overview Cell Value =
     //   同期为 0 或空 → BLANK()（包含双零/双空场景）
     //   本期为 0 或空，同期有值 → -1（即 -100%）
     //   双方均有值 → (This Year - Last Year) / Last Year
-    // 特例（ID8 bp 指标）：YOY = 本期bp - 去年bp（差值，非增长率）
+    // 特例（ID8 bp 指标）：YOY = 本期原始差值 - 去年原始差值（差值，非增长率）
+    //   Base Value 返回原始小数差值（如 0.103），YOY = 本期 - 去年（如 0.023）
+    //   Cell Display 层 ×10000 转 bp（如 230bp）
     VAR __CurrIsEmpty = ISBLANK(__CurrentValue) || __CurrentValue = 0
     VAR __LPIsEmpty = ISBLANK(__LP_Value) || __LP_Value = 0
     VAR __IsBP = (__SelID = 8)                          // ID8 ±Acc Cost% vs Net Sales% 为 bp 派生指标
@@ -807,7 +893,7 @@ KPIs Overview Cell Value =
             BLANK(),
             IF(
                 __IsBP,
-                __CurrentValue - __LP_Value,            // bp 指标 YOY = 本期bp - 去年bp（差值）
+                __CurrentValue - __LP_Value,            // bp 指标 YOY = 本期原始差值 - 去年原始差值（差值）
                 IF(__CurrIsEmpty, -1, DIVIDE(__CurrentValue - __LP_Value, __LP_Value))
             )
         )
@@ -825,9 +911,9 @@ KPIs Overview Cell Value =
         // 与 This Year 同样的汇率换算逻辑
         __Indicator = "Last Period", __LP_Converted,
 
-        // ── YOY：同比增长率（ID8 bp 指标为差值）──
+        // ── YOY：同比增长率（ID8 bp 指标为原始差值的差值）──
         // 默认: 增长率不受汇率影响：(C*R - L*R) / (L*R) = (C-L) / L
-        // ID8: 本期bp - 去年bp（差值，非增长率）
+        // ID8: 本期原始差值 - 去年原始差值（差值，非增长率），Cell Display ×10000 转 bp
         // 边界处理：同期为0/空→BLANK，本期为0/空且同期有值→增长率-1（bp 指标直接返回差值）
         __Indicator = "YOY", __YOY_Result,
 
@@ -839,7 +925,7 @@ KPIs Overview Cell Value =
 |-------------|-----------------------------------------------|------|
 | This Year   | Dim_Date_Current 关系自然筛选 2026-04-12~15   | 直接调用 Base Value |
 | Last Year   | CALCULATE 覆盖 → 2025-04-12~15               | 调用 Base Value + LP 日期覆盖 |
-| YOY         | 计算得出                                       | (This Year - Last Year) / Last Year（ID8 为本期bp - 去年bp 差值） |
+| YOY         | 计算得出                                       | (This Year - Last Year) / Last Year（ID8 为本期原始差值 - 去年原始差值，Cell Display ×10000 转 bp） |
 
 ================================================================================
 6. 格式化显示度量值 — KPIs Overview Cell Display
@@ -882,7 +968,7 @@ KPIs Overview Cell Display =
             SWITCH(
                 __Format,
 
-                // ─── 1. 基础数字格式 ───────────────────────────────────────────
+                // ─── 1. 整数与小数 ───────────────────────────────────────────
                 "integer",                 FORMAT(__Value, "#,##0"),                                    // 1,000
                 "decimal_1dp",             FORMAT(__Value, "#,##0.0"),                                  // 1,000.0
                 "decimal_2dp",             FORMAT(__Value, "#,##0.00"),                                 // 1,000.00
@@ -891,20 +977,37 @@ KPIs Overview Cell Display =
                 "currency",                __CurrencySymbol & FORMAT(__Value, "#,##0"),                 // ¥1,000 / $1,000
                 "currency_decimal_1dp",    __CurrencySymbol & FORMAT(__Value, "#,##0.0"),               // ¥1,000.0
                 "currency_k",              __CurrencySymbol & FORMAT(__Value / 1000, "#,##0") & "k",    // ¥1k / $5k
+                "currency_M_K_Int_0db",
+                    IF(
+                        __Value < 1000,
+                        __CurrencySymbol & FORMAT(__Value, "#,##0"),
+                        IF(
+                            __Value < 1000000,
+                            __CurrencySymbol & FORMAT(__Value / 1000, "#,##0.0") & "K",
+                            __CurrencySymbol & FORMAT(__Value / 1000000, "#,##0.0") & "M"
+                        )
+                    ),                                                                // ¥999 / ¥1.5K / ¥1.5M
 
-                // ─── 3. 百分比格式 ──────────────────────────────────────────
+                // ─── 3. 百分比格式（纯显示，不含正负号）───────────────────────
+                "percent_0dp",             FORMAT(__Value, "#,##0%"),                                   // 15%
                 "percent_1dp",             FORMAT(__Value, "0.0%"),                                     // 40.5%
                 "percent_2dp",             FORMAT(__Value, "0.00%"),                                    // 40.50%
 
                 // ─── 4. 增减百分比 (Delta %，自动添加正负号) ─────────────────
+                "delta_pct_0dp",           IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0%"),        // +15% / -3%
                 "delta_pct_1dp",           IF(__Value > 0, "+", "") & FORMAT(__Value, "0.0%"),          // +14.5% / -3.2%
                 "delta_pct_2dp",           IF(__Value > 0, "+", "") & FORMAT(__Value, "0.00%"),         // +14.50%
 
-                // ─── 5. 增减基点 (Delta BP，区分原始值与转换值) ──────────────
-                // 5.1 __Value 本身已经是基点值 (如 120.5)
+                // ─── 5. 增减基点 ─────────────────────────────────────────────
+                // 5.1 __Value 为小数，需 ×100 转换为 pts（整数），含正号
+                "delta_pts",
+                    IF(ROUND(__Value * 100, 0) > 0, "+", "") & FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts"),
+                                                                                             // +120pts / -80pts / 0pts
+                // 5.2 __Value 为小数，需 ×10000 转换为 bp（整数），含正号
+                "delta_bp",
+                    IF(__Value > 0, "+", "") & FORMAT(__Value * 10000, "#,##0") & "bp",   // +120bp / -80bp
+                // 5.3 __Value 本身已是基点值，保留 1 位小数
                 "delta_bp_1dp",            IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0.0") & "bp",// +120.5bp / -80.0bp
-                // 5.2 __Value 是小数格式，需要乘以 10000 转换为基点 (如 0.012 -> 120bp)
-                "delta_bp",                IF(__Value >= 0, "+", "") & FORMAT(__Value * 10000, "#,##0") & "bp", // +120bp / -80bp
 
                 // ─── 6. 默认兜底格式 ─────────────────────────────────────────
                 FORMAT(__Value, "#,##0.00")                                           // 默认输出两位小数: 1,000.00
@@ -1191,13 +1294,18 @@ _Measures
 
 14.1 Base Value 口径说明（重要）
 ────────────────────────────────────
-- 当前 9 个 SWITCH 分支已全部填充真实口径，底表统一为 summary_d
-- 各指标的业务筛选条件已嵌入分支（page_type / customer_type / framework / channel）
-- 通用筛选条件通过 __BaseFilter_ALL 变量传递（customer_type='ALL' AND page_type="1" + platform + trans_cycle）
+- 当前 9 个 SWITCH 分支已全部填充真实口径，底表混合使用
+- ID 1~6, 9 使用 summary_d；ID 7/8 使用 product_data_d
+- 各指标的业务筛选条件已嵌入分支（page_type / customer_type / framework / channel / mix_msg）
+- 通用筛选条件通过 __BaseFilter_ALL 变量传递（summary_d: customer_type='ALL' AND page_type="1" + platform + trans_cycle）
 - 特殊指标在分支内独立构建筛选器:
-  * ID7/ID8: framework='Acceleration' 分子筛选
-  * ID9: customer_type='NEW' + page_type="2" + channel IN {"直通车","引力魔方"} 分子筛选
-- ID8 派生指标返回 bp 差值（已×100），YOY 行通过 Cell Value 默认逻辑计算同比增长率
+  * ID7/ID8: product_data_d 表，framework='Acceleration' 分子筛选
+    - ID7 & ID8的Acc Cost%部分: 基础筛选 mix_msg is NULL（分子分母均加）
+    - ID8的Acc Net Sales%部分: 无 mix_msg 筛选（分子分母无额外筛选）
+    - product_data_d 无 customer_type / page_type 字段，故不加这两项筛选
+  * ID9: summary_d 表，customer_type='NEW' + page_type="2" + channel IN {"直通车","引力魔方"} 分子筛选
+- ID8 派生指标 = Acceleration Cost% - Acceleration Net Sales%，Base Value 返回原始小数差值
+  Cell Display 层 ×10000 转 bp（delta_bp 格式）；YOY = 本期原始差值 - 去年原始差值
 - ID9 分母 customer_type IN {"EXISTING","NEW"} 对应口径文档"新客+老客"合计
 
 14.2 Platform 单选 + ALL 精确筛选机制
@@ -1281,9 +1389,10 @@ _Measures
 - [ ] 验证：ID4 Cost Rate(Exclude Refund) 百分比正确
 - [ ] 验证：ID5 Net Sales 金额正确
 - [ ] 验证：ID6 ROI 数值正确（分母为 cost_amt 含红包，decimal_1dp 一位小数）
-- [ ] 验证：ID7 Acceleration Cost% 百分比正确（framework='Acceleration' 筛选）
-- [ ] 验证：ID8 ±Acc Cost% vs Net Sales% 显示 bp 格式（+120.5bp / -80.0bp）
-- [ ] 验证：ID8 YOY 行为本期bp - 去年bp 差值（delta_bp_1dp 格式，非增长率）
+- [ ] 验证：ID7 Acceleration Cost% 百分比正确（数据源 product_data_d，mix_msg is NULL + framework='Acceleration' 分子 / 全部 framework 分母）
+- [ ] 验证：ID8 ±Acc Cost% vs Net Sales% 显示 bp 格式（delta_bp：值×10000 转 bp，整数位，如 +1030bp）
+- [ ] 验证：ID8 Acc Cost% 子计算含 mix_msg is NULL，Acc Net Sales% 子计算无 mix_msg（均用 product_data_d）
+- [ ] 验证：ID8 YOY 行为本期原始差值 - 去年原始差值（差值，非增长率，Cell Display ×10000 转 bp）
 - [ ] 验证：ID9 New Customer Cost% 百分比正确（page_type="2"，channel IN {"直通车","引力魔方"}）
 - [ ] 验证：切换币种（RMB→USD），金额类 This Year/Last Year 金额 ×7，YOY 不变
 - [ ] 验证：切换数据口径（T+1→T+15），9 列数据正确响应

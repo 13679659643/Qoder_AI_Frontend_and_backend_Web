@@ -113,8 +113,8 @@
 | **分子** | `cost_amt`（Acceleration 商品花费，即 `framework="Acceleration"`） |
 | **分母** | `cost_amt`（商品表 TTL 花费，所有 framework） |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **分子筛选** | `customer_type="ALL" AND framework="Acceleration" AND page_type="1"` |
-| **分母筛选** | `customer_type="ALL" AND page_type="1"`（全部 framework） |
+| **分子筛选** | 筛mix_msg为空且framework='Acceleration'，再SUM(cost_amt) |
+| **分母筛选** | 先筛mix_msg为空，不限制framework，再SUM(cost_amt) |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
@@ -130,8 +130,8 @@
 | **分子** | `net_sales_amt`（Acceleration 退后销售额，即 `framework="Acceleration"`） |
 | **分母** | `net_sales_amt`（全店 TTL 退后销售额，全部 framework） |
 | **数据底表** | `a05_e2e_paid_media_summary_d` |
-| **分子筛选** | `customer_type="ALL" AND framework="Acceleration" AND page_type="1"` |
-| **分母筛选** | `customer_type="ALL"（全部 framework） AND page_type="1"` |
+| **分子筛选** | 分子：framework='Acceleration'|
+| **分母筛选** | 分母：全部framework；SUM(net_sales_amt) |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
 
@@ -145,10 +145,10 @@
 | **业务定义** | 第二品类的花费占比总花费 vs 零售净销售额占比 |
 | **计算公式** | Acceleration Cost MOB% − Store SLS MOB%（×100 转为 bp） |
 | **指标类型** | **派生指标**，无独立底表取数 |
-| **计算逻辑** | 用 "Acceleration Cost%" 减去 "Acceleration SLS MOB%"，结果乘以 100 转为 basis points（bp） |
+| **计算逻辑** | 用 "Acceleration Cost%" 减去 "Acceleration SLS MOB%"，结果乘以 10000 转为 basis points（bp） |
 | **注意** | 此指标为两个已有指标相减得到，不直接查询底表 |
-| **数据类型** | delta_bp_1dp → 值×100，带正负 bp（基点），保留一位小数 |
-| **数据格式** | `"+#,##0.0'bp';-#,##0.0'bp';0.0'bp'"` |
+| **数据类型** | delta_bp → 值×10000，带正负 bp（基点），保留整数位 |
+| **数据格式** | `"+#,##0'bp';-#,##0'bp';0'bp'"` |
 | **YOY** | 本期bp - 去年bp，区别于传统的YOY，这里是对比本期与去年的bp变化，而不是对比本期与去年的百分比变化 |
 
 ---
@@ -305,9 +305,9 @@
 | **Actual 计算公式** | `SUM(cost_amt[framework="Acceleration"]) / SUM(cost_amt[全部 framework])` |
 | **Target 计算公式** | Month：`acceleration_cost_rate`；Year：`year_acceleration_cost_rate`（按 data_year） |
 | **±Actual vs Target** | Actual - Target |
-| **Actual 数据底表** | `a05_e2e_paid_media_product_data`,筛选条件：`customer_type="ALL" AND page_type="1"` |
+| **Actual 数据底表** | `a05_e2e_paid_media_product_data`,筛选条件：`mix_msg is NULL` |
 | **Target 数据底表** | `a05_e2e_paid_media_fcst_data_m` |
-| **Actual 筛选条件** | `customer_type="ALL" AND page_type="1"` |
+| **Actual 筛选条件** | 筛选条件：`mix_msg is NULL` ，分子：先筛mix_msg为空且framework='Acceleration'，再SUM(cost_amt)；分母:先筛mix_msg为空，不限制framework，再SUM(cost_amt)|
 | **Actual 时间处理** | Month：在所选财月完整日期范围内，分别汇总 `framework="Acceleration"` 的 `cost_amt` 和全部 framework 的 `cost_amt` 后重算占比；Year：在所选财年完整日期范围内，按同一方式汇总分子、分母后重算占比 |
 | **Target 取数逻辑** | Month 取所选财月 `acceleration_cost_rate`；Year 取所选财年 `year_acceleration_cost_rate` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
@@ -324,9 +324,9 @@
 | **Actual 计算公式** | `SUM(net_sales_amt[framework="Acceleration"]) / SUM(net_sales_amt[全部 framework])` |
 | **Target 计算公式** | Month：`acceleration_net_sales_rate`；Year：`year_acceleration_net_sales_rate`（按 data_year） |
 | **±Actual vs Target** | Actual - Target |
-| **Actual 数据底表** | `a05_e2e_paid_media_product_data`,筛选条件：`customer_type="ALL" AND page_type="1"` |
+| **Actual 数据底表** | `a05_e2e_paid_media_product_data`,筛选条件：`framework="Acceleration"` |
 | **Target 数据底表** | `a05_e2e_paid_media_fcst_data_m` |
-| **Actual 筛选条件** | `customer_type="ALL" AND page_type="1"` |
+| **Actual 筛选条件** | 分子：framework='Acceleration'；SUM(net_sales_amt)；分母：全部framework；SUM(net_sales_amt) |
 | **Actual 时间处理** | Month：在所选财月完整日期范围内，分别汇总 `framework="Acceleration"` 的 `net_sales_amt` 和全部 framework 的 `net_sales_amt` 后重算占比；Year：在所选财年完整日期范围内，按同一方式汇总分子、分母后重算占比 |
 | **Target 取数逻辑** | Month 取所选财月 `acceleration_net_sales_rate`；Year 取所选财年 `year_acceleration_net_sales_rate` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
@@ -383,7 +383,7 @@
 | **Target 数据底表** | `a05_e2e_paid_media_fcst_data_m`（预测专用表，按财月/财年粒度取数） |
 | **通用筛选条件** | `customer_type="ALL" AND page_type="1"`（除非指标另有说明） |
 | **RTB 渠道指标** | 使用 `customer_type="ALL" AND channel_type="RTB" AND page_type="1"` |
-| **Acceleration 品类** | 分子需额外加 `framework="Acceleration"` 筛选，数据源 `a05_e2e_paid_media_product_data` |
+| **Acceleration 品类** | 数据源 `a05_e2e_paid_media_product_data`；分子加 `framework="Acceleration"`，分母移除 framework 筛选（全部 framework）；ID17（Acceleration Cost%）额外基础筛选 `mix_msg is NULL`（分子分母均加），ID18（Acceleration Net Sales%）无 `mix_msg` 筛选 |
 | **Cost Rate 系数** | Cost Rate 的 Actual 需乘以 1.13 再除以 1.06 |
 | **红包/返佣返货金** | Cost (Exclude Refund) ACH% 使用 `SUM(cost_amt)-SUM(red_packet)-SUM(rebate)` |
 | **日期切片器** | `Slicer_Time_Frame`：`TimeFrame_ID`（时间粒度 Month/Year），`TimeFrame_Value`（展示值），所选时间区间 `data_date ∈ [TimeFrame_Min, TimeFrame_Max]` |
@@ -418,10 +418,10 @@
 | 4 | Cost ACH%(Exclude Refund) | `(SUM(cost_amt)-SUM(red_packet)-SUM(rebate)) / Cost Target` | `customer_type="ALL" AND page_type="1"` | percent_1dp |
 | 5 | Net Sales ACH% | `SUM(net_sales_amt) / Net Sales Target` | `customer_type="ALL" AND page_type="1"` | percent_1dp |
 | 6 | Demand Sales ACH% | `SUM(sales_amt) / Demand Sales Target` | `customer_type="ALL" AND page_type="1"` | percent_1dp |
-| 7 | Acceleration Cost% | `SUM(cost_amt[framework="Acceleration"]) / SUM(cost_amt)` | `customer_type="ALL" AND page_type="1"`（数据源 `a05_e2e_paid_media_product_data`） | percent_1dp |
-| 8 | Acceleration Net Sales% | `SUM(net_sales_amt[framework="Acceleration"]) / SUM(net_sales_amt)` | `customer_type="ALL" AND page_type="1"`（数据源 `a05_e2e_paid_media_product_data`） | percent_1dp |
+| 7 | Acceleration Cost% | `SUM(cost_amt[framework="Acceleration"]) / SUM(cost_amt[全部 framework])` | 基础筛选 `mix_msg is NULL`；分子加 `framework="Acceleration"`，分母全部 framework（数据源 `a05_e2e_paid_media_product_data`） | percent_1dp |
+| 8 | Acceleration Net Sales% | `SUM(net_sales_amt[framework="Acceleration"]) / SUM(net_sales_amt[全部 framework])` | 分子 `framework="Acceleration"`，分母全部 framework（无 `mix_msg` 筛选，数据源 `a05_e2e_paid_media_product_data`） | percent_1dp |
 | 9 | Media Contribution to New Customer Acquisition% | `媒体新客数(media_member_cnt) / 全店新客数(count distinct user_id)` | 分子：`customer_type="ALL" AND page_type="1"`；分母：`a03_e2e_customer_data_m` 按 platform, shop_info_id 去重 | percent_1dp |
-| 10 | Cost Per New Acquisition | `SUM(media_cost_amt) / SUM(media_member_cnt)`（先按 platform + data_year + data_month 取 MAX 再 SUM） | `customer_type="ALL" AND page_type="1"` | currency_decimal_1dp |
+| 10 | Cost Per New Acquisition | `SUM(media_cost_amt) / SUM(media_member_cnt)`（先按 platform + data_year + data_month 去重再 SUM） | `customer_type="ALL" AND page_type="1"` | currency_decimal_1dp |
 
 ### Target 行（`__Indicator = "Target"`）
 
