@@ -255,7 +255,6 @@ Category Growth Active IDs =
                     ALL(Dim_Date_Current),
                     Dim_Date_Current[数据日期] = __Current_End
                 ),
-            NOT ISBLANK(a05_e2e_paid_media_product_data_d[cost_amt]),
             __PlatformFilter,
             __TransCycleFilter,
             __LevelFilter
