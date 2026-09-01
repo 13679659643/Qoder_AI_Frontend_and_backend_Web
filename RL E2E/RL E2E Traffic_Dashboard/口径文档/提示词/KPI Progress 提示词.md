@@ -135,9 +135,27 @@ Step 1：在所选时间范围内筛选 `net_pay_amt > 0` 的 `user_id`（`data_
 
 
 ## 测试阶段，第十轮提示：
-11、根据口径文档中的子模块三：New Acquisition KPI Trend和子模块四：Category Growth KPI Trend，调整
+1、根据口径文档中的子模块三：New Acquisition KPI Trend和子模块四：Category Growth KPI Trend，调整
 D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPI_Trend\KPI_Trend_solution.md解决方案，一切以现有的口径文档为准，不懂就问。比如，New Customer No.的数据类型变为了integer_M_K_Int_0db；
 2、记住不要踩之前的坑，犯过的错误不能再犯，比如，DAX 实现：`SUMX(SUMMARIZE(..., "__Value", MAX([字段])), [__Value])`，[__Value]才是引用列的写法。
 3、筛选器保持限制，这是柱形图的专有写法，使用另外的一模一样结构的筛选器，只是表名不一样，用处在于，不和其他模块的日期筛选产生交叉筛选。你可以理解为这部分的筛选器是独立的，不受全局日期的影响，只作用于这一部分柱形。
 4、在最终结果的时候判断Day/Week 留空 ：仅支持完整财月、财季、财年；这样就不用细分到分子分母上了，因为Day/Week的时候，该指标无意义。
 5、a05_e2e_paid_media_product_data改为a05_e2e_paid_media_product_data_d。
+
+## 测试阶段，第十一轮提示：
+再次调整这个解决方案，D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS\KPIs_matrix_solution.md；
+其中有关新客Step1+Step2 合并区间等价实现，我忽略了TimeFrame_ID为Quarter、Year的情况，Slicer_Time_Frame_Min维度表已经给出了具体的First_Fiscal_Month、First_Fiscal_Month_Min等字段，data_date ∈ [__TimeMin, __TimeMax]改为`data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]`
+Step1+Step2 合并区间等价实现具体逻辑梳理：
+data_date ∈ start_period AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
+（start_period 是 slicer 区间的子集，合并区间后单一 CALCULATE 即可）
+`data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]`，所选时间范围的第一个财月,Slicer_Time_Frame_Min维度表已经给出了具体的First_Fiscal_Month、First_Fiscal_Month_Min等字段，只关注Slicer_Time_Frame_Min值,比如2026-09，只关注2023-09；2026 Q2，只关注2026-04；财年2026，对应最后一个财月只关注2026-01，然后都转化为具体的天维度范围；
+综合上述信息，修改解决方案，D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS\KPIs_matrix_solution.md；看看涉及到的改动有几处。
+
+
+## 测试阶段，第十二轮提示：
+根据口径文档中的子模块五：KPI by Platform，调整
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPI by Platform\KPI by Platform_matrix_solution.md解决方案，一切以现有的口径文档为准，不懂就问。
+本方案的日期表是什么就用什么，记住不要踩之前的坑，犯过的错误不能再犯，涉及a05_e2e_paid_media_product_data改为a05_e2e_paid_media_product_data_d、data_date ∈ [__TimeMin, __TimeMax]改为`data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]`；
+参考数据格式模版：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\Cell Display模板文件.md
+在本次方案中新增所有拓展类型，便于后续拓展。
+在最终结果的时候判断Day/Week 留空 ：仅支持完整财月、财季、财年；这样就不用细分到分子分母上了，因为Day/Week的时候，该指标无意义。

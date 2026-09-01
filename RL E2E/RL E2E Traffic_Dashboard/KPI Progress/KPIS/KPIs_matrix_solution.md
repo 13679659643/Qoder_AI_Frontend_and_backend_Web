@@ -125,7 +125,7 @@ Dim_ColMetric_KPIs（断开维度，列头）
 | 筛选器                    | 作用方式                                   | DAX 处理                            |
 | ------------------------- | ------------------------------------------ | ----------------------------------- |
 | Slicer_Time_Frame         | 断开维度，SELECTEDVALUE 读取 TimeFrame_ID  | 判断时间粒度（Day/Week 时部分指标留空） |
-| Slicer_Time_Frame_Min     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Min / TimeFrame_Min_LY | `data_date >= __TimeMin`（本期）；`TimeFrame_Min_LY` 用于 vs LY |
+| Slicer_Time_Frame_Min     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Min / TimeFrame_Min_LY / First_Fiscal_Month_Min / First_Fiscal_Month_Max / First_Fiscal_Month_Min_LY / First_Fiscal_Month_Max_LY | `data_date >= __TimeMin`（本期）；`TimeFrame_Min_LY` 用于 vs LY；`First_Fiscal_Month_Min/Max` 用于新客 Step2 start_period（本期）；`First_Fiscal_Month_Min_LY/Max_LY` 用于新客 Step2 start_period（vs LY） |
 | Slicer_Time_Frame_Max     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max / TimeFrame_Max_LY | `data_date <= __TimeMax`（本期）；`TimeFrame_Max_LY` 用于 vs LY |
 | Slicer_Platform_Selection | 1:N 关系，模型自动筛选                     | 无需显式处理                        |
 | Slicer_Store_Name         | 1:N 关系，模型自动筛选                     | 无需显式处理                        |
@@ -187,6 +187,12 @@ KPIs Current Base Value =
     // ── 时间筛选：本期 ──
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+
+    // ── 第一财月区间（新客 Step2 的 start_period）──
+    //   月=自身 / 季=Q1→01,Q2→04,Q3→07,Q4→10 / 年=01
+    //   Slicer_Time_Frame_Min 维度表已扩展 First_Fiscal_Month 系列
+    VAR __FirstFiscalMonthMin = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Min])
+    VAR __FirstFiscalMonthMax = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max])
 
     // ── 时间粒度判断 ──
     VAR __TimeFrameID = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])
@@ -266,7 +272,8 @@ KPIs Current Base Value =
 
     // ═══════════════════════════════════════
     // 全店新客数：a03_e2e_customer_data_m
-    // 合并区间筛选：data_date ∈ [__TimeMin, __TimeMax]
+    // 合并区间筛选：data_date ∈ [__FirstFiscalMonthMin, __FirstFiscalMonthMax]
+    //   （start_period = 第一财月，是 slicer 区间的子集，合并区间后单一 CALCULATE 即可）
     //   AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
     // DISTINCTCOUNT(user_id)
     // Day/Week 时为空
@@ -277,8 +284,8 @@ KPIs Current Base Value =
             BLANK(),
             CALCULATE(
                 DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[data_date] >= __TimeMin,
-                'a03_e2e_customer_data_m'[data_date] <= __TimeMax,
+                'a03_e2e_customer_data_m'[data_date] >= __FirstFiscalMonthMin,
+                'a03_e2e_customer_data_m'[data_date] <= __FirstFiscalMonthMax,
                 'a03_e2e_customer_data_m'[net_pay_amt] > 0,
                 'a03_e2e_customer_data_m'[is_member] = 0,
                 'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0
@@ -388,6 +395,9 @@ KPIs vsLP Base Value =
     // ── 时间筛选：去年同期（直接读取日期表内置 LY 字段）──
     VAR __LPTimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min_LY])
     VAR __LPTimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LY])
+    // ── 第一财月区间（去年同期，新客 Step2 的 start_period）──
+    VAR __LPFirstFiscalMonthMin = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Min_LY])
+    VAR __LPFirstFiscalMonthMax = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max_LY])
     // ── 时间粒度判断 ──
     VAR __TimeFrameID = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])
     VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
@@ -460,6 +470,9 @@ KPIs vsLP Base Value =
 
     // ═══════════════════════════════════════
     // 全店新客数：a03_e2e_customer_data_m（去年同期）
+    // 合并区间筛选：data_date ∈ [__LPFirstFiscalMonthMin, __LPFirstFiscalMonthMax]
+    //   （start_period = 去年同期第一财月）
+    //   AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
     // ═══════════════════════════════════════
     VAR __TotalNewCustCnt = 
         IF(
@@ -467,8 +480,8 @@ KPIs vsLP Base Value =
             BLANK(),
             CALCULATE(
                 DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[data_date] >= __LPTimeMin,
-                'a03_e2e_customer_data_m'[data_date] <= __LPTimeMax,
+                'a03_e2e_customer_data_m'[data_date] >= __LPFirstFiscalMonthMin,
+                'a03_e2e_customer_data_m'[data_date] <= __LPFirstFiscalMonthMax,
                 'a03_e2e_customer_data_m'[net_pay_amt] > 0,
                 'a03_e2e_customer_data_m'[is_member] = 0,
                 'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0
@@ -1619,7 +1632,15 @@ Target 缺失处理：
 
 - 数据底表：`a03_e2e_customer_data_m`
 - Step1 + Step2 交集（合并区间简化实现）：
-  `data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0`
+  - Step1：在所选时间范围内筛选 `net_pay_amt > 0` 的 `user_id`（`data_date ∈ [__TimeMin, __TimeMax]`，`is_member = 0`，`net_pay_amt > 0`）
+  - Step2：缩小顾客范围至 `lp_12m_net_pay_amt = 0`（`data_date ∈ start_period`）
+  - start_period = 第一财月，是 slicer 区间的子集，合并区间后单一 CALCULATE 即可
+  - **合并区间等价实现**：`data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0`
+- 第一财月区间由 `Slicer_Time_Frame_Min` 维度表提供（`First_Fiscal_Month`、`First_Fiscal_Month_Min`、`First_Fiscal_Month_Max`）：
+  - 月 = 自身（如 2026-09 → 2026-09）
+  - 季 = Q1→01, Q2→04, Q3→07, Q4→10（如 2026 Q2 → 2026-04）
+  - 年 = 01（如 财年 2026 → 2026-01）
+- vs LY 时使用 `First_Fiscal_Month_Min_LY` / `First_Fiscal_Month_Max_LY`（去年同期第一财月）
 - 聚合方式：`DISTINCTCOUNT(user_id)`
 - 涉及 Metric_ID：7, 8, 9, 16, 17, 18
 
@@ -1628,7 +1649,7 @@ Target 缺失处理：
 本模块与 Category Growth/KPI_Breakdown 共用筛选器：
 
 - **Slicer_Time_Frame**：断开维度，SELECTEDVALUE 读取 TimeFrame_ID（时间粒度）
-- **Slicer_Time_Frame_Min/Max**：断开维度，SELECTEDVALUE 读取本期时间范围（TimeFrame_Min/Max）及 LY 时间范围（TimeFrame_Min_LY/TimeFrame_Max_LY，财历映射）
+- **Slicer_Time_Frame_Min/Max**：断开维度，SELECTEDVALUE 读取本期时间范围（TimeFrame_Min/Max）及 LY 时间范围（TimeFrame_Min_LY/TimeFrame_Max_LY，财历映射）；Slicer_Time_Frame_Min 另提供第一财月系列字段（First_Fiscal_Month_Min/Max 本期、First_Fiscal_Month_Min_LY/Max_LY 去年同期），用于新客 Step2 的 start_period 筛选
 - **Slicer_Platform_Selection**：1:N 关系，模型自动筛选，不在 DAX 中写显式筛选
 - **Slicer_Store_Name**：1:N 关系，模型自动筛选，不在 DAX 中写显式筛选
 - **Slicer_Currency_Selection**：断开维度，**仅在 Cell Value 层换算**：金额类指标（`Metric_IsCurrencyAmount=TRUE`）`DIVIDE([Base Value], Currency_ExchangeRate)`（除法），非金额类指标不受汇率影响
@@ -1707,7 +1728,7 @@ GROUP BY platform, shop_id, data_month_name;
 -- 分母 SQL
 SELECT COUNT(DISTINCT user_id) AS TotalNewCust
 FROM a03_e2e_customer_data_m
-WHERE data_date BETWEEN '__TimeMin' AND '__TimeMax'
+WHERE data_date BETWEEN '__FirstFiscalMonthMin' AND '__FirstFiscalMonthMax'
   AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0;
 
 -- ± Accel cost MOB% vs. store SLS MOB%（#13）
@@ -1726,7 +1747,7 @@ WHERE data_date BETWEEN '__TimeMin' AND '__TimeMax';
 -- New Customer No（#16）
 SELECT COUNT(DISTINCT user_id) AS NewCustomerNo
 FROM a03_e2e_customer_data_m
-WHERE data_date BETWEEN '__TimeMin' AND '__TimeMax'
+WHERE data_date BETWEEN '__FirstFiscalMonthMin' AND '__FirstFiscalMonthMax'
   AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0;
 
 -- Acceleration SLS（#19）金额类，Cell Value 层÷汇率（验证时对比 Cell Value）

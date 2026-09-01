@@ -169,7 +169,7 @@
 | **分子筛选条件** | `customer_type='ALL' AND page_type="1"`；Month、Quarter、Year 先按 platform、shop_id、data_month_name(包含data_year + data_month属性) 取 `MAX(media_member_cnt)`，再对所选财月 `SUM`。仅支持完整财月、财季、财年，Slicer_Time_Frame[TimeFrame_ID] in ("Day","Week")时不考虑，为空。 |
 | **分母** | `count(distinct user_id)`（全店新客数，`a03_e2e_customer_data_m`） |
 | **分母筛选条件** | Step1：所选时间范围内 `SUM(net_pay_amt) > 0 AND is_member = 0`（`data_date = 所选时间范围`）；Step2：缩小至 `start_period` 往前推 12 个月 `lp_12m_net_pay_amt = 0`（`data_date = 所选时间范围 start_period`）；两步交集。
-技术实现直接等价于单一筛选：data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
+技术实现直接等价于单一筛选： data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
 | **数据底表（分子）** | `a05_e2e_paid_media_summary_d` |
 | **数据底表（分母）** | `a03_e2e_customer_data_m` |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
@@ -206,7 +206,7 @@
 | **Target 数据底表** | `a05_e2e_paid_media_fcst_data_m`，日期字段 `data_date` |
 | **Actual 分子筛选条件** | `customer_type='ALL' AND page_type="1"`；Month、Quarter、Year 先按 platform、shop_id、data_month_name(包含data_year + data_month属性) 取 `MAX(media_member_cnt)`，再对所选财月 `SUM`。仅支持完整财月、财季、财年，Slicer_Time_Frame[TimeFrame_ID] in ("Day","Week")时不考虑，为空。 |
 | **Actual 分母筛选条件** | Step1：所选时间范围内 `SUM(net_pay_amt) > 0 AND is_member = 0`（`data_date = 所选时间范围`）；Step2：缩小至 `start_period` 往前推 12 个月 `lp_12m_net_pay_amt = 0`（`data_date = 所选时间范围 start_period`）；两步交集。
-技术实现直接等价于单一筛选：data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
+技术实现直接等价于单一筛选： data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
 | **Target 取数逻辑** | Month和Quarter使用platform、shop_id、data_month_name维度分组聚合，Year使用platform、shop_id、data_year维度分组聚合；Month 取所选财月 `SUM(media_new_customer_cnt) / SUM(new_customer_cnt)`；Quarter 汇总所选财季各财月 `SUM(media_new_customer_cnt) / SUM(new_customer_cnt)`；Year 按 `data_year` 取 `MAX(year_media_new_customer_contribution_rate)` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
@@ -370,7 +370,7 @@
 | **计算公式** | `COUNT(DISTINCT user_id)`（全店新客） |
 | **统计字段** | `user_id` |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | Step1：在所选时间范围内筛选 `SUM(net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，`SUM(net_pay_amt) > 0`）；Step2：缩小顾客范围至 `lp_12m_net_pay_amt = 0`（`data_date = 所选时间范围 start_period`）；相当于取 Step1 和 Step2 的交集，最后 `COUNT(DISTINCT user_id)`；技术实现直接等价于单一筛选：data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
+| **筛选条件** | Step1：在所选时间范围内筛选 `SUM(net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，`SUM(net_pay_amt) > 0`）；Step2：缩小顾客范围至 `lp_12m_net_pay_amt = 0`（`data_date = 所选时间范围 start_period`）；相当于取 Step1 和 Step2 的交集，最后 `COUNT(DISTINCT user_id)`；技术实现直接等价于单一筛选： data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
 | **聚合粒度** | `data_date = 所选时间范围`，按 `platform, shop_info_id` 分组；Month 按财月、`platform` 对 `user_id` 去重计数；Quarter、Year 及 `Platform=ALL` 去重范围复用 Customer Dashboard 同 Timeframe、同 Period 逻辑 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
@@ -561,7 +561,7 @@
 | **计算公式** | `COUNT(DISTINCT user_id)`（全店新客，趋势图） |
 | **统计字段** | `user_id` |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | Step1：在趋势图所选 Period 内筛选 `SUM(net_pay_amt) > 0` 的 `user_id`（`data_date = 趋势图所选 Period范围`，`is_member = 0`）；Step2：缩小顾客范围至所选 Period 的 `start_period` 往前推 12 个月 `lp_12m_net_pay_amt = 0`（`data_date = 趋势图所选 Period范围 的 start_period`）；两步交集，技术实现直接等价于单一筛选：data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
+| **筛选条件** | Step1：在趋势图所选 Period 内筛选 `SUM(net_pay_amt) > 0` 的 `user_id`（`data_date = 趋势图所选 Period范围`，`is_member = 0`）；Step2：缩小顾客范围至所选 Period 的 `start_period` 往前推 12 个月 `lp_12m_net_pay_amt = 0`（`data_date = 趋势图所选 Period范围 的 start_period`）；两步交集，技术实现直接等价于单一筛选： data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
 | **聚合粒度** | 按趋势图所选 Period 及 `platform`、`shop_info_id` 对 `user_id` 去重计数； |
 | **数据类型** | integer_M_K_Int_0db → 值 < 1,000        → 千分位整数：999;1,000 ≤ 值 < 1M   → K 单位（1位小数）：1.5K;值 ≥ 1,000,000    → M 单位（1位小数）：1.5M; |
 | **数据格式** | dax```IF( __Value < 1000,FORMAT(__Value, "#,##0"),IF(__Value < 1000000,FORMAT(__Value / 1000, "#,##0.0") & "K",FORMAT(__Value / 1000000, "#,##0.0") & "M")), // 999\1.5K¥1.5M; ```|
@@ -575,7 +575,7 @@
 | **指标名称** | New Customer% / 新客占比 |
 | **业务定义** | 新客占比趋势 |
 | **计算公式** | New Customer No / TTL Buyers |
-| **分子** | `COUNT(DISTINCT user_id)`（全店新客数，按 `platform, shop_info_id` 去重）：两步交集，技术实现直接等价于单一筛选：data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
+| **分子** | `COUNT(DISTINCT user_id)`（全店新客数，按 `platform, shop_info_id` 去重）：两步交集，技术实现直接等价于单一筛选： data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
 | **分母** | `COUNT(DISTINCT user_id)`（全部买家，`data_date = 所选时间范围`，`SUM(net_pay_amt) > 0 AND is_member = 0`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | 分子：见全店新客判定（Step1 ∩ Step2）；分母：`data_date = 所选时间范围` `COUNT(DISTINCT user_id) WHERE SUM(net_pay_amt) > 0 AND is_member = 0`。按 Customer Dashboard 同 Timeframe、同 Period 及 Platform 范围分别对 `user_id` 去重后重算 |
@@ -595,7 +595,7 @@
 | **分子筛选条件** | `customer_type='ALL' AND page_type="1"`；Month、Quarter、Year 先按 platform、shop_id、data_month_name(包含data_year + data_month属性) 取 `MAX(media_member_cnt)`，再对所选财月 `SUM`。仅支持完整财月、财季、财年，Slicer_Time_Frame[TimeFrame_ID] in ("Day","Week")时不考虑，为空。 |
 | **分母** | `COUNT(DISTINCT user_id)`（全店新客数，`a03_e2e_customer_data_m`，按 `platform, shop_info_id` 去重） |
 | **分母筛选条件** | 两步交集。
-技术实现直接等价于单一筛选：data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
+技术实现直接等价于单一筛选： data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
 | **数据底表（分子）** | `a05_e2e_paid_media_summary_d` |
 | **数据底表（分母）** | `a03_e2e_customer_data_m` |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
@@ -715,7 +715,7 @@
 | **分子筛选条件** | `customer_type='ALL' AND page_type="1"`；Month、Quarter、Year 先按 platform、shop_id、data_month_name(包含data_year + data_month属性) 取 `MAX(media_member_cnt)`，再对所选财月 `SUM`。仅支持完整财月、财季、财年，Slicer_Time_Frame[TimeFrame_ID] in ("Day","Week")时不考虑，为空。 |
 | **分母** | `COUNT(DISTINCT user_id)`（全店新客数，`a03_e2e_customer_data_m`，按 `platform, shop_info_id` 去重） |
 | **分母筛选条件** | Step1：所选时间范围内 `SUM(net_pay_amt) > 0 AND is_member = 0`（`data_date = 所选时间范围`）；Step2：缩小至 `start_period` 往前推 12 个月 `lp_12m_net_pay_amt = 0`（`data_date = 所选时间范围 start_period`）；两步交集。
-技术实现直接等价于单一筛选：data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
+技术实现直接等价于单一筛选： data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
 | **数据底表（分子）** | `a05_e2e_paid_media_summary_d` |
 | **数据底表（分母）** | `a03_e2e_customer_data_m` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |

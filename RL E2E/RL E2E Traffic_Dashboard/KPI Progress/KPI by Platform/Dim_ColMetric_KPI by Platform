@@ -21,15 +21,15 @@ Dim_ColMetric_KPI by Platform =
 //   This Year 与 Last Year 行统一使用 Metric_ColorDefault（#5f6165 深灰色）
 //
 // 汇率转换标记：
-//   Metric_IsCurrencyAmount = TRUE  → 金额类指标，切换币种时乘以汇率
-//   Metric_IsCurrencyAmount = FALSE → 比率/计数类指标，不受汇率影响
+//   IsCurrencyAmount = TRUE  → 金额类指标，切换币种时乘以汇率
+//   IsCurrencyAmount = FALSE → 比率/计数类指标，不受汇率影响
 // ========================================
 DATATABLE(
     "Metric_ID",              INTEGER,    // 主键 1~21
     "Metric_Name",            STRING,     // 列标题显示名称
     "Metric_Sort",            INTEGER,    // 排序值（起始10，步长10，便于插入）
     "Metric_Format",          STRING,     // 行格式（因 vs LP 与 YOY 视作独立指标，统一格式定义）
-    "Metric_IsCurrencyAmount", BOOLEAN,   // 是否金额类指标（需要汇率转换）
+    "IsCurrencyAmount", BOOLEAN,   // 是否金额类指标（需要汇率转换）
     "Metric_ColorPositive",   STRING,     // YOY 正值颜色
     "Metric_ColorNegative",   STRING,     // YOY 负值颜色
     "Metric_ColorZero",       STRING,     // YOY 零值颜色
