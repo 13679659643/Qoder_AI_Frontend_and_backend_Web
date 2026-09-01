@@ -132,3 +132,12 @@ Step 1：在所选时间范围内筛选 `net_pay_amt > 0` 的 `user_id`（`data_
 | **Target 计算公式** | `100%`（固定值） |
 | **±Actual vs Target** | Actual - Target |
 所以最终根据口径文档得出，#3 = Actual - 100%
+
+
+## 测试阶段，第十轮提示：
+11、根据口径文档中的子模块三：New Acquisition KPI Trend和子模块四：Category Growth KPI Trend，调整
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPI_Trend\KPI_Trend_solution.md解决方案，一切以现有的口径文档为准，不懂就问。比如，New Customer No.的数据类型变为了integer_M_K_Int_0db；
+2、记住不要踩之前的坑，犯过的错误不能再犯，比如，DAX 实现：`SUMX(SUMMARIZE(..., "__Value", MAX([字段])), [__Value])`，[__Value]才是引用列的写法。
+3、筛选器保持限制，这是柱形图的专有写法，使用另外的一模一样结构的筛选器，只是表名不一样，用处在于，不和其他模块的日期筛选产生交叉筛选。你可以理解为这部分的筛选器是独立的，不受全局日期的影响，只作用于这一部分柱形。
+4、在最终结果的时候判断Day/Week 留空 ：仅支持完整财月、财季、财年；这样就不用细分到分子分母上了，因为Day/Week的时候，该指标无意义。
+5、a05_e2e_paid_media_product_data改为a05_e2e_paid_media_product_data_d。
