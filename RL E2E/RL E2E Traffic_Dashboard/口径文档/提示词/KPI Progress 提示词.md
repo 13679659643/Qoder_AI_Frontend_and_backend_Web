@@ -1,4 +1,4 @@
-第一轮提示词:
+## 第一轮提示词:
 在RL E2E\RL E2E Traffic_Dashboard\维度复用目录下，我已经完成了一些维度表的设计工作，可服用的如下，以及设计表的DAX语句、SQL语句：
 1、事实表：a05_e2e_paid_media_summary_d；
 2、日期筛选器，Slicer_Time_Frame_Min和Slicer_Time_Frame_Max，与事实表断开维度，用于页面上的Timeframe(Day\Week\Month\Quarter\Year),对应不同的TimeFrame_Value，需要把年月季周都转化为日，去筛选a05_e2e_paid_media_summary_d表中的data_date字段。
@@ -22,20 +22,20 @@
 9、KPI by Platform Cell SVG Icon只关注YOY%指标，其他指标不关注SVG Icon。SVG Icon就使用KPI Breakdown Cell SVG Icon中的图标。
 10、一切口径以指标口径文档RL E2E\RL E2E Traffic_Dashboard\口径文档\KPI Progress.md中的子模块五：KPI by Platform部分为准，不懂就问。
 
-第二轮提示：
+## 第二轮提示：
 sql测试参数本期时间为：2026-01-01~2026-07-14；则上期时间为2025-01-01~2025-07-14；
 shop_name的所有分组，包括所有店铺的group by;trans_cycle:T+1;
 pbi指标：15个指标，三个为一组单验证本期、同期、YOY%。共计五组SQL验证语句，以及一组Total行的验证语句。
 给出完整SQL语句，mysql语法。
 输出在RL E2E\RL E2E Traffic_Dashboard\KPI Progress目录下。
 
-第三轮提示：
+## 第三轮提示：
 参考这个文件：RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPI by Platform\Dim_ColMetric_KPI by Platform；
 根据口径文档中的子模块一和子模块二，即1~24个指标，生成Dim_ColMetric_KPIs，指标维度文件，
 输出在RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS目录下，严格遵守指标文档的数据格式和数据类型，以及指标命名，比如：1. Media Cost Rate — 媒体花费占比，Metric_Name就是： Media Cost Rate；
 不懂就问。
 
-第四轮提示:
+## 第四轮提示:
 背景：正在开发PowerBI看板，KPI by Platform是整个看板的一个子模块，对应的解决方案文件我已经写好了，参考：RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPI by Platform\KPI by Platform_matrix_solution.md;接下来我要开发其他模块。
 KPI 计算框架解决方案 — 多指标 SWITCH 分发模式需求：
 1、24个指标的数据格式、类型、颜色、是否金额类指标（需要汇率转换）参考RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS\Dim_ColMetric_KPIs文件：展示使用Dim_ColMetric_KPIs维度表的Metric_Name字段，使用Metric_ID进行路由分发。
@@ -49,7 +49,7 @@ KPI 计算框架解决方案 — 多指标 SWITCH 分发模式需求：
 7、由于是一个看板的不同模块，所以筛选器是公用的，具体用法和RL E2E\RL E2E Traffic_Dashboard\Category Growth\KPI_Breakdown_matrix_solution解决方案中的筛选器用法一致。比如：Currency筛选器，断开连接，仅金额类指标除以汇率固定为7；
 在RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS目录下输出解决方案。
 
-第五轮提示：
+## 第五轮提示：
 KPI Trend计算框架解决方案 — 多指标 需求：
 1、指标口径文档RL E2E\RL E2E Traffic_Dashboard\口径文档\KPI Progress.md的子模块三：New Acquisition KPI Trend和子模块四：Category Growth KPI Trend部分，即25-30，共六个指标口径，一切以口径文档为准，不懂就问。
 2、可以参考：RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS\KPIs_matrix_solution.md解决方案，但是没那么复杂，我只适用于柱形图和趋势图的展示，所以不需要矩阵的路由分发，单独写每个度量就行，只需要包括以下内容就行：
@@ -71,3 +71,43 @@ KPI_Trend_solution 解决方案：
 > type: 度量值开发
 > naming: 遵循 dax-style.md 规范
 > 口径来源: KPI Progress.md（最新口径，2026-07-03 同步）
+
+
+## 测试阶段，第六轮提示：
+涉及调整的指标口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\口径文档\指标清单-for辜涛_6_29.xlsx
+参考格式：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Operation\口径文档\Overview.md中板块二：Growth Overview-Target Achievement部分。
+涉及目标表跨年季月的指标参考这个文件的格式：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\Customer KPI.md中的TAR ACH%部分。
+按照口径文档的内容，更新我的以下两个指标文件：
+1、D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\口径文档\KPI Progress.md
+2、D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\口径文档\New Acquisition.md
+
+## 测试阶段，第七轮提示：
+1、store_name和Platform一对多事实表，模型会自动筛选事实表，不需要显示dax处理。
+2、Slicer_Time_Frame中TimeFrame_ID作为前端展示的时间粒度，TimeFrame_Value为展示值，slicer所选时间区间（data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]）为计算指标的时间范围。Slicer_Time_Frame、Slicer_Time_Frame_Min、Slicer_Time_Frame_Max三个筛选器，分别对应前端的TimeFrame_ID、TimeFrame_Min、TimeFrame_Max。
+3、Target 的指标计算会存在根据Slicer_Time_Frame[TimeFrame_ID]时间粒度的不同，使用不同的字段，本次方案存在platform、shop_id和data_month_name维度，季度和月份同理，季度等于包含月份的汇总，Month和Quarter使用platform、shop_id、data_month_name维度分组聚合，Year使用platform、shop_id、data_year维度分组聚合；所有涉及分组聚合的时候，使用SUMX+SUMMARIZE结构，推荐以下写法，语义准确，性能更好，先按维度分组，再对指标列做聚合，参考以下dax实现方式：
+```dax
+VAR __CostAmtTarget =
+CALCULATE(
+    SUMX(
+        SUMMARIZE(
+            'a05_e2e_paid_media_fcst_data_m',
+            'a05_e2e_paid_media_fcst_data_m'[platform],
+            'a05_e2e_paid_media_fcst_data_m'[shop_id],
+            'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+            "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[cost_amt])   -- 别名 + 聚合
+        ),
+        "__Value"
+    ),
+    'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+    'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+)
+```
+4、新客判定 = Step1 + Step2 交集（合并区间简化实现）:
+Step 1：在所选时间范围内筛选 `net_pay_amt > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，`net_pay_amt > 0`）；Step 2：缩小顾客范围至 `lp_12m_net_pay_amt = 0`（`data_date = 所选时间范围 start_period`）；相当于取 Step 1 和 Step 2 的交集，最后 count(distinct user_id)
+由于 start_period（第一个财月）是 slicer 区间的子集，技术实现上可"合并区间"——用于判断 `lp_12m_net_pay_amt = 0` 的行一定也在 slicer 区间内。因此技术实现直接等价于单一筛选：data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
+5、涉及到时间粒度判断的指标，比如，Target和新客的计算等等，仅支持完整财月、财季、财年，Slicer_Time_Frame[TimeFrame_ID] in ("Day","Week")时不考虑，指标的分子分母如果涉及到了，不管单个in ("Day","Week")还是都in ("Day","Week")，整个指标都为空。且计算逻辑基本都是先MAX再SUM，即分组聚合。
+6、
+
+
+5、参考数据格式模版：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\Cell Display模板文件.md在本次方案中新增一些拓展类型，便于后续拓展。
