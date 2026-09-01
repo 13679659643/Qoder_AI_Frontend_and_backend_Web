@@ -84,6 +84,7 @@ D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer
 
 ## 测试阶段，第七轮提示：
 1、store_name和Platform一对多事实表，模型会自动筛选事实表，不需要显示dax处理。
+KPI Progress口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\口径文档\KPI Progress.md,这是我已经总结好的，以这个为准，不要查看execl。本次方案只涉及到子模块一：KPIs和子模块二：Performance Indicators。
 2、Slicer_Time_Frame中TimeFrame_ID作为前端展示的时间粒度，TimeFrame_Value为展示值，slicer所选时间区间（data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]）为计算指标的时间范围。Slicer_Time_Frame、Slicer_Time_Frame_Min、Slicer_Time_Frame_Max三个筛选器，分别对应前端的TimeFrame_ID、TimeFrame_Min、TimeFrame_Max。
 3、Target 的指标计算会存在根据Slicer_Time_Frame[TimeFrame_ID]时间粒度的不同，使用不同的字段，本次方案存在platform、shop_id和data_month_name维度，季度和月份同理，季度等于包含月份的汇总，Month和Quarter使用platform、shop_id、data_month_name维度分组聚合，Year使用platform、shop_id、data_year维度分组聚合；所有涉及分组聚合的时候，使用SUMX+SUMMARIZE结构，推荐以下写法，语义准确，性能更好，先按维度分组，再对指标列做聚合，参考以下dax实现方式：
 ```dax
@@ -97,7 +98,7 @@ CALCULATE(
             'a05_e2e_paid_media_fcst_data_m'[data_month_name],
             "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[cost_amt])   -- 别名 + 聚合
         ),
-        "__Value"
+        [__Value]
     ),
     'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
     'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
@@ -107,7 +108,27 @@ CALCULATE(
 Step 1：在所选时间范围内筛选 `net_pay_amt > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，`net_pay_amt > 0`）；Step 2：缩小顾客范围至 `lp_12m_net_pay_amt = 0`（`data_date = 所选时间范围 start_period`）；相当于取 Step 1 和 Step 2 的交集，最后 count(distinct user_id)
 由于 start_period（第一个财月）是 slicer 区间的子集，技术实现上可"合并区间"——用于判断 `lp_12m_net_pay_amt = 0` 的行一定也在 slicer 区间内。因此技术实现直接等价于单一筛选：data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
 5、涉及到时间粒度判断的指标，比如，Target和新客的计算等等，仅支持完整财月、财季、财年，Slicer_Time_Frame[TimeFrame_ID] in ("Day","Week")时不考虑，指标的分子分母如果涉及到了，不管单个in ("Day","Week")还是都in ("Day","Week")，整个指标都为空。且计算逻辑基本都是先MAX再SUM，即分组聚合。
-6、
+6、涉及金额的记得换算汇率，切记是除法，不是乘法，比率，不涉及汇率换算
+7、参考数据格式模版：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\Cell Display模板文件.md在本次方案中新增一些拓展类型，便于后续拓展。
+综合上述信息，调整解决方案中的指标口径，注意，仅个别指标做了调整(Target\新客\第二品类相关的)，其他指标口径保持不变。
+调整这个文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS\KPIs_matrix_solution.md；
+不懂就问，一切以现在最新的口径文档为准。
+
+## 测试阶段，第八轮提示：
+1、vs LY 时间偏移规则（财历映射）：
+直接读取日期表内置 LY 字段：
+- 全局 LY 起始日：`Slicer_Time_Frame_Min[TimeFrame_Min_LY]`
+- 全局 LY 结束日：`Slicer_Time_Frame_Max[TimeFrame_Max_LY]`
+- 无需 EDATE -12 或 Key 偏移计算
+2、不要在过程中换算汇率，仅在 Cell Value 层除以汇率。比如，你在KPIs Current Base Value中计算了汇率，然后在后续的比值计算中，会导致比值错误。
+换算时机：在 Cell Value 层 `Value / Currency_ExchangeRate`）除以汇率，切记是除法，不是乘法，比率，不涉及汇率换算，本方案24个指标，只有1. Media Cost Rate — 媒体花费占比、6. SLS DCom — 退后销售额、10. Media Cost Per New Acquisition — 媒体新客获客成本、19. Acceleration SLS — 第二品类退后销售额，这四个指标是金额类指标，需要换算汇率。
+具体可查看D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS\Dim_ColMetric_KPIs文件，每个指标有IsCurAmt属性。
 
 
-5、参考数据格式模版：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\Cell Display模板文件.md在本次方案中新增一些拓展类型，便于后续拓展。
+## 测试阶段，第九轮提示：
+1、根据口径文档，检查一下解决方案是否正确，我看到很多不对的，比如：New Customer No TAR ACH%，应该是Actual / Target，你直接给一个__NewCustNoACH_Actual，不就是本期值的意思吗，和口径完全不是一个意思，你在认真检查一下，有些指标是本期值，有些是计算vs LY（增长率 %），有些是派生差值，有些±Actual vs Target是目标率Actual / Target，有些±Actual vs Target为Actual - Target，有些±Actual vs Target是目标率Actual / Target - 1，一切以口径文档为准。
+2、不一定是DIVIDE(Actual, Target)，也有可能是Actual - Target！一切以口径文档中的为准，TRA ACH%就是口径文档中的±Actual vs Target，已经给出了指标的计算公式，并且#3/#5，你理解也是错误的，
+| **Actual 计算公式** | `SUM(net_sales_amt) / Net Sales Target` |
+| **Target 计算公式** | `100%`（固定值） |
+| **±Actual vs Target** | Actual - Target |
+所以最终根据口径文档得出，#3 = Actual - 100%

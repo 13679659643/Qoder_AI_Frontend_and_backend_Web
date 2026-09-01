@@ -351,7 +351,7 @@ VAR __PeriodMin =
 - 分 Monthly / Yearly 两种 ColType
 - 口径文档标注"含正负号"，但按用户要求统一为 `percent_1dp`（不含正号）
 
-### 8. VIC Customer Count 分组去重逻辑
+### 8. 分组去重逻辑
 
 来源：VIC_KPIs_Table
 
@@ -379,6 +379,25 @@ CALCULATE(
     ),
     'a03_e2e_customer_fcst_data_m'[data_date] >= __TimeMin,
     'a03_e2e_customer_fcst_data_m'[data_date] <= __TimeMax
+)
+```
+**写法三）**：DAX 实现：`SUMX(SUMMARIZE(..., "__Value", MAX([字段])), [__Value])`
+使用SUMX+SUMMARIZE结构，推荐以下写法，结合写法一和写法二的优势，语义准确，性能更好，先按维度分组，再对指标列做聚合，参考以下dax实现方式：
+```dax
+VAR __CostAmtTarget =
+CALCULATE(
+    SUMX(
+        SUMMARIZE(
+            'a05_e2e_paid_media_fcst_data_m',
+            'a05_e2e_paid_media_fcst_data_m'[platform],
+            'a05_e2e_paid_media_fcst_data_m'[shop_id],
+            'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+            "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[cost_amt])   -- 别名 + 聚合
+        ),
+        [__Value]
+    ),
+    'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+    'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
 )
 ```
 
@@ -413,6 +432,7 @@ CALCULATE(
     'a03_e2e_customer_fcst_data_m'[data_date] <= __TimeMax
 )
 ```
+
 ### 10 vs LY / vs LP 时间偏移规则（区间对称映射）
 
 本期区间 = `[Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`
@@ -425,6 +445,7 @@ LY/LP 区间按对称原则构造（起始端读 Min 切片器 LY/LP，结束端
 ### 11. DCom 新客判定 = Step1 + Step2 交集，且Step1 和 Step2 period无交集关系
 
 来源：Customer_KPIs_ms.md
+
 ```dax
 // ═══════════════════════════════════════
 // Step 1: 本期区间内 net_pay_amt>0 AND is_member=0 的 user_id 集合
@@ -465,8 +486,10 @@ VAR __NewCustomerCnt_Act =
 ```
 
 ### 12. 嵌套 IF 返回表时 DAX 引擎会把表达式降级为标量值，导致错误结果
+
 来源：KPIs Overview_Target_ms.md
 1、platform为单选的情况，其中有特殊值"ALL",表示全选，布尔表达式：
+
 ```dax
 VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
 VAR __IsAllPlatform = (__ChannelID = "ALL")
@@ -474,7 +497,9 @@ VAR __IsAllPlatform = (__ChannelID = "ALL")
 (a05_e2e_paid_media_summary_d[platform] = __ChannelID
     || ( __IsAllPlatform && a05_e2e_paid_media_summary_d[platform] IN { "TM", "JD" } ))
 ```
+
 2、platform为单选的情况，其中有特殊值"ALL",表示全选，ALL→IN{"TM","JD"}；单平台→=__ChannelID，使用FILTER(ALL) 变量（表筛选器），返回表：
+
 ```dax
 VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
 VAR __IsAllPlatform = (__ChannelID = "ALL")
@@ -490,6 +515,7 @@ VAR __PlatformFilter =
             )
         )
 ```
+
 ---
 
 ## 七、派生指标分类与计算方式

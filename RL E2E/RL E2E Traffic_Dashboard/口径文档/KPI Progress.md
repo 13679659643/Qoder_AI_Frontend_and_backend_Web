@@ -563,8 +563,8 @@
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | Step1：在趋势图所选 Period 内筛选 `SUM(net_pay_amt) > 0` 的 `user_id`（`data_date = 趋势图所选 Period范围`，`is_member = 0`）；Step2：缩小顾客范围至所选 Period 的 `start_period` 往前推 12 个月 `lp_12m_net_pay_amt = 0`（`data_date = 趋势图所选 Period范围 的 start_period`）；两步交集，技术实现直接等价于单一筛选：data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
 | **聚合粒度** | 按趋势图所选 Period 及 `platform`、`shop_info_id` 对 `user_id` 去重计数； |
-| **数据类型** | currency_M_K_Int_0db → 货币符号由币种切片器决定，千分位整数，需要在 Cell Display 度量中拼接币种符号，需要判断是否带 K、M、或者就是千分位整数，如果值小于 1000，就直接表示为千分位整数，如果值大于等于 1000，就表示为带 K、M 的格式，1K 为一千，1M 为一百万，都采用千分位的格式 |
-| **数据格式** | dax```IF( __Value < 1000,__CurrencySymbol & FORMAT(__Value, "#,##0"),IF(__Value < 1000000,__CurrencySymbol & FORMAT(__Value / 1000, "#,##0.0") & "K",__CurrencySymbol & FORMAT(__Value / 1000000, "#,##0.0") & "M")), // ¥999\¥1.5K\¥1.5M; ```|
+| **数据类型** | integer_M_K_Int_0db → 值 < 1,000        → 千分位整数：999;1,000 ≤ 值 < 1M   → K 单位（1位小数）：1.5K;值 ≥ 1,000,000    → M 单位（1位小数）：1.5M; |
+| **数据格式** | dax```IF( __Value < 1000,FORMAT(__Value, "#,##0"),IF(__Value < 1000000,FORMAT(__Value / 1000, "#,##0.0") & "K",FORMAT(__Value / 1000000, "#,##0.0") & "M")), // 999\1.5K¥1.5M; ```|
 
 ---
 
