@@ -25,7 +25,7 @@ Dim_ColMetric_KPI by Platform =
 //   IsCurrencyAmount = FALSE → 比率/计数类指标，不受汇率影响
 // ========================================
 DATATABLE(
-    "Metric_ID",              INTEGER,    // 主键 1~21
+    "Metric_ID",              INTEGER,    // 主键 1~15
     "Metric_Name",            STRING,     // 列标题显示名称
     "Metric_Sort",            INTEGER,    // 排序值（起始10，步长10，便于插入）
     "Metric_Format",          STRING,     // 行格式（因 vs LP 与 YOY 视作独立指标，统一格式定义）

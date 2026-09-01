@@ -159,3 +159,4 @@ D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_
 参考数据格式模版：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\Customer\Cell Display模板文件.md
 在本次方案中新增所有拓展类型，便于后续拓展。
 在最终结果的时候判断Day/Week 留空 ：仅支持完整财月、财季、财年；这样就不用细分到分子分母上了，因为Day/Week的时候，该指标无意义。
+指标维度表（Dim_ColMetric_KPI by Platform）：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPI by Platform\Dim_ColMetric_KPI by Platform

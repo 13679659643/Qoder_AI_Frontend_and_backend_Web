@@ -15,7 +15,7 @@
 实现"KPI by Platform"中国式矩阵效果：
 
 - **行**：店铺维度 Slicer_Store_Name[Store_ID]，复用已有店铺维度表
-- **列**：指标维度 'Dim_ColMetric_KPI by Platform'[Metric_Name]，15 个指标（Metric_ID 1~21，跳号）
+- **列**：指标维度 'Dim_ColMetric_KPI by Platform'[Metric_Name]，15 个指标（Metric_ID 1~15）
 - **值**：SWITCH 动态路由，按 Metric_ID 分发到本期 / vs LP / YOY%
 - **口径**：一切以口径文档 KPI Progress.md 子模块五为准
 - **特殊要求**：
@@ -105,9 +105,9 @@ Dim_ColMetric_KPI by Platform（断开维度，列头）    Slicer_Store_Name（
 ### 3.2 度量值模型设计（拆分 Current / vsLP）
 
 ```
-[KPI by Platform Current Base Value]  ← 本期基础值（Metric_ID 1/4/13/16/19，不换算汇率）
-[KPI by Platform vsLP Base Value]     ← 同期基础值（Metric_ID 2/5/14/17/20，不换算汇率）
-[KPI by Platform Base Value]          ← 总路由（含 YOY% 计算，Metric_ID 3/6/15/18/21，Day/Week 留空）
+[KPI by Platform Current Base Value]  ← 本期基础值（Metric_ID 1/4/7/10/13，不换算汇率）
+[KPI by Platform vsLP Base Value]     ← 同期基础值（Metric_ID 2/5/8/11/14，不换算汇率）
+[KPI by Platform Base Value]          ← 总路由（含 YOY% 计算，Metric_ID 3/6/9/12/15，Day/Week 留空）
 [KPI by Platform Cell Value]         ← 对外值 = Base Value ÷ 汇率（金额类）
 [KPI by Platform Cell Display]       ← 格式化显示文本（全拓展类型）
 [KPI by Platform Cell Font Color]    ← 字体颜色（总计行 vs 其他行）
@@ -138,7 +138,7 @@ Dim_ColMetric_KPI by Platform（断开维度，列头）    Slicer_Store_Name（
 ### 3.5 汇率换算规则
 
 换算时机：在 Cell Value 层 `DIVIDE([Base Value], Currency_ExchangeRate)`（除法，非乘法）
-- 金额类指标（`IsCurrencyAmount = TRUE`）：#32 Media Cost（Metric_ID=4/5）、#35 Cost Per New Acq（Metric_ID=19/20）需 ÷ 汇率
+- 金额类指标（`IsCurrencyAmount = TRUE`）：#32 Media Cost（Metric_ID=4/5）、#35 Cost Per New Acq（Metric_ID=13/14）需 ÷ 汇率
 - 比率/增减百分比类指标（`IsCurrencyAmount = FALSE`）：不涉及汇率换算
 - YOY% 为比率，不涉及汇率换算（分子分母本币值抵消）
 
@@ -327,9 +327,9 @@ KPI by Platform Current Base Value =
             __MetricID,
             1,  __MediaCostRate,        // Media Cost Rate（比率，不涉及汇率）
             4,  __Cost_ALL,             // Media Cost（金额，汇率在 Cell Value 层处理）
-            13, __AccelCostMOBvsSLS,   // ± Accel cost MOB% vs. store SLS MOB%（比率）
-            16, __MediaNewCustContrib,  // Media Contribution to New Cust%（比率）
-            19, __CostPerNewAcq,        // Cost Per New Acq（金额，汇率在 Cell Value 层处理）
+            7,  __AccelCostMOBvsSLS,   // ± Accel cost MOB% vs. store SLS MOB%（比率）
+            10, __MediaNewCustContrib,  // Media Contribution to New Cust%（比率）
+            13, __CostPerNewAcq,        // Cost Per New Acq（金额，汇率在 Cell Value 层处理）
             BLANK()
         )
 ```
@@ -478,9 +478,9 @@ KPI by Platform vsLP Base Value =
             __MetricID,
             2,  __MediaCostRate,        // Media Cost Rate vs LP（比率）
             5,  __Cost_ALL,             // Media Cost vs LP（金额，汇率在 Cell Value 层处理）
-            14, __AccelCostMOBvsSLS,   // ± Accel cost MOB% vs. store SLS MOB% vs LP（比率）
-            17, __MediaNewCustContrib,  // Media Contribution to New Cust% vs LP（比率）
-            20, __CostPerNewAcq,        // Cost Per New Acq vs LP（金额，汇率在 Cell Value 层处理）
+            8,  __AccelCostMOBvsSLS,   // ± Accel cost MOB% vs. store SLS MOB% vs LP（比率）
+            11, __MediaNewCustContrib,  // Media Contribution to New Cust% vs LP（比率）
+            14, __CostPerNewAcq,        // Cost Per New Acq vs LP（金额，汇率在 Cell Value 层处理）
             BLANK()
         )
 ```
@@ -495,10 +495,10 @@ KPI by Platform Base Value =
 // 用途: 总路由，根据 Metric_ID 分发到 Current / vsLP / YOY%
 // 依赖: [KPI by Platform Current Base Value], [KPI by Platform vsLP Base Value]
 // 说明: 
-//   Metric_ID 1/4/13/16/19 → Current
-//   Metric_ID 2/5/14/17/20 → vsLP
-//   Metric_ID 3/6/15/18/21 → YOY% (常规同比百分比，含边界判断)
-// Day/Week: 涉及 MAX+SUM 聚合的指标（#34/#35 系列 = Metric_ID 16~21）在 Day/Week 时为空
+//   Metric_ID 1/4/7/10/13 → Current
+//   Metric_ID 2/5/8/11/14 → vsLP
+//   Metric_ID 3/6/9/12/15 → YOY% (常规同比百分比，含边界判断)
+// Day/Week: 涉及 MAX+SUM 聚合的指标（#34/#35 系列 = Metric_ID 10~15）在 Day/Week 时为空
 //   在三个结果变量（__CurrentValue/__LP_Value/__YOY_Result）各自内部判断，不细分到分子分母
 // ========================================
     VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_KPI by Platform'[Metric_ID])
@@ -506,12 +506,12 @@ KPI by Platform Base Value =
     VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
 
     // 涉及 MAX+SUM 聚合的指标（Day/Week 时无意义）
-    // #34 Media Contribution%（16/17/18）、#35 Cost Per New Acq（19/20/21）
-    VAR __NeedsFullFiscalPeriod = __MetricID IN {16, 17, 18, 19, 20, 21}
+    // #34 Media Contribution%（10/11/12）、#35 Cost Per New Acq（13/14/15）
+    VAR __NeedsFullFiscalPeriod = __MetricID IN {10, 11, 12, 13, 14, 15}
     // Day/Week + 涉及 MAX+SUM 聚合 → 该指标无意义，返回 BLANK
     VAR __NeedsBlank = __IsDayOrWeek && __NeedsFullFiscalPeriod
 
-    VAR __IsYOY = __MetricID IN {3, 6, 15, 18, 21}
+    VAR __IsYOY = __MetricID IN {3, 6, 9, 12, 15}
 
     // ── 本期值（含 YOY% 上下文修复 + Day/Week 留空判断）──
     // 修复上下文冲突：矩阵行标题会保留 Metric_Name 等所有列的筛选器，
@@ -572,21 +572,21 @@ KPI by Platform Base Value =
             // ─── 本期值 ───
             1,  __CurrentValue,    // Media Cost Rate
             4,  __CurrentValue,    // Media Cost
-            13, __CurrentValue,    // ± Accel cost MOB% vs. store SLS MOB%
-            16, __CurrentValue,    // Media Contribution to New Cust%
-            19, __CurrentValue,    // Cost Per New Acquisition
+            7,  __CurrentValue,    // ± Accel cost MOB% vs. store SLS MOB%
+            10, __CurrentValue,    // Media Contribution to New Cust%
+            13, __CurrentValue,    // Cost Per New Acquisition
             // ─── vs LP 值 ───
             2,  __LP_Value,       // Media Cost Rate vs LP
             5,  __LP_Value,       // Media Cost vs LP
-            14, __LP_Value,       // ± Accel cost MOB% vs. store SLS MOB% vs LP
-            17, __LP_Value,       // Media Contribution to New Cust% vs LP
-            20, __LP_Value,       // Cost Per New Acquisition vs LP
+            8,  __LP_Value,       // ± Accel cost MOB% vs. store SLS MOB% vs LP
+            11, __LP_Value,       // Media Contribution to New Cust% vs LP
+            14, __LP_Value,       // Cost Per New Acquisition vs LP
             // ─── YOY% 计算 ───
             3,  __YOY_Result,     // YOY% (Media Cost Rate)
             6,  __YOY_Result,     // YOY % (Media Cost)
-            15, __YOY_Result,     // YOY  % (± Accel cost MOB%)
-            18, __YOY_Result,     // YOY   % (Media New Cust Contribution%)
-            21, __YOY_Result,     // YOY    % (Cost Per New Acq)
+            9,  __YOY_Result,     // YOY  % (± Accel cost MOB%)
+            12, __YOY_Result,     // YOY   % (Media New Cust Contribution%)
+            15, __YOY_Result,     // YOY    % (Cost Per New Acq)
             BLANK()
         )
 ```
@@ -782,12 +782,12 @@ KPI by Platform Cell SVG Icon =
 // 用途: 仅 YOY% 指标返回 SVG 圆形图标
 // 依赖: [KPI by Platform Cell Value], 'Dim_ColMetric_KPI by Platform'[Metric_ID]
 // 说明: 需将此度量值的数据类别设为"图像 URL"
-//       YOY% 的 Metric_ID ∈ {3, 6, 15, 18, 21}
+//       YOY% 的 Metric_ID ∈ {3, 6, 9, 12, 15}
 //       正值 → 绿色圆，负值 → 红色圆，零值 → 黄色圆
 // ========================================
     VAR __Value = [KPI by Platform Cell Value]
     VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_KPI by Platform'[Metric_ID])
-    VAR __NeedsIcon = __MetricID IN {3, 6, 15, 18, 21}
+    VAR __NeedsIcon = __MetricID IN {3, 6, 9, 12, 15}
     VAR __GreenSVG =
         "data:image/svg+xml;utf8," &
         "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
@@ -816,8 +816,8 @@ KPI by Platform Cell SVG Icon =
 
 | 序号 | 度量值名称                            | Display Folder | 用途                                 |
 | ---- | ------------------------------------- | -------------- | ------------------------------------ |
-| 1    | KPI by Platform Current Base Value    | Base Metrics   | 本期基础值（Metric_ID 1/4/13/16/19，不换算汇率） |
-| 2    | KPI by Platform vsLP Base Value       | Base Metrics   | 同期基础值（Metric_ID 2/5/14/17/20，不换算汇率） |
+| 1    | KPI by Platform Current Base Value    | Base Metrics   | 本期基础值（Metric_ID 1/4/7/10/13，不换算汇率） |
+| 2    | KPI by Platform vsLP Base Value       | Base Metrics   | 同期基础值（Metric_ID 2/5/8/11/14，不换算汇率） |
 | 3    | KPI by Platform Base Value            | Base Metrics   | 总路由（含 YOY% 计算，Day/Week 留空） |
 | 4    | KPI by Platform Cell Value            | Cell Values    | 对外值 = Base Value ÷ 汇率（金额类） |
 | 5    | KPI by Platform Cell Display          | Formatting     | 格式化显示文本（全拓展类型）          |
@@ -837,15 +837,15 @@ KPI by Platform Cell SVG Icon =
 | 4         | Media Cost                                  | 子模块五 §32  | SUM(cost_amt)                           | cost_amt                                        | a05_e2e_paid_media_summary_d          | ALL           | 是       |
 | 5         | Media Cost vs LP                            | 子模块五 §32  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 是       |
 | 6         | YOY %                                       | 子模块五 §32  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
-| 13        | ± Accel Cost MOB% vs. Store SLS MOB%       | 子模块五 §33  | Accel Cost MOB% - Store SLS MOB%        | cost_amt / net_sales_amt                        | a05_e2e_paid_media_product_data_d     | ALL           | 否       |
-| 14        | ± Accel Cost MOB% vs. Store SLS MOB% vs LP | 子模块五 §33  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 否       |
-| 15        | YOY  %                                      | 子模块五 §33  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
-| 16        | Media Contribution to New Cust%            | 子模块五 §34  | 媒体新客数 / 全店新客数                 | MAX+SUM(media_member_cnt) / DISTINCTCOUNT(user_id) | summary_d + customer_data_m           | ALL           | 否       |
-| 17        | Media Contribution to New Cust% vs LP      | 子模块五 §34  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 否       |
-| 18        | YOY   %                                     | 子模块五 §34  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
-| 19        | Cost Per New Acquisition                    | 子模块五 §35  | 新客花费 / 媒体新客数                   | MAX+SUM(media_cost_amt) / MAX+SUM(media_member_cnt) | a05_e2e_paid_media_summary_d          | ALL           | 是       |
-| 20        | Cost Per New Acquisition vs LP             | 子模块五 §35  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 是       |
-| 21        | YOY    %                                    | 子模块五 §35  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
+| 7         | ± Accel Cost MOB% vs. Store SLS MOB%       | 子模块五 §33  | Accel Cost MOB% - Store SLS MOB%        | cost_amt / net_sales_amt                        | a05_e2e_paid_media_product_data_d     | ALL           | 否       |
+| 8         | ± Accel Cost MOB% vs. Store SLS MOB% vs LP | 子模块五 §33  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 否       |
+| 9         | YOY  %                                      | 子模块五 §33  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
+| 10        | Media Contribution to New Cust%            | 子模块五 §34  | 媒体新客数 / 全店新客数                 | MAX+SUM(media_member_cnt) / DISTINCTCOUNT(user_id) | summary_d + customer_data_m           | ALL           | 否       |
+| 11        | Media Contribution to New Cust% vs LP      | 子模块五 §34  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 否       |
+| 12        | YOY   %                                     | 子模块五 §34  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
+| 13        | Cost Per New Acquisition                    | 子模块五 §35  | 新客花费 / 媒体新客数                   | MAX+SUM(media_cost_amt) / MAX+SUM(media_member_cnt) | a05_e2e_paid_media_summary_d          | ALL           | 是       |
+| 14        | Cost Per New Acquisition vs LP             | 子模块五 §35  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 是       |
+| 15        | YOY    %                                    | 子模块五 §35  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
 
 ---
 
@@ -898,7 +898,7 @@ KPI by Platform Cell SVG Icon =
 │  ┌─────────────────────────┐   ┌─────────────────────────┐          │
 │  │ KPI by Platform         │   │ KPI by Platform         │          │
 │  │ Current Base Value      │   │ vsLP Base Value         │          │
-│  │ (Metric_ID 1/4/13/16/19)│   │ (Metric_ID 2/5/14/17/20)│         │
+│  │ (Metric_ID 1/4/7/10/13) │   │ (Metric_ID 2/5/8/11/14) │         │
 │  │ 不换算汇率              │   │ 不换算汇率              │          │
 │  └───────────┬─────────────┘   └───────────┬─────────────┘          │
 │              │                              │                        │
@@ -1007,7 +1007,7 @@ KPI by Platform Cell SVG Icon =
 | 总计行颜色 | 总计行字体黑色 #252423，背景中米色 #E6D9C7                                                   |
 | 其他行颜色 | 其他行字体深灰 #5F6165，背景白色 #FFFFFF                                                     |
 | SVG 图标   | 仅 YOY% 行显示圆形图标（正值绿、负值红、零值黄）                                             |
-| Day/Week   | #34/#35 系列（Metric_ID 16~21）在 Day/Week 时为空                                           |
+| Day/Week   | #34/#35 系列（Metric_ID 10~15）在 Day/Week 时为空                                           |
 
 ### 9.2 数据验证 SQL
 
@@ -1098,8 +1098,8 @@ GROUP BY platform, shop_id, data_month_name;
 
 | 指标类型 | 换算方式 | 判断依据 | 涉及 Metric_ID |
 | -------- | -------- | -------- | --------------- |
-| 金额类 | `DIVIDE([Base Value], Currency_ExchangeRate)`（除法，非乘法） | `IsCurrencyAmount = TRUE` | 4, 5, 19, 20 |
-| 比率/增减百分比类 | 不换算，直接返回 [Base Value] | `IsCurrencyAmount = FALSE` | 1, 2, 3, 6, 13, 14, 15, 16, 17, 18, 21 |
+| 金额类 | `DIVIDE([Base Value], Currency_ExchangeRate)`（除法，非乘法） | `IsCurrencyAmount = TRUE` | 4, 5, 13, 14 |
+| 比率/增减百分比类 | 不换算，直接返回 [Base Value] | `IsCurrencyAmount = FALSE` | 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 15 |
 
 ### 10.3 vs LP 时间偏移规则（财历映射）
 
@@ -1127,11 +1127,11 @@ GROUP BY platform, shop_id, data_month_name;
 - 仅支持完整财月、财季、财年，`Day`/`Week` 时为空
 - DAX 实现：`SUMX(SUMMARIZE(..., "__Value", MAX([字段])), [__Value])`
 - 列引用写法：`[__Value]`，不是字符串 `"__Value"`
-- 涉及 Metric_ID：16, 17, 18, 19, 20, 21
+- 涉及 Metric_ID：10, 11, 12, 13, 14, 15
 
 ### 10.6 Day/Week 留空规则
 
-- 涉及 MAX+SUM 聚合的指标（#34/#35 系列 = Metric_ID 16~21）在 Day/Week 时无意义
+- 涉及 MAX+SUM 聚合的指标（#34/#35 系列 = Metric_ID 10~15）在 Day/Week 时无意义
 - 在总路由层 `IF(__IsDayOrWeek && __NeedsFullFiscalPeriod, BLANK(), ...)` 统一留空
 - 不细分到分子分母，避免冗余判断和潜在不一致
 
