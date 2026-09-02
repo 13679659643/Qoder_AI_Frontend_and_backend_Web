@@ -1,0 +1,9 @@
+ToolTips 01 = "Monthly Update"
+
+ToolTips 02 = 
+-- 第一行标题
+"TAR ACH% display rules" & 
+-- 尝试换行 + 用非断行空格撑开一段距离
+UNICHAR(10) & REPT(UNICHAR(160), 86) & 
+-- 正文内容（如果不需要英文引号，把 ""-"" 改回 - 即可）
+"TAR ACH% is shown as ""-"" for Day and Week, for Timeframes not applicable to the metric, or when target data is unavailable for the selected period."

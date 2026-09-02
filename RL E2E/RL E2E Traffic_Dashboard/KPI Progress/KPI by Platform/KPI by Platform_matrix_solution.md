@@ -60,15 +60,15 @@
 | 4         | Media Cost                                            | 40          | currency             | TRUE             |
 | 5         | Media Cost vs LP                                     | 50          | currency             | TRUE             |
 | 6         | YOY %                                                 | 60          | percent_1dp          | FALSE            |
-| 13        | ± Acceleration cost MOB% vs. store SLS MOB%          | 130         | percent_1dp          | FALSE            |
-| 14        | ± Acceleration cost MOB% vs. store SLS MOB% vs LP    | 140         | percent_1dp          | FALSE            |
-| 15        | YOY  %                                                | 150         | percent_1dp          | FALSE            |
-| 16        | Media Contribution to New Customer Acquisition%       | 160         | percent_1dp          | FALSE            |
-| 17        | Media Contribution to New Customer Acquisition% vs LP | 170         | percent_1dp          | FALSE            |
-| 18        | YOY   %                                               | 180         | percent_1dp          | FALSE            |
-| 19        | Cost Per New Acquisition                              | 190         | currency_decimal_1dp | TRUE             |
-| 20        | Cost Per New Acquisition vs LP                        | 200         | currency_decimal_1dp | TRUE             |
-| 21        | YOY    %                                              | 210         | percent_1dp          | FALSE            |
+| 7         | ± Acceleration cost MOB% vs. store SLS MOB%          | 70         | percent_1dp          | FALSE            |         
+| 8        | ± Acceleration cost MOB% vs. store SLS MOB% vs LP    | 80         | percent_1dp          | FALSE            |  
+| 9        | YOY  %                                                | 90         | percent_1dp          | FALSE            |
+| 10        | Media Contribution to New Customer Acquisition%       | 100         | percent_1dp          | FALSE            |
+| 11        | Media Contribution to New Customer Acquisition% vs LP | 110         | percent_1dp          | FALSE            |
+| 12        | YOY   %                                               | 120         | percent_1dp          | FALSE            |
+| 13        | Cost Per New Acquisition                              | 130         | currency_decimal_1dp | TRUE             |
+| 14        | Cost Per New Acquisition vs LP                        | 140         | currency_decimal_1dp | TRUE             |
+| 15        | YOY    %                                              | 150         | percent_1dp          | FALSE            |
 
 ---
 
@@ -1002,7 +1002,7 @@ KPI by Platform Cell SVG Icon =
 | 验证项     | 方法                                                                                         |
 | ---------- | -------------------------------------------------------------------------------------------- |
 | 矩阵形状   | 确认 6 行（5 个 Store + 1 个总计）× 15 列（15 个 Metric）= 90 个单元格                      |
-| 排序       | 行按 Store_Sort 排序；列按 Metric_Sort 排序（10, 20, 30, 40, 50, 60, 130, 140, 150, 160, 170, 180, 190, 200, 210） |
+| 排序       | 行按 Store_Sort 排序；列按 Metric_Sort 排序（10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150） |
 | YOY% 行名  | 确认 5 个 YOY% 行名后缀空格数不同（YOY% / YOY % / YOY  % / YOY   % / YOY    %）              |
 | 总计行颜色 | 总计行字体黑色 #252423，背景中米色 #E6D9C7                                                   |
 | 其他行颜色 | 其他行字体深灰 #5F6165，背景白色 #FFFFFF                                                     |

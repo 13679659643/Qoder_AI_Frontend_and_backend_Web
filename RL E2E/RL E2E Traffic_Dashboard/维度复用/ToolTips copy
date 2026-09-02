@@ -1,0 +1,144 @@
+### IsMinFiscalYearVisible
+IsMinFiscalYearVisible = 
+/*
+功能：动态控制筛选器，仅显示最大年份（本财年）的月份
+返回：1（显示）或 0（隐藏）
+*/
+
+// 步骤1：获取当前行的年份（从 "2027-05" 中提取前4位）
+VAR CurrentYear = 
+    LEFT(SELECTEDVALUE(Slicer_Month_Period_Min[TimeFrame_Value]), 4)
+
+// 步骤2：获取所有数据中的最大年份
+// 使用 ALL() 移除当前上下文筛选，确保始终取全表最大值
+VAR MaxYear = 
+    CALCULATE(
+        MAXX(
+            ALL(Slicer_Month_Period_Min),
+            LEFT(Slicer_Month_Period_Min[TimeFrame_Value], 4)
+        )
+    )
+
+// 步骤3：判断当前年份是否等于最大年份
+// 等于最大年份返回1（显示），否则返回0（隐藏）
+RETURN
+    IF(CurrentYear = MaxYear, 1, 0)
+
+
+### IsMaxFiscalYearVisible
+IsMaxFiscalYearVisible = 
+/*
+功能：动态控制筛选器，仅显示最大年份（本财年）的月份
+返回：1（显示）或 0（隐藏）
+*/
+
+// 步骤1：获取当前行的年份（从 "2027-05" 中提取前4位）
+VAR CurrentYear = 
+    LEFT(SELECTEDVALUE(Slicer_Month_Period_Max[TimeFrame_Value]), 4)
+
+// 步骤2：获取所有数据中的最大年份
+// 使用 ALL() 移除当前上下文筛选，确保始终取全表最大值
+VAR MaxYear = 
+    CALCULATE(
+        MAXX(
+            ALL(Slicer_Month_Period_Max),
+            LEFT(Slicer_Month_Period_Max[TimeFrame_Value], 4)
+        )
+    )
+
+// 步骤3：判断当前年份是否等于最大年份
+// 等于最大年份返回1（显示），否则返回0（隐藏）
+RETURN
+    IF(CurrentYear = MaxYear, 1, 0)
+
+
+### IsMinPeriodVisible_ThisFY
+IsMinPeriodVisible_ThisFY = 
+/*
+功能：动态控制筛选器，仅显示最大年份（本财年）中除当前财月以外的月份
+逻辑：年份 = 最大年份 且 值 < 最大值（排除当前未完成的财月）
+示例：数据范围 2026-01 ~ 2027-06，则显示 2027-01 ~ 2027-05
+返回：1（显示）或 0（隐藏）
+*/
+
+// 步骤1：获取当前行的 TimeFrame_Value（如 "2027-05"）
+VAR CurrentValue = 
+    SELECTEDVALUE(Slicer_Month_Period_Min[TimeFrame_Value])
+
+// 步骤2：提取当前行的年份（前4位）
+VAR CurrentYear = 
+    LEFT(CurrentValue, 4)
+
+// 步骤3：获取全表中的最大年份
+// 使用 ALL() 移除当前上下文筛选，确保始终取全表最大值
+VAR MaxYear = 
+    CALCULATE(
+        MAXX(
+            ALL(Slicer_Month_Period_Min),
+            LEFT(Slicer_Month_Period_Min[TimeFrame_Value], 4)
+        )
+    )
+
+// 步骤4：获取全表中最大的 TimeFrame_Value（即当前财月，如 "2027-06"）
+// "YYYY-MM" 格式的字符串比较天然按时间顺序排列
+VAR MaxValue = 
+    CALCULATE(
+        MAX(Slicer_Month_Period_Min[TimeFrame_Value]),
+        ALL(Slicer_Month_Period_Min)
+    )
+
+// 步骤5：判断条件
+// 条件1：年份必须等于最大年份（只看本财年）
+// 条件2：当前值必须小于最大值（排除当前未完成的财月）
+RETURN
+    IF(
+        CurrentYear = MaxYear && CurrentValue < MaxValue,
+        1,  // 满足条件：显示
+        0   // 不满足：隐藏
+    )
+
+
+### IsMaxPeriodVisible_ThisFY
+IsMaxPeriodVisible_ThisFY = 
+/*
+功能：动态控制筛选器，仅显示最大年份（本财年）中除当前财月以外的月份
+逻辑：年份 = 最大年份 且 值 < 最大值（排除当前未完成的财月）
+示例：数据范围 2026-01 ~ 2027-06，则显示 2027-01 ~ 2027-05
+返回：1（显示）或 0（隐藏）
+*/
+
+// 步骤1：获取当前行的 TimeFrame_Value（如 "2027-05"）
+VAR CurrentValue = 
+    SELECTEDVALUE(Slicer_Month_Period_Max[TimeFrame_Value])
+
+// 步骤2：提取当前行的年份（前4位）
+VAR CurrentYear = 
+    LEFT(CurrentValue, 4)
+
+// 步骤3：获取全表中的最大年份
+// 使用 ALL() 移除当前上下文筛选，确保始终取全表最大值
+VAR MaxYear = 
+    CALCULATE(
+        MAXX(
+            ALL(Slicer_Month_Period_Max),
+            LEFT(Slicer_Month_Period_Max[TimeFrame_Value], 4)
+        )
+    )
+
+// 步骤4：获取全表中最大的 TimeFrame_Value（即当前财月，如 "2027-06"）
+// "YYYY-MM" 格式的字符串比较天然按时间顺序排列
+VAR MaxValue = 
+    CALCULATE(
+        MAX(Slicer_Month_Period_Max[TimeFrame_Value]),
+        ALL(Slicer_Month_Period_Max)
+    )
+
+// 步骤5：判断条件
+// 条件1：年份必须等于最大年份（只看本财年）
+// 条件2：当前值必须小于最大值（排除当前未完成的财月）
+RETURN
+    IF(
+        CurrentYear = MaxYear && CurrentValue < MaxValue,
+        1,  // 满足条件：显示
+        0   // 不满足：隐藏
+    )

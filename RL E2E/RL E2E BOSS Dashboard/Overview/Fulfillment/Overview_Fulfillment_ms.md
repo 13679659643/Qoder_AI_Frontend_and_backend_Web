@@ -329,7 +329,7 @@ Avg Processing Time Value =
             'a02_e2e_boss_fulfillment_request_data_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_fulfillment_request_data_d'[data_date] <= __TimeMax
         )
-    RETURN DIVIDE(__Numerator, __Denominator)
+    RETURN DIVIDE(DIVIDE(__Numerator, __Denominator),60)
 ```
 
 ### 4.6 子模块六：Avg Processing Time Display

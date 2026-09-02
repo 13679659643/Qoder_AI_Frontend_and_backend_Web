@@ -16,8 +16,13 @@ let
     `ly_timeframe_min` AS `TimeFrame_Min_LY`, -- 去年同期起始自然日
     `ly_timeframe_max` AS `TimeFrame_Max_LY` -- 去年同期结束自然日
 FROM 
-	    indep_rl_dim.dim_t00_bi_fiscal_calendar
-        ORDER BY ID_Sort DESC
+	    indep_rl_dim.dim_t00_bi_fiscal_calendar t1
+WHERE (t1.`TimeFrame_ID` = 'Day' AND t1.`timeframe_value` >='2025-01-01') 
+OR (t1.`TimeFrame_ID` = 'Week' AND t1.`TimeFrame_Key` >=202540)
+OR (t1.`TimeFrame_ID` = 'Month' AND t1.`TimeFrame_Key` >=202510)
+OR (t1.`TimeFrame_ID` = 'Quarter' AND t1.`TimeFrame_Key` >=202504)
+OR (t1.`TimeFrame_ID` = 'Year' AND t1.`TimeFrame_Key` >=2025)
+ORDER BY ID_Sort DESC
     ")
 in
     源
