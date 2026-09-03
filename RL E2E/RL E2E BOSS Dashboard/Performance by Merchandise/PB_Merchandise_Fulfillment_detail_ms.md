@@ -354,7 +354,7 @@ Fulfillment PB Merchandise Act Base Value =
             __MetricID,
             // ── Order Processing Efficiency 分组（a02_e2e_boss_fulfillment_request_data_d）──
             1,  DIVIDE(__RequestTimes_Act, __RequestSkuQty_Act),                                           // Avg. No. of Store Passed Act
-            2,  DIVIDE(__RequestDuration_Act, __RequestSkuQty_Act),                                        // Avg. Processing Time(Hour) Act
+            2,  DIVIDE(DIVIDE(__RequestDuration_Act, __RequestSkuQty_Act),60),                             // Avg. Processing Time(Hour) Act
             // ── Fulfillment% 分组 ──
             3,  DIVIDE(__ShippedOrderCnt_Act, __RequestOrderCnt_Act),                                      // Fulfillment% Act
             // ── Request Order 分组 ──

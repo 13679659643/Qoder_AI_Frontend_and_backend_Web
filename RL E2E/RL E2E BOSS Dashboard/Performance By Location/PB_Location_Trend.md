@@ -877,12 +877,12 @@ Region Unfulfilled Order Tooltip Display =
 //   Cancelled By Other：{Cancelled Order by Other} 占比：{Cancelled Order Share by Other}
 //   共五行，换行拼接
 // ========================================
-    VAR __Region = SELECTEDVALUE('t01_o2o_fulfillment_order_detail_d'[order_type_cd])
+    VAR __Region = SELECTEDVALUE('t01_o2o_fulfillment_order_detail_d'[store_region])
     VAR __Line1 = "Region：" & IF(ISBLANK(__Region), "-", __Region)
-    VAR __Line2 = "Rejected By Store：" & [Rejected Order by Store Display] & " ：" & [Rejected Order Share by Store Display]
-    VAR __Line3 = "Cancelled By Overdue：" & [Cancelled Order by Overdue Display] & " ：" & [Cancelled Order Share by Overdue Display]
-    VAR __Line4 = "Cancelled By Customer：" & [Cancelled Order by Customer Display] & " ：" & [Cancelled Order Share by Customer Display]
-    VAR __Line5 = "Cancelled By Other：" & [Cancelled Order by Other Display] & " ：" & [Cancelled Order Share by Other Display]
+    VAR __Line2 = "Rejected By Store：" & [Rejected Order by Store Display] & " , " & [Rejected Order Share by Store Display]
+    VAR __Line3 = "Cancelled By Overdue：" & [Cancelled Order by Overdue Display] & " , " & [Cancelled Order Share by Overdue Display]
+    VAR __Line4 = "Cancelled By Customer：" & [Cancelled Order by Customer Display] & " , " & [Cancelled Order Share by Customer Display]
+    VAR __Line5 = "Cancelled By Other：" & [Cancelled Order by Other Display] & " , " & [Cancelled Order Share by Other Display]
     RETURN
         __Line1 & UNICHAR(10) & __Line2 & UNICHAR(10) & __Line3 & UNICHAR(10) & __Line4 & UNICHAR(10) & __Line5
 ```
@@ -904,12 +904,12 @@ Store Type Unfulfilled Order Tooltip Display =
 //   Cancelled By Other：{Cancelled Order by Other} 占比：{Cancelled Order Share by Other}
 //   共五行，换行拼接
 // ========================================
-    VAR __StoreType = SELECTEDVALUE('t01_o2o_fulfillment_order_detail_d'[order_type])
+    VAR __StoreType = SELECTEDVALUE('t01_o2o_fulfillment_order_detail_d'[store_type])
     VAR __Line1 = "Store Type：" & IF(ISBLANK(__StoreType), "-", __StoreType)
-    VAR __Line2 = "Rejected By Store：" & [Rejected Order by Store Display] & " ：" & [Rejected Order Share by Store Display]
-    VAR __Line3 = "Cancelled By Overdue：" & [Cancelled Order by Overdue Display] & " ：" & [Cancelled Order Share by Overdue Display]
-    VAR __Line4 = "Cancelled By Customer：" & [Cancelled Order by Customer Display] & " ：" & [Cancelled Order Share by Customer Display]
-    VAR __Line5 = "Cancelled By Other：" & [Cancelled Order by Other Display] & " ：" & [Cancelled Order Share by Other Display]
+    VAR __Line2 = "Rejected By Store：" & [Rejected Order by Store Display] & " , " & [Rejected Order Share by Store Display]
+    VAR __Line3 = "Cancelled By Overdue：" & [Cancelled Order by Overdue Display] & " , " & [Cancelled Order Share by Overdue Display]
+    VAR __Line4 = "Cancelled By Customer：" & [Cancelled Order by Customer Display] & " , " & [Cancelled Order Share by Customer Display]
+    VAR __Line5 = "Cancelled By Other：" & [Cancelled Order by Other Display] & " , " & [Cancelled Order Share by Other Display]
     RETURN
         __Line1 & UNICHAR(10) & __Line2 & UNICHAR(10) & __Line3 & UNICHAR(10) & __Line4 & UNICHAR(10) & __Line5
 ```
