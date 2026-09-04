@@ -55,14 +55,14 @@ Crowd TA Cost% =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
     VAR __CostAmt =
         CALCULATE(
             SUM(a05_e2e_paid_media_crowed_data_d[cost_amt]),
             __PlatformFilter,
             // ── Channel 固定范围（分子用 FILTER(VALUES()) 交集模式，保留行维度）──
             FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-                a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"}),
+                a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"}),
             a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
             FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[season]),
                 a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),
@@ -85,7 +85,7 @@ Crowd TA Cost% =
             // ── Channel 固定范围（分母用 FILTER(ALL()) 仅保留范围筛选，不依赖行维度）──
             // 移除维度表的行级筛选，但保留切片器筛选
             FILTER(ALLSELECTED(a05_e2e_paid_media_crowed_data_d[channel]),
-                a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"}),
+                a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"}),
             // ── 分母用 FILTER(ALL()) 仅保留切片器筛选（不用 FILTER(VALUES())）──
             FILTER(ALL(a05_e2e_paid_media_crowed_data_d[season]),
                 a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),

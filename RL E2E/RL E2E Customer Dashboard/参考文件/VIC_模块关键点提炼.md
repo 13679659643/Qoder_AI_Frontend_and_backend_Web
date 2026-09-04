@@ -516,6 +516,278 @@ VAR __PlatformFilter =
         )
 ```
 
+### 13. "左外连接"（Left Outer Join）
+```dax
+测试 = 
+
+// ═══════════════════════════════════════════════════════════
+// 变量定义区
+// ═══════════════════════════════════════════════════════════
+
+// ── 日期范围（模拟筛选器，正式使用时取消注释下方两行）──
+VAR __TimeMin = DATEVALUE("2026-05-24")
+VAR __TimeMax = DATEVALUE("2026-07-25")
+// VAR __TimeMin = SELECTEDVALUE(Slicer_Month_Period_Min[TimeFrame_Min])
+// VAR __TimeMax = SELECTEDVALUE(Slicer_Month_Period_Max[TimeFrame_Max])
+
+// ── 第一财月区间（Step2 使用的 data_date 范围）──
+VAR __FirstFiscalMonthMin = DATEVALUE("2026-05-24")
+VAR __FirstFiscalMonthMax = DATEVALUE("2026-06-27")
+// VAR __FirstFiscalMonthMin = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Min])
+// VAR __FirstFiscalMonthMax = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max])
+
+// ── 时间粒度判断：Day/Week 不计算 ──
+VAR __TimeFrameID = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])
+VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
+
+// ═══════════════════════════════════════════════════════════
+// 子查询a（对应SQL的 FROM ... WHERE data_month IN (...) GROUP BY user_id）
+//
+// 逻辑：在所选时间范围内，非会员有消费的记录，按 user_id 聚合
+//
+// 关于多选筛选器（shop_name_en / platform）：
+//   FILTER() 在当前筛选上下文中执行，
+//   外部筛选器（视觉对象上的多选Slicer）会自动生效，
+//   无需在此处手动添加。
+// ═══════════════════════════════════════════════════════════
+VAR _Step1 = 
+    SUMMARIZE(
+        FILTER(
+            'a03_e2e_customer_data_m',
+            'a03_e2e_customer_data_m'[data_date] >= __TimeMin
+                && 'a03_e2e_customer_data_m'[data_date] <= __TimeMax
+                && 'a03_e2e_customer_data_m'[is_member] = 0
+        ),
+        // ── 分组键 ──
+        // user_id：按用户聚合（对应SQL的 GROUP BY user_id）
+        // shop_name_en：加入分组键，确保 JOIN 时按店铺精确匹配
+        'a03_e2e_customer_data_m'[user_id],
+        'a03_e2e_customer_data_m'[shop_name_en],
+        // ── 聚合列 ──
+        "_net_pay_amt", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+    )
+
+// ═══════════════════════════════════════════════════════════
+// 子查询b（对应SQL的 FROM ... WHERE data_month = '202701' GROUP BY user_id）
+//
+// 逻辑：在第一财月区间内，非会员的历史消费记录，按 user_id 聚合
+// ═══════════════════════════════════════════════════════════
+VAR _Step2 = 
+    SUMMARIZE(
+        FILTER(
+            'a03_e2e_customer_data_m',
+            'a03_e2e_customer_data_m'[data_date] >= __FirstFiscalMonthMin
+                && 'a03_e2e_customer_data_m'[data_date] <= __FirstFiscalMonthMax
+                && 'a03_e2e_customer_data_m'[is_member] = 0
+        ),
+        // ── 分组键（与 _Step1 保持一致，供 NATURALLEFTOUTERJOIN 使用）──
+        'a03_e2e_customer_data_m'[user_id],
+        'a03_e2e_customer_data_m'[shop_name_en],
+        // ── 聚合列 ──
+        "_lp_12m_net_pay_amt", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+    )
+
+// ═══════════════════════════════════════════════════════════
+// NATURALLEFTOUTERJOIN 详解：
+//
+// 功能：将两个表进行"左外连接"（Left Outer Join）
+//
+// "NATURAL"（自然）：
+//   自动查找两个表中【列名完全相同】的列，作为连接键。
+//   此处 _Step1 和 _Step2 都有 user_id 和 shop_name_en，
+//   所以连接条件等价于：
+//     ON _Step1.user_id = _Step2.user_id
+//    AND _Step1.shop_name_en = _Step2.shop_name_en
+//
+// "LEFT OUTER"（左外）：
+//   左表（_Step1）的所有行都保留；
+//   右表（_Step2）如果没有匹配的行，右表的列填充 BLANK。
+//   → 这就是SQL中 "b.lp_12m_net_pay_amt IS NULL" 的来源
+//
+// 等价SQL：
+//   SELECT a.*, b._lp_12m_net_pay_amt
+//   FROM _Step1 a
+//   LEFT JOIN _Step2 b
+//     ON a.user_id = b.user_id
+//    AND a.shop_name_en = b.shop_name_en
+// ═══════════════════════════════════════════════════════════
+VAR _Joined = NATURALLEFTOUTERJOIN(_Step1, _Step2)
+
+// ═══════════════════════════════════════════════════════════
+// 最终筛选（对应SQL的 WHERE 子句）：
+//
+//   [_net_pay_amt] > 0
+//     → 对应 SQL：a.net_pay_amt > 0
+//
+//   ISBLANK([_lp_12m_net_pay_amt])
+//     → 对应 SQL：b.lp_12m_net_pay_amt IS NULL
+//     → 含义：该用户在第一财月区间内没有记录（LEFT JOIN 未匹配到）
+//
+//   [_lp_12m_net_pay_amt] = 0
+//     → 对应 SQL：b.lp_12m_net_pay_amt = 0
+//     → 含义：该用户在第一财月区间内有记录，但过去12个月无消费
+//
+// 注意：由于底表已将 NULL 处理为 0，
+//       ISBLANK 分支理论上不会触发（除非用户整行不存在），
+//       但保留此判断是为了与SQL逻辑严格一致。
+// ═══════════════════════════════════════════════════════════
+VAR _Result = 
+    FILTER(
+        _Joined,
+        [_net_pay_amt] > 0
+            && (ISBLANK([_lp_12m_net_pay_amt]) || [_lp_12m_net_pay_amt] = 0)
+    )
+
+// ═══════════════════════════════════════════════════════════
+// 返回
+// ═══════════════════════════════════════════════════════════
+RETURN
+IF(
+    __IsDayOrWeek,
+    BLANK(),                          // Day/Week 粒度不计算
+    COUNTROWS(_Result)                // 等价于 SQL 的 COUNT(DISTINCT user_id)
+)
+```
+
+### 14. 优化方案：EXCEPT（排除 > 0 的用户）
+```dax
+测试 = 
+
+// ═══════════════════════════════════════════════════════════
+// 变量定义区
+// ═══════════════════════════════════════════════════════════
+
+// ── 日期范围（模拟筛选器，正式使用时取消注释下方两行）──
+VAR __TimeMin = DATEVALUE("2026-05-24")
+VAR __TimeMax = DATEVALUE("2026-07-25")
+// VAR __TimeMin = SELECTEDVALUE(Slicer_Month_Period_Min[TimeFrame_Min])
+// VAR __TimeMax = SELECTEDVALUE(Slicer_Month_Period_Max[TimeFrame_Max])
+
+// ── 第一财月区间（Step2 使用的 data_date 范围）──
+VAR __FirstFiscalMonthMin = DATEVALUE("2026-05-24")
+VAR __FirstFiscalMonthMax = DATEVALUE("2026-06-27")
+// VAR __FirstFiscalMonthMin = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Min])
+// VAR __FirstFiscalMonthMax = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max])
+
+// ── 时间粒度判断：Day/Week 不计算 ──
+VAR __TimeFrameID = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])
+VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
+
+// ═══════════════════════════════════════════════════════════
+// 提前短路：Day/Week 粒度直接返回空，不执行后续任何计算
+// ═══════════════════════════════════════════════════════════
+RETURN
+IF(
+    __IsDayOrWeek,
+    BLANK(),
+
+// ═══════════════════════════════════════════════════════════
+// 子查询a（对应SQL的 FROM ... WHERE data_month IN (...) GROUP BY）
+//
+// 逻辑：在所选时间范围内，非会员有消费的记录，按 user_id + shop_name_en 聚合
+//
+// 关于多选筛选器（shop_name_en / platform）：
+//   CALCULATETABLE() 在当前筛选上下文中执行，
+//   外部筛选器（视觉对象上的多选Slicer）会自动注入筛选上下文，
+//   无需在DAX中手动添加。
+//
+// 关于 CALCULATETABLE：
+//   将筛选条件作为参数传入，由 VertiPaq 引擎在列存储层面执行过滤，
+//   比 FILTER(表, ...) 逐行扫描更高效。
+//
+// 关于 SUMMARIZECOLUMNS：
+//   存储引擎原生聚合函数，自动生成最优查询计划，
+//   性能优于 SUMMARIZE + FILTER 的组合。
+// ═══════════════════════════════════════════════════════════
+    VAR _New = 
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_name_en],
+                        "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __TimeMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __TimeMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_net] > 0
+            ),
+            "user_id", [user_id],
+            "shop_name_en", [shop_name_en]
+        )
+
+// ═══════════════════════════════════════════════════════════
+// 排除集（对应SQL中需要排除的用户）
+//
+// 逻辑：在第一财月区间内，非会员且过去12个月消费 > 0 的用户
+//
+// 注意：这里只筛选 [_lp12m] > 0 的用户（老客），
+//       后续用 EXCEPT 从 _New 中减去。
+//
+// 为什么用 > 0 而不是 = 0：
+//   SQL 的保留条件是 (IS NULL OR = 0)
+//   等价于排除条件是 > 0
+//   所以这里收集的是"需要排除的用户"
+// ═══════════════════════════════════════════════════════════
+    VAR _Old = 
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_name_en],
+                        "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __FirstFiscalMonthMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __FirstFiscalMonthMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_lp12m] > 0
+            ),
+            "user_id", [user_id],
+            "shop_name_en", [shop_name_en]
+        )
+
+// ═══════════════════════════════════════════════════════════
+// EXCEPT 详解：
+//
+// 功能：集合差集运算，返回在 _New 中存在但在 _Old 中不存在的行。
+//
+// 为什么 EXCEPT 等价于 SQL 的 LEFT JOIN + (IS NULL OR = 0)：
+//
+//   SQL 的保留条件：b.lp_12m_net_pay_amt IS NULL OR = 0
+//   等价于排除条件：b.lp_12m_net_pay_amt > 0
+//
+//   ┌──────────────────────────────────────────────────────────────┐
+//   │ 用户情况                      │ _Old 中是否存在 │ 是否保留  │
+//   ├──────────────────────────────────────────────────────────────┤
+//   │ 开始月份无记录（IS NULL）     │ ❌ 不存在       │ ✅ 保留   │
+//   │ 开始月份有记录，lp12m = 0     │ ❌ 不存在       │ ✅ 保留   │
+//   │ 开始月份有记录，lp12m > 0     │ ✅ 存在         │ ❌ 排除   │
+//   └──────────────────────────────────────────────────────────────┘
+//
+//   EXCEPT(_New, _Old) = _New 全集 - _Old 中的用户
+//   恰好保留了上述前两种情况。
+//
+// 等价SQL：
+//   SELECT a.user_id, a.shop_name_en
+//   FROM _New a
+//   LEFT JOIN _Old b 
+//     ON a.user_id = b.user_id AND a.shop_name_en = b.shop_name_en
+//   WHERE b.user_id IS NULL
+//
+// 相比 NATURALLEFTOUTERJOIN 的优势：
+//   - 少构建一个中间表（无需 _Joined），内存占用更低
+//   - 无需 ISBLANK() 判断，逻辑更简洁
+//   - 引擎对 EXCEPT 有专门优化，大数据量下更快
+// ═══════════════════════════════════════════════════════════
+    RETURN
+        COUNTROWS(EXCEPT(_New, _Old))
+)
+```
+
 ---
 
 ## 七、派生指标分类与计算方式

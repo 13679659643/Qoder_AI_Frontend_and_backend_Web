@@ -342,13 +342,13 @@
 | **业务定义** | 目标媒体新客贡献率 |
 | **Actual 计算公式** | 媒体新客数 / 全店新客数 |
 | **Actual 分子** | `media_member_cnt`（来自 `a05_e2e_paid_media_summary_d`） |
-| **Actual 分母** | `count(distinct user_id)`（来自 `a03_e2e_customer_data_m`） |
+| **Actual 分母** | `COUNTROWS(EXCEPT(Step1, Step2))`（来自 `a03_e2e_customer_data_m`，EXCEPT 差集模式） |
 | **Target 计算公式** | Month：`media_new_customer_contribution_rate`；Year：`year_media_new_customer_contribution_rate`（按 data_year） |
 | **±Actual vs Target** | Actual - Target |
 | **Target 数据底表** | `a05_e2e_paid_media_fcst_data_m` |
 | **Actual 分子筛选条件** | `customer_type="ALL" AND page_type="1"` |
 | **Actual 分子时间处理** | Month：按 `platform + data_year + data_month` 取 `media_member_cnt`；Year 及 Platform="ALL"：先按 `platform + data_year + data_month` 取 `media_member_cnt`，再对所选财月及平台 SUM。仅支持完整财月、财年 |
-| **Actual 分母计算逻辑** | data_date ∈ start_period AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 （Step1：筛选在所选时间范围内 net sales > 0 的 user_id（`dt = 所选时间范围, SUM(net_pay_amt) > 0 WHERE is_member = 0`）；Step2：缩小顾客范围至 start period 往前推 12 个月无消费（`dt = 所选时间范围 start_period, lp_12m_net_pay_amt = 0`）；两步交集即为全店新客） |
+| **Actual 分母计算逻辑** | EXCEPT 差集模式（Step1+Step2 不能合并区间，参考：维度复用/新客 No. 模板详解.md）。Step1（本期有消费的新客候选）：`data_date ∈ [TimeFrame_Min, TimeFrame_Max]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(net_pay_amt) > 0`；Step2（第一财月的老客排除集）：`data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(lp_12m_net_pay_amt) > 0`；结果 = `COUNTROWS(EXCEPT(Step1, Step2))`，即 Step1 全集减去 Step2 老客。第一财月时间范围：Month = 所选财月本身；Year = 财年起始月 |
 | **Target 取数逻辑** | Month 取所选财月 `media_new_customer_contribution_rate`；Year 取所选财年 `year_media_new_customer_contribution_rate` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%;-#,##0.0%;0.0%` |
@@ -420,7 +420,7 @@
 | 6 | Demand Sales ACH% | `SUM(sales_amt) / Demand Sales Target` | `customer_type="ALL" AND page_type="1"` | percent_1dp |
 | 7 | Acceleration Cost% | `SUM(cost_amt[framework="Acceleration"]) / SUM(cost_amt[全部 framework])` | 基础筛选 `mix_msg is NULL`；分子加 `framework="Acceleration"`，分母全部 framework（数据源 `a05_e2e_paid_media_product_data`） | percent_1dp |
 | 8 | Acceleration Net Sales% | `SUM(net_sales_amt[framework="Acceleration"]) / SUM(net_sales_amt[全部 framework])` | 分子 `framework="Acceleration"`，分母全部 framework（无 `mix_msg` 筛选，数据源 `a05_e2e_paid_media_product_data`） | percent_1dp |
-| 9 | Media Contribution to New Customer Acquisition% | `媒体新客数(media_member_cnt) / 全店新客数(count distinct user_id)` | 分子：`customer_type="ALL" AND page_type="1"`；分母：`a03_e2e_customer_data_m` 按 platform, shop_info_id 去重 | percent_1dp |
+| 9 | Media Contribution to New Customer Acquisition% | `媒体新客数(media_member_cnt) / 全店新客数(EXCEPT差集)` | 分子：`customer_type="ALL" AND page_type="1"`；分母：`a03_e2e_customer_data_m` EXCEPT 差集模式（Step1+Step2 不能合并区间） | percent_1dp |
 | 10 | Cost Per New Acquisition | `SUM(media_cost_amt) / SUM(media_member_cnt)`（先按 platform + data_year + data_month 去重再 SUM） | `customer_type="ALL" AND page_type="1"` | currency_decimal_1dp |
 
 ### Target 行（`__Indicator = "Target"`）
@@ -450,6 +450,6 @@
 > - 比率类指标（ID 1, 7-9）Target 缺失时，Target 及 ±Actual vs Target 展示"-"
 > - Cost Per New Acquisition（ID 10）：Target 缺失或为 0 时展示"-"；汇总后的 `media_member_cnt` 为 0 时，Actual 及 ±Actual vs Target 展示"-"
 > - ID 10 ±Actual vs Target = Actual / Target - 1（区别于其他指标的 Actual - Target）
-> - ID 19 分母新客判定：Step1（所选时间范围 `SUM(net_pay_amt) > 0 AND is_member = 0`）∩ Step2（start_period `lp_12m_net_pay_amt = 0`）
+> - ID 19 分母新客判定：EXCEPT 差集模式（Step1+Step2 不能合并区间）。Step1（本期有消费的新客候选）：`data_date ∈ [TimeFrame_Min, TimeFrame_Max]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(net_pay_amt) > 0`；Step2（第一财月的老客排除集）：`data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(lp_12m_net_pay_amt) > 0`；结果 = `COUNTROWS(EXCEPT(Step1, Step2))`
 
 

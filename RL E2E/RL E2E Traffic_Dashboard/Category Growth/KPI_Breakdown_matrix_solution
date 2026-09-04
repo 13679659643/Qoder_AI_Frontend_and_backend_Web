@@ -189,7 +189,7 @@ KPI Breakdown Base Value =
         CALCULATE(
             SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
             a05_e2e_paid_media_summary_d[customer_type] = "ALL",
-            a05_e2e_paid_media_summary_d[page_type] = "2",
+            a05_e2e_paid_media_summary_d[page_type] = "1",
             a05_e2e_paid_media_summary_d[Total] = "Total",
             __ChannelFilter, __DateFilter,
             __L1_Filter, __L2_Filter, __L3_Filter
@@ -265,7 +265,7 @@ KPI Breakdown Base Value =
         CALCULATE(
             SUM(a05_e2e_paid_media_summary_d[net_sales_amt]),
             a05_e2e_paid_media_summary_d[customer_type] = "ALL",
-            a05_e2e_paid_media_summary_d[page_type] = "2",
+            a05_e2e_paid_media_summary_d[page_type] = "1",
             a05_e2e_paid_media_summary_d[Total] = "Total",
             __DateFilter
         )

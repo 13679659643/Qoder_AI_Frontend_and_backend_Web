@@ -20,16 +20,16 @@
 
 ### 0.2 核心设计要点
 
-| # | 要点 | 说明 |
-|---|------|------|
-| 1 | Target 数据源切换 | Target 改用独立预测表 `a05_e2e_paid_media_fcst_data_m`（不再用 summary_d 的 fcst_ 前缀字段） |
-| 2 | 日期驱动方式 | 新增断开日期表 `Slicer_Time_Frame` 作为本方案唯一日期来源 |
-| 3 | Dim_Date_Current 关系处理 | 仅 `a05_e2e_paid_media_summary_d`、`a05_e2e_paid_media_product_data_d` 与 Dim_Date_Current 有连接关系，需 `REMOVEFILTERS(Dim_Date_Current)` 后重施加 `data_date` 筛选；`a05_e2e_paid_media_fcst_data_m`、`a03_e2e_customer_data_m` 与 Dim_Date_Current 无连接关系，无需 REMOVEFILTERS |
-| 4 | Platform 筛选 | 仅 `a05_e2e_paid_media_fcst_data_m` 在物理层面计算好了 `platform IN {"ALL"}`，始终单选形式（ALL→`="ALL"`，单平台→`=__ChannelID`）；Actual 表（summary_d / product_data_d / a03）用 `FILTER(ALL(<表>[platform]), ...)` 写法，ALL→`IN{"TM","JD"}`，单平台→`=__ChannelID`（避免嵌套 IF 返回表降级为标量） |
-| 5 | Target 时间粒度路由 | 根据 `Slicer_Time_Frame[TimeFrame_ID]` 取不同字段：Month 取月度字段，Year 取 year_ 年度字段（同财年 12 行重复，用 SUMMARIZE 去重） |
-| 6 | ACH% 类指标（ID 2-6） | Target 固定 100%；Actual = 实际值 / fcst 对应目标值 |
-| 7 | ±delta 口径 | ID 1-9 = Actual - Target；ID 10 = Actual / Target - 1；Target 缺失/为 0 → ±delta 展示 "-" |
-| 8 | 币种换算 | 仅 ID 10（金额类）在 Cell Value 层 `Value / Currency_ExchangeRate`（除法）；比率类不换算 |
+| # | 要点                      | 说明                                                                                                                                                                                                                                                                                                                     |
+| - | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1 | Target 数据源切换         | Target 改用独立预测表 `a05_e2e_paid_media_fcst_data_m`（不再用 summary_d 的 fcst_ 前缀字段）                                                                                                                                                                                                                           |
+| 2 | 日期驱动方式              | 新增断开日期表 `Slicer_Time_Frame` 作为本方案唯一日期来源                                                                                                                                                                                                                                                              |
+| 3 | Dim_Date_Current 关系处理 | 仅 `a05_e2e_paid_media_summary_d`、`a05_e2e_paid_media_product_data_d` 与 Dim_Date_Current 有连接关系，需 `REMOVEFILTERS(Dim_Date_Current)` 后重施加 `data_date` 筛选；`a05_e2e_paid_media_fcst_data_m`、`a03_e2e_customer_data_m` 与 Dim_Date_Current 无连接关系，无需 REMOVEFILTERS                        |
+| 4 | Platform 筛选             | 仅 `a05_e2e_paid_media_fcst_data_m` 在物理层面计算好了 `platform IN {"ALL"}`，始终单选形式（ALL→`="ALL"`，单平台→`=__ChannelID`）；Actual 表（summary_d / product_data_d / a03）用 `FILTER(ALL(<表>[platform]), ...)` 写法，ALL→`IN{"TM","JD"}`，单平台→`=__ChannelID`（避免嵌套 IF 返回表降级为标量） |
+| 5 | Target 时间粒度路由       | 根据 `Slicer_Time_Frame[TimeFrame_ID]` 取不同字段：Month 取月度字段，Year 取 year_ 年度字段（同财年 12 行重复，用 SUMMARIZE 去重）                                                                                                                                                                                     |
+| 6 | ACH% 类指标（ID 2-6）     | Target 固定 100%；Actual = 实际值 / fcst 对应目标值                                                                                                                                                                                                                                                                      |
+| 7 | ±delta 口径              | ID 1-9 = Actual - Target；ID 10 = Actual / Target - 1；Target 缺失/为 0 → ±delta 展示 "-"                                                                                                                                                                                                                              |
+| 8 | 币种换算                  | 仅 ID 10（金额类）在 Cell Value 层 `Value / Currency_ExchangeRate`（除法）；比率类不换算                                                                                                                                                                                                                               |
 
 ### 0.3 架构链
 
@@ -63,18 +63,18 @@ KPIs Overview Target Cell Value ── 行路由 + 金额类 ÷ 汇率；±delta
 
 ### 0.4 指标列对照
 
-| # | 列名 | 格式 | 金额 | Actual 数据源 | Target 数据源 |
-|---|------|------|------|--------------|---------------|
-| 1 | Cost Rate | percent_1dp | FALSE | summary_d | fcst(rate) |
-| 2 | RTB Cost ACH% | percent_1dp | FALSE | summary_d + fcst(amount) | 固定 100% |
-| 3 | Cost ACH% | percent_1dp | FALSE | summary_d + fcst(amount) | 固定 100% |
-| 4 | Cost ACH%(Exclude Refund) | percent_1dp | FALSE | summary_d + fcst(amount) | 固定 100% |
-| 5 | Net Sales ACH% | percent_1dp | FALSE | summary_d + fcst(amount) | 固定 100% |
-| 6 | Demand Sales ACH% | percent_1dp | FALSE | summary_d + fcst(amount) | 固定 100% |
-| 7 | Acceleration Cost% | percent_1dp | FALSE | product_data_d | fcst(rate) |
-| 8 | Acceleration Net Sales% | percent_1dp | FALSE | product_data_d | fcst(rate) |
-| 9 | Media Contribution to New Customer% | percent_1dp | FALSE | summary_d(分子) + a03(分母) | fcst(rate) |
-| 10 | Cost Per New Acquisition | currency_decimal_1dp | TRUE | summary_d | fcst(amount) |
+| #  | 列名                                | 格式                 | 金额  | Actual 数据源               | Target 数据源 |
+| -- | ----------------------------------- | -------------------- | ----- | --------------------------- | ------------- |
+| 1  | Cost Rate                           | percent_1dp          | FALSE | summary_d                   | fcst(rate)    |
+| 2  | RTB Cost ACH%                       | percent_1dp          | FALSE | summary_d + fcst(amount)    | 固定 100%     |
+| 3  | Cost ACH%                           | percent_1dp          | FALSE | summary_d + fcst(amount)    | 固定 100%     |
+| 4  | Cost ACH%(Exclude Refund)           | percent_1dp          | FALSE | summary_d + fcst(amount)    | 固定 100%     |
+| 5  | Net Sales ACH%                      | percent_1dp          | FALSE | summary_d + fcst(amount)    | 固定 100%     |
+| 6  | Demand Sales ACH%                   | percent_1dp          | FALSE | summary_d + fcst(amount)    | 固定 100%     |
+| 7  | Acceleration Cost%                  | percent_1dp          | FALSE | product_data_d              | fcst(rate)    |
+| 8  | Acceleration Net Sales%             | percent_1dp          | FALSE | product_data_d              | fcst(rate)    |
+| 9  | Media Contribution to New Customer% | percent_1dp          | FALSE | summary_d(分子) + a03(分母) | fcst(rate)    |
+| 10 | Cost Per New Acquisition            | currency_decimal_1dp | TRUE  | summary_d                   | fcst(amount)  |
 
 ---
 
@@ -209,10 +209,10 @@ RETURN __Rows
 - **复用** TTL 汇总方案（单选含 ALL）
 - **Platform 筛选规则**（Actual 表用 FILTER 写法，避免嵌套 IF 返回表降级为标量；Target 表用单选形式）：
 
-| 目标表 | ALL | 单平台 | 写法 |
-|--------|-----|--------|------|
+| 目标表                                        | ALL               | 单平台           | 写法                                                                                                      |
+| --------------------------------------------- | ----------------- | ---------------- | --------------------------------------------------------------------------------------------------------- |
 | Actual 表（summary_d / product_data_d / a03） | `IN{"TM","JD"}` | `=__ChannelID` | `FILTER(ALL(<表>[platform]), IF(__ChannelID="ALL", [platform] IN {"TM","JD"}, [platform]=__ChannelID))` |
-| Target 表（fcst_data_m） | `="ALL"` | `=__ChannelID` | `[platform] = IF(__ChannelID="ALL", "ALL", __ChannelID)` |
+| Target 表（fcst_data_m）                      | `="ALL"`        | `=__ChannelID` | `[platform] = IF(__ChannelID="ALL", "ALL", __ChannelID)`                                                |
 
 ### 3.3 币种 Slicer_Currency_Selection
 
@@ -232,14 +232,14 @@ RETURN __Rows
 
 ### 4.1 事实表
 
-| Power BI 表名 | 用途 | 与 Dim_Date_Current 关系 |
-|---------------|------|--------------------------|
-| `a05_e2e_paid_media_summary_d` | Actual：cost / net_sales / sales / red_packet / rebate / media_member_cnt / media_cost_amt | ✅ 已连接（需 REMOVEFILTERS） |
-| `a05_e2e_paid_media_product_data_d` | Actual：Acceleration（framework 维度） | ✅ 已连接（需 REMOVEFILTERS） |
-| `a05_e2e_paid_media_fcst_data_m` | Target：预测表（platform 含 ALL，月度行） | ❌ 断开（无需 REMOVEFILTERS） |
-| `a03_e2e_customer_data_m` | Actual ID9 分母：全店新客数 | ❌ 断开（无需 REMOVEFILTERS） |
-| `Dim_Date_Current` | 看板层日期 | — |
-| `Slicer_Time_Frame` | 本方案日期来源（断开） | — |
+| Power BI 表名                         | 用途                                                                                       | 与 Dim_Date_Current 关系      |
+| ------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------- |
+| `a05_e2e_paid_media_summary_d`      | Actual：cost / net_sales / sales / red_packet / rebate / media_member_cnt / media_cost_amt | ✅ 已连接（需 REMOVEFILTERS） |
+| `a05_e2e_paid_media_product_data_d` | Actual：Acceleration（framework 维度）                                                     | ✅ 已连接（需 REMOVEFILTERS） |
+| `a05_e2e_paid_media_fcst_data_m`    | Target：预测表（platform 含 ALL，月度行）                                                  | ❌ 断开（无需 REMOVEFILTERS） |
+| `a03_e2e_customer_data_m`           | Actual ID9 分母：全店新客数（EXCEPT 差集模式）                                                    | ❌ 断开（无需 REMOVEFILTERS） |
+| `Dim_Date_Current`                  | 看板层日期                                                                                 | —                            |
+| `Slicer_Time_Frame`                 | 本方案日期来源（断开）                                                                     | —                            |
 
 ### 4.2 关系配置
 
@@ -261,23 +261,23 @@ RETURN __Rows
 
 **日期处理原则**：
 
-| 表 | 与 Dim_Date_Current 关系 | 处理方式 |
-|----|--------------------------|----------|
-| summary_d | ✅ 已连接 | `REMOVEFILTERS(Dim_Date_Current)` + 重施加 `data_date ∈ [Min, Max]` |
-| product_data_d | ✅ 已连接 | `REMOVEFILTERS(Dim_Date_Current)` + 重施加 `data_date ∈ [Min, Max]` |
-| fcst_data_m | ❌ 断开 | 直接筛选 `data_date ∈ [Min, Max]`（无需 REMOVEFILTERS） |
-| a03_customer_data_m | ❌ 断开 | 直接筛选 `data_date ∈ [Min, Max]`（无需 REMOVEFILTERS） |
+| 表                  | 与 Dim_Date_Current 关系 | 处理方式                                                                 |
+| ------------------- | ------------------------ | ------------------------------------------------------------------------ |
+| summary_d           | ✅ 已连接                | `REMOVEFILTERS(Dim_Date_Current)` + 重施加 `data_date ∈ [Min, Max]` |
+| product_data_d      | ✅ 已连接                | `REMOVEFILTERS(Dim_Date_Current)` + 重施加 `data_date ∈ [Min, Max]` |
+| fcst_data_m         | ❌ 断开                  | 直接筛选 `data_date ∈ [Min, Max]`（无需 REMOVEFILTERS）               |
+| a03_customer_data_m | ❌ 断开                  | 直接筛选 `data_date ∈ [Min, Max]`（无需 REMOVEFILTERS）               |
 
 ### 4.3 Sort by Column
 
-| 表 | 字段 | Sort by Column |
-|----|------|----------------|
-| DIM_RowKPIs_Overview_Target | Indicator_Type | Indicator_Order |
-| DIM_ColMetric_Target | Metric_Name | Metric_Sort |
-| Slicer_Platform_Selection | Platform_Label | Platform_Sort |
-| Slicer_Time_Frame | TimeFrame_Value | TimeFrame_Sort |
+| 表                           | 字段              | Sort by Column   |
+| ---------------------------- | ----------------- | ---------------- |
+| DIM_RowKPIs_Overview_Target  | Indicator_Type    | Indicator_Order  |
+| DIM_ColMetric_Target         | Metric_Name       | Metric_Sort      |
+| Slicer_Platform_Selection    | Platform_Label    | Platform_Sort    |
+| Slicer_Time_Frame            | TimeFrame_Value   | TimeFrame_Sort   |
 | Slicer_DataCaliber_Selection | DataCaliber_Label | DataCaliber_Sort |
-| Slicer_Currency_Selection | Currency_Label | Currency_Sort |
+| Slicer_Currency_Selection    | Currency_Label    | Currency_Sort    |
 
 ---
 
@@ -374,7 +374,7 @@ KPIs Overview Target Actual Base Value =
 // 平台筛选：Actual 表用 __PlatformFilter_<表>（FILTER 写法）；
 //           fcst 表用 platform = IF(__ChannelID="ALL","ALL",__ChannelID)（单选形式）
 // ACH% 类（ID 2-6）：Actual = 实际值 / fcst目标值
-// ID 9：分子 media_member_cnt 用 SUMMARIZE 去重；分母走 a03 直接筛选 DISTINCTCOUNT
+// ID 9：分子 media_member_cnt 用 SUMMARIZE 去重；分母走 a03 EXCEPT 差集模式（Step1+Step2 不能合并区间）
 
 VAR __SelID = SELECTEDVALUE(DIM_ColMetric_Target[Metric_ID])
 VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
@@ -415,6 +415,11 @@ VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "
 VAR __TimeFrameID = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID], "Month")
 VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Min])
 VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Max])
+// ── 第一财月时间范围（用于 Step2 老客排除集）──
+// Month：第一财月 = 所选财月本身
+// Year：第一财月 = 财年起始月（__TimeMin 所在月的第一天 ~ 最后一天）
+VAR __FirstFiscalMonthMin = __TimeMin
+VAR __FirstFiscalMonthMax = EOMONTH(__TimeMin, 0)
 
 RETURN
 SWITCH(
@@ -655,7 +660,10 @@ SWITCH(
 
     // ═══ ID 9: Media Contribution = 媒体新客数 / 全店新客数 ═══
     // 分子 media_member_cnt：SUMMARIZE(platform, data_year, data_month, media_member_cnt) + SUMX 去重后汇总
-    // 分母 全店新客数：a03 直接筛选 data_date ∈ [Min,Max] AND net_pay_amt>0 AND is_member=0 AND lp_12m_net_pay_amt=0，DISTINCTCOUNT user_id
+    // 分母 全店新客数：a03 EXCEPT 差集模式（Step1+Step2 不能合并区间）
+    //   Step1（本期有消费的新客候选）：data_date ∈ [__TimeMin, __TimeMax]，is_member = 0，SUM(net_pay_amt) > 0
+    //   Step2（第一财月的老客排除集）：data_date ∈ [__FirstFiscalMonthMin, __FirstFiscalMonthMax]，is_member = 0，SUM(lp_12m_net_pay_amt) > 0
+    //   结果 = COUNTROWS(EXCEPT(Step1, Step2))
     // a03 与 Dim_Date_Current 无连接，无需 REMOVEFILTERS；user_id 不受 trans_cycle 和 Currency 影响
     9,
     VAR __MediaMember =
@@ -678,16 +686,45 @@ SWITCH(
             __PlatformFilter_summary,
             a05_e2e_paid_media_summary_d[trans_cycle] = __TransCycle
         )
-    VAR __NewCustomer =
-        CALCULATE(
-            DISTINCTCOUNT(a03_e2e_customer_data_m[user_id]),
-            a03_e2e_customer_data_m[data_date] >= __TimeMin,
-            a03_e2e_customer_data_m[data_date] <= __TimeMax,
-            a03_e2e_customer_data_m[net_pay_amt] > 0,
-            a03_e2e_customer_data_m[is_member] = 0,
-            a03_e2e_customer_data_m[lp_12m_net_pay_amt] = 0,
-            __PlatformFilter_a03
+    VAR __NewCust_Step1 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        a03_e2e_customer_data_m[user_id],
+                        a03_e2e_customer_data_m[shop_info_id],
+                        "_net", SUM(a03_e2e_customer_data_m[net_pay_amt])
+                    ),
+                    a03_e2e_customer_data_m[data_date] >= __TimeMin,
+                    a03_e2e_customer_data_m[data_date] <= __TimeMax,
+                    a03_e2e_customer_data_m[is_member] = 0,
+                    __PlatformFilter_a03
+                ),
+                [_net] > 0
+            ),
+            "user_id", a03_e2e_customer_data_m[user_id],
+            "shop_info_id", a03_e2e_customer_data_m[shop_info_id]
         )
+    VAR __OldCust_Step2 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        a03_e2e_customer_data_m[user_id],
+                        a03_e2e_customer_data_m[shop_info_id],
+                        "_lp12m", SUM(a03_e2e_customer_data_m[lp_12m_net_pay_amt])
+                    ),
+                    a03_e2e_customer_data_m[data_date] >= __FirstFiscalMonthMin,
+                    a03_e2e_customer_data_m[data_date] <= __FirstFiscalMonthMax,
+                    a03_e2e_customer_data_m[is_member] = 0,
+                    __PlatformFilter_a03
+                ),
+                [_lp12m] > 0
+            ),
+            "user_id", a03_e2e_customer_data_m[user_id],
+            "shop_info_id", a03_e2e_customer_data_m[shop_info_id]
+        )
+    VAR __NewCustomer = COUNTROWS(EXCEPT(__NewCust_Step1, __OldCust_Step2))
     RETURN DIVIDE(__MediaMember, __NewCustomer),
 
     // ═══ ID 10: Cost Per New Acquisition = media_cost_amt / media_member_cnt（SUMMARIZE+SUMX 去重） ═══
@@ -1181,41 +1218,41 @@ KPIs Overview Target Cell Background Color =
 
 ### 10.1 矩阵（Matrix）
 
-| 属性 | 值 |
-|------|-----|
-| 行 | `DIM_RowKPIs_Overview_Target[Indicator_Type]` |
-| 列 | `DIM_ColMetric_Target[Metric_Name]` |
-| 值 | `[KPIs Overview Target Cell Display]` |
+| 属性 | 值                                              |
+| ---- | ----------------------------------------------- |
+| 行   | `DIM_RowKPIs_Overview_Target[Indicator_Type]` |
+| 列   | `DIM_ColMetric_Target[Metric_Name]`           |
+| 值   | `[KPIs Overview Target Cell Display]`         |
 
 ### 10.2 条件格式
 
-| 格式类型 | 基于字段 | 说明 |
-|---------|----------|------|
-| 字体颜色 | `[KPIs Overview Target Cell Font Color]` | ±delta 行三色，其他 #5f6165 |
-| 背景颜色 | `[KPIs Overview Target Cell Background Color]` | 交替行（白/灰/白） |
-| 图标 | `[KPIs Overview Target Cell SVG Icon]` | ±delta 行箭头，数据类别 = 图像 URL |
+| 格式类型 | 基于字段                                         | 说明                                |
+| -------- | ------------------------------------------------ | ----------------------------------- |
+| 字体颜色 | `[KPIs Overview Target Cell Font Color]`       | ±delta 行三色，其他 #5f6165        |
+| 背景颜色 | `[KPIs Overview Target Cell Background Color]` | 交替行（白/灰/白）                  |
+| 图标     | `[KPIs Overview Target Cell SVG Icon]`         | ±delta 行箭头，数据类别 = 图像 URL |
 
 ### 10.3 切片器
 
-| 切片器 | 类型 | 字段 | 默认值 |
-|--------|------|------|--------|
-| 时间粒度/区间 | 单选 | `Slicer_Time_Frame[TimeFrame_Value]` | 当前财月 |
-| Platform | 单选 | `Slicer_Platform_Selection[Platform_Label]` | ALL |
-| 数据口径 | 单选 | `Slicer_DataCaliber_Selection[DataCaliber_Label]` | T+1 |
-| 币种 | 单选 | `Slicer_Currency_Selection[Currency_Label]` | RMB |
+| 切片器        | 类型 | 字段                                                | 默认值   |
+| ------------- | ---- | --------------------------------------------------- | -------- |
+| 时间粒度/区间 | 单选 | `Slicer_Time_Frame[TimeFrame_Value]`              | 当前财月 |
+| Platform      | 单选 | `Slicer_Platform_Selection[Platform_Label]`       | ALL      |
+| 数据口径      | 单选 | `Slicer_DataCaliber_Selection[DataCaliber_Label]` | T+1      |
+| 币种          | 单选 | `Slicer_Currency_Selection[Currency_Label]`       | RMB      |
 
 ---
 
 ## 11. 度量值清单与 Display Folder
 
-| # | 度量值名称 | Display Folder | 返回类型 |
-|---|-----------|----------------|----------|
-| 1 | KPIs Overview Target Actual Base Value | KPIs Overview Target | 数值 |
-| 2 | KPIs Overview Target Target Base Value | KPIs Overview Target | 数值 |
-| 3 | KPIs Overview Target Cell Value | KPIs Overview Target | 数值 |
-| 4 | KPIs Overview Target Cell Display | KPIs Overview Target › Formatting | 文本 |
-| 5 | KPIs Overview Target Cell Font Color | KPIs Overview Target › Formatting | 颜色代码 |
-| 6 | KPIs Overview Target Cell SVG Icon | KPIs Overview Target › Formatting | 图像 URL |
+| # | 度量值名称                                 | Display Folder                     | 返回类型 |
+| - | ------------------------------------------ | ---------------------------------- | -------- |
+| 1 | KPIs Overview Target Actual Base Value     | KPIs Overview Target               | 数值     |
+| 2 | KPIs Overview Target Target Base Value     | KPIs Overview Target               | 数值     |
+| 3 | KPIs Overview Target Cell Value            | KPIs Overview Target               | 数值     |
+| 4 | KPIs Overview Target Cell Display          | KPIs Overview Target › Formatting | 文本     |
+| 5 | KPIs Overview Target Cell Font Color       | KPIs Overview Target › Formatting | 颜色代码 |
+| 6 | KPIs Overview Target Cell SVG Icon         | KPIs Overview Target › Formatting | 图像 URL |
 | 7 | KPIs Overview Target Cell Background Color | KPIs Overview Target › Formatting | 颜色代码 |
 
 ```
@@ -1233,14 +1270,14 @@ _Measures
 
 ### 新建/重建对象清单
 
-| 类型 | 名称 | 说明 |
-|------|------|------|
-| 计算表 | `DIM_RowKPIs_Overview_Target` | 沿用；Actual/Target/±Actual vs Target |
-| 计算表 | `DIM_ColMetric_Target` | 重建；ACH% 类统一 percent_1dp，仅 ID 10 金额类 |
-| 度量值 | `KPIs Overview Target Actual Base Value` | 重写；日期 = Slicer_Time_Frame，ACH% 分母走 fcst(MAX)，ID9 分母走 a03 DISTINCTCOUNT |
-| 度量值 | `KPIs Overview Target Target Base Value` | 重写；fcst 表，SUMMARIZE 去重，ACH% 类固定 100% |
-| 度量值 | `KPIs Overview Target Cell Value` | 重写；±delta ID 1-9 = Actual-Target，ID 10 = Actual/Target-1；金额类 ÷ 汇率 |
-| 度量值 | Cell Display / Font Color / SVG Icon / Background Color | 沿用，Cell Display 新增拓展格式类型 |
+| 类型   | 名称                                                    | 说明                                                                                |
+| ------ | ------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 计算表 | `DIM_RowKPIs_Overview_Target`                         | 沿用；Actual/Target/±Actual vs Target                                              |
+| 计算表 | `DIM_ColMetric_Target`                                | 重建；ACH% 类统一 percent_1dp，仅 ID 10 金额类                                      |
+| 度量值 | `KPIs Overview Target Actual Base Value`              | 重写；日期 = Slicer_Time_Frame，ACH% 分母走 fcst(MAX)，ID9 分母走 a03 EXCEPT 差集模式 |
+| 度量值 | `KPIs Overview Target Target Base Value`              | 重写；fcst 表，SUMMARIZE 去重，ACH% 类固定 100%                                     |
+| 度量值 | `KPIs Overview Target Cell Value`                     | 重写；±delta ID 1-9 = Actual-Target，ID 10 = Actual/Target-1；金额类 ÷ 汇率       |
+| 度量值 | Cell Display / Font Color / SVG Icon / Background Color | 沿用，Cell Display 新增拓展格式类型                                                 |
 
 ---
 
@@ -1248,22 +1285,22 @@ _Measures
 
 ### A. 日期处理
 
-| 表 | 与 Dim_Date_Current 关系 | 处理方式 |
-|----|--------------------------|----------|
-| `a05_e2e_paid_media_summary_d` | ✅ 已连接 | `REMOVEFILTERS(Dim_Date_Current)` + 重施加 `data_date ∈ [Min, Max]` |
-| `a05_e2e_paid_media_product_data_d` | ✅ 已连接 | `REMOVEFILTERS(Dim_Date_Current)` + 重施加 `data_date ∈ [Min, Max]` |
-| `a05_e2e_paid_media_fcst_data_m` | ❌ 断开 | 直接筛选 `data_date ∈ [Min, Max]`（无需 REMOVEFILTERS） |
-| `a03_e2e_customer_data_m` | ❌ 断开 | 直接筛选 `data_date ∈ [Min, Max]`（无需 REMOVEFILTERS） |
+| 表                                    | 与 Dim_Date_Current 关系 | 处理方式                                                                 |
+| ------------------------------------- | ------------------------ | ------------------------------------------------------------------------ |
+| `a05_e2e_paid_media_summary_d`      | ✅ 已连接                | `REMOVEFILTERS(Dim_Date_Current)` + 重施加 `data_date ∈ [Min, Max]` |
+| `a05_e2e_paid_media_product_data_d` | ✅ 已连接                | `REMOVEFILTERS(Dim_Date_Current)` + 重施加 `data_date ∈ [Min, Max]` |
+| `a05_e2e_paid_media_fcst_data_m`    | ❌ 断开                  | 直接筛选 `data_date ∈ [Min, Max]`（无需 REMOVEFILTERS）               |
+| `a03_e2e_customer_data_m`           | ❌ 断开                  | 直接筛选 `data_date ∈ [Min, Max]`（无需 REMOVEFILTERS）               |
 
 - `Slicer_Time_Frame` 单选，`TimeFrame_Min/Max` 即所选财月/财年的完整自然日区间
 - 各表 `data_date` 列需为 Date 类型（与 `TimeFrame_Min/Max` 比较）
 
 ### B. Platform 处理
 
-| 表 | ALL | 单平台 | 写法 |
-|----|-----|--------|------|
+| 表                                            | ALL               | 单平台           | 写法                                                                                                      |
+| --------------------------------------------- | ----------------- | ---------------- | --------------------------------------------------------------------------------------------------------- |
 | Actual 表（summary_d / product_data_d / a03） | `IN{"TM","JD"}` | `=__ChannelID` | `FILTER(ALL(<表>[platform]), IF(__ChannelID="ALL", [platform] IN {"TM","JD"}, [platform]=__ChannelID))` |
-| Target 表（fcst_data_m） | `="ALL"` | `=__ChannelID` | `[platform] = IF(__ChannelID="ALL", "ALL", __ChannelID)` |
+| Target 表（fcst_data_m）                      | `="ALL"`        | `=__ChannelID` | `[platform] = IF(__ChannelID="ALL", "ALL", __ChannelID)`                                                |
 
 - 仅 `a05_e2e_paid_media_fcst_data_m` 在物理层面计算好了 `platform IN {"ALL"}`，始终单选形式
 - Actual 表用 `FILTER(ALL(<表>[platform]), ...)` 写法，每个事实表单独声明一个 `__PlatformFilter_<表>` 变量
@@ -1275,9 +1312,15 @@ _Measures
 - **Year**：同财年 12 行重复年度值，`SUMMARIZE(platform, year_字段)` + `SUMX` 去重 = 该年度值（等价 MAX）
 - **ACH% 分母**（Actual 内）：按口径用 `MAX`（Month 取月度字段 MAX，Year 取 year_ 字段 MAX）
 
-### D. ID 9 新客判定（简化直接筛选）
+### D. ID 9 新客判定（EXCEPT 差集模式）
 
-- **分母**：`a03_e2e_customer_data_m` 直接筛选 `data_date ∈ [TimeFrame_Min, TimeFrame_Max] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0`，`DISTINCTCOUNT(user_id)`
+- **分母**：`a03_e2e_customer_data_m` EXCEPT 差集模式（Step1+Step2 不能合并区间，参考：维度复用/新客 No. 模板详解.md）
+  - **Step1（本期有消费的新客候选）**：`data_date ∈ [__TimeMin, __TimeMax]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(net_pay_amt) > 0`
+  - **Step2（第一财月的老客排除集）**：`data_date ∈ [__FirstFiscalMonthMin, __FirstFiscalMonthMax]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(lp_12m_net_pay_amt) > 0`
+  - **结果** = `COUNTROWS(EXCEPT(Step1, Step2))`，即 Step1 全集减去 Step2 老客
+- 第一财月时间范围：
+  - Month：`__FirstFiscalMonthMin = __TimeMin`，`__FirstFiscalMonthMax = EOMONTH(__TimeMin, 0)`（所选财月本身）
+  - Year：`__FirstFiscalMonthMin = __TimeMin`（财年起始日），`__FirstFiscalMonthMax = EOMONTH(__TimeMin, 0)`（财年起始月的最后一天）
 - `a03` 与 `Dim_Date_Current` 无连接，无需 `REMOVEFILTERS`
 - `user_id` 不受 `trans_cycle` 和 `Currency` 影响
 - 受 Platform 筛选：ALL→`IN{"TM","JD"}`；单平台→`=__ChannelID`

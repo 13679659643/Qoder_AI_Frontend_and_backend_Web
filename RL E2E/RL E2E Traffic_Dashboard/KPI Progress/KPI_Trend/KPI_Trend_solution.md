@@ -2,7 +2,7 @@
 
 > status: updated
 > created: 2026-06-23
-> updated: 2026-09-01
+> updated: 2026-09-04
 > complexity: 🟡中等
 > type: 度量值开发
 > naming: 遵循 dax-style.md 规范
@@ -56,7 +56,7 @@ VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
 
 | 底表 | 用途 | 涉及指标 |
 | ---- | ---- | -------- |
-| a03_e2e_customer_data_m | 全店新客 / 全部买家（DISTINCTCOUNT user_id） | #25 分子、#26 分子分母、#27 分母 |
+| a03_e2e_customer_data_m | 全店新客（EXCEPT 差集）/ 全部买家（DISTINCTCOUNT user_id） | #25 分子、#26 分子分母、#27 分母 |
 | a05_e2e_paid_media_summary_d | 媒体新客数（media_member_cnt，MAX+SUM 聚合） | #27 分子 |
 | a05_e2e_paid_media_product_data_d | 第二品类 SLS / Cost（framework 筛选） | #28、#29、#30 |
 
@@ -73,12 +73,13 @@ New Customer No. Value =
 // Display Folder: KPI Trend
 // 用途: 新客数量趋势值（柱形图/趋势图 Y 轴）
 // 口径来源: KPI Progress.md 子模块三 §25
-// 计算公式: COUNT(DISTINCT user_id)（全店新客）
+// 计算公式: COUNTROWS(EXCEPT(Step1, Step2))（全店新客，EXCEPT 差集模式）
 // 数据底表: a03_e2e_customer_data_m
-// 筛选条件: 合并区间等价于单一筛选：
-//   data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
-// 聚合粒度: 按趋势图所选 Period 及 platform、shop_info_id 对 user_id 去重计数
-//   （platform/shop_info_id 由模型 1:N 关系自动筛选，无需显式 DAX 处理）
+// Step1+Step2 不能合并区间计算（参考：维度复用/新客 No. 模板详解.md）：
+//   Step1（本期有消费的新客候选）：data_date ∈ [__CurrentMonthMin, __CurrentMonthMax]，is_member = 0，SUM(net_pay_amt) > 0
+//   Step2（第一财月的老客排除集）：data_date ∈ [__FirstFiscalMonthMin, __FirstFiscalMonthMax]，is_member = 0，SUM(lp_12m_net_pay_amt) > 0
+//   结果 = COUNTROWS(EXCEPT(Step1, Step2))
+// 聚合粒度: 按 user_id + shop_info_id 聚合（platform/shop_info_id 由模型 1:N 关系自动筛选）
 // 数据类型: integer_M_K_Int_0db（整数，不涉及汇率换算）
 // 注意: Day/Week 时指标无意义，在最终结果层统一留空，不细分到分子分母
 // ========================================
@@ -88,24 +89,64 @@ New Customer No. Value =
     // ── X 轴当前遍历月份 ──
     VAR __CurrentMonthMin = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Min])
     VAR __CurrentMonthMax = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Max])
+    // ── 第一财月时间范围（用于 Step2 老客排除集）──
+    VAR __FirstFiscalMonthMin = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Min])
+    VAR __FirstFiscalMonthMax = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Max])
     // ── 时间粒度判断（Day/Week 时指标无意义，统一留空）──
     VAR __TimeFrameID = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_ID])
     VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
+
+    // ═══════════════════════════════════════
+    // 全店新客数：a03_e2e_customer_data_m（EXCEPT 差集模式）
+    // Step1+Step2 不能合并区间计算（参考：维度复用/新客 No. 模板详解.md）：
+    //   Step1（本期有消费的新客候选）：data_date ∈ [__CurrentMonthMin, __CurrentMonthMax]，is_member = 0，SUM(net_pay_amt) > 0
+    //   Step2（第一财月的老客排除集）：data_date ∈ [__FirstFiscalMonthMin, __FirstFiscalMonthMax]，is_member = 0，SUM(lp_12m_net_pay_amt) > 0
+    //   结果 = COUNTROWS(EXCEPT(Step1, Step2))
+    // 按 user_id + shop_info_id 聚合（platform/shop_info_id 由模型 1:N 关系自动筛选）
+    // ═══════════════════════════════════════
+    VAR __NewCust_Step1 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __CurrentMonthMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __CurrentMonthMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_net] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
+        )
+    VAR __OldCust_Step2 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __FirstFiscalMonthMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __FirstFiscalMonthMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_lp12m] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
+        )
+    VAR __TotalNewCustCnt = COUNTROWS(EXCEPT(__NewCust_Step1, __OldCust_Step2))
 
     RETURN
         IF(
             __IsDayOrWeek,
             BLANK(),
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[data_date] >= __TimeMin,
-                'a03_e2e_customer_data_m'[data_date] <= __TimeMax,
-                'a03_e2e_customer_data_m'[data_date] >= __CurrentMonthMin,
-                'a03_e2e_customer_data_m'[data_date] <= __CurrentMonthMax,
-                'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0
-            )
+            __TotalNewCustCnt
         )
 ```
 
@@ -149,10 +190,8 @@ New Customer% Value =
 // 口径来源: KPI Progress.md 子模块三 §26
 // 计算公式: New Customer No / TTL Buyers
 // 数据底表: a03_e2e_customer_data_m
-// 分子: COUNT(DISTINCT user_id)（全店新客，同 #25）
-//   筛选: net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
-// 分母: COUNT(DISTINCT user_id)（全部买家）
-//   筛选: SUM(net_pay_amt) > 0 AND is_member = 0（行级等价 net_pay_amt > 0）
+// 分子: COUNTROWS(EXCEPT(Step1, Step2))（全店新客，EXCEPT 差集模式，同 #25）
+// 分母: COUNTROWS(Step1)（全部买家，net_pay_amt > 0 AND is_member = 0）
 // 数据类型: percent_0dp（比率，不涉及汇率换算）
 // 注意: Day/Week 时指标无意义，在最终结果层统一留空，不细分到分子分母
 // ========================================
@@ -162,28 +201,55 @@ New Customer% Value =
     // ── X 轴当前遍历月份 ──
     VAR __CurrentMonthMin = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Min])
     VAR __CurrentMonthMax = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Max])
+    // ── 第一财月时间范围（用于 Step2 老客排除集）──
+    VAR __FirstFiscalMonthMin = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Min])
+    VAR __FirstFiscalMonthMax = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Max])
     // ── 时间粒度判断（Day/Week 时指标无意义，统一留空）──
     VAR __TimeFrameID = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_ID])
     VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
 
-    // ── 分子：全店新客（合并区间筛选，同 #25）──
-    VAR __NewCustCnt =
-        CALCULATE(
-            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[data_date] >= __TimeMin,
-            'a03_e2e_customer_data_m'[data_date] <= __TimeMax,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentMonthMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentMonthMax,
-            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-            'a03_e2e_customer_data_m'[is_member] = 0,
-            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0
+    // ── 分子：全店新客（EXCEPT 差集模式，同 #25）──
+    VAR __NewCust_Step1 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __CurrentMonthMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __CurrentMonthMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_net] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
         )
-    // ── 分母：全部买家（net_pay_amt > 0 AND is_member = 0）──
+    VAR __OldCust_Step2 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __FirstFiscalMonthMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __FirstFiscalMonthMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_lp12m] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
+        )
+    VAR __NewCustCnt = COUNTROWS(EXCEPT(__NewCust_Step1, __OldCust_Step2))
+    // ── 分母：全部买家（按 user_id 去重，net_pay_amt > 0 AND is_member = 0）──
     VAR __TTLBuyers =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[data_date] >= __TimeMin,
-            'a03_e2e_customer_data_m'[data_date] <= __TimeMax,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentMonthMin,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentMonthMax,
             'a03_e2e_customer_data_m'[net_pay_amt] > 0,
@@ -227,10 +293,10 @@ Media Contribution to New Customer Acquisition% Value =
 // 口径来源: KPI Progress.md 子模块三 §27
 // 计算公式: 媒体新客数 / 全店新客数
 // 分子底表: a05_e2e_paid_media_summary_d（media_member_cnt）
-// 分母底表: a03_e2e_customer_data_m（DISTINCTCOUNT user_id）
+// 分母底表: a03_e2e_customer_data_m（COUNTROWS(EXCEPT)）
 // 分子筛选: customer_type='ALL' AND page_type="1"
 //   Month/Quarter/Year: 先按 platform, shop_id, data_month_name 取 MAX(media_member_cnt)，再 SUM
-// 分母筛选: 合并区间 net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
+// 分母筛选: EXCEPT 差集模式（同 #25）
 // 数据类型: percent_0dp（比率，不涉及汇率换算）
 // 注意: SUMX+SUMMARIZE 中列引用用 [__Value]，不是 "__Value"
 // 注意: Day/Week 时指标无意义，在最终结果层统一留空，不细分到分子分母
@@ -241,6 +307,9 @@ Media Contribution to New Customer Acquisition% Value =
     // ── X 轴当前遍历月份 ──
     VAR __CurrentMonthMin = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Min])
     VAR __CurrentMonthMax = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Max])
+    // ── 第一财月时间范围（用于 Step2 老客排除集）──
+    VAR __FirstFiscalMonthMin = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Min])
+    VAR __FirstFiscalMonthMax = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Max])
     // ── 时间粒度判断（Day/Week 时指标无意义，统一留空）──
     VAR __TimeFrameID = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_ID])
     VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
@@ -267,18 +336,44 @@ Media Contribution to New Customer Acquisition% Value =
             'a05_e2e_paid_media_summary_d'[data_date] <= __CurrentMonthMax
         )
 
-    // ── 分母：全店新客（合并区间筛选，同 #25）──
-    VAR __TotalNewCust =
-        CALCULATE(
-            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[data_date] >= __TimeMin,
-            'a03_e2e_customer_data_m'[data_date] <= __TimeMax,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentMonthMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentMonthMax,
-            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-            'a03_e2e_customer_data_m'[is_member] = 0,
-            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0
+    // ── 分母：全店新客（EXCEPT 差集模式，同 #25）──
+    VAR __NewCust_Step1 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __CurrentMonthMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __CurrentMonthMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_net] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
         )
+    VAR __OldCust_Step2 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __FirstFiscalMonthMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __FirstFiscalMonthMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_lp12m] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
+        )
+    VAR __TotalNewCust = COUNTROWS(EXCEPT(__NewCust_Step1, __OldCust_Step2))
     RETURN
         IF(
             __IsDayOrWeek,
@@ -528,9 +623,9 @@ Acceleration Cost MOB% Display =
 
 | Metric_ID | Metric Name                                  | 口径文档出处   | 计算公式                                | 统计字段                                       | 数据底表                              | 数据类型            | 涉及汇率 |
 | --------- | -------------------------------------------- | -------------- | --------------------------------------- | ---------------------------------------------- | ------------------------------------- | ------------------- | -------- |
-| 25        | New Customer No.                             | 子模块三 §25   | COUNT(DISTINCT user_id)                 | user_id                                        | a03_e2e_customer_data_m               | integer_M_K_Int_0db | 否       |
-| 26        | New Customer%                                | 子模块三 §26   | New Customer No / TTL Buyers            | user_id（分子新客 / 分母全部买家）            | a03_e2e_customer_data_m               | percent_0dp         | 否       |
-| 27        | Media Contribution to New Customer Acq%      | 子模块三 §27   | 媒体新客数 / 全店新客数                 | media_member_cnt / user_id                     | summary_d + customer_data_m           | percent_0dp         | 否       |
+| 25        | New Customer No.                             | 子模块三 §25   | COUNTROWS(EXCEPT(Step1, Step2))         | user_id + shop_info_id（EXCEPT 差集模式）      | a03_e2e_customer_data_m               | integer_M_K_Int_0db | 否       |
+| 26        | New Customer%                                | 子模块三 §26   | New Customer No / TTL Buyers            | user_id（分子 EXCEPT 差集 / 分母全部买家）     | a03_e2e_customer_data_m               | percent_0dp         | 否       |
+| 27        | Media Contribution to New Customer Acq%      | 子模块三 §27   | 媒体新客数 / 全店新客数                 | media_member_cnt / user_id + shop_info_id（EXCEPT 差集） | summary_d + customer_data_m     | percent_0dp         | 否       |
 | 28        | Acceleration SLS                             | 子模块四 §28   | SUM(net_sales_amt), framework='Accel'   | net_sales_amt                                  | a05_e2e_paid_media_product_data_d       | currency_M_K_Int_0db | 是       |
 | 29        | Acceleration SLS MOB%                        | 子模块四 §29   | SUM(net_sales_amt[Accel]) / SUM(全部)   | net_sales_amt(Accel) / net_sales_amt(全部)     | a05_e2e_paid_media_product_data_d       | percent_0dp         | 否       |
 | 30        | Acceleration Cost MOB%                       | 子模块四 §30   | SUM(cost_amt[Accel]) / SUM(cost_amt)    | cost_amt(Accel, mix_msg NULL) / cost_amt(全部, mix_msg NULL) | a05_e2e_paid_media_product_data_d | percent_0dp         | 否       |
@@ -579,7 +674,7 @@ Acceleration Cost MOB% Display =
 │  子模块三：New Acquisition KPI Trend                                 │
 │  ┌─────────────────────────┐  ┌─────────────────────────┐           │
 │  │ New Customer No. Value  │  │ New Customer No. Display│           │
-│  │ (#25 DISTINCTCOUNT)     │→ │ (integer_M_K_Int_0db)   │           │
+│  │ (#25 EXCEPT 差集)       │→ │ (integer_M_K_Int_0db)   │           │
 │  └─────────────────────────┘  └─────────────────────────┘           │
 │  ┌─────────────────────────┐  ┌─────────────────────────┐           │
 │  │ New Customer% Value     │  │ New Customer% Display   │           │
@@ -641,13 +736,21 @@ Acceleration Cost MOB% Display =
 - **时间粒度**：Slicer_Month_Period[TimeFrame_ID]（判断 Day/Week）
 - **设计目的**：不与其他模块的日期筛选产生交叉筛选，只作用于本模块柱形图
 
-### 7.4 全店新客判定（合并区间）
+### 7.4 全店新客判定（EXCEPT 差集模式）
 
-#25/#26 分子 / #27 分母均使用全店新客判定，技术实现等价于单一筛选：
-```
-data_date ∈ [__TimeMin, __TimeMax] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
-```
-说明：start_period（第一个财月）是 slicer 区间的子集，用于判断 `lp_12m_net_pay_amt = 0` 的行一定也在 slicer 区间内，因此可合并区间。
+#25/#26 分子 / #27 分母均使用全店新客判定，采用 EXCEPT 差集模式（参考：维度复用/新客 No. 模板详解.md）：
+
+- 数据底表：`a03_e2e_customer_data_m`
+- Step1+Step2 不能合并区间计算：
+  - **Step1（本期有消费的新客候选）**：`data_date ∈ [__CurrentMonthMin, __CurrentMonthMax]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(net_pay_amt) > 0`
+  - **Step2（第一财月的老客排除集）**：`data_date ∈ [__FirstFiscalMonthMin, __FirstFiscalMonthMax]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(lp_12m_net_pay_amt) > 0`
+  - **结果** = `COUNTROWS(EXCEPT(Step1, Step2))`，即 Step1 全集减去 Step2 老客
+- 第一财月区间由 `Slicer_Month_Period_Min` 维度表提供（`First_Fiscal_Month_Min`、`First_Fiscal_Month_Max`）：
+  - 月 = 自身（如 2026-09 → 2026-09）
+  - 季 = Q1→01, Q2→04, Q3→07, Q4→10（如 2026 Q2 → 2026-04）
+  - 年 = 01（如 财年 2026 → 2026-01）
+- 聚合方式：`COUNTROWS(EXCEPT(Step1, Step2))`
+- 涉及 Metric_ID：25, 26（分子）, 27（分母）
 
 ### 7.5 #27 媒体新客 MAX+SUM 聚合
 

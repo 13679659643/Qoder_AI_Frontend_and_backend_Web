@@ -2,7 +2,7 @@
 
 > status: updated
 > created: 2026-07-14
-> updated: 2026-09-01
+> updated: 2026-09-04
 > complexity: 🟡中等
 > type: 度量值开发 + 可视化构建
 > 口径来源: 口径文档/KPI Progress.md 子模块五：KPI by Platform
@@ -34,7 +34,7 @@
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | 事实表   | a05_e2e_paid_media_summary_d                                                                                                                             | 汇总指标（#31/#32/#34/#35）              |
 | 事实表   | a05_e2e_paid_media_product_data_d                                                                                                                        | 第二品类（#33，framework/mix_msg 筛选）   |
-| 事实表   | a03_e2e_customer_data_m                                                                                                                                  | 全店新客（#34 分母，DISTINCTCOUNT user_id）|
+| 事实表   | a03_e2e_customer_data_m                                                                                                                                  | 全店新客（#34 分母，EXCEPT 差集 COUNTROWS）|
 | 关键字段 | data_date, platform, store_name, trans_cycle, customer_type, page_type, framework, mix_msg, cost_amt, net_sales_amt, media_member_cnt, media_cost_amt, user_id, net_pay_amt, is_member, lp_12m_net_pay_amt | 口径文档 KPI Progress.md 子模块五         |
 
 ### 2.2 维度表清单
@@ -142,14 +142,15 @@ Dim_ColMetric_KPI by Platform（断开维度，列头）    Slicer_Store_Name（
 - 比率/增减百分比类指标（`IsCurrencyAmount = FALSE`）：不涉及汇率换算
 - YOY% 为比率，不涉及汇率换算（分子分母本币值抵消）
 
-### 3.6 全店新客判定规则（合并区间）
+### 3.6 全店新客判定规则（EXCEPT 差集，不能合并区间）
 
-新客 Step1+Step2 合并区间等价实现：
-- Step1：在所选时间范围内筛选 `net_pay_amt > 0` 的 `user_id`（`data_date ∈ [__TimeMin, __TimeMax]`，`is_member = 0`）
-- Step2：缩小顾客范围至 `lp_12m_net_pay_amt = 0`（`data_date ∈ start_period`）
-- start_period = 第一财月，是 slicer 区间的子集，合并区间后单一 CALCULATE 即可
-- **合并区间等价实现**：`data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0`
+新客 Step1+Step2 不能合并区间计算（参考：维度复用/新客 No. 模板详解.md），Step1 和 Step2 使用不同的时间范围，需通过 EXCEPT 差集实现：
+- Step1（本期有消费的新客候选）：`data_date ∈ [__TimeMin, __TimeMax]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(net_pay_amt) > 0`
+- Step2（第一财月的老客排除集）：`data_date ∈ [__FirstFiscalMonthMin, __FirstFiscalMonthMax]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(lp_12m_net_pay_amt) > 0`
+- **结果** = `COUNTROWS(EXCEPT(Step1, Step2))`，即 Step1 全集减去 Step2 老客
+- start_period = 第一财月，是 slicer 区间的子集，但 Step1 用完整 slicer 区间，Step2 用第一财月区间，**不能合并为单一 CALCULATE**
 - 第一财月映射：月=自身 / 季=Q1→01,Q2→04,Q3→07,Q4→10 / 年=01
+- `platform`/`shop_info_id` 由模型 1:N 关系自动筛选，无需在 DAX 中手动添加
 
 ### 3.7 媒体新客字段聚合规则（MAX+SUM）
 
@@ -291,20 +292,49 @@ KPI by Platform Current Base Value =
 
     // ═══════════════════════════════════════
     // 全店新客数：a03_e2e_customer_data_m
-    // 合并区间筛选：data_date ∈ [__FirstFiscalMonthMin, __FirstFiscalMonthMax]
-    //   （start_period = 第一财月，是 slicer 区间的子集，合并区间后单一 CALCULATE 即可）
-    //   AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
-    // DISTINCTCOUNT(user_id)
+    // Step1+Step2 不能合并区间计算（参考：维度复用/新客 No. 模板详解.md）：
+    //   Step1（本期有消费的新客候选）：data_date ∈ [__TimeMin, __TimeMax]，is_member = 0，SUM(net_pay_amt) > 0
+    //   Step2（第一财月的老客排除集）：data_date ∈ [__FirstFiscalMonthMin, __FirstFiscalMonthMax]，is_member = 0，SUM(lp_12m_net_pay_amt) > 0
+    //   结果 = COUNTROWS(EXCEPT(Step1, Step2))
+    // 按 user_id + shop_info_id 聚合（platform/shop_info_id 由模型 1:N 关系自动筛选）
     // ═══════════════════════════════════════
-    VAR __TotalNewCustCnt = 
-        CALCULATE(
-            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[data_date] >= __FirstFiscalMonthMin,
-            'a03_e2e_customer_data_m'[data_date] <= __FirstFiscalMonthMax,
-            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-            'a03_e2e_customer_data_m'[is_member] = 0,
-            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0
+    VAR __NewCust_Step1 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __TimeMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __TimeMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_net] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
         )
+    VAR __OldCust_Step2 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __FirstFiscalMonthMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __FirstFiscalMonthMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_lp12m] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
+        )
+    VAR __TotalNewCustCnt = COUNTROWS(EXCEPT(__NewCust_Step1, __OldCust_Step2))
 
     // ═══════════════════════════════════════
     // 派生指标
@@ -449,19 +479,49 @@ KPI by Platform vsLP Base Value =
 
     // ═══════════════════════════════════════
     // 全店新客数：a03_e2e_customer_data_m（去年同期）
-    // 合并区间筛选：data_date ∈ [__LPFirstFiscalMonthMin, __LPFirstFiscalMonthMax]
-    //   （start_period = 去年同期第一财月）
-    //   AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
+    // Step1+Step2 不能合并区间计算（参考：维度复用/新客 No. 模板详解.md）：
+    //   Step1（去年同期有消费的新客候选）：data_date ∈ [__LPTimeMin, __LPTimeMax]，is_member = 0，SUM(net_pay_amt) > 0
+    //   Step2（去年同期第一财月的老客排除集）：data_date ∈ [__LPFirstFiscalMonthMin, __LPFirstFiscalMonthMax]，is_member = 0，SUM(lp_12m_net_pay_amt) > 0
+    //   结果 = COUNTROWS(EXCEPT(Step1, Step2))
+    // 按 user_id + shop_info_id 聚合（platform/shop_info_id 由模型 1:N 关系自动筛选）
     // ═══════════════════════════════════════
-    VAR __TotalNewCustCnt = 
-        CALCULATE(
-            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[data_date] >= __LPFirstFiscalMonthMin,
-            'a03_e2e_customer_data_m'[data_date] <= __LPFirstFiscalMonthMax,
-            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-            'a03_e2e_customer_data_m'[is_member] = 0,
-            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0
+    VAR __NewCust_Step1 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __LPTimeMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __LPTimeMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_net] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
         )
+    VAR __OldCust_Step2 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __LPFirstFiscalMonthMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __LPFirstFiscalMonthMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_lp12m] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
+        )
+    VAR __TotalNewCustCnt = COUNTROWS(EXCEPT(__NewCust_Step1, __OldCust_Step2))
 
     // ═══════════════════════════════════════
     // 派生指标
@@ -497,7 +557,7 @@ KPI by Platform Base Value =
 // 说明: 
 //   Metric_ID 1/4/7/10/13 → Current
 //   Metric_ID 2/5/8/11/14 → vsLP
-//   Metric_ID 3/6/9/12/15 → YOY% (常规同比百分比，含边界判断)
+//   Metric_ID 3/6/9/12/15 → YOY% (3/6/15 为同比百分比 当期/上期-1，9/12 为差值 当期-上期)
 // Day/Week: 涉及 MAX+SUM 聚合的指标（#34/#35 系列 = Metric_ID 10~15）在 Day/Week 时为空
 //   在三个结果变量（__CurrentValue/__LP_Value/__YOY_Result）各自内部判断，不细分到分子分母
 // ========================================
@@ -512,6 +572,8 @@ KPI by Platform Base Value =
     VAR __NeedsBlank = __IsDayOrWeek && __NeedsFullFiscalPeriod
 
     VAR __IsYOY = __MetricID IN {3, 6, 9, 12, 15}
+    // YOY% 计算方式：9/12 为差值（当期 - 上期），3/6/15 为同比百分比（当期/上期 - 1）
+    VAR __IsDiffYOY = __MetricID IN {9, 12}
 
     // ── 本期值（含 YOY% 上下文修复 + Day/Week 留空判断）──
     // 修复上下文冲突：矩阵行标题会保留 Metric_Name 等所有列的筛选器，
@@ -552,9 +614,9 @@ KPI by Platform Base Value =
 
     // ── YOY 同比计算（含 Day/Week 留空 + 边界判断）──
     //   Day/Week 无意义时 → BLANK
-    //   同期为 0 或空 → 本期为 0 或空返回 BLANK()，本期有值返回 -1 (即 -100%)
-    //   本期为 0 或空，同期有值 → -1 (即 -100%)
-    //   双方均有值 → (This Year - Last Year) / Last Year
+    //   同期为 0 或空 → BLANK
+    //   9/12（差值类）：双方均有值 → 当期 - 上期（不除以上期）
+    //   3/6/15（百分比类）：本期为 0 或空 → -1 (即 -100%)；双方均有值 → (当期 - 上期) / 上期
     VAR __YOY_Result =
         IF(
             __NeedsBlank,
@@ -562,7 +624,11 @@ KPI by Platform Base Value =
             IF(
                 __LPIsEmpty,
                 BLANK(),
-                IF(__CurrIsEmpty, -1, DIVIDE(__CurrentValue - __LP_Value, __LP_Value))
+                IF(
+                    __IsDiffYOY,
+                    __CurrentValue - __LP_Value,                                          // 当期 - 上期（Metric_ID 9/12）
+                    IF(__CurrIsEmpty, -1, DIVIDE(__CurrentValue - __LP_Value, __LP_Value)) // 当期/上期 - 1（Metric_ID 3/6/15）
+                )
             )
         )
 
@@ -643,6 +709,7 @@ KPI by Platform Cell Display =
 //   integer_pts           → 基点整数（小数×100 转 pts）：120pts / 80pts / 0pts
 //   delta_bp              → 增减基点整数（小数×10000 转 bp）：+120bp / -80bp
 //   delta_bp_1dp          → 增减基点一位小数（值本身已是基点）：+120.5bp / -80.0bp
+//   integer_bp            → 基点整数（小数×10000 转 bp，不含正号）：120bp / -80bp / 0bp
 // 说明:
 //   - BLANK 显示为 "-"
 //   - 货币符号由 Slicer_Currency_Selection[Currency_Symbol] 决定（默认 "¥"）
@@ -727,6 +794,10 @@ KPI by Platform Cell Display =
     // 5.4 __Value 本身已是基点值，保留 1 位小数
                 "delta_bp_1dp",
                     IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0.0") & "bp",// +120.5bp / -80.0bp
+
+    // 5.5 __Value 为小数，需 ×10000 转换为 bp（整数），不含正号，含负号
+                "integer_bp",
+                    FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp"),              // 120bp / -80bp / 0bp
 
     // ─── 默认 ───────────────────────────────────────────────────
                 FORMAT(__Value, "#,##0.00")
@@ -839,10 +910,10 @@ KPI by Platform Cell SVG Icon =
 | 6         | YOY %                                       | 子模块五 §32  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
 | 7         | ± Accel Cost MOB% vs. Store SLS MOB%       | 子模块五 §33  | Accel Cost MOB% - Store SLS MOB%        | cost_amt / net_sales_amt                        | a05_e2e_paid_media_product_data_d     | ALL           | 否       |
 | 8         | ± Accel Cost MOB% vs. Store SLS MOB% vs LP | 子模块五 §33  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 否       |
-| 9         | YOY  %                                      | 子模块五 §33  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
-| 10        | Media Contribution to New Cust%            | 子模块五 §34  | 媒体新客数 / 全店新客数                 | MAX+SUM(media_member_cnt) / DISTINCTCOUNT(user_id) | summary_d + customer_data_m           | ALL           | 否       |
+| 9         | YOY  %                                      | 子模块五 §33  | Current - vsLP（差值）                  | -                                               | -                                     | -             | 否       |
+| 10        | Media Contribution to New Cust%            | 子模块五 §34  | 媒体新客数 / 全店新客数                 | MAX+SUM(media_member_cnt) / COUNTROWS(EXCEPT) | summary_d + customer_data_m           | ALL           | 否       |
 | 11        | Media Contribution to New Cust% vs LP      | 子模块五 §34  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 否       |
-| 12        | YOY   %                                     | 子模块五 §34  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
+| 12        | YOY   %                                     | 子模块五 §34  | Current - vsLP（差值）                  | -                                               | -                                     | -             | 否       |
 | 13        | Cost Per New Acquisition                    | 子模块五 §35  | 新客花费 / 媒体新客数                   | MAX+SUM(media_cost_amt) / MAX+SUM(media_member_cnt) | a05_e2e_paid_media_summary_d          | ALL           | 是       |
 | 14        | Cost Per New Acquisition vs LP             | 子模块五 §35  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 是       |
 | 15        | YOY    %                                    | 子模块五 §35  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
@@ -1039,7 +1110,7 @@ WHERE data_date BETWEEN '__TimeMin' AND '__TimeMax'
 
 -- Media Contribution to New Customer Acquisition%（#34，比率）
 -- 分子：MAX+SUM(media_member_cnt) from summary_d
--- 分母：DISTINCTCOUNT(user_id) from customer_data_m（合并区间）
+-- 分母：COUNTROWS(EXCEPT(Step1, Step2)) from customer_data_m（不能合并区间）
 SELECT
   __MediaNewCustCnt / __TotalNewCustCnt AS MediaContrib
 -- 分子 SQL（先 MAX 再 SUM）
@@ -1052,12 +1123,32 @@ WHERE customer_type='ALL' AND page_type='1'
   AND platform='TM'
 GROUP BY platform, shop_id, data_month_name;
 -- 然后对 max_media_member_cnt 做 SUM
--- 分母 SQL（合并区间，第一财月）
-SELECT COUNT(DISTINCT user_id) AS TotalNewCust
-FROM a03_e2e_customer_data_m
-WHERE data_date BETWEEN '__FirstFiscalMonthMin' AND '__FirstFiscalMonthMax'
-  AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0
-  AND platform='TM';
+-- 分母 SQL（EXCEPT 差集，Step1 用完整区间，Step2 用第一财月区间）
+-- Step1：本期有消费的新客候选
+SELECT user_id, shop_info_id
+FROM (
+  SELECT user_id, shop_info_id, SUM(net_pay_amt) AS _net
+  FROM a03_e2e_customer_data_m
+  WHERE data_date BETWEEN '__TimeMin' AND '__TimeMax'
+    AND is_member = 0 AND platform='TM'
+  GROUP BY user_id, shop_info_id
+) a
+WHERE a._net > 0;
+-- Step2：第一财月的老客排除集
+SELECT user_id, shop_info_id
+FROM (
+  SELECT user_id, shop_info_id, SUM(lp_12m_net_pay_amt) AS _lp12m
+  FROM a03_e2e_customer_data_m
+  WHERE data_date BETWEEN '__FirstFiscalMonthMin' AND '__FirstFiscalMonthMax'
+    AND is_member = 0 AND platform='TM'
+  GROUP BY user_id, shop_info_id
+) b
+WHERE b._lp12m > 0;
+-- 结果 = Step1 LEFT JOIN Step2 WHERE b.user_id IS NULL（即 EXCEPT）
+SELECT COUNT(*) AS TotalNewCust
+FROM (Step1) a
+LEFT JOIN (Step2) b ON a.user_id = b.user_id AND a.shop_info_id = b.shop_info_id
+WHERE b.user_id IS NULL;
 
 -- Cost Per New Acquisition（#35，金额，Cell Value 层÷汇率）
 -- 分子：MAX+SUM(media_cost_amt) from summary_d
@@ -1079,7 +1170,7 @@ GROUP BY platform, shop_id, data_month_name;
 
 ### 9.3 vs LP 验证
 
-验证 vs LP 值时，将 SQL 中的日期范围替换为 `Slicer_Time_Frame_Min[TimeFrame_Min_LY]` 和 `Slicer_Time_Frame_Max[TimeFrame_Max_LY]` 对应的日期范围（日期表内置财历映射 LY 字段），新客分母用 `First_Fiscal_Month_Min_LY` / `First_Fiscal_Month_Max_LY`，对比 DAX 计算结果。
+验证 vs LP 值时，将 SQL 中的日期范围替换为 `Slicer_Time_Frame_Min[TimeFrame_Min_LY]` 和 `Slicer_Time_Frame_Max[TimeFrame_Max_LY]` 对应的日期范围（日期表内置财历映射 LY 字段），新客分母 Step1 用 `TimeFrame_Min_LY` / `TimeFrame_Max_LY`，Step2 用 `First_Fiscal_Month_Min_LY` / `First_Fiscal_Month_Max_LY`，对比 DAX 计算结果。
 
 ---
 
@@ -1092,7 +1183,7 @@ GROUP BY platform, shop_id, data_month_name;
 | 汇总指标（#31/#32） | a05_e2e_paid_media_summary_d | customer_type='ALL' AND page_type="1" |
 | 第二品类（#33） | a05_e2e_paid_media_product_data_d | Cost 类：mix_msg is NULL；SLS 类：不限 mix_msg；分子 framework='Acceleration' |
 | 媒体新客（#34/#35） | a05_e2e_paid_media_summary_d | customer_type='ALL' AND page_type="1"，MAX+SUM 聚合 |
-| 全店新客（#34 分母） | a03_e2e_customer_data_m | 合并区间：data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0 |
+| 全店新客（#34 分母） | a03_e2e_customer_data_m | EXCEPT 差集（不能合并区间）：Step1 `data_date ∈ [TimeFrame_Min, TimeFrame_Max]` AND `is_member=0` AND `SUM(net_pay_amt)>0`；Step2 `data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]` AND `is_member=0` AND `SUM(lp_12m_net_pay_amt)>0`；结果 = `COUNTROWS(EXCEPT(Step1, Step2))` |
 
 ### 10.2 汇率换算规则
 
@@ -1109,16 +1200,17 @@ GROUP BY platform, shop_id, data_month_name;
 - 新客 LY 第一财月：`Slicer_Time_Frame_Min[First_Fiscal_Month_Min_LY]` / `First_Fiscal_Month_Max_LY`
 - 无需 EDATE -12 计算
 
-### 10.4 全店新客判定规则（合并区间）
+### 10.4 全店新客判定规则（EXCEPT 差集，不能合并区间）
 
 - 数据底表：`a03_e2e_customer_data_m`
-- Step1 + Step2 交集（合并区间简化实现）：
-  - Step1：在所选时间范围内筛选 `net_pay_amt > 0` 的 `user_id`（`data_date ∈ [__TimeMin, __TimeMax]`，`is_member = 0`）
-  - Step2：缩小顾客范围至 `lp_12m_net_pay_amt = 0`（`data_date ∈ start_period`）
-  - start_period = 第一财月，是 slicer 区间的子集，合并区间后单一 CALCULATE 即可
-  - **合并区间等价实现**：`data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max] AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0`
+- Step1+Step2 不能合并区间计算（参考：维度复用/新客 No. 模板详解.md），需通过 EXCEPT 差集实现：
+  - Step1（本期有消费的新客候选）：`data_date ∈ [__TimeMin, __TimeMax]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(net_pay_amt) > 0`
+  - Step2（第一财月的老客排除集）：`data_date ∈ [__FirstFiscalMonthMin, __FirstFiscalMonthMax]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(lp_12m_net_pay_amt) > 0`
+  - start_period = 第一财月，是 slicer 区间的子集，但 Step1 用完整 slicer 区间，Step2 用第一财月区间，**不能合并为单一 CALCULATE**
+  - **结果** = `COUNTROWS(EXCEPT(Step1, Step2))`，即 Step1 全集减去 Step2 老客
 - 第一财月映射：月=自身 / 季=Q1→01,Q2→04,Q3→07,Q4→10 / 年=01
-- vs LY 时使用 `First_Fiscal_Month_Min_LY` / `First_Fiscal_Month_Max_LY`
+- `platform`/`shop_info_id` 由模型 1:N 关系自动筛选，无需在 DAX 中手动添加
+- vs LY 时 Step1 用 `TimeFrame_Min_LY` / `TimeFrame_Max_LY`，Step2 用 `First_Fiscal_Month_Min_LY` / `First_Fiscal_Month_Max_LY`
 
 ### 10.5 媒体新客字段聚合规则（MAX+SUM）
 
@@ -1137,12 +1229,12 @@ GROUP BY platform, shop_id, data_month_name;
 
 ### 10.7 Cell Display 全拓展类型
 
-支持 16 种格式类型，便于后续拓展：
+支持 17 种格式类型，便于后续拓展：
 - 整数与小数：`integer`、`decimal_1dp`、`decimal_2dp`
 - 货币：`currency`、`currency_decimal_1dp`、`currency_k`、`currency_M_K_Int_0db`
 - 百分比：`percent_0dp`、`percent_1dp`、`percent_2dp`
 - 增减百分比：`delta_pct_0dp`、`delta_pct_1dp`、`delta_pct_2dp`
-- 增减基点：`delta_pts`、`integer_pts`、`delta_bp`、`delta_bp_1dp`
+- 增减基点：`delta_pts`、`integer_pts`、`delta_bp`、`delta_bp_1dp`、`integer_bp`
 
 ### 10.8 性能考量
 

@@ -173,7 +173,7 @@ Keyword Base Value =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-            a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
 
     // ── 公共筛选参数（所有指标共用）──
     // 行维度（category / keyword_type / plan_name / keyword_name）由矩阵行上下文自然传递
@@ -206,7 +206,7 @@ Keyword Base Value =
             __PlatformFilter,
             a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
             FILTER(ALLSELECTED(a05_e2e_paid_media_keyword_data_d[channel]),
-                a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推"}),
+                a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"}),
             FILTER(ALL(a05_e2e_paid_media_keyword_data_d[season]),
                 a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
             FILTER(ALL(a05_e2e_paid_media_keyword_data_d[category]),
@@ -520,9 +520,9 @@ Keyword Cell Display =
 6. 条件格式度量值 — 字体颜色
 ================================================================================
 
-Keyword YOY Cell Font Color =
+Keyword YOY Cell Font Color = 
 // ========================================
-// 度量值: Keyword YOY Cell Font Color
+// 度量值: Keyword Cell Font Color
 // Display Folder: Keyword YOY > Formatting
 // 用途: 根据行类型返回字体颜色
 //       - This Year / Last Year 行：4 级行层次（总计近黑 / 其余深灰）
@@ -551,6 +551,7 @@ Keyword YOY Cell Font Color =
     VAR __ColorNeg    = SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_ColorNegative], "#D64550")
     VAR __ColorZero   = SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_ColorZero], "#E1C233")
     VAR __ColorDefault = SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_ColorDefault], "#5f6165")
+    VAR __ColorTotal = "#252423"
 
     // ── 2. YOY 行（Period on Period）颜色 ──
     VAR __YOY_Color =
@@ -559,7 +560,7 @@ Keyword YOY Cell Font Color =
             ISBLANK(__CellValue), __ColorDefault,   // 空值 → 深灰
             __CellValue > 0,       __ColorPos,      // 正值 → 绿色
             __CellValue < 0,       __ColorNeg,      // 负值 → 红色
-                                    __ColorZero      // 零值 → 黄色
+                                    __ColorTotal      // 零值 → 黄色
         )
 
     // ── 5. 最终路由 ──

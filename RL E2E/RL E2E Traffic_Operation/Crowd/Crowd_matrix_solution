@@ -47,7 +47,7 @@ VAR __PlatformFilter =
 VAR __ChannelScopeFilter =
     FILTER(
         VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-        a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+        a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
 
 // ── 三个专属切片器 FILTER 块 ──
 // FILTER(VALUES(事实表[season]),   事实表[season]   IN __SuperSeasonVals)
@@ -86,7 +86,7 @@ Crowd Cost =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
 
     VAR __BaseValue =
         CALCULATE(
@@ -142,7 +142,7 @@ Crowd Cost% =
             __PlatformFilter,
             // ── Channel 固定范围（分子用 FILTER(VALUES()) 交集模式，保留行维度）──
             FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-                a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"}),
+                a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"}),
             a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
             FILTER(VALUES(a05_e2e_paid_media_crowed_data_d[season]),
                 a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),
@@ -165,7 +165,7 @@ Crowd Cost% =
             a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
             // ── Channel 固定范围（分母用 FILTER(ALL()) 仅保留范围筛选，不依赖行维度）──
             FILTER(ALL(a05_e2e_paid_media_crowed_data_d[channel]),
-                a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"}),
+                a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"}),
             // ── 分母用 FILTER(ALL()) 仅保留切片器筛选（不用 FILTER(VALUES())）──
             FILTER(ALL(a05_e2e_paid_media_crowed_data_d[season]),
                 a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),
@@ -209,7 +209,7 @@ Crowd ROI =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
 
     VAR __SalesAmt =
         CALCULATE(
@@ -271,7 +271,7 @@ Crowd Click =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
 
     RETURN
         CALCULATE(
@@ -319,7 +319,7 @@ Crowd CPC =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
 
     VAR __CostAmt =
         CALCULATE(
@@ -381,7 +381,7 @@ Crowd CTR =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
 
     VAR __Click =
         CALCULATE(
@@ -443,7 +443,7 @@ Crowd CVR =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
 
     VAR __Orders =
         CALCULATE(
@@ -505,7 +505,7 @@ Crowd Add to Cart =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
 
     RETURN
         CALCULATE(
@@ -553,7 +553,7 @@ Crowd CPATC =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
 
     VAR __CostAmt =
         CALCULATE(

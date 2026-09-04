@@ -1,6 +1,7 @@
 let
     源 = Odbc.Query("dsn=bytehouse_rl", 
-    "select 
+    "   
+select 
 *,
 'Total' AS Total,
 CASE 
@@ -12,7 +13,8 @@ CASE
     WHEN is_controllable_channel = 0 THEN 'Uncontrollable'
     WHEN platform = 'TM' THEN
         CASE
-            WHEN channel IN ('直通车', '引力魔方') THEN channel
+            WHEN channel='关键词推广' AND page_type=1 THEN '直通车'
+            WHEN channel='人群推广' AND page_type=1 THEN '引力魔方'
             ELSE 'TM_Other_Channel'
         END
     WHEN platform = 'JD' THEN

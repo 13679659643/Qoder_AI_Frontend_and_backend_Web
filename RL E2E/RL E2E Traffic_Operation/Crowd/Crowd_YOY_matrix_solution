@@ -173,7 +173,7 @@ Crowd Base Value =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"})
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
 
     // ── 公共筛选参数（所有指标共用）──
     // 行维度（category / keyword_type / plan_name / keyword_name）由矩阵行上下文自然传递
@@ -206,7 +206,7 @@ Crowd Base Value =
             __PlatformFilter,
             a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
             FILTER(ALLSELECTED(a05_e2e_paid_media_crowed_data_d[channel]),
-                a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推"}),
+                a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"}),
             FILTER(ALL(a05_e2e_paid_media_crowed_data_d[season]),
                 a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),
             FILTER(ALL(a05_e2e_paid_media_crowed_data_d[category]),
@@ -516,6 +516,67 @@ Crowd Cell Display =
             )
         )
 
+
+================================================================================
+6. 条件格式度量值 — 字体颜色
+================================================================================
+
+Crowd YOY Cell Font Color = 
+// ========================================
+// 度量值: Crowd YOY Cell Font Color
+// Display Folder: Crowd YOY > Formatting
+// 用途: 根据行类型返回字体颜色
+//       - This Year / Last Year 行：4 级行层次（总计近黑 / 其余深灰）
+//       - Period on Period 行（YOY）：正值绿色 / 负值红色 / 零值黄色
+//
+// 颜色规则：
+//   1. This Year / Last Year 行：
+//      总计行 → #252423（近黑，强调）
+//      其余行 → #5F6165（深灰）
+//   2. Period on Period 行（YOY）：
+//      YOY > 0 → #1A9018（绿色，增长）
+//      YOY < 0 → #D64550（红色，下降）
+//      YOY = 0 → #E1C233（黄色，持平）
+//      YOY 为空 → #5F6165（深灰，无数据）
+//   3. 不区分指标业务性质，统一按数值正负判断
+//      - 正值：绿色（Metric_ColorPositive）
+//      - 负值：红色（Metric_ColorNegative）
+//      - 零值：黄色（Metric_ColorZero）
+//      - 空值：深灰（Metric_ColorDefault）
+//
+// 依赖: [Crowd Cell Value]
+//       DIM_RowKPIs_Keyword_Crowd[Indicator Type]
+//       DIM_ColMetric_Keyword_Crowd[Metric_ColorPositive/Negative/Zero/Default]
+// ========================================
+
+    // ── 1. 获取当前上下文 ──
+    VAR __Indicator   = SELECTEDVALUE(DIM_RowKPIs_Keyword_Crowd[Indicator Type])
+    VAR __CellValue   = [Crowd Cell Value]
+    VAR __ColorPos    = SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_ColorPositive], "#1A9018")
+    VAR __ColorNeg    = SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_ColorNegative], "#D64550")
+    VAR __ColorZero   = SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_ColorZero], "#E1C233")
+    VAR __ColorDefault = SELECTEDVALUE(DIM_ColMetric_Keyword_Crowd[Metric_ColorDefault], "#5f6165")
+    VAR __ColorTotal = "#252423"
+
+    // ── 2. YOY 行（Period on Period）颜色 ──
+    VAR __YOY_Color =
+        SWITCH(
+            TRUE(),
+            ISBLANK(__CellValue), __ColorDefault,   // 空值 → 深灰
+            __CellValue > 0,       __ColorPos,      // 正值 → 绿色
+            __CellValue < 0,       __ColorNeg,      // 负值 → 红色
+                                    __ColorTotal      // 零值 → 黄色
+        )
+
+    // ── 5. 最终路由 ──
+    RETURN
+        SWITCH(
+            TRUE(),
+            // This Year / Last Year → 默认行颜色（总计近黑 / 其余深灰）
+            __Indicator <> "Period on Period", __ColorDefault,
+            // Period on Period（YOY）→ 正/负/零三色
+            __YOY_Color
+        )
 
 6. 切片器配置
 ───────────────────────────────────────────────────────────────────────────────
