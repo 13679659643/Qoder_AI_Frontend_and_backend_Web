@@ -17,7 +17,7 @@ Category Growth Diff EOH(OMS)% =
 //       分子 = 当前分组 SUM(stock_qty)
 //       分母 = 全店 SUM(stock_qty)（移除全部 5 个行维度）
 // 类型: 比率类，不乘汇率
-// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 筛选: 全局筛选（mix_msg IS NULL / IS NOT NULL）
 //       Platform（单选含 ALL，ALL → platform IN {"TM","JD"}）
@@ -241,7 +241,7 @@ Category Growth Diff Active IDs VS LP =
 //       本期 = Dim_Date_Current 关系自然筛选
 //       同期 = Dim_Date_Ly 断开维度，MIN/MAX 取范围，CALCULATE 覆盖日期上下文
 // 类型: 同比增长率，不乘汇率
-// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 同比机制:
 //   本期 = Dim_Date_Current 关系自然筛选
@@ -294,7 +294,7 @@ Category Growth Diff Net Sales% =
 //       分子 = 当前分组 SUM(net_sales_amt)
 //       分母 = 全店 SUM(net_sales_amt)（移除全部 5 个行维度）
 // 类型: 比率类，不乘汇率
-// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 筛选: 全局筛选条件下直接 SUM
 //       Platform（单选含 ALL，ALL → platform IN {"TM","JD"}）
@@ -381,7 +381,7 @@ Category Growth Diff SLS% VS LP =
 //       本期 Net Sales% = 本期品类 net_sales_amt / 本期 TTL net_sales_amt
 //       同期 Net Sales% = 同期品类 net_sales_amt / 同期 TTL net_sales_amt
 // 类型: 同比增长率，不乘汇率
-// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 同比机制:
 //   本期 = Dim_Date_Current 关系自然筛选
@@ -505,7 +505,7 @@ Category Growth Diff Cost VS LP =
 // 类型: 同比增长率，不乘汇率
 // 汇率说明: 增长率不受汇率影响（本期与同期乘相同汇率约分抵消）
 //           内部用原始值（不乘汇率）计算，结果与乘汇率后计算一致
-// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 同比机制:
 //   本期 = Dim_Date_Current 关系自然筛选
@@ -560,7 +560,7 @@ Category Growth Diff Cost% =
 //       分母不受行维度（season / brand / category / channel / mix_msg）筛选上下文影响
 //       分母使用 REMOVEFILTERS 移除全部 5 个行维度 + 保留切片器筛选
 // 类型: 比率类，不乘汇率
-// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
@@ -633,7 +633,7 @@ Category Growth Diff Cost% VS LP =
 // 用途: Cost% 同比增长率
 // 口径: YOY同比 = 本期 Cost% / 同期(LP) Cost% - 1
 // 类型: 同比增长率，不乘汇率
-// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 同比机制:
 //   本期 Cost% = 本期当前行 cost_amt / 本期总计 cost_amt
@@ -755,7 +755,7 @@ Category Growth Diff ROI VS LP =
 // 用途: ROI 同比增长率
 // 口径: YOY同比 = 本期 ROI / 同期(LP) ROI - 1
 // 类型: 同比增长率，不乘汇率
-// 数据格式: #,##0.0%;#,##0.0%;0.0%
+// 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 同比机制:
 //   本期 ROI = 本期 media_sales_amt / 本期 cost_amt
@@ -801,7 +801,7 @@ Category Growth Diff ROI VS LP =
 格式字符串说明（以口径文档为准）：
   Power BI 自定义格式字符串由 1~3 节组成，以分号分隔：
     正数格式;负数格式;零值格式
-  百分比类: "#,##0.0%;#,##0.0%;0.0%"
+  百分比类: "#,##0.0%"
   整数类: "#,##0;(#,##0);0"
   金额类: 在 DAX 中用 __CurrencySymbol & FORMAT(__Value, "#,##0") 拼接币种符号
   小数类: "#,##0.0;-#,##0.0;0.0"
@@ -817,13 +817,13 @@ Category Growth Diff EOH(OMS)% Display =
 // Display Folder: Category Growth Diff > Display
 // 用途: Category Growth Diff EOH(OMS)% 的格式化显示
 // 数据类型: 百分比（保留一位小数，不含正号）
-// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
+// 格式字符串: "#,##0.0%"
 // ========================================
     var __Value = [Category Growth Diff EOH(OMS)%]
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+            "-",FORMAT(__Value, "#,##0.0%")
         )   
 
 --------------------------------------------------------------------------------
@@ -857,13 +857,13 @@ Category Growth Diff Active IDs VS LP Display =
 // Display Folder: Category Growth Diff > Display
 // 用途: Category Growth Diff Active IDs VS LP 的格式化显示
 // 数据类型: 百分比（保留一位小数，不含正号）
-// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
+// 格式字符串: "#,##0.0%"
 // ========================================
     VAR __Value = [Category Growth Diff Active IDs VS LP]
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+            "-",FORMAT(__Value, "#,##0.0%")
         )   
 
 --------------------------------------------------------------------------------
@@ -877,13 +877,13 @@ Category Growth Diff Net Sales% Display =
 // Display Folder: Category Growth Diff > Display
 // 用途: Category Growth Diff Net Sales% 的格式化显示
 // 数据类型: 百分比（保留一位小数，不含正号）
-// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
+// 格式字符串: "#,##0.0%"
 // ========================================
     VAR __Value = [Category Growth Diff Net Sales%]
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+            "-",FORMAT(__Value, "#,##0.0%")
         )   
 
 --------------------------------------------------------------------------------
@@ -897,13 +897,13 @@ Category Growth Diff SLS% VS LP Display =
 // Display Folder: Category Growth Diff > Display
 // 用途: Category Growth Diff SLS% VS LP 的格式化显示
 // 数据类型: 百分比（保留一位小数，不含正号）
-// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
+// 格式字符串: "#,##0.0%"
 // ========================================
     VAR __Value = [Category Growth Diff SLS% VS LP]
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+            "-",FORMAT(__Value, "#,##0.0%")
         )   
 
 --------------------------------------------------------------------------------
@@ -941,13 +941,13 @@ Category Growth Diff Cost VS LP Display =
 // Display Folder: Category Growth Diff > Display
 // 用途: Category Growth Diff Cost VS LP 的格式化显示
 // 数据类型: 百分比（保留一位小数，不含正号）
-// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
+// 格式字符串: "#,##0.0%"
 // ========================================
     VAR __Value = [Category Growth Diff Cost VS LP]
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+            "-",FORMAT(__Value, "#,##0.0%")
         )   
 
 --------------------------------------------------------------------------------
@@ -961,13 +961,13 @@ Category Growth Diff Cost% Display =
 // Display Folder: Category Growth Diff > Display
 // 用途: Category Growth Diff Cost% 的格式化显示
 // 数据类型: 百分比（保留一位小数，不含正号）
-// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
+// 格式字符串: "#,##0.0%"
 // ========================================
     VAR __Value = [Category Growth Diff Cost%]
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+            "-",FORMAT(__Value, "#,##0.0%")
         )   
 
 --------------------------------------------------------------------------------
@@ -981,13 +981,13 @@ Category Growth Diff Cost% VS LP Display =
 // Display Folder: Category Growth Diff > Display
 // 用途: Category Growth Diff Cost% VS LP 的格式化显示
 // 数据类型: 百分比（保留一位小数，不含正号）
-// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
+// 格式字符串: "#,##0.0%"
 // ========================================
     VAR __Value = [Category Growth Diff Cost% VS LP]
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+            "-",FORMAT(__Value, "#,##0.0%")
         )   
 
 --------------------------------------------------------------------------------
@@ -1021,13 +1021,13 @@ Category Growth Diff ROI VS LP Display =
 // Display Folder: Category Growth Diff > Display
 // 用途: Category Growth Diff ROI VS LP 的格式化显示
 // 数据类型: 百分比（保留一位小数，不含正号）
-// 格式字符串: "#,##0.0%;#,##0.0%;0.0%"
+// 格式字符串: "#,##0.0%"
 // ========================================
     VAR __Value = [Category Growth Diff ROI VS LP]
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%")
+            "-",FORMAT(__Value, "#,##0.0%")
         )   
 
 ================================================================================

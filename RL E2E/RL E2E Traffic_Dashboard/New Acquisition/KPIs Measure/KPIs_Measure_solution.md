@@ -566,6 +566,92 @@ ROI 直通车 Display =
         )
 ```
 
+### 2.10 TM 直通车-->JD 快车\TM 引力魔方-->JD 触点
+
+```dax
+TM 引力魔方-->JD 触点 = 
+    // ── 店铺筛选： ──
+    VAR __Store_ID = SELECTEDVALUE(Slicer_Store_Name[Store_ID])
+        
+    RETURN
+        SWITCH(__Store_ID,
+            "TM","引力魔方",
+            "JD","触点",
+            "-"
+        )
+```
+
+```dax
+TM 直通车-->JD 快车 = 
+    // ── 店铺筛选： ──
+    VAR __Store_ID = SELECTEDVALUE(Slicer_Store_Name[Store_ID])
+        
+    RETURN
+        SWITCH(__Store_ID,
+            "TM","直通车",
+            "JD","快车",
+            "-"
+        )
+```
+
+### 2.11 字段筛选任一不为空&&空字符，即显示
+
+```dax
+IsAnyCrowedNotEmpty = 
+/*
+功能：实现跨字段并集（OR）筛选
+逻辑：三个字段中任一字段"不为空"（既非 BLANK 也非空字符串 ""）即显示
+返回：1（显示）或 0（隐藏）
+*/
+
+// 步骤1：获取当前上下文中各字段的值（行粒度下 MAX 即当前行的值）
+VAR LayerValue = MAX('a05_e2e_paid_media_crowed_data_d'[crowed_layer])
+VAR NameValue  = MAX('a05_e2e_paid_media_crowed_data_d'[crowed_name])
+VAR TypeValue  = MAX('a05_e2e_paid_media_crowed_data_d'[crowed_type])
+
+// 步骤2：逐字段判断"有效"= 不为 BLANK 且 不为空字符串
+VAR IsLayerValid = NOT ISBLANK(LayerValue) && LayerValue <> ""
+VAR IsNameValid  = NOT ISBLANK(NameValue)  && NameValue  <> ""
+VAR IsTypeValid  = NOT ISBLANK(TypeValue)  && TypeValue  <> ""
+
+// 步骤3：并集（OR）—— 任一字段有效即显示
+RETURN
+    IF(
+        IsLayerValid || IsNameValid || IsTypeValid,
+        1,  // 任一不为空：显示
+        0   // 全为空：隐藏
+    )
+```
+
+```dax
+IsAnyKeywordNotEmpty = 
+/*
+功能：实现跨字段并集（OR）筛选
+逻辑：四个字段中任一字段"不为空"（既非 BLANK 也非空字符串 ""）即显示
+返回：1（显示）或 0（隐藏）
+*/
+
+// 步骤1：获取当前上下文中各字段的值（行粒度下 MAX 即当前行的值）
+VAR CustomerTypeValue = MAX('a05_e2e_paid_media_keyword_data_d'[customer_type])
+VAR CategoryValue     = MAX('a05_e2e_paid_media_keyword_data_d'[category])
+VAR PlanNameValue     = MAX('a05_e2e_paid_media_keyword_data_d'[plan_name])
+VAR KeywordNameValue  = MAX('a05_e2e_paid_media_keyword_data_d'[keyword_name])
+
+// 步骤2：逐字段判断"有效"= 不为 BLANK 且 不为空字符串
+VAR IsCustomerTypeValid = NOT ISBLANK(CustomerTypeValue) && CustomerTypeValue <> ""
+VAR IsCategoryValid     = NOT ISBLANK(CategoryValue)     && CategoryValue     <> ""
+VAR IsPlanNameValid     = NOT ISBLANK(PlanNameValue)     && PlanNameValue     <> ""
+VAR IsKeywordNameValid  = NOT ISBLANK(KeywordNameValue)  && TRIM(KeywordNameValue)  <> "" && TRIM(KeywordNameValue)  <> " "
+
+// 步骤3：并集（OR）—— 任一字段有效即显示
+RETURN
+    IF(
+        IsCustomerTypeValid || IsCategoryValid || IsPlanNameValid || IsKeywordNameValid,
+        1,  // 任一不为空：显示
+        0   // 全为空：隐藏
+    )
+
+```
 ---
 
 ## 3. 度量值清单与 Display Folder
