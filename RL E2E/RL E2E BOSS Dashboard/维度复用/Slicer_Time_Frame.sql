@@ -36,7 +36,9 @@ let
     `ly_timeframe_min` AS `TimeFrame_Min_LY`, -- 去年同期起始自然日
     `ly_timeframe_max` AS `TimeFrame_Max_LY` -- 去年同期结束自然日
 FROM 
-	    indep_rl_dim.dim_t00_bi_fiscal_calendar
+	    	    (select t1.*
+from indep_rl_dim.dim_t00_bi_fiscal_calendar t1
+where t1.timeframe_max < current_date())
         ORDER BY ID_Sort DESC
     ")
 in

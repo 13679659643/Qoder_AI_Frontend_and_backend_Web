@@ -111,7 +111,7 @@
     │      SUM(shipped_cnt),   │         │    calc_type="fulfillment",                  │
     │      SUM(request_cnt)    │         │    data_date ∈ 全局范围                      │
     │    ),                    │         │  ) / SUM(... request_sku_qty)                │
-    │    calc_type="fulfillment",│       │                                              │
+    │    calc_type="fulfillment_brand",│ │                                              │
     │    data_date ∈ 全局范围  │         │ Avg Processing Time Value                    │
     │  )                       │         │  CALCULATE(SUM(request_duration), ...)       │
     │  brand 由图例传递        │         │  / SUM(... request_sku_qty)                  │
@@ -129,7 +129,7 @@
     │ OOS Penalty Amt Value                                       │
     │  CALCULATE(                                                 │
     │    SUM(o2o_penalty_oos_amt),                                │
-    │    calc_type="fulfillment",                                 │
+    │    calc_type="payment",                                 │
     │    data_date ∈ 全局范围                                     │
     │  ) / __FXRate                                               │
     │                                                             │
@@ -149,7 +149,7 @@
 | Slicer_Time_Frame_Max    | `data_date <= __TimeMax`   | `data_date <= __TimeMax`    | `data_date <= __TimeMax`    |
 | 事实表[brand]            | 条形图 Y 轴自动传递筛选    | 条形图 Y 轴自动传递筛选     | 不筛选                      |
 | Slicer_Store_Name[Store_ID] | 不适用                  | 不适用                      | 堆积柱形图 X 轴自动传递筛选 |
-| calc_type                | = "fulfillment"            | = "fulfillment"             | = "fulfillment"             |
+| calc_type                | = "fulfillment_brand"      | = "fulfillment"             | = "payment"             |
 | Slicer_Currency_Selection| 比率类不除汇率             | 比率类不除汇率              | 金额类 ÷ __FXRate；整数类、比率类不除 |
 
 ### 3.3 汇率换算规则
@@ -186,7 +186,7 @@ Fulfillment% by label Value =
 //   分子: o2o_fulfillment_shipped_order_cnt（实际发货订单数）
 //   分母: o2o_fulfillment_request_order_cnt（客户请求门店的总订单数）
 // 筛选条件:
-//   - calc_type = "fulfillment"
+//   - calc_type = "fulfillment_brand"
 //   - data_date ∈ [__TimeMin, __TimeMax]（全局时间范围）
 //   - brand 由条形图 Y 轴（事实表[brand]）自动传递筛选，无需显式处理
 //   - 比率类，不除汇率（分子分母同币种相除自动抵消）
@@ -197,14 +197,14 @@ Fulfillment% by label Value =
     VAR __Numerator =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __Denominator =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -329,7 +329,7 @@ Avg Processing Time Value =
             'a02_e2e_boss_fulfillment_request_data_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_fulfillment_request_data_d'[data_date] <= __TimeMax
         )
-    RETURN DIVIDE(DIVIDE(__Numerator, __Denominator),60)
+    RETURN DIVIDE(__Numerator, __Denominator)
 ```
 
 ### 4.6 子模块六：Avg Processing Time Display
@@ -368,7 +368,7 @@ Penalty Amt Value =
 //         （堆积柱形图的 Y 轴应放 OOS Penalty Amt Value 和 Delay Penalty Amt Value 两个度量堆叠，
 //          Penalty Amt Value 用于工具提示或总标签展示）
 // 筛选条件:
-//   - calc_type = "fulfillment"
+//   - calc_type = "payment"
 //   - data_date ∈ [__TimeMin, __TimeMax]（全局时间范围）
 //   - Store_ID 由堆积柱形图 X 轴（Slicer_Store_Name[Store_ID]）通过 1:N 关系自动传递筛选
 //   - 金额类指标 ÷ __FXRate（汇率换算）
@@ -380,14 +380,14 @@ Penalty Amt Value =
     VAR __OOSAmt =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_oos_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __DelayAmt =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_delay_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -445,7 +445,7 @@ OOS Penalty Amt Value =
     VAR __OOSAmt =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_oos_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -501,7 +501,7 @@ Delay Penalty Amt Value =
     VAR __DelayAmt =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_delay_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -561,14 +561,14 @@ OOS Penalty Amt Share Value =
     VAR __OOSAmt =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_oos_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __DelayAmt =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_delay_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -617,14 +617,14 @@ Delay Penalty Amt Share Value =
     VAR __OOSAmt =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_oos_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __DelayAmt =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_delay_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -666,7 +666,7 @@ Penalty Order Value =
 //         独立聚合 OOS 和 Delay 再相加，避免在堆积柱形图中双计
 //         （堆积柱形图的 Y 轴应放 OOS Penalty Order Value 和 Delay Penalty Order Value 两个度量堆叠，
 //          Penalty Order Value 用于工具提示或总标签展示）
-// 筛选条件: 同 Penalty Amt Value（calc_type = "fulfillment" + 全局时间范围）
+// 筛选条件: 同 Penalty Amt Value（calc_type = "payment" + 全局时间范围）
 //   - Store_ID 由 X 轴自动传递筛选
 //   - 整数类指标，不除汇率（计数无币种属性）
 // 数据类型: integer → 整数，千分位整数
@@ -676,14 +676,14 @@ Penalty Order Value =
     VAR __OOSOrder =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_oos_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __DelayOrder =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_delay_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -730,7 +730,7 @@ OOS Penalty Order Value =
     VAR __OOSOrder =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_oos_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -777,7 +777,7 @@ Delay Penalty Order Value =
     VAR __DelayOrder =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_delay_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -826,14 +826,14 @@ OOS Penalty Order Share Value =
     VAR __OOSOrder =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_oos_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __DelayOrder =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_delay_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -882,14 +882,14 @@ Delay Penalty Order Share Value =
     VAR __OOSOrder =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_oos_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __DelayOrder =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_penalty_delay_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "payment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -1014,45 +1014,34 @@ Delay Penalty Order Share Display =
 
 ```sql
 -- Fulfillment%（所有 brand 汇总，全局时间范围）
-SELECT
-  SUM(o2o_fulfillment_shipped_order_cnt) * 1.0 / SUM(o2o_fulfillment_request_order_cnt) AS Fulfillment_Pct
-FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'fulfillment'
-  AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
-
--- Fulfillment%（按 brand 分组）
-SELECT
-  brand,
-  SUM(o2o_fulfillment_shipped_order_cnt) * 1.0 / SUM(o2o_fulfillment_request_order_cnt) AS Fulfillment_Pct
-FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'fulfillment'
-  AND data_date BETWEEN '__TimeMin' AND '__TimeMax'
-GROUP BY brand
-ORDER BY Fulfillment_Pct DESC;
+select brand, 
+       sum(o2o_fulfillment_shipped_order_cnt) as shipped_order_cnt, 
+       sum(o2o_fulfillment_request_order_cnt) as request_order_cnt, 
+       sum(o2o_fulfillment_shipped_order_cnt)/sum(o2o_fulfillment_request_order_cnt) as fulfillment_rate
+from `indep_rl_ads`.`a02_e2e_boss_performance_summary_d`
+where calc_type = 'fulfillment_brand'
+and fulfillment_calc_type = 'Exclude orders cancelled in pay date'
+--and fulfillment_calc_type = 'Exclude orders cancelled in paydate & EC-fulfilled from O2O unfulfilled'
+-- and data_year = '2027'
+-- and data_month = '01_Apr'
+AND dt >= '2026-03-29' and dt <= '2026-08-22'
+group by brand
+ORDER BY fulfillment_rate DESC
 ```
 
 ### 7.2 子模块六：Avg Store Passed / Avg Processing Time 验证
 
 ```sql
 -- Avg Store Passed（按 brand 分组）
-SELECT
-  brand,
-  SUM(o2o_fulfillment_request_times) * 1.0 / SUM(o2o_fulfillment_request_sku_qty) AS Avg_Store_Passed
-FROM a02_e2e_boss_fulfillment_request_data_d
-WHERE calc_type = 'fulfillment'
-  AND data_date BETWEEN '__TimeMin' AND '__TimeMax'
-GROUP BY brand
-ORDER BY Avg_Store_Passed DESC;
-
--- Avg Processing Time（按 brand 分组）
-SELECT
-  brand,
-  SUM(o2o_fulfillment_request_duration) * 1.0 / SUM(o2o_fulfillment_request_sku_qty) AS Avg_Processing_Time
-FROM a02_e2e_boss_fulfillment_request_data_d
-WHERE calc_type = 'fulfillment'
-  AND data_date BETWEEN '__TimeMin' AND '__TimeMax'
-GROUP BY brand
-ORDER BY Avg_Processing_Time DESC;
+select brand, 
+       sum(o2o_fulfillment_request_times)/sum(o2o_fulfillment_request_sku_qty) as avg_pass_store_cnt,
+       sum(o2o_fulfillment_request_duration)/sum(o2o_fulfillment_request_sku_qty) as avg_duration
+from `indep_rl_ads`.`a02_e2e_boss_fulfillment_request_data_d`
+where calc_type = 'fulfillment'
+-- and data_year = '2027'
+-- and data_month = '01_Apr'
+AND dt >= '2026-03-29' and dt <= '2026-08-22'
+group by brand
 ```
 
 ### 7.3 子模块七：Penalty 系列验证
@@ -1061,39 +1050,39 @@ ORDER BY Avg_Processing_Time DESC;
 -- Penalty Amt（按 Store_ID 分组，对应 store_name）
 -- 注意：Slicer_Store_Name[Store_ID] 与事实表[store_name] 通过 1:N 关联
 --       验证时需 join Slicer_Store_Name 表或直接按 store_name 分组
-SELECT
-  s.Store_ID,
-  s.Store_Label,
-  SUM(p.o2o_penalty_oos_amt) AS OOS_Amt_RMB,
-  SUM(p.o2o_penalty_delay_amt) AS Delay_Amt_RMB,
-  SUM(p.o2o_penalty_oos_amt) + SUM(p.o2o_penalty_delay_amt) AS Total_Amt_RMB,
-  -- 换算为美元（假设 __FXRate = 7）
-  (SUM(p.o2o_penalty_oos_amt) + SUM(p.o2o_penalty_delay_amt)) / 7 AS Total_Amt_USD,
-  -- Share 类（不受汇率影响）
-  SUM(p.o2o_penalty_oos_amt) * 1.0 / (SUM(p.o2o_penalty_oos_amt) + SUM(p.o2o_penalty_delay_amt)) AS OOS_Share,
-  SUM(p.o2o_penalty_delay_amt) * 1.0 / (SUM(p.o2o_penalty_oos_amt) + SUM(p.o2o_penalty_delay_amt)) AS Delay_Share
-FROM a02_e2e_boss_performance_summary_d p
-JOIN Slicer_Store_Name s ON s.Store_ID = p.store_name  -- 关联关系
-WHERE p.calc_type = 'fulfillment'
-  AND p.data_date BETWEEN '__TimeMin' AND '__TimeMax'
-GROUP BY s.Store_ID, s.Store_Label
-ORDER BY Total_Amt_RMB DESC;
-
--- Penalty Order（按 Store_ID 分组）
-SELECT
-  s.Store_ID,
-  s.Store_Label,
-  SUM(p.o2o_penalty_oos_order_cnt) AS OOS_Order,
-  SUM(p.o2o_penalty_delay_order_cnt) AS Delay_Order,
-  SUM(p.o2o_penalty_oos_order_cnt) + SUM(p.o2o_penalty_delay_order_cnt) AS Total_Order,
-  SUM(p.o2o_penalty_oos_order_cnt) * 1.0 / (SUM(p.o2o_penalty_oos_order_cnt) + SUM(p.o2o_penalty_delay_order_cnt)) AS OOS_Order_Share,
-  SUM(p.oo2o_penalty_delay_order_cnt) * 1.0 / (SUM(p.o2o_penalty_oos_order_cnt) + SUM(p.o2o_penalty_delay_order_cnt)) AS Delay_Order_Share
-FROM a02_e2e_boss_performance_summary_d p
-JOIN Slicer_Store_Name s ON s.Store_ID = p.store_name
-WHERE p.calc_type = 'fulfillment'
-  AND p.data_date BETWEEN '__TimeMin' AND '__TimeMax'
-GROUP BY s.Store_ID, s.Store_Label
-ORDER BY Total_Order DESC;
+-- 日期记得替换为Powerbi筛选器的时间范围
+select * from
+(select shop_info_id, shop_name,
+       '延迟发货' as penalty_type,
+       sum(case when data_month like '01%' then o2o_penalty_delay_order_cnt end) as fm01_order_cnt,
+       sum(case when data_month like '01%' then o2o_penalty_delay_amt end) as fm01_amt,
+       sum(case when data_month like '02%' then o2o_penalty_delay_order_cnt end) as fm02_order_cnt,
+       sum(case when data_month like '02%' then o2o_penalty_delay_amt end) as fm02_amt,
+       sum(case when data_month like '03%' then o2o_penalty_delay_order_cnt end) as fm03_order_cnt,
+       sum(case when data_month like '03%' then o2o_penalty_delay_amt end) as fm03_amt,
+       sum(case when data_month like '04%' then o2o_penalty_delay_order_cnt end) as fm04_order_cnt,
+       sum(case when data_month like '04%' then o2o_penalty_delay_amt end) as fm04_amt    
+from `indep_rl_ads`.`a02_e2e_boss_performance_summary_d`
+where data_year = '2027'
+and calc_type = 'payment'
+group by shop_info_id, shop_name
+union all
+select shop_info_id, shop_name,
+       '缺货' as penalty_type,
+       sum(case when data_month like '01%' then o2o_penalty_oos_order_cnt end) as fm01_order_cnt,
+       sum(case when data_month like '01%' then o2o_penalty_oos_amt end) as fm01_amt,
+       sum(case when data_month like '02%' then o2o_penalty_oos_order_cnt end) as fm02_order_cnt,
+       sum(case when data_month like '02%' then o2o_penalty_oos_amt end) as fm02_amt,
+       sum(case when data_month like '03%' then o2o_penalty_oos_order_cnt end) as fm03_order_cnt,
+       sum(case when data_month like '03%' then o2o_penalty_oos_amt end) as fm03_amt,
+       sum(case when data_month like '04%' then o2o_penalty_oos_order_cnt end) as fm04_order_cnt,
+       sum(case when data_month like '04%' then o2o_penalty_oos_amt end) as fm04_amt     
+from `indep_rl_ads`.`a02_e2e_boss_performance_summary_d`
+where 1=1
+AND data_date >= '2026-03-29' and data_date <= '2026-08-22'
+and calc_type = 'payment'
+group by shop_info_id, shop_name)
+order by shop_name, penalty_type
 ```
 
 ### 7.4 汇率换算验证

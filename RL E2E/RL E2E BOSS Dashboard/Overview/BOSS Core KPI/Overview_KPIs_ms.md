@@ -16,7 +16,7 @@
 
 - **行**：`Dim_RowKPIs_BossCoreKPI_Overview` 的两级层级 `KPIGroup`（父）> `KPIName`（子）
   - Sales 分组（calc_type=payment）：SLS / Demand SLS / SLS Penetration / Return / Return%
-  - Fulfillment 分组（calc_type=fulfillment）：Fulfillment% / Request Order Qty / Request Units / Request Order Amt / Shipped Order Qty / Shipped Units / Shipped Order Amt
+  - Fulfillment 分组（calc_type=fulfillment_shop_info_id）：Fulfillment% / Request Order Qty / Request Units / Request Order Amt / Shipped Order Qty / Shipped Units / Shipped Order Amt
 - **列**：`Dim_ColKPIs_BossCoreKPI_Overview` 的两级层级 `StoreGroup`（父）> `ColName`（子）
   - 6 个店铺分组：TM / JD / RLE_CN / DY_Family / DY_W / DY_MN（对应事实表 shop_name）
   - 每个店铺分组下 3 列：Act / LY / vs LY
@@ -58,13 +58,13 @@
 | 30        | Sales       | SLS Penetration   | O2O销售渗透率     | payment      | percent_1dp | delta_bp    | FALSE            |
 | 40        | Sales       | Return            | O2O退货金额       | payment      | currency    | percent_1dp | TRUE             |
 | 50        | Sales       | Return%           | O2O退货率（金额） | payment      | percent_1dp | delta_bp    | FALSE            |
-| 110       | Fulfillment | Fulfillment%      | O2O订单履约率     | fulfillment  | percent_1dp | delta_bp    | FALSE            |
-| 120       | Fulfillment | Request Order Qty | O2O销售订单量     | fulfillment  | integer     | percent_1dp | FALSE            |
-| 130       | Fulfillment | Request Units     | O2O商品销售件数   | fulfillment  | integer     | percent_1dp | FALSE            |
-| 140       | Fulfillment | Request Order Amt | O2O销售金额       | fulfillment  | currency    | percent_1dp | TRUE             |
-| 150       | Fulfillment | Shipped Order Qty | O2O已配货订单量   | fulfillment  | integer     | percent_1dp | FALSE            |
-| 160       | Fulfillment | Shipped Units     | O2O已配货商品件数 | fulfillment  | integer     | percent_1dp | FALSE            |
-| 170       | Fulfillment | Shipped Order Amt | O2O已配货销售金额 | fulfillment  | currency    | percent_1dp | TRUE             |
+| 110       | Fulfillment | Fulfillment%      | O2O订单履约率     | fulfillment_shop_info_id  | percent_1dp | delta_bp    | FALSE            |
+| 120       | Fulfillment | Request Order Qty | O2O销售订单量     | fulfillment_shop_info_id  | integer     | percent_1dp | FALSE            |
+| 130       | Fulfillment | Request Units     | O2O商品销售件数   | fulfillment_shop_info_id  | integer     | percent_1dp | FALSE            |
+| 140       | Fulfillment | Request Order Amt | O2O销售金额       | fulfillment_shop_info_id  | currency    | percent_1dp | TRUE             |
+| 150       | Fulfillment | Shipped Order Qty | O2O已配货订单量   | fulfillment_shop_info_id  | integer     | percent_1dp | FALSE            |
+| 160       | Fulfillment | Shipped Units     | O2O已配货商品件数 | fulfillment_shop_info_id  | integer     | percent_1dp | FALSE            |
+| 170       | Fulfillment | Shipped Order Amt | O2O已配货销售金额 | fulfillment_shop_info_id  | currency    | percent_1dp | TRUE             |
 
 ### 2.4 列维度表（6 店铺 × 3 列 = 18 列）
 
@@ -212,7 +212,7 @@ BOSS Core KPI Act Base Value =
 // 筛选上下文:
 //   - data_date ∈ [__TimeMin, __TimeMax]
 //   - shop_name = __StoreName（来自列维度 StoreGroup_ID）
-//   - calc_type = __CalcType（来自行维度 KPI_CalcType：Sales→payment, Fulfillment→fulfillment）
+//   - calc_type = __CalcType（来自行维度 KPI_CalcType：Sales→payment, Fulfillment→fulfillment_shop_info_id）
 //   - fulfillment_calc_type 由 Slicer_Fulfillment_Calc_Type 1:N 关系自动筛选
 //   - 金额类指标（Metric_IsCurrencyAmount=TRUE）÷ __FXRate（汇率）
 // ========================================
@@ -295,7 +295,7 @@ BOSS Core KPI Act Base Value =
     VAR __Return_Pct_Act = DIVIDE(__Return_Pct_Numerator_Act, __Return_Pct_Denominator_Act)
 
     // ═══════════════════════════════════════
-    // 基础聚合：calc_type = fulfillment（Fulfillment 分组）
+    // 基础聚合：calc_type = fulfillment_shop_info_id（Fulfillment 分组）
     // ═══════════════════════════════════════
     // Fulfillment% O2O订单履约率 = SUM(o2o_fulfillment_shipped_order_cnt) / SUM(o2o_fulfillment_request_order_cnt)
     VAR __Fulfillment_Pct_Numerator_Act =
@@ -383,7 +383,7 @@ BOSS Core KPI Act Base Value =
             30, __SLS_Penetration_Act,                                                                       // SLS Penetration O2O销售渗透率
             40, IF(__IsCurrencyAmount, DIVIDE(__Return_Act, __FXRate), __Return_Act),                       // Return O2O退货金额
             50, __Return_Pct_Act,                                                                            // Return% O2O退货率（金额）
-            // ─── Fulfillment 分组（calc_type=fulfillment）───
+            // ─── Fulfillment 分组（calc_type=fulfillment_shop_info_id）───
             110, __Fulfillment_Pct_Act,                                                                      // Fulfillment% O2O订单履约率
             120, __Request_Order_Qty_Act,                                                                    // Request Order Qty O2O销售订单量
             130, __Request_Units_Act,                                                                        // Request Units O2O商品销售件数
@@ -491,7 +491,7 @@ BOSS Core KPI LY Base Value =
     VAR __Return_Pct_LY = DIVIDE(__Return_Pct_Numerator_LY, __Return_Pct_Denominator_LY)
 
     // ═══════════════════════════════════════
-    // 基础聚合：calc_type = fulfillment（Fulfillment 分组，去年同期）
+    // 基础聚合：calc_type = fulfillment_shop_info_id（Fulfillment 分组，去年同期）
     // ═══════════════════════════════════════
     VAR __Fulfillment_Pct_Numerator_LY =
         CALCULATE(
@@ -572,7 +572,7 @@ BOSS Core KPI LY Base Value =
             30, __SLS_Penetration_LY,                                                                         // SLS Penetration O2O销售渗透率（去年同期）
             40, IF(__IsCurrencyAmount, DIVIDE(__Return_LY, __FXRate), __Return_LY),                          // Return O2O退货金额（去年同期）
             50, __Return_Pct_LY,                                                                              // Return% O2O退货率（金额）（去年同期）
-            // ─── Fulfillment 分组（calc_type=fulfillment）去年同期 ───
+            // ─── Fulfillment 分组（calc_type=fulfillment_shop_info_id）去年同期 ───
             110, __Fulfillment_Pct_LY,                                                                        // Fulfillment% O2O订单履约率（去年同期）
             120, __Request_Order_Qty_LY,                                                                      // Request Order Qty O2O销售订单量（去年同期）
             130, __Request_Units_LY,                                                                          // Request Units O2O商品销售件数（去年同期）
@@ -986,42 +986,33 @@ BOSS Core KPI Cell SVG Icon =
 --   假设结果: LY Min = '2024-06-30', LY Max = '2024-08-04'
 --   （无需再做 Key - 100 或 EDATE -12 推导，日期表已内置 LY 范围）
 
--- SLS O2O销售净额（TM 店铺，本期）
-SELECT SUM(o2o_net_sales_amt) AS SLS_Act
-FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'payment'
-  AND shop_name = 'TM'
-  AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
-  -- 例如 __TimeMin='2025-06-29', __TimeMax='2025-08-09'
+select shop_name,
+       sum(o2o_net_sales_amt) as net_sales,
+       sum(o2o_sales_amt) as demand_sales,
+       sum(o2o_sales_amt)/sum(sales_amt) as sales_penetration,
+       sum(o2o_return_amt) as return_amt,
+       sum(o2o_return_amt)/sum(o2o_sales_amt) as return_rate
+from `indep_rl_ads`.`a02_e2e_boss_performance_summary_d`
+where data_date >= '2026-03-29' and data_date <= '2026-08-22'
+and calc_type = 'payment'
+group by shop_name
 
--- SLS O2O销售净额（TM 店铺，去年同编号财周，LY 范围来自日期表 ly_timeframe_min/ly_timeframe_max）
-SELECT SUM(o2o_net_sales_amt) AS SLS_LY
-FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'payment'
-  AND shop_name = 'TM'
-  AND data_date BETWEEN '2024-06-30' AND '2024-08-04';
-  -- 注意: 不是 DATE_SUB('__TimeMin', INTERVAL 12 MONTH) = '2024-06-29'
-  -- LY 日期范围直接读自日期表 ly_timeframe_min / ly_timeframe_max（去年同编号财周的完整定义范围）
+select shop_name,
+       sum(o2o_fulfillment_request_order_cnt) as request_order_cnt,
+       sum(o2o_fulfillment_request_qty) as request_qty,
+       sum(o2o_fulfillment_request_sales_amt) as request_amt,
+       sum(o2o_fulfillment_shipped_order_cnt) as shipped_order_cnt,
+       sum(o2o_fulfillment_shipped_qty) as shipped_qty,
+       sum(o2o_fulfillment_shipped_sales_amt) as shipped_amt,
+       sum(o2o_fulfillment_shipped_order_cnt)/sum(o2o_fulfillment_request_order_cnt) as fulfillment_rate
+from `indep_rl_ads`.`a02_e2e_boss_performance_summary_d`
+where data_date >= '2026-03-29' and data_date <= '2026-08-22'
+and calc_type = 'fulfillment_shop_info_id'
+and fulfillment_calc_type = 'Exclude orders cancelled in pay date'
+--and fulfillment_calc_type = 'Exclude orders cancelled in paydate & EC-fulfilled from O2O unfulfilled'
+group by shop_name
 
--- SLS vs LY = SLS_Act / SLS_LY - 1（percent_1dp）
 
--- SLS Penetration O2O销售渗透率（TM 店铺，本期）
-SELECT
-  SUM(o2o_sales_amt) / SUM(sales_amt) AS SLS_Penetration_Act
-FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'payment'
-  AND shop_name = 'TM'
-  AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
-
--- SLS Penetration vs LY = SLS_Penetration_Act - SLS_Penetration_LY（delta_bp，×10000 转 bp）
-
--- Fulfillment% O2O订单履约率（TM 店铺，本期）
-SELECT
-  SUM(o2o_fulfillment_shipped_order_cnt) / SUM(o2o_fulfillment_request_order_cnt) AS Fulfillment_Pct_Act
-FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'fulfillment'
-  AND shop_name = 'TM'
-  AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
 ```
 
 **LY 日期范围获取方式说明**：

@@ -122,14 +122,14 @@ RETURN
 #### 4.1.1 Co-Purchase Cross-Sell-Class Value
 
 ```dax
-Co-Purchase Cross-Sell-Class Value =
+Co-Purchase Cross-Sell-Class Value = 
 // ========================================
 // 度量值: Co-Purchase Cross-Sell-Class Value
 // 用途: Class 图表的连带率，按 Slicer_Co_Purchase_Type_Selection 切换 Same-Order / Cross-Order 公式
 // 分支 Same-Order:  sum(co_net_pay_order_cnt) / sum(net_pay_order_cnt)（直接聚合）
-// 分支 Cross-Order: count(distinct user_id) / count(distinct user_id) ALLSELECTED(co_category_summary)
+// 分支 Cross-Order: 同Same-Order逻辑
 // 数据底表: a03_e2e_customer_order_correlation_data_m
-// 筛选处理: 时间/周期/类型由模型关系自动传递；Cross-Order 分母显式移除图表 co_category_summary 维度
+// 筛选处理: 时间/周期/类型由模型关系自动传递；
 // 行维度: co_category_summary 直接拉取，自动分组
 // 数据格式: percent_0dp（Display 层处理）
 // ========================================
@@ -142,19 +142,17 @@ RETURN
         "Same-Order Cross-Sell",
             DIVIDE(
                 SUM('a03_e2e_customer_order_correlation_data_m'[co_net_pay_order_cnt]),
-                SUM('a03_e2e_customer_order_correlation_data_m'[net_pay_order_cnt])
+                SUM('a03_e2e_customer_order_correlation_data_m'[net_pay_order_cnt]),BLANK()
             ),
         // ── Cross-Order 分支: 跨单连带率，分母移除图表 co_category_summary 维度 ──
         "Cross-Order Cross-Sell",
             DIVIDE(
-                DISTINCTCOUNT('a03_e2e_customer_order_correlation_data_m'[user_id]),
-                CALCULATE(
-                    DISTINCTCOUNT('a03_e2e_customer_order_correlation_data_m'[user_id]),
-                    ALLSELECTED('a03_e2e_customer_order_correlation_data_m'[co_category_summary])
-                )
+                SUM('a03_e2e_customer_order_correlation_data_m'[co_net_pay_order_cnt]),
+                SUM('a03_e2e_customer_order_correlation_data_m'[net_pay_order_cnt]),BLANK()
             ),
         BLANK()
     )
+
 ```
 
 #### 4.1.2 Co-Purchase Cross-Sell-Class Display
@@ -179,14 +177,14 @@ RETURN
 #### 4.2.1 Co-Purchase Cross-Sell-Label Value
 
 ```dax
-Co-Purchase Cross-Sell-Label Value =
+Co-Purchase Cross-Sell-Label Value = 
 // ========================================
 // 度量值: Co-Purchase Cross-Sell-Label Value
 // 用途: Label 图表的连带率，按 Slicer_Co_Purchase_Type_Selection 切换 Same-Order / Cross-Order 公式
 // 分支 Same-Order:  sum(co_net_pay_order_cnt) / sum(net_pay_order_cnt)（直接聚合）
-// 分支 Cross-Order: count(distinct user_id) / count(distinct user_id) ALLSELECTED(co_brand)
+// 分支 Cross-Order: 同Same-Order逻辑
 // 数据底表: a03_e2e_customer_order_correlation_data_m
-// 筛选处理: 时间/周期/类型由模型关系自动传递；Cross-Order 分母显式移除图表 co_brand 维度
+// 筛选处理: 时间/周期/类型由模型关系自动传递；
 // 行维度: co_brand 直接拉取，自动分组
 // 数据格式: percent_0dp（Display 层处理）
 // ========================================
@@ -204,14 +202,12 @@ RETURN
         // ── Cross-Order 分支: 跨单连带率，分母移除图表 co_brand 维度 ──
         "Cross-Order Cross-Sell",
             DIVIDE(
-                DISTINCTCOUNT('a03_e2e_customer_order_correlation_data_m'[user_id]),
-                CALCULATE(
-                    DISTINCTCOUNT('a03_e2e_customer_order_correlation_data_m'[user_id]),
-                    ALLSELECTED('a03_e2e_customer_order_correlation_data_m'[co_brand])
-                )
+                SUM('a03_e2e_customer_order_correlation_data_m'[co_net_pay_order_cnt]),
+                SUM('a03_e2e_customer_order_correlation_data_m'[net_pay_order_cnt])
             ),
         BLANK()
     )
+
 ```
 
 #### 4.2.2 Co-Purchase Cross-Sell-Label Display

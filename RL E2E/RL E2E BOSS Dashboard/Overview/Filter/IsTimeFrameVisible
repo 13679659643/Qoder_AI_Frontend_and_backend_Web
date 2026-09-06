@@ -1,0 +1,54 @@
+IsTimeFrameVisible = 
+// ========================================
+// 度量值: IsTimeFrameVisible
+// Display Folder: Sales Trend
+// 用途: 判断柱形图/趋势图 X 轴当前遍历的 timeframe（日/周/月/季/年）
+//       是否落在起止切片器选定的范围内（同粒度 + Key 在 [MinKey, MaxKey] 区间）
+// 返回: 1（显示）或 0（隐藏）
+// 依赖: Slicer_Time_Frame[TimeFrame_ID, TimeFrame_Key],
+//       Slicer_Time_Frame_Min[TimeFrame_ID, TimeFrame_Key, TimeFrame_Value],
+//       Slicer_Time_Frame_Max[TimeFrame_ID, TimeFrame_Key, TimeFrame_Value]
+// 使用方式: 作为柱形图/趋势图 X 轴（Slicer_Time_Frame）的视觉对象级别筛选器
+//           筛选条件: IsTimeFrameVisible = 1
+// 设计说明:
+//   1. 粒度一致性校验：X 轴当前行粒度必须与 Min/Max 切片器选择的粒度一致
+//      （Min/Max 切片器应受同一粒度选择器联动，保持同粒度）
+//   2. Key 范围校验：同粒度下比较 TimeFrame_Key，确保 X 轴柱子在 [MinKey, MaxKey] 区间
+//   3. 若 Min/Max 未选择，默认显示 X 轴主表全部同粒度行（取主表 Min/Max Key）
+// ========================================
+    // ── 步骤1：获取 X 轴当前行的粒度与 Key ──
+    VAR __CurrentTimeFrameID = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])
+    VAR __CurrentKey = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_Key])
+    // ── 步骤2：获取起止切片器选定的粒度 ──
+    VAR __MinTimeFrameID = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_ID])
+    VAR __MaxTimeFrameID = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_ID])
+    // ── 步骤3：粒度一致性校验 ──
+    // X 轴当前行粒度必须与起止切片器选择的粒度一致，才参与 Key 比较
+    VAR __IsSameGranularity =
+        NOT ISBLANK(__CurrentTimeFrameID)
+        && __CurrentTimeFrameID = __MinTimeFrameID
+        && __CurrentTimeFrameID = __MaxTimeFrameID
+    // ── 步骤4：获取起止切片器选定的 Key（同粒度下比较）──
+    // 若未选择，默认取 X 轴主表的最小/最大 Key，确保全部显示
+    VAR __MinKey =
+        IF(
+            ISFILTERED(Slicer_Time_Frame_Min[TimeFrame_Value]),
+            MIN(Slicer_Time_Frame_Min[TimeFrame_Key]),
+            MIN(Slicer_Time_Frame[TimeFrame_Key])
+        )
+    VAR __MaxKey =
+        IF(
+            ISFILTERED(Slicer_Time_Frame_Max[TimeFrame_Value]),
+            MAX(Slicer_Time_Frame_Max[TimeFrame_Key]),
+            MAX(Slicer_Time_Frame[TimeFrame_Key])
+        )
+    // ── 步骤5：判断当前 Key 是否在 [MinKey, MaxKey] 区间内 ──
+    RETURN
+        IF(
+            NOT __IsSameGranularity, 0,
+            IF(
+                __CurrentKey >= __MinKey && __CurrentKey <= __MaxKey,
+                1,  // 在范围内：柱子显示
+                0   // 不在范围内：柱子隐藏
+            )
+        )

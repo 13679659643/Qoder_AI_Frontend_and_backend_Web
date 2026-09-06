@@ -15,7 +15,7 @@ Dim_RowKPIs_BossCoreKPI_Overview =
 //   KPIName_CN            KPI 中文名称（与口径文档一致）
 //   KPIGroup_Sort         Level 1 排序：Sales=10, Fulfillment=20
 //   KPIName_Sort          Level 2 排序，组内递增 10，便于后续插入新 KPI
-//   KPI_CalcType          calc_type 标识：payment / fulfillment（用于事实表筛选）
+//   KPI_CalcType          calc_type 标识：payment / fulfillment_shop_info_id（用于事实表筛选）
 //   Metric_Format_Act     当期行格式（与口径文档中 Act 数据类型一致）
 //   Metric_Format_LY      去年同期行格式（与 Act 格式一致）
 //   Metric_Format_VsLY    YOY/同比行格式：
@@ -59,7 +59,7 @@ DATATABLE(
     "KPIName_CN",             STRING,     // KPI 中文名称
     "KPIGroup_Sort",          INTEGER,    // Level 1 排序：Sales=10, Fulfillment=20
     "KPIName_Sort",           INTEGER,    // Level 2 排序（组内间隔 10）
-    "KPI_CalcType",           STRING,     // calc_type：payment / fulfillment
+    "KPI_CalcType",           STRING,     // calc_type：payment / fulfillment_shop_info_id
     "Metric_Format_Act",      STRING,     // 当期 行格式
     "Metric_Format_LY",       STRING,     // 去年同期 行格式（与本期格式一致）
     "Metric_Format_VsLY",     STRING,     // YOY、同比 行格式
@@ -96,35 +96,35 @@ DATATABLE(
 
         // ════════════════════════════════════════════════════════════════
         // Fulfillment 分组（KPIGroup_Sort = 20）
-        // calc_type = fulfillment
+        // calc_type = fulfillment_shop_info_id
         // ════════════════════════════════════════════════════════════════
 
         // ─── 6. Fulfillment% — O2O订单履约率（比率类） ───
         // Act/LY: percent_1dp；vs LY: delta_bp（今年-去年，差值bp）
-        { 110, "Fulfillment", "Fulfillment%",       "O2O订单履约率",       20, 10, "fulfillment", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 110, "Fulfillment", "Fulfillment%",       "O2O订单履约率",       20, 10, "fulfillment_shop_info_id", "percent_1dp", "percent_1dp", "delta_bp",    FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ─── 7. Request Order Qty — O2O销售订单量（数量类） ───
         // Act/LY: integer；vs LY: percent_1dp（今年/去年-1）
-        { 120, "Fulfillment", "Request Order Qty",  "O2O销售订单量",       20, 20, "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 120, "Fulfillment", "Request Order Qty",  "O2O销售订单量",       20, 20, "fulfillment_shop_info_id", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ─── 8. Request Units — O2O商品销售件数（数量类） ───
         // Act/LY: integer；vs LY: percent_1dp（今年/去年-1）
-        { 130, "Fulfillment", "Request Units",      "O2O商品销售件数",     20, 30, "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 130, "Fulfillment", "Request Units",      "O2O商品销售件数",     20, 30, "fulfillment_shop_info_id", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ─── 9. Request Order Amt — O2O销售金额（金额类） ───
         // Act/LY: currency；vs LY: percent_1dp（今年/去年-1）
-        { 140, "Fulfillment", "Request Order Amt",  "O2O销售金额",         20, 40, "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 140, "Fulfillment", "Request Order Amt",  "O2O销售金额",         20, 40, "fulfillment_shop_info_id", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ─── 10. Shipped Order Qty — O2O已配货订单量（数量类） ───
         // Act/LY: integer；vs LY: percent_1dp（今年/去年-1）
-        { 150, "Fulfillment", "Shipped Order Qty",  "O2O已配货订单量",     20, 50, "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 150, "Fulfillment", "Shipped Order Qty",  "O2O已配货订单量",     20, 50, "fulfillment_shop_info_id", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ─── 11. Shipped Units — O2O已配货商品件数（数量类） ───
         // Act/LY: integer；vs LY: percent_1dp（今年/去年-1）
-        { 160, "Fulfillment", "Shipped Units",      "O2O已配货商品件数",   20, 60, "fulfillment", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 160, "Fulfillment", "Shipped Units",      "O2O已配货商品件数",   20, 60, "fulfillment_shop_info_id", "integer",     "integer",     "percent_1dp", FALSE, "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ─── 12. Shipped Order Amt — O2O已配货销售金额（金额类） ───
         // Act/LY: currency；vs LY: percent_1dp（今年/去年-1）
-        { 170, "Fulfillment", "Shipped Order Amt",  "O2O已配货销售金额",   20, 70, "fulfillment", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+        { 170, "Fulfillment", "Shipped Order Amt",  "O2O已配货销售金额",   20, 70, "fulfillment_shop_info_id", "currency",    "currency",    "percent_1dp", TRUE,  "#1A9018", "#D64550", "#E1C233", "#5f6165" }
     }
 )
