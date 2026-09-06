@@ -74,12 +74,12 @@ Step 2 应用全局时间范围筛选到 `t05_customer_order_data_d[dt]`：
 口径文档要求：
 
 > **is_member 使用**: `VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)`，默认 TTL VIC
-> **is_employee 使用**: `VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)`，默认 Yes
+> **is_employee 使用**: `VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])`，默认 Yes
 
 Step 1（a03 表）应用这两个筛选：
 
 - `a03[is_member] = __IsMemberFilter`
-- `a03[is_employee] = __IsEmployeeFilter`
+- `a03[is_employee] in __IsEmployeeFilter`
 
 Step 2（t05 表）同样应用 `is_member` 筛选（**is_employee 不涉及，因 t05 表无 is_employee 字段**），按 `__IsMemberFilter` 值分支处理：
 
@@ -269,7 +269,7 @@ VIC No. (Net_New VIC) Display             ← integer 格式 #,##0
 | Slicer_Time_Frame_Max（Step 1 end period）| 断开维度，SELECTEDVALUE 读取 `Last_Fiscal_Month_Min/Max`                  | `a03[data_date] >= __PeriodMin AND a03[data_date] <= __PeriodMax`     |
 | Slicer_Time_Frame_Min（Step 2 全局下限）  | 断开维度，SELECTEDVALUE 读取 `TimeFrame_Min`                              | `t05[dt] >= __TimeMin`                                          |
 | Slicer_Time_Frame_Max（Step 2 全局上限）  | 断开维度，SELECTEDVALUE 读取 `TimeFrame_Max`                              | `t05[dt] <= __TimeMax`                                          |
-| Slicer_Is_Employee_Selection              | 断开维度，SELECTEDVALUE 读取 `IsEmployee_Code`                            | `a03[is_employee] = __IsEmployeeFilter`（仅 Step 1 应用，t05 表无此字段） |
+| Slicer_Is_Employee_Selection              | 断开维度，SELECTEDVALUE 读取 `IsEmployee_Code`                            | `a03[is_employee] in __IsEmployeeFilter`（仅 Step 1 应用，t05 表无此字段） |
 | IsMemberFilter                            | 断开维度，SELECTEDVALUE 读取 `IsMember`                                   | Step 1: `a03[is_member] = __IsMemberFilter`；Step 2: 按 `__IsMemberFilter` 分支过滤 `t05[is_member]`（=0 时 IN {0,1}，=1 时 =1） |
 | Slicer_Platform_Selection                 | 1:N 维度，桥接两表 platform 字段                                          | 模型自动传递 platform 筛选到 a03 和 t05                                |
 | Slicer_Store_Name                         | 1:N 维度，桥接两表 shop 字段（a03[shop_name_en] / t05[shop_name]）        | 模型自动传递 shop 筛选到 a03 和 t05                                     |
@@ -318,7 +318,7 @@ VIC No. (Net_Retention VIC) Value =
 //     - a03[data_date] ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //     - a03[is_retention_vic] = 1
 //     - a03[is_member] = __IsMemberFilter（默认 0 = TTL VIC）
-//     - a03[is_employee] = __IsEmployeeFilter（默认 1 = Yes）
+//     - a03[is_employee] in __IsEmployeeFilter（默认 所有）
 //   Step 2:
 //     - t05[dt] ∈ [TimeFrame_Min, TimeFrame_Max]（全局时间范围）
 //     - t05[user_id] ∈ Step 1 框定的 user_id 集合（TREATAS 传递）
@@ -341,14 +341,14 @@ VIC No. (Net_Retention VIC) Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     VAR __VICUserIds =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
@@ -404,7 +404,7 @@ VIC No. (Net_T4-5 Upgrade) Value =
 //     - a03[data_date] ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //     - a03[is_upgrade_vic] = 1
 //     - a03[is_member] = __IsMemberFilter（默认 0 = TTL VIC）
-//     - a03[is_employee] = __IsEmployeeFilter（默认 1 = Yes）
+//     - a03[is_employee] in __IsEmployeeFilter（默认 所有值）
 //   Step 2:
 //     - t05[dt] ∈ [TimeFrame_Min, TimeFrame_Max]（全局时间范围）
 //     - t05[user_id] ∈ Step 1 框定的 user_id 集合（TREATAS 传递）
@@ -416,14 +416,14 @@ VIC No. (Net_T4-5 Upgrade) Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     VAR __VICUserIds =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
@@ -479,7 +479,7 @@ VIC No. (Net_Direct VIC) Value =
 //     - a03[data_date] ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //     - a03[is_direct_vic] = 1
 //     - a03[is_member] = __IsMemberFilter（默认 0 = TTL VIC）
-//     - a03[is_employee] = __IsEmployeeFilter（默认 1 = Yes）
+//     - a03[is_employee] in __IsEmployeeFilter（默认 所有）
 //   Step 2:
 //     - t05[dt] ∈ [TimeFrame_Min, TimeFrame_Max]（全局时间范围）
 //     - t05[user_id] ∈ Step 1 框定的 user_id 集合（TREATAS 传递）
@@ -491,14 +491,14 @@ VIC No. (Net_Direct VIC) Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     VAR __VICUserIds =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
@@ -554,7 +554,7 @@ VIC No. (Net_New VIC) Value =
 //     - a03[data_date] ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //     - a03[is_new_vic] = 1
 //     - a03[is_member] = __IsMemberFilter（默认 0 = TTL VIC）
-//     - a03[is_employee] = __IsEmployeeFilter（默认 1 = Yes）
+//     - a03[is_employee] in __IsEmployeeFilter（默认 所有）
 //   Step 2:
 //     - t05[dt] ∈ [TimeFrame_Min, TimeFrame_Max]（全局时间范围）
 //     - t05[user_id] ∈ Step 1 框定的 user_id 集合（TREATAS 传递）
@@ -566,14 +566,14 @@ VIC No. (Net_New VIC) Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     VAR __VICUserIds =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_new_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
@@ -922,7 +922,7 @@ ORDER BY VIC_No_Retention DESC;
 4. **全局时间范围筛选（关键逻辑）**：Step 2 使用 `Slicer_Time_Frame_Min[TimeFrame_Min]` 和 `Slicer_Time_Frame_Max[TimeFrame_Max]` 作为全局时间范围。参考实现：Customer_Member_Indicator.md。
 
 5. **is_member / is_employee 双重筛选（关键逻辑，Step 1 + Step 2 均应用 is_member）**：
-   - Step 1（a03 表）应用两个筛选：`is_member = __IsMemberFilter` 和 `is_employee = __IsEmployeeFilter`
+   - Step 1（a03 表）应用两个筛选：`is_member = __IsMemberFilter` 和 `is_employee in __IsEmployeeFilter`
    - Step 2（t05 表）仅应用 `is_member` 筛选（t05 表无 is_employee 字段），按 `__IsMemberFilter` 值分支过滤：
      - `__IsMemberFilter = 0`（TTL VIC，默认）→ `t05[is_member] IN {0, 1}`（全部会员身份）
      - `__IsMemberFilter = 1`（会员 VIC）→ `t05[is_member] = 1`（仅会员）

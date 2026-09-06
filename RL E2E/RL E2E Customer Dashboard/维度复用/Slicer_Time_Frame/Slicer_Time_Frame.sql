@@ -20,7 +20,41 @@ FROM
 	    indep_rl_dim.dim_t00_bi_fiscal_calendar
         ORDER BY ID_Sort DESC
 
-
+select t1.*
+from indep_rl_dim.dim_t00_bi_fiscal_calendar t1
+left join (
+    select *
+    from (
+        select
+            date_key as financial_day,
+            concat(financial_year, lpad(financial_week_num, 2, '0')) as financial_week,
+            count(distinct concat(financial_year, lpad(financial_week_num, 2, '0'))) over() as week_cnt,
+            concat(financial_year, lpad(financial_month_num, 2, '0')) as financial_month,
+            count(distinct concat(financial_year, lpad(financial_month_num, 2, '0'))) over() as month_cnt,
+            concat(financial_year, lpad(financial_quarter_num, 2, '0')) as financial_quarter,
+            count(distinct concat(financial_year, lpad(financial_quarter_num, 2, '0'))) over() as quarter_cnt,
+            financial_year as financial_year,
+            count(distinct financial_year) over() as year_cnt,
+            row_number() over(order by date_key desc) as rn
+        from indep_rl_dim.dim_t00_calendar
+        -- where date_key in ('20260823', '20260824')
+        where date_key in (replace(current_date(), '-', ''), replace(date_sub(current_date(), 1), '-', ''))
+        group by date_key,
+            concat(financial_year, lpad(financial_week_num, 2, '0')),
+            concat(financial_year, lpad(financial_month_num, 2, '0')),
+            concat(financial_year, lpad(financial_quarter_num, 2, '0')),
+            financial_year
+    ) calendar
+    where rn = 1
+) t2
+on 1=1
+where (
+    (t1.timeframe_id = 'Day' and t1.timeframe_key < t2.financial_day)
+or (t1.timeframe_id = 'Week' and (case when t2.week_cnt=2 then t1.timeframe_key < t2.financial_week else t1.timeframe_key <= t2.financial_week end))
+or (t1.timeframe_id = 'Month' and (case when t2.month_cnt=2 then t1.timeframe_key < t2.financial_month else t1.timeframe_key <= t2.financial_month end))
+or (t1.timeframe_id = 'Quarter' and (case when t2.quarter_cnt=2 then t1.timeframe_key < t2.financial_quarter else t1.timeframe_key <= t2.financial_quarter end))
+or (t1.timeframe_id = 'Year' and (case when t2.year_cnt=2 then t1.timeframe_key < t2.financial_year else t1.timeframe_key <= t2.financial_year end))
+)
 
 let
     源 = Odbc.Query("dsn=bytehouse_rl", 
@@ -44,11 +78,14 @@ let
     `lp_timeframe_min` AS `TimeFrame_Min_LP`, -- 环比上期起始自然日
     `lp_timeframe_max` AS `TimeFrame_Max_LP`   -- 环比上期结束自然日
 FROM 
-	    indep_rl_dim.dim_t00_bi_fiscal_calendar
+	    (select t1.*
+from indep_rl_dim.dim_t00_bi_fiscal_calendar t1
+where t1.timeframe_max < current_date())
         ORDER BY ID_Sort DESC
-    ")
+    "),
+    筛选的行 = Table.SelectRows(源, each ([TimeFrame_ID] <> "Day" and [TimeFrame_ID] <> "Week"))
 in
-    源
+    筛选的行
 
 Day\Week\Month\Quarter\Year
 数据样式（含 LY 字段）：

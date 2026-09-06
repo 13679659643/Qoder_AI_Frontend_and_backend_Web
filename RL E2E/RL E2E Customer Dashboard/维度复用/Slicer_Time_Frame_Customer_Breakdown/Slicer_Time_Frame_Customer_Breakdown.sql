@@ -44,9 +44,11 @@ let
     `lp_timeframe_min` AS `TimeFrame_Min_LP`, -- 环比上期起始自然日
     `lp_timeframe_max` AS `TimeFrame_Max_LP`   -- 环比上期结束自然日
 FROM 
-	    indep_rl_dim.dim_t00_bi_fiscal_calendar
+	    (select t1.*
+from indep_rl_dim.dim_t00_bi_fiscal_calendar t1
+where t1.timeframe_max < current_date())
         ORDER BY ID_Sort DESC
-    ")
+    "),
     筛选的行 = Table.SelectRows(源, each ([TimeFrame_ID] = "Month" or [TimeFrame_ID] = "Quarter"))
 in
     筛选的行

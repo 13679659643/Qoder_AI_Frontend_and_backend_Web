@@ -65,7 +65,7 @@
 | Slicer_Time_Frame_VIC_Breakdown | 断开维度 | 柱形图 X 轴；SELECTEDVALUE 读取 TimeFrame_ID/Key/Value、Last_Fiscal_Month_Min/Max（X 轴每个时间点的 end period 区间） |
 | Slicer_Time_Frame_Max_VIC_Breakdown | 断开维度 | 结束切片器；SELECTEDVALUE 读取 TimeFrame_Max（全局范围上界） |
 | Slicer_Time_Frame_Min_VIC_Breakdown | 断开维度 | 起始切片器；SELECTEDVALUE 读取 TimeFrame_Min（全局范围下界） |
-| Slicer_Is_Employee_Selection | 断开维度 | SELECTEDVALUE 读取 IsEmployee_Code（默认 1 = Yes） |
+| Slicer_Is_Employee_Selection | 断开维度 | SELECTEDVALUE 读取 IsEmployee_Code（默认 所有） |
 | IsMemberFilter | 断开维度 | SELECTEDVALUE 读取 IsMember（默认 0 = TTL VIC） |
 | Slicer_Currency_Selection | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate（默认 1）、Currency_Symbol（默认 "¥"） |
 
@@ -81,7 +81,7 @@
 |--------|---------|---------|
 | Slicer_Time_Frame_VIC_Breakdown（X 轴 end period） | 断开维度，SELECTEDVALUE 读取 Last_Fiscal_Month_Min/Max | `data_date >= __CurrentLFMMin AND data_date <= __CurrentLFMMax` |
 | Slicer_Time_Frame_Min/Max_VIC_Breakdown（全局范围） | 冗余保护 | `data_date >= __GlobalMin AND data_date <= __GlobalMax` |
-| Slicer_Is_Employee_Selection | SELECTEDVALUE 读取 IsEmployee_Code | `is_employee = __IsEmployeeFilter`（默认 1） |
+| Slicer_Is_Employee_Selection | SELECTEDVALUE 读取 IsEmployee_Code | `is_employee in __IsEmployeeFilter`（默认 1） |
 | IsMemberFilter | SELECTEDVALUE 读取 IsMember | `is_member = __IsMemberFilter`（默认 0） |
 | Slicer_Currency_Selection | SELECTEDVALUE 读取 Currency_ExchangeRate / Currency_Symbol | 金额类 `DIVIDE(SUM(net_pay_amt), __FXRate)`；Display 拼接 `__CurrencySymbol` |
 | 事实表行维度字段（platform / shop_info_id / 新老客分层等） | 柱形图图例/小多图直接拉取，模型自动传递 | DAX 无需显式处理 |
@@ -179,7 +179,7 @@ SLS Trend Value (New VIC) =
 //   - 全局范围冗余筛选: data_date ∈ [TimeFrame_Min, TimeFrame_Max]
 //   - is_new_vic = 1
 //   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
-//   - is_employee = __IsEmployeeFilter（默认 1 = Yes）
+//   - is_employee in __IsEmployeeFilter（默认 所有）
 // 货币转换: 金额类 ÷ Currency_ExchangeRate（RMB=1, USD=7）
 // Metric_ID: 1
 // 数据类型: currency（内部值，未格式化）
@@ -189,7 +189,7 @@ SLS Trend Value (New VIC) =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Breakdown[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Breakdown[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
     VAR __Result =
         DIVIDE(
@@ -197,7 +197,7 @@ SLS Trend Value (New VIC) =
                 SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                 'a03_e2e_customer_data_m'[is_new_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
                 'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
                 'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
@@ -248,7 +248,7 @@ SLS% Trend Value (New VIC) =
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（X 轴 end period 当月）
 //   - 全局范围冗余筛选: data_date ∈ [TimeFrame_Min, TimeFrame_Max]
 //   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
-//   - is_employee = __IsEmployeeFilter（默认 1 = Yes）
+//   - is_employee in __IsEmployeeFilter（默认 所有）
 // 货币转换: SLS% 占比不除（分子分母同币种抵消）
 // Metric_ID: 4
 // 数据类型: percent_0dp（比率，0~1）
@@ -258,7 +258,7 @@ SLS% Trend Value (New VIC) =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Breakdown[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Breakdown[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ── 分子: is_new_vic=1 的 SLS ──
     VAR __Numerator =
@@ -266,7 +266,7 @@ SLS% Trend Value (New VIC) =
             SUM('a03_e2e_customer_data_m'[net_pay_amt]),
             'a03_e2e_customer_data_m'[is_new_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
@@ -279,7 +279,7 @@ SLS% Trend Value (New VIC) =
             SUM('a03_e2e_customer_data_m'[net_pay_amt]),
             'a03_e2e_customer_data_m'[is_new_vic] IN {0, 1},
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
@@ -323,7 +323,7 @@ SLS Trend Value (Retention VIC) =
 //   - 全局范围冗余筛选: data_date ∈ [TimeFrame_Min, TimeFrame_Max]
 //   - is_retention_vic = 1
 //   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
-//   - is_employee = __IsEmployeeFilter（默认 1 = Yes）
+//   - is_employee in __IsEmployeeFilter（默认 所有）
 // 货币转换: 金额类 ÷ Currency_ExchangeRate（RMB=1, USD=7）
 // Metric_ID: 23
 // 数据类型: currency（内部值，未格式化）
@@ -333,7 +333,7 @@ SLS Trend Value (Retention VIC) =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Breakdown[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Breakdown[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
     VAR __Result =
         DIVIDE(
@@ -341,7 +341,7 @@ SLS Trend Value (Retention VIC) =
                 SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                 'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
                 'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
                 'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
@@ -392,7 +392,7 @@ SLS% Trend Value (Retention VIC) =
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（X 轴 end period 当月）
 //   - 全局范围冗余筛选: data_date ∈ [TimeFrame_Min, TimeFrame_Max]
 //   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
-//   - is_employee = __IsEmployeeFilter（默认 1 = Yes）
+//   - is_employee in __IsEmployeeFilter（默认 所有）
 // 货币转换: SLS% 占比不除（分子分母同币种抵消）
 // Metric_ID: 26
 // 数据类型: percent_0dp（比率，0~1）
@@ -402,7 +402,7 @@ SLS% Trend Value (Retention VIC) =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Breakdown[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Breakdown[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ── 分子: is_retention_vic=1 的 SLS ──
     VAR __Numerator =
@@ -410,7 +410,7 @@ SLS% Trend Value (Retention VIC) =
             SUM('a03_e2e_customer_data_m'[net_pay_amt]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
@@ -423,7 +423,7 @@ SLS% Trend Value (Retention VIC) =
             SUM('a03_e2e_customer_data_m'[net_pay_amt]),
             'a03_e2e_customer_data_m'[is_retention_vic] IN {0, 1},
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,

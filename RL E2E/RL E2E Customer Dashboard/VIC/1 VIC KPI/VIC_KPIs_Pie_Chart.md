@@ -43,7 +43,7 @@
 | 维度表 | 类型 | 连接方式 |
 |--------|------|---------|
 | Slicer_Time_Frame_Max | 断开维度 | SELECTEDVALUE 读取 `Last_Fiscal_Month_Min`（end period 当月起始日）、`Last_Fiscal_Month_Max`（end period 当月结束日） |
-| Slicer_Is_Employee_Selection | 断开维度 | SELECTEDVALUE 读取 `IsEmployee_Code`（默认 1 = Yes） |
+| Slicer_Is_Employee_Selection | 断开维度 | SELECTEDVALUE 读取 `IsEmployee_Code`（默认 所有） |
 | IsMemberFilter | 断开维度 | SELECTEDVALUE 读取 `IsMember`（默认 0 = TTL VIC） |
 
 > 本方案不使用 Slicer_Time_Frame_Min（VIC 端 end period 当月区间已在 Slicer_Time_Frame_Max 中预算）。
@@ -57,7 +57,7 @@
 | 筛选器 | 作用方式 | DAX 处理 |
 |--------|---------|---------|
 | Slicer_Time_Frame_Max | 断开维度，SELECTEDVALUE 读取 `Last_Fiscal_Month_Min/Max` | `data_date >= __PeriodMin AND data_date <= __PeriodMax` |
-| Slicer_Is_Employee_Selection | 断开维度，SELECTEDVALUE 读取 `IsEmployee_Code` | `is_employee = __IsEmployeeFilter`（默认 1） |
+| Slicer_Is_Employee_Selection | 断开维度，SELECTEDVALUE 读取 `IsEmployee_Code` | `is_employee in __IsEmployeeFilter`（默认 1） |
 | IsMemberFilter | 断开维度，SELECTEDVALUE 读取 `IsMember` | `is_member = __IsMemberFilter`（默认 0） |
 | 事实表分组字段（platform / shop_info_id） | 饼图图例直接拉取，模型自动传递筛选 | DAX 无需显式处理 |
 
@@ -95,7 +95,7 @@ T4-5 Upgrade No. Pie Value =
 // 筛选条件:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
-//   - is_employee = __IsEmployeeFilter（默认 1 = Yes）
+//   - is_employee in __IsEmployeeFilter（默认 所有）
 //   - 分组维度由饼图图例直接拉取事实表字段自动传递
 // 数据类型: integer → 整数，千分位整数
 // 独立性: 不依赖 Metric_ID 路由，与 VIC_KPIs_Table.md 主表解耦
@@ -103,13 +103,13 @@ T4-5 Upgrade No. Pie Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
@@ -152,7 +152,7 @@ Retention VIC No. Pie Value =
 // 筛选条件:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
-//   - is_employee = __IsEmployeeFilter（默认 1 = Yes）
+//   - is_employee in __IsEmployeeFilter（默认 所有）
 //   - 分组维度由饼图图例直接拉取事实表字段自动传递
 // 数据类型: integer → 整数，千分位整数
 // 独立性: 不依赖 Metric_ID 路由，与 VIC_KPIs_Table.md 主表解耦
@@ -160,13 +160,13 @@ Retention VIC No. Pie Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
@@ -209,7 +209,7 @@ Direct VIC No. Pie Value =
 // 筛选条件:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
-//   - is_employee = __IsEmployeeFilter（默认 1 = Yes）
+//   - is_employee in __IsEmployeeFilter（默认 所有）
 //   - 分组维度由饼图图例直接拉取事实表字段自动传递
 // 数据类型: integer → 整数，千分位整数
 // 独立性: 不依赖 Metric_ID 路由，与 VIC_KPIs_Table.md 主表解耦
@@ -217,13 +217,13 @@ Direct VIC No. Pie Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
@@ -310,7 +310,7 @@ WHERE data_date BETWEEN '2026-09-01' AND '2026-09-30'
 
 2. **时间范围**：用 VIC 项目统一的 end period 当月区间（`Last_Fiscal_Month_Min/Max`），非 PB_Merchandise 的全局 `TimeFrame_Min/Max`。若需要切换为 Rolling 12 或其他区间，需调整 `__PeriodMin/Max` 的取值逻辑。
 
-3. **人群筛选保留**：is_member（默认 0 = TTL VIC）和 is_employee（默认 1 = Yes）与主表口径一致，确保饼图与主表 KPI 矩阵展示同一人群切片。若饼图需要展示不同人群，可通过切片器切换。
+3. **人群筛选保留**：is_member（默认 0 = TTL VIC）和 is_employee（默认 所有）与主表口径一致，确保饼图与主表 KPI 矩阵展示同一人群切片。若饼图需要展示不同人群，可通过切片器切换。
 
 4. **分组维度传递**：platform / shop_info_id 等分组字段由饼图图例直接拉取事实表字段，DAX 度量值无需显式处理分组逻辑，模型自动传递筛选。
 

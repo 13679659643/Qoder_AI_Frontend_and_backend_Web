@@ -46,7 +46,7 @@
 口径文档要求：
 
 > **is_member 使用**: `VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)`，默认 TTL VIC
-> **is_employee 使用**: `VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)`，默认 Yes
+> **is_employee 使用**: `VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])`，默认 Yes
 
 所有指标（除特殊说明外）都需要应用这两个筛选到事实表 `a03_e2e_customer_data_m[is_member]` / `[is_employee]`。
 
@@ -187,7 +187,7 @@ Dim_ColMetric_VIC_KPIs（断开维度，列头）
 | Slicer_Time_Frame_Max（LY）               | SELECTEDVALUE 读取 `Last_Fiscal_Month_Min_LY/Max_LY`                                    | `data_date >= __LYMin AND data_date <= __LYMax`                  |
 | Slicer_Time_Frame_Max（LP）               | SELECTEDVALUE 读取 `Last_Fiscal_Month_Min_LP/Max_LP`                                    | `data_date >= __LPMin AND data_date <= __LPMax`                  |
 | Slicer_Time_Frame_Max（Rolling12 起始月） | 用 `Last_Fiscal_Month` 月份字符串 → EDATE(-11) → 起始月字符串 → 查 `TimeFrame_Min` | VIC Retention% Metric_ID=6 分母专用（内化于 Act/LY/LP Base Value） |
-| Slicer_Is_Employee_Selection              | 断开维度，SELECTEDVALUE 读取 `IsEmployee_Code`                                          | `a03_e2e_customer_data_m[is_employee] = __IsEmployeeFilter`      |
+| Slicer_Is_Employee_Selection              | 断开维度，SELECTEDVALUE 读取 `IsEmployee_Code`                                          | `a03_e2e_customer_data_m[is_employee] in __IsEmployeeFilter`      |
 | IsMemberFilter                            | 断开维度，SELECTEDVALUE 读取 `IsMember`                                                 | `a03_e2e_customer_data_m[is_member] = __IsMemberFilter`          |
 | 事实表分组字段                            | 表格行直接拉取，模型自动传递筛选                                                          | DAX 无需显式处理                                                   |
 
@@ -330,7 +330,7 @@ VIC KPIs Act Base Value =
 // 筛选上下文:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
-//   - is_employee = __IsEmployeeFilter（默认 1 = Yes）
+//   - is_employee in __IsEmployeeFilter（默认 所有）
 //   - 按 Metric_ID 路由到 is_vic / is_retention_vic / is_upgrade_vic / is_direct_vic 字段
 // 聚合粒度: DISTINCTCOUNT(user_id) WHERE 对应 is_xxx_vic = 1
 // 说明:
@@ -348,7 +348,7 @@ VIC KPIs Act Base Value =
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     // ── 人群筛选 ──
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ═══════════════════════════════════════
     // 基础聚合：DISTINCTCOUNT(user_id) WHERE is_xxx_vic = 1
@@ -359,7 +359,7 @@ VIC KPIs Act Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
@@ -368,7 +368,7 @@ VIC KPIs Act Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
@@ -377,7 +377,7 @@ VIC KPIs Act Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
@@ -386,7 +386,7 @@ VIC KPIs Act Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
@@ -429,7 +429,7 @@ VIC KPIs Act Base Value =
                     DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                     'a03_e2e_customer_data_m'[is_vic] = 1,
                     'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __Rolling12StartMin,
                     'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
                 )
@@ -485,7 +485,7 @@ VIC KPIs LY Base Value =
     VAR __LYMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY])
     // ── 人群筛选 ──
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ═══════════════════════════════════════
     // 基础聚合：去年同期 end period 当月
@@ -495,7 +495,7 @@ VIC KPIs LY Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
         )
@@ -504,7 +504,7 @@ VIC KPIs LY Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
         )
@@ -513,7 +513,7 @@ VIC KPIs LY Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
         )
@@ -522,7 +522,7 @@ VIC KPIs LY Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
         )
@@ -575,7 +575,7 @@ VIC KPIs LY Base Value =
                     DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                     'a03_e2e_customer_data_m'[is_vic] = 1,
                     'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __Rolling12StartMin,
                     'a03_e2e_customer_data_m'[data_date] <= __LYMax
                 )
@@ -632,7 +632,7 @@ VIC KPIs LP Base Value =
     VAR __LPMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LP])
     // ── 人群筛选 ──
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ═══════════════════════════════════════
     // 基础聚合：上期 end period 当月
@@ -642,7 +642,7 @@ VIC KPIs LP Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LPMin,
             'a03_e2e_customer_data_m'[data_date] <= __LPMax
         )
@@ -651,7 +651,7 @@ VIC KPIs LP Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LPMin,
             'a03_e2e_customer_data_m'[data_date] <= __LPMax
         )
@@ -660,7 +660,7 @@ VIC KPIs LP Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LPMin,
             'a03_e2e_customer_data_m'[data_date] <= __LPMax
         )
@@ -669,7 +669,7 @@ VIC KPIs LP Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LPMin,
             'a03_e2e_customer_data_m'[data_date] <= __LPMax
         )
@@ -722,7 +722,7 @@ VIC KPIs LP Base Value =
                     DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                     'a03_e2e_customer_data_m'[is_vic] = 1,
                     'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __Rolling12StartMin,
                     'a03_e2e_customer_data_m'[data_date] <= __LPMax
                 )
@@ -1482,7 +1482,7 @@ VIC KPIs Cell Background Color =
 ## 7. 注意事项
 
 1. **end period 时间范围（关键逻辑）**：所有指标均使用 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Min]` ~ `[Last_Fiscal_Month_Max]` 作为本期时间范围；LY 使用 `Last_Fiscal_Month_Min_LY` ~ `Last_Fiscal_Month_Max_LY`；LP 使用 `Last_Fiscal_Month_Min_LP` ~ `Last_Fiscal_Month_Max_LP`。这些字段已由 Slicer_Time_Frame_Max 日期维度表通过自关联计算得到，无需在 DAX 中重复实现。
-2. **is_member / is_employee 双重筛选（关键逻辑）**：所有指标均应用 `is_member = SELECTEDVALUE(IsMemberFilter[IsMember], 0)` 和 `is_employee = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)` 筛选。默认值：is_member=0（TTL VIC），is_employee=1（Yes）。
+2. **is_member / is_employee 双重筛选（关键逻辑）**：所有指标均应用 `is_member = SELECTEDVALUE(IsMemberFilter[IsMember], 0)` 和 `is_employee = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])` 筛选。默认值：is_member=0（TTL VIC），is_employee=1（Yes）。
 3. **REMOVEFILTERS 机制**：派生指标（vs LY / vs LP / Share / Share vs LY / Share vs LP）的取值必须先 `REMOVEFILTERS('Dim_ColMetric_VIC_KPIs')` 再应用目标 Metric_ID，否则矩阵行标题保留的筛选器会导致冲突返回 BLANK。这与 PB_Merchandise_Fulfillment_detail_ms.md 的总路由范式完全一致。
 4. **VIC Retention% 的 Rolling 12 个财月分母（关键逻辑，仅此指标使用）**：分母为"所选时间范围 end period 往前 Rolling 12 个财月 count(distinct user_id) where is_vic=1"。
 

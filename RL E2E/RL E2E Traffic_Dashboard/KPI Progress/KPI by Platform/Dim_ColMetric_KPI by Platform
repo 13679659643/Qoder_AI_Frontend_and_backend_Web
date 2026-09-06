@@ -39,7 +39,7 @@ DATATABLE(
         // ID  Name                                                        Sort  Metric_Format           IsCurAmt  Pos        Neg        Zero       Default
         { 1,  "Media Cost Rate",                                           10,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 2,  "Media Cost Rate vs LP",                                     20,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 3,  "YOY%",                                                      30,  "percent_1dp",        FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 3,  "YOY%",                                                      30,  "integer_bp",        FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 4,  "Media Cost",                                                40,  "currency",             TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 5,  "Media Cost vs LP",                                          50,  "currency",             TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 6,  "YOY %",                                                     60,  "percent_1dp",        FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },

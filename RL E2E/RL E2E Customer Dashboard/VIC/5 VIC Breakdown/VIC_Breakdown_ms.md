@@ -74,7 +74,7 @@ SLS / ACV / UPT / AUR / Freq. 等指标均采用 Step1 + Step2 两步法：
 口径文档要求：
 
 > **is_member 使用**: `VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)`，默认 TTL VIC
-> **is_employee 使用**: `VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)`，默认 Yes
+> **is_employee 使用**: `VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])`，默认 Yes
 
 所有指标（除特殊说明外）都需要应用这两个筛选到事实表 `a03_e2e_customer_data_m[is_member]` / `[is_employee]`。
 
@@ -218,7 +218,7 @@ Dim_ColMetric_New_Retention_VIC（断开维度，三级列头）
 | Slicer_Time_Frame_Max_VIC_Breakdown            | 断开维度，SELECTEDVALUE 读取 `Last_Fiscal_Month_Min/Max`                                | `data_date >= __PeriodMin AND data_date <= __PeriodMax`                                      |
 | Slicer_Time_Frame_Max_VIC_Breakdown（LY）      | SELECTEDVALUE 读取 `Last_Fiscal_Month_Min_LY/Max_LY`                                    | `data_date >= __LYMin AND data_date <= __LYMax`                                              |
 | Slicer_Time_Frame_Max_VIC_Breakdown（LP）      | SELECTEDVALUE 读取 `Last_Fiscal_Month_Min_LP/Max_LP`                                    | `data_date >= __LPMin AND data_date <= __LPMax`                                              |
-| Slicer_Is_Employee_Selection                   | 断开维度，SELECTEDVALUE 读取 `IsEmployee_Code`                                          | `a03_e2e_customer_data_m[is_employee] = __IsEmployeeFilter`                                 |
+| Slicer_Is_Employee_Selection                   | 断开维度，SELECTEDVALUE 读取 `IsEmployee_Code`                                          | `a03_e2e_customer_data_m[is_employee] in __IsEmployeeFilter`                                 |
 | IsMemberFilter                                 | 断开维度，SELECTEDVALUE 读取 `IsMember`                                                 | `a03_e2e_customer_data_m[is_member] = __IsMemberFilter`                                     |
 | Slicer_Currency_Selection                      | 断开维度，SELECTEDVALUE 读取 `Currency_ExchangeRate` / `Currency_Symbol`                | 金额类 `DIVIDE(SUM(net_pay_amt), __FXRate)`；Display 拼接 `__CurrencySymbol`                 |
 | 事实表分组字段                                 | 表格行直接拉取，模型自动传递筛选                                                          | DAX 无需显式处理                                                                               |
@@ -341,7 +341,7 @@ VIC Breakdown Act Base Value =
 // 筛选上下文:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
-//   - is_employee = __IsEmployeeFilter（默认 1 = Yes）
+//   - is_employee in __IsEmployeeFilter（默认 所有）
 //   - 按 VICType 路由 is_new_vic=1（New VIC）或 is_retention_vic=1（Retention VIC）
 //   - 按 Metric_ID 路由到 SLS / SLS% / ACV / UPT / AUR / Freq. 聚合
 // 货币转换:
@@ -362,7 +362,7 @@ VIC Breakdown Act Base Value =
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max])
     // ── 人群筛选 ──
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     // ── 货币转换 ──
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
@@ -386,7 +386,7 @@ VIC Breakdown Act Base Value =
                     SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                     'a03_e2e_customer_data_m'[is_new_vic] = 1,
                     'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                     'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
                 ),
@@ -394,7 +394,7 @@ VIC Breakdown Act Base Value =
                     SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                     'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                     'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                     'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
                 )
@@ -409,7 +409,7 @@ VIC Breakdown Act Base Value =
                 DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                 'a03_e2e_customer_data_m'[is_new_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                 'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
             ),
@@ -417,7 +417,7 @@ VIC Breakdown Act Base Value =
                 DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                 'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                 'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
             )
@@ -430,7 +430,7 @@ VIC Breakdown Act Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_qty]),
                 'a03_e2e_customer_data_m'[is_new_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                 'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
             ),
@@ -438,7 +438,7 @@ VIC Breakdown Act Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_qty]),
                 'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                 'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
             )
@@ -451,7 +451,7 @@ VIC Breakdown Act Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
                 'a03_e2e_customer_data_m'[is_new_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                 'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
             ),
@@ -459,7 +459,7 @@ VIC Breakdown Act Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
                 'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                 'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
             )
@@ -519,7 +519,7 @@ VIC Breakdown LY Base Value =
     VAR __LYMax = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max_LY])
     // ── 人群筛选 ──
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     // ── 货币转换 ──
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
@@ -541,7 +541,7 @@ VIC Breakdown LY Base Value =
                     SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                     'a03_e2e_customer_data_m'[is_new_vic] = 1,
                     'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __LYMin,
                     'a03_e2e_customer_data_m'[data_date] <= __LYMax
                 ),
@@ -549,7 +549,7 @@ VIC Breakdown LY Base Value =
                     SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                     'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                     'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __LYMin,
                     'a03_e2e_customer_data_m'[data_date] <= __LYMax
                 )
@@ -563,7 +563,7 @@ VIC Breakdown LY Base Value =
                 DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                 'a03_e2e_customer_data_m'[is_new_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __LYMin,
                 'a03_e2e_customer_data_m'[data_date] <= __LYMax
             ),
@@ -571,7 +571,7 @@ VIC Breakdown LY Base Value =
                 DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                 'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __LYMin,
                 'a03_e2e_customer_data_m'[data_date] <= __LYMax
             )
@@ -583,7 +583,7 @@ VIC Breakdown LY Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_qty]),
                 'a03_e2e_customer_data_m'[is_new_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __LYMin,
                 'a03_e2e_customer_data_m'[data_date] <= __LYMax
             ),
@@ -591,7 +591,7 @@ VIC Breakdown LY Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_qty]),
                 'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __LYMin,
                 'a03_e2e_customer_data_m'[data_date] <= __LYMax
             )
@@ -603,7 +603,7 @@ VIC Breakdown LY Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
                 'a03_e2e_customer_data_m'[is_new_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __LYMin,
                 'a03_e2e_customer_data_m'[data_date] <= __LYMax
             ),
@@ -611,7 +611,7 @@ VIC Breakdown LY Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
                 'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __LYMin,
                 'a03_e2e_customer_data_m'[data_date] <= __LYMax
             )
@@ -667,7 +667,7 @@ VIC Breakdown LP Base Value =
     VAR __LPMax = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max_LP])
     // ── 人群筛选 ──
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     // ── 货币转换 ──
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
@@ -689,7 +689,7 @@ VIC Breakdown LP Base Value =
                     SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                     'a03_e2e_customer_data_m'[is_new_vic] = 1,
                     'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __LPMin,
                     'a03_e2e_customer_data_m'[data_date] <= __LPMax
                 ),
@@ -697,7 +697,7 @@ VIC Breakdown LP Base Value =
                     SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                     'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                     'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __LPMin,
                     'a03_e2e_customer_data_m'[data_date] <= __LPMax
                 )
@@ -711,7 +711,7 @@ VIC Breakdown LP Base Value =
                 DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                 'a03_e2e_customer_data_m'[is_new_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __LPMin,
                 'a03_e2e_customer_data_m'[data_date] <= __LPMax
             ),
@@ -719,7 +719,7 @@ VIC Breakdown LP Base Value =
                 DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                 'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __LPMin,
                 'a03_e2e_customer_data_m'[data_date] <= __LPMax
             )
@@ -731,7 +731,7 @@ VIC Breakdown LP Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_qty]),
                 'a03_e2e_customer_data_m'[is_new_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __LPMin,
                 'a03_e2e_customer_data_m'[data_date] <= __LPMax
             ),
@@ -739,7 +739,7 @@ VIC Breakdown LP Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_qty]),
                 'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __LPMin,
                 'a03_e2e_customer_data_m'[data_date] <= __LPMax
             )
@@ -751,7 +751,7 @@ VIC Breakdown LP Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
                 'a03_e2e_customer_data_m'[is_new_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __LPMin,
                 'a03_e2e_customer_data_m'[data_date] <= __LPMax
             ),
@@ -759,7 +759,7 @@ VIC Breakdown LP Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
                 'a03_e2e_customer_data_m'[is_retention_vic] = 1,
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __LPMin,
                 'a03_e2e_customer_data_m'[data_date] <= __LPMax
             )
@@ -860,7 +860,7 @@ VIC Breakdown Store Base Value =
         )
     // ── 人群筛选 ──
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     // ── 货币转换 ──
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
@@ -882,7 +882,7 @@ VIC Breakdown Store Base Value =
                     SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                     'a03_e2e_customer_data_m'[is_new_vic] IN {0, 1},
                     'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                     'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
                 ),
@@ -890,7 +890,7 @@ VIC Breakdown Store Base Value =
                     SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                     'a03_e2e_customer_data_m'[is_retention_vic] IN {0, 1},
                     'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                     'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
                 )
@@ -904,7 +904,7 @@ VIC Breakdown Store Base Value =
                 DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                 'a03_e2e_customer_data_m'[is_new_vic] IN {0, 1},
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                 'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
             ),
@@ -912,7 +912,7 @@ VIC Breakdown Store Base Value =
                 DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                 'a03_e2e_customer_data_m'[is_retention_vic] IN {0, 1},
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                 'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
             )
@@ -924,7 +924,7 @@ VIC Breakdown Store Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_qty]),
                 'a03_e2e_customer_data_m'[is_new_vic] IN {0, 1},
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                 'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
             ),
@@ -932,7 +932,7 @@ VIC Breakdown Store Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_qty]),
                 'a03_e2e_customer_data_m'[is_retention_vic] IN {0, 1},
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                 'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
             )
@@ -944,7 +944,7 @@ VIC Breakdown Store Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
                 'a03_e2e_customer_data_m'[is_new_vic] IN {0, 1},
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                 'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
             ),
@@ -952,7 +952,7 @@ VIC Breakdown Store Base Value =
                 SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
                 'a03_e2e_customer_data_m'[is_retention_vic] IN {0, 1},
                 'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                 'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                 'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
             )
@@ -1596,7 +1596,7 @@ VIC Breakdown Cell Background Color =
 
 2. **end period 时间范围（关键逻辑）**：所有指标均使用 `Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min]` ~ `[Last_Fiscal_Month_Max]` 作为本期时间范围；LY 使用 `Last_Fiscal_Month_Min_LY` ~ `Last_Fiscal_Month_Max_LY`；LP 使用 `Last_Fiscal_Month_Min_LP` ~ `Last_Fiscal_Month_Max_LP`。这些字段已由日期维度表通过自关联计算得到，无需在 DAX 中重复实现。
 
-3. **is_member / is_employee 双重筛选（关键逻辑）**：所有指标均应用 `is_member = SELECTEDVALUE(IsMemberFilter[IsMember], 0)` 和 `is_employee = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)` 筛选。默认值：is_member=0（TTL VIC），is_employee=1（Yes）。
+3. **is_member / is_employee 双重筛选（关键逻辑）**：所有指标均应用 `is_member = SELECTEDVALUE(IsMemberFilter[IsMember], 0)` 和 `is_employee = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])` 筛选。默认值：is_member=0（TTL VIC），is_employee=1（Yes）。
 
 4. **New VIC / Retention VIC 双大分组（关键逻辑）**：两个大分组指标完全对称，唯一区别是筛选字段：
    - New VIC（Metric_ID 1-22）：Step1 筛选 `is_new_vic = 1`

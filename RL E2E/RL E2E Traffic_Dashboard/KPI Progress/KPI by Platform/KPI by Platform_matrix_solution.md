@@ -52,23 +52,62 @@
 
 ### 2.3 指标维度表（Dim_ColMetric_KPI by Platform）15 个指标
 
-| Metric_ID | Metric_Name                                           | Metric_Sort | Metric_Format        | IsCurrencyAmount |
-| --------- | ----------------------------------------------------- | ----------- | -------------------- | ---------------- |
-| 1         | Media Cost Rate                                       | 10          | percent_1dp          | FALSE            |
-| 2         | Media Cost Rate vs LP                                 | 20          | percent_1dp          | FALSE            |
-| 3         | YOY%                                                  | 30          | percent_1dp          | FALSE            |
-| 4         | Media Cost                                            | 40          | currency             | TRUE             |
-| 5         | Media Cost vs LP                                     | 50          | currency             | TRUE             |
-| 6         | YOY %                                                 | 60          | percent_1dp          | FALSE            |
-| 7         | ± Acceleration cost MOB% vs. store SLS MOB%          | 70         | percent_1dp          | FALSE            |         
-| 8        | ± Acceleration cost MOB% vs. store SLS MOB% vs LP    | 80         | percent_1dp          | FALSE            |  
-| 9        | YOY  %                                                | 90         | percent_1dp          | FALSE            |
-| 10        | Media Contribution to New Customer Acquisition%       | 100         | percent_1dp          | FALSE            |
-| 11        | Media Contribution to New Customer Acquisition% vs LP | 110         | percent_1dp          | FALSE            |
-| 12        | YOY   %                                               | 120         | percent_1dp          | FALSE            |
-| 13        | Cost Per New Acquisition                              | 130         | currency_decimal_1dp | TRUE             |
-| 14        | Cost Per New Acquisition vs LP                        | 140         | currency_decimal_1dp | TRUE             |
-| 15        | YOY    %                                              | 150         | percent_1dp          | FALSE            |
+Dim_ColMetric_KPI by Platform = 
+// ========================================
+// 表: Dim_ColMetric_KPI by Platform
+// 类型: 断开维度
+// 用途: KPIs by Platform 矩阵列维度（15 个指标行）
+// 变更: 2026-06-24 扩展为分平台KPI矩阵列维度，包含各项费比、花费及新客指标
+//        2026-07-14 因 vs LP 与 YOY 视作独立指标行，合并原三列格式为单一 Metric_Format，并清洗格式命名
+//
+// 格式类型清单：
+//   currency              → ¥1,000 / $1,000（货币符号由币种切片器决定）
+//   currency_decimal_1dp  → ¥1,000.0 / $1,000.0（货币符号由币种切片器决定，保留一位小数）
+//   integer               → 1,000
+//   decimal_1dp           → 1,000.0
+//   decimal_2             → 1,000.00
+//   percent_1dp           → 1,000.0%
+//   delta_pct_1dp         → +14.5%（含正负号）
+//   delta_bp_1dp          → +120.5bp / -80.0bp（基点，含正负号，值×10000 转 bp）
+//   integer_bp            → 基点整数（小数×10000 转 bp，不含正号）：120bp / -80bp / 0bp
+//
+// 颜色说明：
+//   仅 YOY 行启用条件颜色（正/负/零）
+//   This Year 与 Last Year 行统一使用 Metric_ColorDefault（#5f6165 深灰色）
+//
+// 汇率转换标记：
+//   IsCurrencyAmount = TRUE  → 金额类指标，切换币种时乘以汇率
+//   IsCurrencyAmount = FALSE → 比率/计数类指标，不受汇率影响
+// ========================================
+DATATABLE(
+    "Metric_ID",              INTEGER,    // 主键 1~15
+    "Metric_Name",            STRING,     // 列标题显示名称
+    "Metric_Sort",            INTEGER,    // 排序值（起始10，步长10，便于插入）
+    "Metric_Format",          STRING,     // 行格式（因 vs LP 与 YOY 视作独立指标，统一格式定义）
+    "IsCurrencyAmount", BOOLEAN,   // 是否金额类指标（需要汇率转换）
+    "Metric_ColorPositive",   STRING,     // YOY 正值颜色
+    "Metric_ColorNegative",   STRING,     // YOY 负值颜色
+    "Metric_ColorZero",       STRING,     // YOY 零值颜色
+    "Metric_ColorDefault",    STRING,     // 默认颜色（This Year / Last Year 行）
+    {
+        // ID  Name                                                        Sort  Metric_Format           IsCurAmt  Pos        Neg        Zero       Default
+        { 1,  "Media Cost Rate",                                           10,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 2,  "Media Cost Rate vs LP",                                     20,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 3,  "YOY%",                                                      30,  "integer_bp",        FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 4,  "Media Cost",                                                40,  "currency",             TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 5,  "Media Cost vs LP",                                          50,  "currency",             TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 6,  "YOY %",                                                     60,  "percent_1dp",        FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 7,  "± Acceleration cost MOB% vs. store SLS MOB%",               70,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 8, "± Acceleration cost MOB% vs. store SLS MOB% vs LP",         80,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 9, "YOY  %",                                                    90,  "integer_bp",        FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 10, "Media Contribution to New Customer Acquisition%",           100,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 11, "Media Contribution to New Customer Acquisition% vs LP",     110,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 12, "YOY   %",                                                   120,  "integer_bp",        FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 13, "Cost Per New Acquisition",                                  130,  "currency_decimal_1dp", TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 14, "Cost Per New Acquisition vs LP",                            140,  "currency_decimal_1dp", TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { 15, "YOY    %",                                                  150,  "percent_1dp",        FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+    }
+)
 
 ---
 
@@ -557,7 +596,7 @@ KPI by Platform Base Value =
 // 说明: 
 //   Metric_ID 1/4/7/10/13 → Current
 //   Metric_ID 2/5/8/11/14 → vsLP
-//   Metric_ID 3/6/9/12/15 → YOY% (3/6/15 为同比百分比 当期/上期-1，9/12 为差值 当期-上期)
+//   Metric_ID 3/6/9/12/15 → YOY% (6/15 为同比百分比 当期/上期-1，3/9/12 为差值 当期-上期)
 // Day/Week: 涉及 MAX+SUM 聚合的指标（#34/#35 系列 = Metric_ID 10~15）在 Day/Week 时为空
 //   在三个结果变量（__CurrentValue/__LP_Value/__YOY_Result）各自内部判断，不细分到分子分母
 // ========================================
@@ -573,7 +612,7 @@ KPI by Platform Base Value =
 
     VAR __IsYOY = __MetricID IN {3, 6, 9, 12, 15}
     // YOY% 计算方式：9/12 为差值（当期 - 上期），3/6/15 为同比百分比（当期/上期 - 1）
-    VAR __IsDiffYOY = __MetricID IN {9, 12}
+    VAR __IsDiffYOY = __MetricID IN {3, 9, 12}
 
     // ── 本期值（含 YOY% 上下文修复 + Day/Week 留空判断）──
     // 修复上下文冲突：矩阵行标题会保留 Metric_Name 等所有列的筛选器，
@@ -626,8 +665,8 @@ KPI by Platform Base Value =
                 BLANK(),
                 IF(
                     __IsDiffYOY,
-                    __CurrentValue - __LP_Value,                                          // 当期 - 上期（Metric_ID 9/12）
-                    IF(__CurrIsEmpty, -1, DIVIDE(__CurrentValue - __LP_Value, __LP_Value)) // 当期/上期 - 1（Metric_ID 3/6/15）
+                    __CurrentValue - __LP_Value,                                          // 当期 - 上期（Metric_ID 3/9/12）
+                    IF(__CurrIsEmpty, -1, DIVIDE(__CurrentValue - __LP_Value, __LP_Value)) // 当期/上期 - 1（Metric_ID 6/15）
                 )
             )
         )
@@ -643,12 +682,12 @@ KPI by Platform Base Value =
             13, __CurrentValue,    // Cost Per New Acquisition
             // ─── vs LP 值 ───
             2,  __LP_Value,       // Media Cost Rate vs LP
+            3,  __LP_Value,     // YOY% (Media Cost Rate)
             5,  __LP_Value,       // Media Cost vs LP
             8,  __LP_Value,       // ± Accel cost MOB% vs. store SLS MOB% vs LP
             11, __LP_Value,       // Media Contribution to New Cust% vs LP
             14, __LP_Value,       // Cost Per New Acquisition vs LP
             // ─── YOY% 计算 ───
-            3,  __YOY_Result,     // YOY% (Media Cost Rate)
             6,  __YOY_Result,     // YOY % (Media Cost)
             9,  __YOY_Result,     // YOY  % (± Accel cost MOB%)
             12, __YOY_Result,     // YOY   % (Media New Cust Contribution%)
@@ -904,7 +943,7 @@ KPI by Platform Cell SVG Icon =
 | --------- | ------------------------------------------- | ------------ | --------------------------------------- | ----------------------------------------------- | ------------------------------------- | ------------- | -------- |
 | 1         | Media Cost Rate                             | 子模块五 §31  | Cost / SLS × 1.13 / 1.06               | cost_amt / net_sales_amt                        | a05_e2e_paid_media_summary_d          | ALL           | 否       |
 | 2         | Media Cost Rate vs LP                       | 子模块五 §31  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 否       |
-| 3         | YOY%                                        | 子模块五 §31  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
+| 3         | YOY%                                        | 子模块五 §31  | Current - vsLP（差值）                 | -                                               | -                                     | -             | 否       |
 | 4         | Media Cost                                  | 子模块五 §32  | SUM(cost_amt)                           | cost_amt                                        | a05_e2e_paid_media_summary_d          | ALL           | 是       |
 | 5         | Media Cost vs LP                            | 子模块五 §32  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 是       |
 | 6         | YOY %                                       | 子模块五 §32  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |

@@ -79,7 +79,7 @@
 | Slicer_Time_Frame_VIC_Trend | 断开维度 | 柱形图 X 轴；SELECTEDVALUE 读取 TimeFrame_ID/Key/Value/Label、TimeFrame_Min/Max、TimeFrame_Min_LY/Max_LY、Last_Fiscal_Month 及 Last_Fiscal_Month_Min/Max/Min_LY/Max_LY/Min_LP/Max_LP 系列 |
 | Slicer_Time_Frame_Max_VIC_Trend | 断开维度 | 结束切片器；SELECTEDVALUE 读取 TimeFrame_Max/Key/ID、TimeFrame_Max_LY、Last_Fiscal_Month 系列 |
 | Slicer_Time_Frame_Min_VIC_Trend | 断开维度 | 起始切片器；SELECTEDVALUE 读取 TimeFrame_Min/Key/ID、TimeFrame_Min_LY |
-| Slicer_Is_Employee_Selection | 断开维度 | SELECTEDVALUE 读取 IsEmployee_Code（默认 1 = Yes） |
+| Slicer_Is_Employee_Selection | 断开维度 | SELECTEDVALUE 读取 IsEmployee_Code（默认 所有） |
 | IsMemberFilter | 断开维度 | SELECTEDVALUE 读取 IsMember（默认 0 = TTL VIC） |
 
 > **日期表结构假设**：Slicer_Time_Frame_VIC_Trend 的结构与原 Slicer_Time_Frame_Max 一致（包含 TimeFrame 系列 + Last_Fiscal_Month 系列），每个 X 轴时间点都有完整的 Last_Fiscal_Month 系列字段，用于 end period 逻辑和 Rolling 12 推导。Slicer_Time_Frame_Max_VIC_Trend / Slicer_Time_Frame_Min_VIC_Trend 的结构与原 Slicer_Time_Frame_Max / Slicer_Time_Frame_Min 一致。
@@ -96,7 +96,7 @@
 | Slicer_Time_Frame_VIC_Trend（X 轴 LY） | SELECTEDVALUE 读取 Last_Fiscal_Month_Min_LY/Max_LY | `data_date >= __CurrentLFMMin_LY AND data_date <= __CurrentLFMMax_LY` |
 | Slicer_Time_Frame_VIC_Trend（X 轴 LP） | SELECTEDVALUE 读取 Last_Fiscal_Month_Min_LP/Max_LP | `data_date >= __CurrentLFMMin_LP AND data_date <= __CurrentLFMMax_LP` |
 | Slicer_Time_Frame_Min/Max_VIC_Trend（全局范围） | 冗余保护，防止 X 轴超出全局范围 | `data_date >= __GlobalMin AND data_date <= __GlobalMax` |
-| Slicer_Is_Employee_Selection | 断开维度，SELECTEDVALUE 读取 IsEmployee_Code | `is_employee = __IsEmployeeFilter`（默认 1） |
+| Slicer_Is_Employee_Selection | 断开维度，SELECTEDVALUE 读取 IsEmployee_Code | `is_employee in __IsEmployeeFilter`（默认 1） |
 | IsMemberFilter | 断开维度，SELECTEDVALUE 读取 IsMember | `is_member = __IsMemberFilter`（默认 0） |
 | 事实表分组字段（platform / shop_info_id） | 柱形图图例直接拉取，模型自动传递 | DAX 无需显式处理 |
 
@@ -214,7 +214,7 @@ VIC No. Trend Act Value =
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（X 轴 end period 当月）
 //   - 全局范围冗余筛选: data_date ∈ [TimeFrame_Min, TimeFrame_Max]
 //   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
-//   - is_employee = __IsEmployeeFilter（默认 1 = Yes）
+//   - is_employee in __IsEmployeeFilter（默认 所有）
 // 数据类型: integer
 // ========================================
     VAR __GlobalMin = SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min])
@@ -222,13 +222,13 @@ VIC No. Trend Act Value =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
@@ -256,13 +256,13 @@ VIC No. Trend LY Value =
     VAR __CurrentLFMMin_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY])
     VAR __CurrentLFMMax_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax_LY,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LY,
@@ -288,13 +288,13 @@ VIC No. Trend LP Value =
     VAR __CurrentLFMMin_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP])
     VAR __CurrentLFMMax_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LP])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LP,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LP
         )
@@ -327,7 +327,7 @@ VIC Retention% Trend Act Value =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ── 分子: is_retention_vic=1 在 X 轴 end period 当月的 DISTINCTCOUNT ──
     VAR __Numerator =
@@ -335,7 +335,7 @@ VIC Retention% Trend Act Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
@@ -370,7 +370,7 @@ VIC Retention% Trend Act Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __Rolling12StartMin,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
         )
@@ -400,7 +400,7 @@ VIC Retention% Trend LY Value =
     VAR __CurrentLFMMin_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY])
     VAR __CurrentLFMMax_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ── 分子_LY: is_retention_vic=1 在 X 轴 LY end period 当月的 DISTINCTCOUNT ──
     VAR __Numerator_LY =
@@ -408,7 +408,7 @@ VIC Retention% Trend LY Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax_LY,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LY,
@@ -451,7 +451,7 @@ VIC Retention% Trend LY Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __Rolling12StartMin,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LY
         )
@@ -479,7 +479,7 @@ VIC Retention% Trend LP Value =
     VAR __CurrentLFMMin_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP])
     VAR __CurrentLFMMax_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LP])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ── 分子_LP: is_retention_vic=1 在 X 轴 LP end period 当月的 DISTINCTCOUNT ──
     VAR __Numerator_LP =
@@ -487,7 +487,7 @@ VIC Retention% Trend LP Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LP,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LP
         )
@@ -528,7 +528,7 @@ VIC Retention% Trend LP Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __Rolling12StartMin,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LP
         )
@@ -552,7 +552,7 @@ T4-5 Upgrade No. Trend Act Value =
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（X 轴 end period 当月）
 //   - 全局范围冗余筛选: data_date ∈ [TimeFrame_Min, TimeFrame_Max]
 //   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
-//   - is_employee = __IsEmployeeFilter（默认 1 = Yes）
+//   - is_employee in __IsEmployeeFilter（默认 所有）
 // 数据类型: integer
 // ========================================
     VAR __GlobalMin = SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min])
@@ -560,13 +560,13 @@ T4-5 Upgrade No. Trend Act Value =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
@@ -594,13 +594,13 @@ T4-5 Upgrade No. Trend LY Value =
     VAR __CurrentLFMMin_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY])
     VAR __CurrentLFMMax_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax_LY,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LY,
@@ -625,13 +625,13 @@ T4-5 Upgrade No. Trend LP Value =
     VAR __CurrentLFMMin_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP])
     VAR __CurrentLFMMax_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LP])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)
+    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] = __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LP,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LP
         )

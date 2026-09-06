@@ -1,6 +1,11 @@
 let
     源 = Odbc.Query("dsn=bytehouse_rl", 
     "
+WITH dim_t00_bi_fiscal_calendar AS (
+select t1.*
+from indep_rl_dim.dim_t00_bi_fiscal_calendar t1
+where t1.timeframe_max < current_date()
+)
 SELECT
     t1.`etl_time`,
     t1.`TimeFrame_ID`,
@@ -63,11 +68,11 @@ FROM (
             ELSE NULL
         END AS `Last_Fiscal_Month`
 
-    FROM indep_rl_dim.dim_t00_bi_fiscal_calendar
+    FROM dim_t00_bi_fiscal_calendar
 ) t1
 
 -- ★ 自关联：用 Last_Fiscal_Month 匹配月维度的 timeframe_value
-LEFT JOIN indep_rl_dim.dim_t00_bi_fiscal_calendar t2
+LEFT JOIN dim_t00_bi_fiscal_calendar t2
     ON  t2.`timeframe_label` = '月'
     AND t2.`timeframe_value` = t1.`Last_Fiscal_Month`
 
