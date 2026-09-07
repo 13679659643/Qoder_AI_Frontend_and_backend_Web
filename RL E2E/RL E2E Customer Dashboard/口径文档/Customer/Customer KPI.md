@@ -49,7 +49,7 @@
 | **统计字段** | `user_id` |
 | **数据底表（实际值）** | `a03_e2e_customer_data_m` |
 | **数据底表（目标值）** | `a03_e2e_customer_fcst_data_m`，日期字段 `data_date` |
-| **筛选条件** | Step 1：在所选时间范围内筛选 `net_pay_amt > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，`net_pay_amt > 0`）；Step 2：缩小顾客范围至 `lp_12m_net_pay_amt = 0`（`data_date = 所选时间范围 start_period`）；相当于取Step 1和Step 2的交集，最后count(distinct user_id) |
+| **筛选条件** | Step 1（本期有消费的新客候选）：`data_date = 所选时间范围`，`is_member = 0`，`net_pay_amt > 0`；Step 2（第一财月的老客排除集）：`data_date = 所选时间范围 start_period`，`is_member = 0`，`lp_12m_net_pay_amt > 0`；结果 = Step 1 剔除 Step 2（EXCEPT，本期消费者剔除第一财月已识别的老客），最后 count(distinct user_id) |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |

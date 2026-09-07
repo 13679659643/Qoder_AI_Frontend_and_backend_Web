@@ -56,17 +56,23 @@ Slicer_Customer_Type_Selection 中 Customer_Type_ID 只有 New 和 Existing 两�
   - 单选 Existing → Existing 逻辑
 - `HASONEVALUE = FALSE`（不选/多选/全选）→ All 逻辑
 
-**New/Existing/All 口径**（参考 New Existing All 口径.md）：
+**New/Existing/All 口径**（参考 New Existing All 口径.md；与新客数最新 EXCEPT 逻辑保持一致）：
 
-| 客户类型 | 用户判定（start_period 内） | 销售额/件数/订单数汇总口径 |
+| 客户类型 | user_id 集合构造（Step1+Step2 EXCEPT/INTERSECT，不可合并区间） | 销售额/件数/订单数汇总口径 |
 | --- | --- | --- |
-| **New** | `amt > 0 AND is_member = 0 AND lp_12m_*_amt = 0` → 得到新客 user_id 集合 | 对该 user_id 集合在 **slicer 区间** 内 `SUM(amt/qty/order_cnt) WHERE is_member = 0` |
-| **Existing** | `amt > 0 AND is_member = 0 AND lp_12m_*_amt > 0` → 得到老客 user_id 集合 | 对该 user_id 集合在 **slicer 区间** 内 `SUM(amt/qty/order_cnt) WHERE is_member = 0` |
+| **New** | Step1（本期区间 `SUM(amt) > 0 ∩ is_member=0`）EXCEPT Step2（第一财月 `SUM(lp_12m_*_amt) > 0 ∩ is_member=0`）→ 本期消费者剔除第一财月已识别的老客 | 对该 user_id 集合在 **slicer 区间** 内 `SUM(amt/qty/order_cnt) WHERE is_member = 0` |
+| **Existing** | Step1（本期区间 `SUM(amt) > 0 ∩ is_member=0`）INTERSECT Step2（第一财月 `SUM(lp_12m_*_amt) > 0 ∩ is_member=0`）→ 本期消费者中第一财月已识别的老客 | 对该 user_id 集合在 **slicer 区间** 内 `SUM(amt/qty/order_cnt) WHERE is_member = 0` |
 | **All** | 不限定 user_id 集合 | 在 **slicer 区间** 内 `SUM(amt/qty/order_cnt) WHERE is_member = 0` |
 
+**Step1/Step2 区间定义**（两步区间不同、不可合并，参考：维度复用/新客 No. 模板详解.md）：
+- Step1（本期有消费的新客候选）：`data_date ∈ [TimeFrame_Min, TimeFrame_Max]`（slicer 区间），`is_member = 0`，`SUM(amt) > 0`
+- Step2（第一财月的老客排除集）：`data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]`（start_period 第一财月），`is_member = 0`，`SUM(lp_12m_*_amt) > 0`
+- amt/lp_12m_*_amt 字段按 Row_Code 路由：Net→`net_pay_amt`/`lp_12m_net_pay_amt`，Demand→`pay_amt`/`lp_12m_pay_amt`
+
 **技术实现**：
-- New/Existing：先用 `CALCULATETABLE(VALUES(user_id), <start_period + New/Existing 条件>)` 得到目标 user_id 集合，再用 `TREATAS(__TargetUserIDs, 'a03_e2e_customer_data_m'[user_id])` 作为筛选器应用到 slicer 区间的 SUM/COUNT
+- New/Existing：先用 `SUMMARIZECOLUMNS(user_id, shop_info_id)` 聚合 Step1/Step2 做 SUM 判定，各自 `SUMMARIZE(..., [user_id])` 去重到 user_id 级，再 `EXCEPT`（New）/ `INTERSECT`（Existing）得到目标 user_id 集合；用 `TREATAS(__TargetUserIDs, 'a03_e2e_customer_data_m'[user_id])` 作为筛选器应用到 slicer 区间的 SUM/COUNT
 - All：不应用 user_id 集合筛选，直接在 slicer 区间内 SUM/COUNT
+- 人数按 user_id 粒度计数（`COUNTROWS(SUMMARIZE(..., [user_id]))`，非 DISTINCTCOUNT(user_id)，与新客数口径一致）
 
 ### 1.4 指标分类与派生规则
 
@@ -218,55 +224,65 @@ VAR __CustomerType =
 - 单选 Existing → `HASONEVALUE = TRUE` → `__CustomerType = "Existing"`
 - 全选（两个都选）→ `HASONEVALUE = FALSE` → `__CustomerType = "All"`
 
-**New/Existing user_id 集合计算**（在 start_period 内）：
+**New/Existing user_id 集合计算**（Step1+Step2 EXCEPT/INTERSECT，不可合并区间）：
 ```dax
+// Step1（本期有消费的新客候选）：slicer 区间，is_member=0，SUM(amt) > 0；按 user_id+shop_info_id 聚合做 SUM 判定
+VAR __Step1_Net =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
+                'a03_e2e_customer_data_m'[data_date] <= __PeriodMax,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_net] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
+    )
+// Step2（第一财月的老客排除集）：start_period 区间，is_member=0，SUM(lp_12m_*_amt) > 0；同粒度聚合
+VAR __Step2_Net =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
+                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_lp12m] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
+    )
+// Demand 分支：将 net_pay_amt→pay_amt、lp_12m_net_pay_amt→lp_12m_pay_amt，结构同上
+VAR __Step1_Demand = ...   // pay_amt
+VAR __Step2_Demand = ...   // lp_12m_pay_amt
+
+// New = Step1 EXCEPT Step2（本期消费者剔除第一财月已识别的老客，按 user_id 去重）
+// Existing = Step1 INTERSECT Step2（本期消费者中第一财月已识别的老客，按 user_id 去重）
+VAR __Users_New_Net         = EXCEPT(SUMMARIZE(__Step1_Net, [user_id]), SUMMARIZE(__Step2_Net, [user_id]))
+VAR __Users_New_Demand      = EXCEPT(SUMMARIZE(__Step1_Demand, [user_id]), SUMMARIZE(__Step2_Demand, [user_id]))
+VAR __Users_Existing_Net    = INTERSECT(SUMMARIZE(__Step1_Net, [user_id]), SUMMARIZE(__Step2_Net, [user_id]))
+VAR __Users_Existing_Demand  = INTERSECT(SUMMARIZE(__Step1_Demand, [user_id]), SUMMARIZE(__Step2_Demand, [user_id]))
+
+// __TargetUserIDs 按 CustomerType × RowCode 路由（UNION+FILTER 保证表类型）
 VAR __TargetUserIDs =
-    SWITCH(__CustomerType,
-        "New",
-            SWITCH(__RowCode,
-                "Net",
-                    CALCULATETABLE(
-                        VALUES('a03_e2e_customer_data_m'[user_id]),
-                        'a03_e2e_customer_data_m'[is_member] = 0,
-                        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
-                        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-                        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
-                    ),
-                "Demand",
-                    CALCULATETABLE(
-                        VALUES('a03_e2e_customer_data_m'[user_id]),
-                        'a03_e2e_customer_data_m'[is_member] = 0,
-                        'a03_e2e_customer_data_m'[pay_amt] > 0,
-                        'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
-                        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-                        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
-                    ),
-                {}   // 兜底空表
-            ),
-        "Existing",
-            SWITCH(__RowCode,
-                "Net",
-                    CALCULATETABLE(
-                        VALUES('a03_e2e_customer_data_m'[user_id]),
-                        'a03_e2e_customer_data_m'[is_member] = 0,
-                        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
-                        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-                        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
-                    ),
-                "Demand",
-                    CALCULATETABLE(
-                        VALUES('a03_e2e_customer_data_m'[user_id]),
-                        'a03_e2e_customer_data_m'[is_member] = 0,
-                        'a03_e2e_customer_data_m'[pay_amt] > 0,
-                        'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
-                        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-                        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
-                    ),
-                {}
-            ),
-        {}   // All 返回空表，表示不应用 user_id 集合筛选
+    UNION(
+        FILTER(__Users_New_Net,         NOT __IsAll && __CustomerType = "New"      && __RowCode = "Net"),
+        FILTER(__Users_New_Demand,      NOT __IsAll && __CustomerType = "New"      && __RowCode = "Demand"),
+        FILTER(__Users_Existing_Net,    NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Net"),
+        FILTER(__Users_Existing_Demand, NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Demand"),
+        FILTER(__EmptyUsers,            __IsAll)
     )
 ```
 
@@ -277,13 +293,13 @@ VAR __TargetUserIDs =
 | Metric_ID | 指标 | New/Existing 逻辑 | All 逻辑 |
 | --- | --- | --- | --- |
 | 1 | DCom SLS | `SUM(amt) WHERE slicer 区间 AND is_member=0 AND user_id ∈ __TargetUserIDs` | `SUM(amt) WHERE slicer 区间 AND is_member=0` |
-| 4 | Customer No. | `COUNT(DISTINCT user_id) WHERE start_period AND amt>0 AND is_member=0 AND lp_12m_*_amt 判定` | `COUNT(DISTINCT user_id) WHERE slicer 区间 AND amt>0 AND is_member=0` |
+| 4 | Customer No. | New: `COUNTROWS(EXCEPT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id])))`；Existing: `COUNTROWS(INTERSECT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id])))`（即直接 `COUNTROWS(__Users_New_*)` / `COUNTROWS(__Users_Existing_*)`，与 __TargetUserIDs 同源） | `COUNT(DISTINCT user_id) WHERE slicer 区间 AND amt>0 AND is_member=0` |
 | 7 | ACV | 分子: `SUM(amt) WHERE slicer 区间 AND is_member=0 AND user_id ∈ __TargetUserIDs`；分母: `COUNT(DISTINCT user_id) WHERE slicer 区间 AND is_member=0 AND user_id ∈ __TargetUserIDs` | 分子: `SUM(amt) WHERE slicer 区间 AND is_member=0`；分母: `COUNT(DISTINCT user_id) WHERE slicer 区间 AND amt>0 AND is_member=0` |
 | 10 | AUR | 分子: `SUM(amt) WHERE slicer 区间 AND is_member=0 AND user_id ∈ __TargetUserIDs`；分母: `SUM(qty) WHERE slicer 区间 AND is_member=0 AND user_id ∈ __TargetUserIDs` | 分子: `SUM(amt) WHERE slicer 区间 AND is_member=0`；分母: `SUM(qty) WHERE slicer 区间 AND is_member=0` |
 | 13 | Freq. | 分子: `SUM(order_cnt) WHERE slicer 区间 AND is_member=0 AND user_id ∈ __TargetUserIDs`；分母: `COUNT(DISTINCT user_id) WHERE slicer 区间 AND is_member=0 AND user_id ∈ __TargetUserIDs` | 分子: `SUM(order_cnt) WHERE slicer 区间 AND is_member=0`；分母: `COUNT(DISTINCT user_id) WHERE slicer 区间 AND amt>0 AND is_member=0` |
 | 16 | UPT | 分子: `SUM(qty) WHERE slicer 区间 AND is_member=0 AND user_id ∈ __TargetUserIDs`；分母: `SUM(order_cnt) WHERE slicer 区间 AND is_member=0 AND user_id ∈ __TargetUserIDs` | 分子: `SUM(qty) WHERE slicer 区间 AND is_member=0`；分母: `SUM(order_cnt) WHERE slicer 区间 AND is_member=0` |
 
-> **注**：Customer No. (Metric_ID=4) 的 New/Existing 逻辑特殊——直接在 start_period 内 DISTINCTCOUNT（合并区间实现，无需 TREATAS），因为 Customer No. 的统计本身就是基于 start_period 内的 user_id 判定。All 逻辑则在 slicer 区间内 DISTINCTCOUNT。
+> **注**：Customer No. (Metric_ID=4) 的 New/Existing 逻辑直接复用 __TargetUserIDs 计算过程中的 __Users_New_* / __Users_Existing_* 集合，对其做 `COUNTROWS` 即可——无需重新构造。New = `COUNTROWS(EXCEPT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id])))`；Existing = `COUNTROWS(INTERSECT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id])))`；按 user_id 粒度计数（与 Customer.md 新客数口径一致）。All 逻辑则在 slicer 区间内 DISTINCTCOUNT。
 
 ### 3.6 格式规范（按 Metric_Format + Currency_Symbol）
 
@@ -355,49 +371,102 @@ VAR __StartPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Mi
 VAR __StartPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max])
 
 // ═══════════════════════════════════════════════════════════════
-// New/Existing user_id 集合（在 start_period 内判定）
+// New/Existing user_id 集合（Step1+Step2 EXCEPT/INTERSECT，不可合并区间）
+// Step1（本期有消费的新客候选）：data_date ∈ [__PeriodMin, __PeriodMax]，is_member = 0，SUM(amt) > 0
+// Step2（第一财月的老客排除集）：data_date ∈ [__StartPeriodMin, __StartPeriodMax]，is_member = 0，SUM(lp_12m_*_amt) > 0
+// New user_id 集 = EXCEPT(SUMMARIZE(Step1, [user_id]), SUMMARIZE(Step2, [user_id]))
+// Existing user_id 集 = INTERSECT(SUMMARIZE(Step1, [user_id]), SUMMARIZE(Step2, [user_id]))
 // All 返回空表，后续用 __IsAll 分支不应用 TREATAS
+// 字段按 Row_Code 路由：Net→net_pay_amt/lp_12m_net_pay_amt，Demand→pay_amt/lp_12m_pay_amt
+// Step1/Step2 内部按 user_id + shop_info_id 聚合做 SUM 判定，最终各自 SUMMARIZE 去重到 user_id 再 EXCEPT/INTERSECT
+// 人数按 user_id 粒度计数（与 Customer.md 新客数口径一致）
 //
 // 关键技术点（DAX 表类型约束）:UNION+FILTER 替代嵌套 IF，确保 VAR 解析为表类型
 // ═══════════════════════════════════════════════════════════════
 VAR __EmptyUsers = FILTER(VALUES('a03_e2e_customer_data_m'[user_id]), FALSE())   // 列名为 user_id 的空表
 
-VAR __Users_New_Net =
-    CALCULATETABLE(
-        VALUES('a03_e2e_customer_data_m'[user_id]),
-        'a03_e2e_customer_data_m'[is_member] = 0,
-        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
-        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
+// ── Step1（本期有消费的新客候选，slicer 区间）：按 user_id + shop_info_id 聚合做 SUM(amt) > 0 判定 ──
+VAR __Step1_Net =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
+                'a03_e2e_customer_data_m'[data_date] <= __PeriodMax,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_net] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
     )
-VAR __Users_New_Demand =
-    CALCULATETABLE(
-        VALUES('a03_e2e_customer_data_m'[user_id]),
-        'a03_e2e_customer_data_m'[is_member] = 0,
-        'a03_e2e_customer_data_m'[pay_amt] > 0,
-        'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
-        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
+VAR __Step1_Demand =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_pay", SUM('a03_e2e_customer_data_m'[pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
+                'a03_e2e_customer_data_m'[data_date] <= __PeriodMax,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_pay] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
     )
-VAR __Users_Existing_Net =
-    CALCULATETABLE(
-        VALUES('a03_e2e_customer_data_m'[user_id]),
-        'a03_e2e_customer_data_m'[is_member] = 0,
-        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
-        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
+
+// ── Step2（第一财月的老客排除集，start_period 区间）：按 user_id + shop_info_id 聚合做 SUM(lp_12m_*_amt) > 0 判定 ──
+VAR __Step2_Net =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
+                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_lp12m] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
     )
-VAR __Users_Existing_Demand =
-    CALCULATETABLE(
-        VALUES('a03_e2e_customer_data_m'[user_id]),
-        'a03_e2e_customer_data_m'[is_member] = 0,
-        'a03_e2e_customer_data_m'[pay_amt] > 0,
-        'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
-        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
+VAR __Step2_Demand =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
+                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_lp12m] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
     )
+
+// ── New = Step1 EXCEPT Step2；Existing = Step1 INTERSECT Step2（均按 user_id 去重）──
+VAR __Users_New_Net         = EXCEPT(SUMMARIZE(__Step1_Net, [user_id]), SUMMARIZE(__Step2_Net, [user_id]))
+VAR __Users_New_Demand      = EXCEPT(SUMMARIZE(__Step1_Demand, [user_id]), SUMMARIZE(__Step2_Demand, [user_id]))
+VAR __Users_Existing_Net    = INTERSECT(SUMMARIZE(__Step1_Net, [user_id]), SUMMARIZE(__Step2_Net, [user_id]))
+VAR __Users_Existing_Demand = INTERSECT(SUMMARIZE(__Step1_Demand, [user_id]), SUMMARIZE(__Step2_Demand, [user_id]))
+
 VAR __TargetUserIDs =
     // 用 UNION+FILTER 替代嵌套 IF，确保 VAR 解析为表类型
     // 原因: 嵌套 IF 返回表时 DAX 引擎会把表达式降级为标量，导致 TREATAS 报错
@@ -452,54 +521,24 @@ VAR __SLS_Act = SWITCH(__RowCode, "Net", __SLS_Net, "Demand", __SLS_Demand)
 
 // ═══════════════════════════════════════════════════════════════
 // Metric_ID=4: Customer No.（买家人数）
-// New/Existing: DISTINCTCOUNT(user_id) WHERE start_period AND amt>0 AND is_member=0 AND lp_12m_*_amt 判定
-//   （合并区间实现，无需 TREATAS，直接在 start_period 内判定）
+// New: COUNTROWS(__Users_New_*) = COUNTROWS(EXCEPT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id])))
+// Existing: COUNTROWS(__Users_Existing_*) = COUNTROWS(INTERSECT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id])))
+//   （直接复用 __TargetUserIDs 计算过程中的 __Users_New_* / __Users_Existing_* 集合，无需重新构造）
 // All: DISTINCTCOUNT(user_id) WHERE slicer 区间 AND amt>0 AND is_member=0
+// 按 user_id 粒度计数（与 Customer.md 新客数口径一致）
 // ═══════════════════════════════════════════════════════════════
 VAR __CustomerNo_Net_New_Existing =
     SWITCH(
         __CustomerType,
-        "New",
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
-                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
-            ),
-        "Existing",
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
-            ),
+        "New",      COUNTROWS(__Users_New_Net),
+        "Existing", COUNTROWS(__Users_Existing_Net),
         BLANK()
     )
 VAR __CustomerNo_Demand_New_Existing =
     SWITCH(
         __CustomerType,
-        "New",
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[pay_amt] > 0,
-                'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
-                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
-            ),
-        "Existing",
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[pay_amt] > 0,
-                'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
-                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax
-            ),
+        "New",      COUNTROWS(__Users_New_Demand),
+        "Existing", COUNTROWS(__Users_Existing_Demand),
         BLANK()
     )
 VAR __CustomerNo_Net_All =
@@ -888,53 +927,103 @@ VAR __PeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LY])
 VAR __StartPeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Min_LY])
 VAR __StartPeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max_LY])
 
-// ── New/Existing user_id 集合（在 start_period LY 内判定）──
-// 注意：SWITCH 不能返回表，IF 返回表需两分支列结构一致，用 FILTER(VALUES,FALSE) 造同结构空表
+// ── New/Existing user_id 集合（Step1+Step2 EXCEPT/INTERSECT，LY 区间，不可合并）──
+// Step1（LY 本期有消费的新客候选）：data_date ∈ [__PeriodMin_LY, __PeriodMax_LY]，is_member = 0，SUM(amt) > 0
+// Step2（LY 第一财月的老客排除集）：data_date ∈ [__StartPeriodMin_LY, __StartPeriodMax_LY]，is_member = 0，SUM(lp_12m_*_amt) > 0
+// New = EXCEPT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id]))；Existing = INTERSECT(...)
+// 字段按 Row_Code 路由：Net→net_pay_amt/lp_12m_net_pay_amt，Demand→pay_amt/lp_12m_pay_amt
 VAR __EmptyUsers_LY = FILTER(VALUES('a03_e2e_customer_data_m'[user_id]), FALSE())
-VAR __Users_New_Net_LY =
-    CALCULATETABLE(
-        VALUES('a03_e2e_customer_data_m'[user_id]),
-        'a03_e2e_customer_data_m'[is_member] = 0,
-        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
-        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
-        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
+
+// ── Step1 LY（本期有消费的新客候选，slicer LY 区间）──
+VAR __Step1_Net_LY =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LY,
+                'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LY,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_net] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
     )
-VAR __Users_New_Demand_LY =
-    CALCULATETABLE(
-        VALUES('a03_e2e_customer_data_m'[user_id]),
-        'a03_e2e_customer_data_m'[is_member] = 0,
-        'a03_e2e_customer_data_m'[pay_amt] > 0,
-        'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
-        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
-        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
+VAR __Step1_Demand_LY =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_pay", SUM('a03_e2e_customer_data_m'[pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LY,
+                'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LY,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_pay] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
     )
-VAR __Users_Existing_Net_LY =
-    CALCULATETABLE(
-        VALUES('a03_e2e_customer_data_m'[user_id]),
-        'a03_e2e_customer_data_m'[is_member] = 0,
-        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
-        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
-        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
+
+// ── Step2 LY（第一财月的老客排除集，start_period LY 区间）──
+VAR __Step2_Net_LY =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
+                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_lp12m] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
     )
-VAR __Users_Existing_Demand_LY =
-    CALCULATETABLE(
-        VALUES('a03_e2e_customer_data_m'[user_id]),
-        'a03_e2e_customer_data_m'[is_member] = 0,
-        'a03_e2e_customer_data_m'[pay_amt] > 0,
-        'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
-        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
-        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
+VAR __Step2_Demand_LY =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
+                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_lp12m] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
     )
+
+// ── New = Step1 EXCEPT Step2；Existing = Step1 INTERSECT Step2（均按 user_id 去重）──
+VAR __Users_New_Net_LY         = EXCEPT(SUMMARIZE(__Step1_Net_LY, [user_id]), SUMMARIZE(__Step2_Net_LY, [user_id]))
+VAR __Users_New_Demand_LY      = EXCEPT(SUMMARIZE(__Step1_Demand_LY, [user_id]), SUMMARIZE(__Step2_Demand_LY, [user_id]))
+VAR __Users_Existing_Net_LY    = INTERSECT(SUMMARIZE(__Step1_Net_LY, [user_id]), SUMMARIZE(__Step2_Net_LY, [user_id]))
+VAR __Users_Existing_Demand_LY = INTERSECT(SUMMARIZE(__Step1_Demand_LY, [user_id]), SUMMARIZE(__Step2_Demand_LY, [user_id]))
+
 VAR __TargetUserIDs_LY =
     // UNION+FILTER 确保返回表类型，避免 IF 返回表被降级为标量
     UNION(
         FILTER(__Users_New_Net_LY,         NOT __IsAll && __CustomerType = "New"      && __RowCode = "Net"),
         FILTER(__Users_New_Demand_LY,      NOT __IsAll && __CustomerType = "New"      && __RowCode = "Demand"),
         FILTER(__Users_Existing_Net_LY,     NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Net"),
-        FILTER(__Users_Existing_Demand_LY, NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Demand"),
-        FILTER(__EmptyUsers_LY,            __IsAll)
+        FILTER(__Users_Existing_Demand_LY,  NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Demand"),
+        FILTER(__EmptyUsers_LY,             __IsAll)
     )
 
 // ═══ Metric_ID=1: DCom SLS LY ═══
@@ -973,50 +1062,21 @@ VAR __SLS_Demand_LY =
 VAR __SLS_LY = SWITCH(__RowCode, "Net", __SLS_Net_LY, "Demand", __SLS_Demand_LY)
 
 // ═══ Metric_ID=4: Customer No. LY ═══
+// New: COUNTROWS(__Users_New_*_LY)；Existing: COUNTROWS(__Users_Existing_*_LY)
+//   （直接复用 __TargetUserIDs_LY 计算过程中的 user_id 集合，无需重新构造）
+// All: DISTINCTCOUNT(user_id) WHERE slicer LY 区间 AND amt>0 AND is_member=0
 VAR __CustomerNo_Net_NE_LY =
     SWITCH(
         __CustomerType,
-        "New",
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
-                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
-                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
-            ),
-        "Existing",
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
-                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
-            ),
+        "New",      COUNTROWS(__Users_New_Net_LY),
+        "Existing", COUNTROWS(__Users_Existing_Net_LY),
         BLANK()
     )
 VAR __CustomerNo_Demand_NE_LY =
     SWITCH(
         __CustomerType,
-        "New",
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[pay_amt] > 0,
-                'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
-                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
-                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
-            ),
-        "Existing",
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[pay_amt] > 0,
-                'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
-                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY
-            ),
+        "New",      COUNTROWS(__Users_New_Demand_LY),
+        "Existing", COUNTROWS(__Users_Existing_Demand_LY),
         BLANK()
     )
 VAR __CustomerNo_Net_All_LY =
@@ -1387,45 +1447,95 @@ VAR __PeriodMax_LP = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LP])
 VAR __StartPeriodMin_LP = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Min_LP])
 VAR __StartPeriodMax_LP = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max_LP])
 
-// ── New/Existing user_id 集合（在 start_period LP 内判定）──
-// 注意：SWITCH 不能返回表，IF 返回表需两分支列结构一致，用 FILTER(VALUES,FALSE) 造同结构空表
+// ── New/Existing user_id 集合（Step1+Step2 EXCEPT/INTERSECT，LP 区间，不可合并）──
+// Step1（LP 本期有消费的新客候选）：data_date ∈ [__PeriodMin_LP, __PeriodMax_LP]，is_member = 0，SUM(amt) > 0
+// Step2（LP 第一财月的老客排除集）：data_date ∈ [__StartPeriodMin_LP, __StartPeriodMax_LP]，is_member = 0，SUM(lp_12m_*_amt) > 0
+// New = EXCEPT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id]))；Existing = INTERSECT(...)
+// 字段按 Row_Code 路由：Net→net_pay_amt/lp_12m_net_pay_amt，Demand→pay_amt/lp_12m_pay_amt
 VAR __EmptyUsers_LP = FILTER(VALUES('a03_e2e_customer_data_m'[user_id]), FALSE())
-VAR __Users_New_Net_LP =
-    CALCULATETABLE(
-        VALUES('a03_e2e_customer_data_m'[user_id]),
-        'a03_e2e_customer_data_m'[is_member] = 0,
-        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
-        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
-        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
+
+// ── Step1 LP（本期有消费的新客候选，slicer LP 区间）──
+VAR __Step1_Net_LP =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LP,
+                'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LP,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_net] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
     )
-VAR __Users_New_Demand_LP =
-    CALCULATETABLE(
-        VALUES('a03_e2e_customer_data_m'[user_id]),
-        'a03_e2e_customer_data_m'[is_member] = 0,
-        'a03_e2e_customer_data_m'[pay_amt] > 0,
-        'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
-        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
-        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
+VAR __Step1_Demand_LP =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_pay", SUM('a03_e2e_customer_data_m'[pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LP,
+                'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LP,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_pay] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
     )
-VAR __Users_Existing_Net_LP =
-    CALCULATETABLE(
-        VALUES('a03_e2e_customer_data_m'[user_id]),
-        'a03_e2e_customer_data_m'[is_member] = 0,
-        'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-        'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
-        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
-        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
+
+// ── Step2 LP（第一财月的老客排除集，start_period LP 区间）──
+VAR __Step2_Net_LP =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
+                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_lp12m] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
     )
-VAR __Users_Existing_Demand_LP =
-    CALCULATETABLE(
-        VALUES('a03_e2e_customer_data_m'[user_id]),
-        'a03_e2e_customer_data_m'[is_member] = 0,
-        'a03_e2e_customer_data_m'[pay_amt] > 0,
-        'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
-        'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
-        'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
+VAR __Step2_Demand_LP =
+    SELECTCOLUMNS(
+        FILTER(
+            CALCULATETABLE(
+                SUMMARIZECOLUMNS(
+                    'a03_e2e_customer_data_m'[user_id],
+                    'a03_e2e_customer_data_m'[shop_info_id],
+                    "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_pay_amt])
+                ),
+                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
+                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP,
+                'a03_e2e_customer_data_m'[is_member] = 0
+            ),
+            [_lp12m] > 0
+        ),
+        "user_id", [user_id],
+        "shop_info_id", [shop_info_id]
     )
+
+// ── New = Step1 EXCEPT Step2；Existing = Step1 INTERSECT Step2（均按 user_id 去重）──
+VAR __Users_New_Net_LP         = EXCEPT(SUMMARIZE(__Step1_Net_LP, [user_id]), SUMMARIZE(__Step2_Net_LP, [user_id]))
+VAR __Users_New_Demand_LP      = EXCEPT(SUMMARIZE(__Step1_Demand_LP, [user_id]), SUMMARIZE(__Step2_Demand_LP, [user_id]))
+VAR __Users_Existing_Net_LP    = INTERSECT(SUMMARIZE(__Step1_Net_LP, [user_id]), SUMMARIZE(__Step2_Net_LP, [user_id]))
+VAR __Users_Existing_Demand_LP = INTERSECT(SUMMARIZE(__Step1_Demand_LP, [user_id]), SUMMARIZE(__Step2_Demand_LP, [user_id]))
+
 VAR __TargetUserIDs_LP =
     // UNION+FILTER 确保返回表类型，避免 IF 返回表被降级为标量
     UNION(
@@ -1433,7 +1543,7 @@ VAR __TargetUserIDs_LP =
         FILTER(__Users_New_Demand_LP,      NOT __IsAll && __CustomerType = "New"      && __RowCode = "Demand"),
         FILTER(__Users_Existing_Net_LP,     NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Net"),
         FILTER(__Users_Existing_Demand_LP, NOT __IsAll && __CustomerType = "Existing" && __RowCode = "Demand"),
-        FILTER(__EmptyUsers_LP,            __IsAll)
+        FILTER(__EmptyUsers_LP,             __IsAll)
     )
 
 // ═══ Metric_ID=1: DCom SLS LP ═══
@@ -1472,50 +1582,21 @@ VAR __SLS_Demand_LP =
 VAR __SLS_LP = SWITCH(__RowCode, "Net", __SLS_Net_LP, "Demand", __SLS_Demand_LP)
 
 // ═══ Metric_ID=4: Customer No. LP ═══
+// New: COUNTROWS(__Users_New_*_LP)；Existing: COUNTROWS(__Users_Existing_*_LP)
+//   （直接复用 __TargetUserIDs_LP 计算过程中的 user_id 集合，无需重新构造）
+// All: DISTINCTCOUNT(user_id) WHERE slicer LP 区间 AND amt>0 AND is_member=0
 VAR __CustomerNo_Net_NE_LP =
     SWITCH(
         __CustomerType,
-        "New",
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] = 0,
-                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
-                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
-            ),
-        "Existing",
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
-                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
-            ),
+        "New",      COUNTROWS(__Users_New_Net_LP),
+        "Existing", COUNTROWS(__Users_Existing_Net_LP),
         BLANK()
     )
 VAR __CustomerNo_Demand_NE_LP =
     SWITCH(
         __CustomerType,
-        "New",
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[pay_amt] > 0,
-                'a03_e2e_customer_data_m'[lp_12m_pay_amt] = 0,
-                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
-                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
-            ),
-        "Existing",
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = 0,
-                'a03_e2e_customer_data_m'[pay_amt] > 0,
-                'a03_e2e_customer_data_m'[lp_12m_pay_amt] > 0,
-                'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
-                'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP
-            ),
+        "New",      COUNTROWS(__Users_New_Demand_LP),
+        "Existing", COUNTROWS(__Users_Existing_Demand_LP),
         BLANK()
     )
 VAR __CustomerNo_Net_All_LP =
@@ -2292,18 +2373,21 @@ Customer Performance Cell Background Color =
 4. **实际值时间口径 = 所选时间范围区间聚合**：
    - slicer 区间：`data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`
    - start_period（第一个财月）：`data_date ∈ [Slicer_Time_Frame_Min[First_Fiscal_Month_Min], Slicer_Time_Frame_Min[First_Fiscal_Month_Max]]`
-   - start_period 是 slicer 区间的子集，技术实现可"合并区间"
-5. **DCom 新客判定（Customer No. Metric_ID=4）Step1 + Step2 合并区间实现**：
-   - **New 逻辑**：`data_date ∈ start_period AND amt > 0 AND is_member = 0 AND lp_12m_*_amt = 0`
+   - 两步区间不同、不可合并：Step1 用 slicer 区间，Step2 用第一财月区间（参考：维度复用/新客 No. 模板详解.md）
+5. **DCom 新客/老客判定（Customer No. Metric_ID=4）Step1 + Step2 EXCEPT/INTERSECT 实现**：
+   - Step1（本期有消费的新客候选）：`data_date ∈ slicer 区间 AND is_member = 0 AND SUM(amt) > 0`
      - amt 字段按 Net/Demand 路由：Net→`net_pay_amt`，Demand→`pay_amt`
+   - Step2（第一财月的老客排除集）：`data_date ∈ start_period AND is_member = 0 AND SUM(lp_12m_*_amt) > 0`
      - lp_12m 字段按 Net/Demand 路由：Net→`lp_12m_net_pay_amt`，Demand→`lp_12m_pay_amt`
-     - 技术实现直接等价于单一 `CALCULATE(DISTINCTCOUNT(user_id), <四条件>)`，无需 INTERSECT
-   - **Existing 逻辑**：本期区间有消费 ∩ start_period 在 lp_12m_*_amt > 0 名单
-   - **All 逻辑**：本期区间 `amt > 0`（不限定 is_member=0 与 lp_12m 字段）
-6. **Customer No. 三个分支的特殊处理**：
-   - New / Existing：用户集合先过滤，再对 start_period 区间做 `DISTINCTCOUNT(user_id)`
-   - All：直接对 slicer 区间做 `DISTINCTCOUNT(user_id) WHERE amt > 0`
-   - 字段路由按 Row_Code（Net/Demand）切换 amt 字段
+   - Step1/Step2 内部按 `user_id + shop_info_id` 聚合做 SUM 判定，最终各自 `SUMMARIZE(..., [user_id])` 去重到 user_id 级
+   - **New 逻辑**：`COUNTROWS(EXCEPT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id])))`（本期消费者剔除第一财月已识别的老客）
+   - **Existing 逻辑**：`COUNTROWS(INTERSECT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id])))`（本期消费者中第一财月已识别的老客，与 New 互补）
+   - **All 逻辑**：本期区间 `DISTINCTCOUNT(user_id) WHERE amt > 0 AND is_member = 0`（不限定 lp_12m 字段）
+   - 人数按 user_id 粒度计数（`COUNTROWS(SUMMARIZE(..., [user_id]))`，非 `DISTINCTCOUNT(user_id)`，与 Customer.md 新客数口径一致）
+6. **Customer No. 三个分支的实现复用**：
+   - New / Existing：直接对 `__Users_New_*` / `__Users_Existing_*`（即 __TargetUserIDs 计算过程中的 user_id 集合）做 `COUNTROWS`，无需重新构造
+   - All：直接对 slicer 区间做 `DISTINCTCOUNT(user_id) WHERE amt > 0 AND is_member = 0`
+   - 字段路由按 Row_Code（Net/Demand）切换 amt/lp_12m 字段（通过 __Step1_Net/__Step2_Net 与 __Step1_Demand/__Step2_Demand 分别构造）
 7. **ACV / Freq. 比率类指标分母的 All 分支特殊处理**：
    - 公式：`ACV = SLS / DISTINCTCOUNT(user_id)`；`Freq. = pay_order_cnt / DISTINCTCOUNT(user_id)`
    - **All 分支**：分母需加 `amt > 0` 筛选，定义为"活跃买家"集合

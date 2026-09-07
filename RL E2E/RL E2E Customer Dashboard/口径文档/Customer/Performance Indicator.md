@@ -19,8 +19,8 @@
 | **货币转换规则** | 数据源默认为 RMB，转化为美元需要除以固定值 7 |
 | **派生指标** | LY（去年同期）、LP（上期）、vs LY（同比）、vs LP（环比）、占比、YOY 等为派生指标，依据基础指标计算生成 |
 | **必须遵守** | 口径文档中定义的所有指标，必须遵守其数据类型和数据格式，如果和解决方案中存在争议的，一切以口径文档为准，必须按照口径文档中的格式进行调整 |
-| **新客/老客判定（Net）** | New：`lp_12m_net_pay_amt = 0`（start period 往前推 12 个月无净销售额）；Existing：`lp_12m_net_pay_amt > 0`（start period 往前推 12 个月有净销售额）；All：不限定 `lp_12m_net_pay_amt` |
-| **新客/老客判定（Demand）** | New：`lp_12m_pay_amt = 0`；Existing：`lp_12m_pay_amt > 0`；All：不限定 `lp_12m_pay_amt` |
+| **新客/老客判定（Net）** | Step1（本期有消费的新客候选）：`data_date ∈ slicer 区间 AND is_member = 0 AND SUM(net_pay_amt) > 0`；Step2（第一财月的老客排除集）：`data_date ∈ start_period AND is_member = 0 AND SUM(lp_12m_net_pay_amt) > 0`。**New** = Step1 EXCEPT Step2（本期消费者剔除第一财月已识别的老客，`lp_12m_net_pay_amt = 0` 的新客）；**Existing** = Step1 INTERSECT Step2（本期消费者中第一财月已识别的老客，`lp_12m_net_pay_amt > 0`）；**All**：不限定 user_id 集合。Step1/Step2 内部按 `user_id + shop_info_id` 聚合做 SUM 判定，最终各自 `SUMMARIZE(..., [user_id])` 去重到 user_id 再 EXCEPT/INTERSECT，两步区间不同、不可合并 |
+| **新客/老客判定（Demand）** | 同 Net，字段替换：`net_pay_amt` → `pay_amt`，`lp_12m_net_pay_amt` → `lp_12m_pay_amt` |
 | **DAX 语法规范** | 文本常量必须使用双引号 `" "`，禁止使用单引号；单引号 `' '` 仅用于表名，列名使用方括号 `[ ]`，例如：`[is_member] = 0` |
 | **pts 与 bp 区别** | pts 指标：值×100 转 pts（基点，含正负号），数据格式 `+#,##0pts;-#,##0pts;0pts`；bp 指标：值×10000 转 bp，数据格式 `+#,##0bp;-#,##0bp;0bp` |
 | **TAR ACH%实现** | 实现方式：SUMX+SUMMARIZE，SUMMARIZE 按所需维度分组去重，再 SUMX 求和；DISTINCT 返回表非标量，不能在 SUMX 内当值用，用 SUMMARIZE 分组等价实现 DISTINCT 去重后再 SUM |
@@ -28,10 +28,12 @@
 | **end period说明** | `data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]`，所选时间范围的最后一个财月,Slicer_Time_Frame_Max维度表已经给出了具体的Last_Fiscal_Month、Last_Fiscal_Month_Min等字段，只关注Slicer_Time_Frame_Max值,比如2026-09，只关注2023-09；2026 Q2，只关注2026-06；财年2026，对应最后一个财月只关注2026-12，然后都转化为具体的天维度范围； |
 | **data_date = 所选时间范围** | `data_date` ∈ `[__TimeMin, __TimeMax]`（全局时间范围），Slicer_Time_Frame_Min 和 Slicer_Time_Frame_Max 维度表已经给出具体的 TimeFrame_Min 和 TimeFrame_Max 值；`data_date = 所选时间范围` 即 `data_date ∈ [TimeFrame_Min, TimeFrame_Max]`，TimeFrame_Min从Slicer_Time_Frame_Min表取值，TimeFrame_Max从Slicer_Time_Frame_Max表取值|
 | **platform, shop_info_id维度分组说明** | 在没有特殊说明的情况下，由表字段自动传递，DAX 无需显式处理分组|
-| **净销售额New、Existing、All三种情况总结** | start_period（data_date ∈ [Slicer_Time_Frame_Min[First_Fiscal_Month_Min], Slicer_Time_Frame_Min[First_Fiscal_Month_Max]]）、slicer所选时间区间（data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]）；start_period 是 slicer 区间的子集，技术实现上可以“合并区间”，用于判断 lp_12m_net_pay_amt = 0 或者 lp_12m_net_pay_amt > 0的行，一定也在 slicer 区间内 ，所以，
-New：distinct user_id WHERE data_date ∈ start_period AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt = 0得到新客的user_id，然后再SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]  AND is_member = 0 AND user_id in (新客user_id)；
-Existing:distinct user_id WHERE data_date ∈ start_period AND net_pay_amt > 0 AND is_member = 0 AND lp_12m_net_pay_amt > 0得到老客的user_id，然后再SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]  AND is_member = 0 AND user_id in (老客user_id)；
-ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]  AND is_member = 0|
+| **净销售额New、Existing、All三种情况总结** | Step1（本期有消费的新客候选）：`data_date ∈ slicer 区间 [TimeFrame_Min, TimeFrame_Max] AND is_member = 0 AND SUM(net_pay_amt) > 0`；Step2（第一财月的老客排除集）：`data_date ∈ start_period [First_Fiscal_Month_Min, First_Fiscal_Month_Max] AND is_member = 0 AND SUM(lp_12m_net_pay_amt) > 0`。两步区间不同、不可合并（参考：维度复用/新客 No. 模板详解.md），所以：
+New：Step1 EXCEPT Step2 得到新客 user_id 集合（本期消费者剔除第一财月已识别的老客，`lp_12m_net_pay_amt = 0` 的新客），然后再 `SUM(net_pay_amt) WHERE data_date ∈ [TimeFrame_Min, TimeFrame_Max] AND is_member = 0 AND user_id ∈ (新客 user_id 集合)`；
+Existing：Step1 INTERSECT Step2 得到老客 user_id 集合（本期消费者中第一财月已识别的老客，`lp_12m_net_pay_amt > 0`），然后再 `SUM(net_pay_amt) WHERE data_date ∈ [TimeFrame_Min, TimeFrame_Max] AND is_member = 0 AND user_id ∈ (老客 user_id 集合)`；
+ALL：`SUM(net_pay_amt) WHERE data_date ∈ [TimeFrame_Min, TimeFrame_Max] AND is_member = 0`（不限定 user_id 集合）|
+
+> 注：Step1/Step2 内部按 `user_id + shop_info_id` 聚合做 SUM 判定，最终各自 `SUMMARIZE(..., [user_id])` 去重到 user_id 级再 EXCEPT/INTERSECT，人数按 user_id 粒度计数。New + Existing = Step1（本期消费者总数），两者互补。|
 
 ---
 
@@ -51,7 +53,7 @@ ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min],
 | **计算公式** | `sum(net_pay_amt)` |
 | **统计字段** | `net_pay_amt` |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `net_pay_amt > 0` 的 `user_id`（`data_date = 所选时间范围`，`sum(net_pay_amt) > 0`，`is_member = 0`），再缩小到 `lp_12m_net_pay_amt = 0`（`data_date = 所选时间范围 start_period`）；Step 2 该 `user_id` 在所选时间范围对应的 `sum(net_pay_amt) where is_member = 0`。<br>**Existing**：同 New，但 `lp_12m_net_pay_amt > 0`。<br>**All**：在所选时间范围对应的 `sum(net_pay_amt) where is_member = 0` |
+| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `sum(net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，按 `user_id + shop_info_id` 聚合），再 EXCEPT 第一财月 `sum(lp_12m_net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围 start_period`，`is_member = 0`，同粒度聚合后 `SUMMARIZE` 去重到 user_id）；Step 2 该新客 `user_id` 集合在所选时间范围对应的 `sum(net_pay_amt) where is_member = 0`（用 TREATAS 作为 user_id 筛选器）。<br>**Existing**：Step 1 同 New，但与第一财月老客集取 INTERSECT（`lp_12m_net_pay_amt > 0`）；Step 2 该老客 `user_id` 集合在所选时间范围对应的 `sum(net_pay_amt) where is_member = 0`。<br>**All**：在所选时间范围对应的 `sum(net_pay_amt) where is_member = 0`（不限定 user_id 集合） |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
@@ -70,7 +72,7 @@ ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min],
 | **计算公式** | `count(distinct user_id)` |
 | **统计字段** | `user_id` |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | **New**：Step 1 筛选 `net_pay_amt > 0` 的 `user_id`（`data_date = 所选时间范围`，`sum(net_pay_amt) > 0`，`is_member = 0`），再缩小到 `lp_12m_net_pay_amt = 0`。<br>**Existing**：同 New，但 `lp_12m_net_pay_amt > 0`。<br>**All**：`count(distinct user_id)`，`data_date = 所选时间范围`，`sum(net_pay_amt) > 0`，`is_member = 0` |
+| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `sum(net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，按 `user_id + shop_info_id` 聚合），再 EXCEPT 第一财月 `sum(lp_12m_net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围 start_period`，`is_member = 0`，同粒度聚合后 `SUMMARIZE` 去重到 user_id）；结果 = `COUNTROWS(EXCEPT(SUMMARIZE(Step1, [user_id]), SUMMARIZE(Step2, [user_id])))`（即对 New user_id 集合直接 `COUNTROWS`，按 user_id 粒度计数）。<br>**Existing**：Step 1 同 New，但与第一财月老客集取 INTERSECT（`lp_12m_net_pay_amt > 0`）；结果 = `COUNTROWS(INTERSECT(SUMMARIZE(Step1, [user_id]), SUMMARIZE(Step2, [user_id])))`（即对 Existing user_id 集合直接 `COUNTROWS`）。<br>**All**：`count(distinct user_id)`，`data_date = 所选时间范围`，`sum(net_pay_amt) > 0`，`is_member = 0`（不限定 lp_12m 字段） |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
@@ -89,7 +91,7 @@ ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min],
 | **分子** | `net_pay_amt`（`is_member = 0`） |
 | **分母** | `user_id`（`sum(net_pay_amt) > 0`，`is_member = 0`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | **New**：Step 1 筛选 `net_pay_amt > 0` 的 `user_id`（`is_member = 0`，`lp_12m_net_pay_amt = 0`）；Step 2 基于Step 1的user_id汇总`sum(net_pay_amt) where is_member = 0`；Step 3 `sum(net_pay_amt)/count(distinct user_id)`，这里的distinct user_id也是Step 2中的user_id。<br>**Existing**：同 New（`lp_12m_net_pay_amt > 0`）。<br>**All**：分子 `sum(net_pay_amt) where is_member = 0`；分母 `count(distinct user_id)`，`data_date = 所选时间范围`，`sum(net_pay_amt) > 0`，`is_member = 0` |
+| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `sum(net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，按 `user_id + shop_info_id` 聚合），再 EXCEPT 第一财月 `sum(lp_12m_net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围 start_period`，`is_member = 0`，同粒度聚合后 `SUMMARIZE` 去重到 user_id）；Step 2 基于该新客 user_id 集合（用 TREATAS 作为 user_id 筛选器）在所选时间范围汇总 `sum(net_pay_amt) where is_member = 0`；Step 3 `sum(net_pay_amt)/count(distinct user_id)`，这里的 distinct user_id 也是 Step 1 得到的新客 user_id 集合（即 `COUNTROWS(__Users_New_Net)`）。<br>**Existing**：同 New，但 Step 1 与第一财月老客集取 INTERSECT（`lp_12m_net_pay_amt > 0`）。<br>**All**：分子 `sum(net_pay_amt) where is_member = 0`；分母 `count(distinct user_id)`，`data_date = 所选时间范围`，`sum(net_pay_amt) > 0`，`is_member = 0` |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
@@ -108,7 +110,7 @@ ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min],
 | **分子** | `net_pay_amt`（`is_member = 0`） |
 | **分母** | `net_pay_qty`（`is_member = 0`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | **New**：Step 1 筛选 `net_pay_amt > 0` 的 `user_id`（`is_member = 0`，`lp_12m_net_pay_amt = 0`）；Step 2 分子基于Step 1的user_id汇总 `sum(net_pay_amt) where is_member = 0`；分母基于Step 1的user_id汇总 `sum(net_pay_qty) where is_member = 0`。<br>**Existing**：同 New（`lp_12m_net_pay_amt > 0`）。<br>**All**：分子在所选时间范围对应 `sum(net_pay_amt) where is_member = 0`；分母在所选时间范围对应 `sum(net_pay_qty) where is_member = 0` |
+| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `sum(net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，按 `user_id + shop_info_id` 聚合），再 EXCEPT 第一财月 `sum(lp_12m_net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围 start_period`，`is_member = 0`，同粒度聚合后 `SUMMARIZE` 去重到 user_id）；Step 2 分子基于该新客 user_id 集合（用 TREATAS 作为 user_id 筛选器）在所选时间范围汇总 `sum(net_pay_amt) where is_member = 0`；分母基于该新客 user_id 集合汇总 `sum(net_pay_qty) where is_member = 0`。<br>**Existing**：同 New，但 Step 1 与第一财月老客集取 INTERSECT（`lp_12m_net_pay_amt > 0`）。<br>**All**：分子在所选时间范围对应 `sum(net_pay_amt) where is_member = 0`；分母在所选时间范围对应 `sum(net_pay_qty) where is_member = 0` |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
@@ -127,7 +129,7 @@ ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min],
 | **分子** | `net_pay_order_cnt`（`is_member = 0`） |
 | **分母** | `user_id`（`sum(net_pay_amt) > 0`，`is_member = 0`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | **New**：Step 1 筛选 `net_pay_amt > 0` 的 `user_id`（`is_member = 0`，`lp_12m_net_pay_amt = 0`）；Step 2基于Step 1的user_id汇总 `sum(net_pay_order_cnt) where is_member = 0`；Step 3 基于Step 1的user_id汇总`sum(net_pay_order_cnt)/count(distinct user_id)`。<br>**Existing**：同 New（`lp_12m_net_pay_amt > 0`）。<br>**All**：分子在所选时间范围对应 `sum(net_pay_order_cnt) where is_member = 0`；分母在所选时间范围对应 `count(distinct user_id)`，`sum(net_pay_amt) > 0`，`is_member = 0` |
+| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `sum(net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，按 `user_id + shop_info_id` 聚合），再 EXCEPT 第一财月 `sum(lp_12m_net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围 start_period`，`is_member = 0`，同粒度聚合后 `SUMMARIZE` 去重到 user_id）；Step 2 基于该新客 user_id 集合（用 TREATAS 作为 user_id 筛选器）在所选时间范围汇总 `sum(net_pay_order_cnt) where is_member = 0`；Step 3 基于该新客 user_id 集合 `sum(net_pay_order_cnt)/count(distinct user_id)`（即 `COUNTROWS(__Users_New_Net)`）。<br>**Existing**：同 New，但 Step 1 与第一财月老客集取 INTERSECT（`lp_12m_net_pay_amt > 0`）。<br>**All**：分子在所选时间范围对应 `sum(net_pay_order_cnt) where is_member = 0`；分母在所选时间范围对应 `count(distinct user_id)`，`sum(net_pay_amt) > 0`，`is_member = 0` |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
@@ -146,7 +148,7 @@ ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min],
 | **分子** | `net_pay_qty`（`is_member = 0`） |
 | **分母** | `net_pay_order_cnt`（`is_member = 0`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | **New**：Step 1 筛选 `net_pay_amt > 0` 的 `user_id`（`is_member = 0`，`lp_12m_net_pay_amt = 0`）；Step 2 分子基于Step 1的user_id汇总 `sum(net_pay_qty) where is_member = 0`；分母基于Step 1的user_id汇总 `sum(net_pay_order_cnt) where is_member = 0`。<br>**Existing**：同 New（`lp_12m_net_pay_amt > 0`）。<br>**All**：分子在所选时间范围对应 `sum(net_pay_qty) where is_member = 0`；分母在所选时间范围对应 `sum(net_pay_order_cnt) where is_member = 0` |
+| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `sum(net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，按 `user_id + shop_info_id` 聚合），再 EXCEPT 第一财月 `sum(lp_12m_net_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围 start_period`，`is_member = 0`，同粒度聚合后 `SUMMARIZE` 去重到 user_id）；Step 2 分子基于该新客 user_id 集合（用 TREATAS 作为 user_id 筛选器）在所选时间范围汇总 `sum(net_pay_qty) where is_member = 0`；分母基于该新客 user_id 集合汇总 `sum(net_pay_order_cnt) where is_member = 0`。<br>**Existing**：同 New，但 Step 1 与第一财月老客集取 INTERSECT（`lp_12m_net_pay_amt > 0`）。<br>**All**：分子在所选时间范围对应 `sum(net_pay_qty) where is_member = 0`；分母在所选时间范围对应 `sum(net_pay_order_cnt) where is_member = 0` |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
@@ -166,7 +168,7 @@ ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min],
 | **计算公式** | `sum(pay_amt)` |
 | **统计字段** | `pay_amt` |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | **New**：Step 1 筛选 demand sales > 0 的 `user_id`（`sum(pay_amt) > 0`，`is_member = 0`，`lp_12m_pay_amt = 0`）；Step 2 该 `user_id` 在所选时间范围对应的`sum(pay_amt) where is_member = 0`。<br>**Existing**：同 New（`lp_12m_pay_amt > 0`）。<br>**All**：在所选时间范围对应的 `sum(pay_amt) where is_member = 0` |
+| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `sum(pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，按 `user_id + shop_info_id` 聚合），再 EXCEPT 第一财月 `sum(lp_12m_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围 start_period`，`is_member = 0`，同粒度聚合后 `SUMMARIZE` 去重到 user_id）；Step 2 该新客 `user_id` 集合在所选时间范围对应的 `sum(pay_amt) where is_member = 0`（用 TREATAS 作为 user_id 筛选器）。<br>**Existing**：Step 1 同 New，但与第一财月老客集取 INTERSECT（`lp_12m_pay_amt > 0`）；Step 2 该老客 `user_id` 集合在所选时间范围对应的 `sum(pay_amt) where is_member = 0`。<br>**All**：在所选时间范围对应的 `sum(pay_amt) where is_member = 0`（不限定 user_id 集合） |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
@@ -184,7 +186,7 @@ ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min],
 | **计算公式** | `count(distinct user_id)` |
 | **统计字段** | `user_id` |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | **New**：Step 1 筛选 demand sales > 0 的 `user_id`（`sum(pay_amt) > 0`，`is_member = 0`，`lp_12m_pay_amt = 0`）。<br>**Existing**：同 New（`lp_12m_pay_amt > 0`）。<br>**All**：`count(distinct user_id)`，`data_date = 所选时间范围`，`sum(pay_amt) > 0`，`is_member = 0` |
+| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `sum(pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，按 `user_id + shop_info_id` 聚合），再 EXCEPT 第一财月 `sum(lp_12m_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围 start_period`，`is_member = 0`，同粒度聚合后 `SUMMARIZE` 去重到 user_id）；结果 = `COUNTROWS(EXCEPT(SUMMARIZE(Step1, [user_id]), SUMMARIZE(Step2, [user_id])))`（即对 New user_id 集合直接 `COUNTROWS`，按 user_id 粒度计数）。<br>**Existing**：Step 1 同 New，但与第一财月老客集取 INTERSECT（`lp_12m_pay_amt > 0`）；结果 = `COUNTROWS(INTERSECT(SUMMARIZE(Step1, [user_id]), SUMMARIZE(Step2, [user_id])))`（即对 Existing user_id 集合直接 `COUNTROWS`）。<br>**All**：`count(distinct user_id)`，`data_date = 所选时间范围`，`sum(pay_amt) > 0`，`is_member = 0`（不限定 lp_12m 字段） |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
@@ -203,7 +205,7 @@ ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min],
 | **分子** | `pay_amt`（`is_member = 0`） |
 | **分母** | `user_id`（`sum(pay_amt) > 0`，`is_member = 0`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | **New**：Step 1 筛选 demand sales > 0 的 `user_id`（`pay_amt > 0`，`is_member = 0`，`lp_12m_pay_amt = 0`）；Step 2 基于Step 1的user_id汇总`sum(pay_amt) where is_member = 0`；Step 3 `sum(pay_amt)/count(distinct user_id)`，这里的distinct user_id也是Step 2中的user_id。<br>**Existing**：同 New（`lp_12m_pay_amt > 0`）。<br>**All**：分子 `sum(pay_amt) where is_member = 0`；分母 `count(distinct user_id)`，`sum(pay_amt) > 0`，`is_member = 0` |
+| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `sum(pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，按 `user_id + shop_info_id` 聚合），再 EXCEPT 第一财月 `sum(lp_12m_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围 start_period`，`is_member = 0`，同粒度聚合后 `SUMMARIZE` 去重到 user_id）；Step 2 基于该新客 user_id 集合（用 TREATAS 作为 user_id 筛选器）在所选时间范围汇总 `sum(pay_amt) where is_member = 0`；Step 3 `sum(pay_amt)/count(distinct user_id)`，这里的 distinct user_id 也是 Step 1 得到的新客 user_id 集合（即 `COUNTROWS(__Users_New_Demand)`）。<br>**Existing**：同 New，但 Step 1 与第一财月老客集取 INTERSECT（`lp_12m_pay_amt > 0`）。<br>**All**：分子 `sum(pay_amt) where is_member = 0`；分母 `count(distinct user_id)`，`data_date = 所选时间范围`，`sum(pay_amt) > 0`，`is_member = 0` |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
@@ -222,7 +224,7 @@ ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min],
 | **分子** | `pay_amt`（`is_member = 0`） |
 | **分母** | `pay_qty`（`is_member = 0`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | **New**：Step 1 筛选 demand sales > 0 的 `user_id`（`pay_amt > 0`，`is_member = 0`，`lp_12m_pay_amt = 0`）；Step 2 分子基于Step 1的user_id汇总 `sum(pay_amt) where is_member = 0`；分母基于Step 1的user_id汇总 `sum(pay_qty) where is_member = 0`。<br>**Existing**：同 New（`lp_12m_pay_amt > 0`）。<br>**All**：分子在所选时间范围对应 `sum(pay_amt) where is_member = 0`；分母在所选时间范围对应 `sum(pay_qty) where is_member = 0` |
+| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `sum(pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，按 `user_id + shop_info_id` 聚合），再 EXCEPT 第一财月 `sum(lp_12m_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围 start_period`，`is_member = 0`，同粒度聚合后 `SUMMARIZE` 去重到 user_id）；Step 2 分子基于该新客 user_id 集合（用 TREATAS 作为 user_id 筛选器）在所选时间范围汇总 `sum(pay_amt) where is_member = 0`；分母基于该新客 user_id 集合汇总 `sum(pay_qty) where is_member = 0`。<br>**Existing**：同 New，但 Step 1 与第一财月老客集取 INTERSECT（`lp_12m_pay_amt > 0`）。<br>**All**：分子在所选时间范围对应 `sum(pay_amt) where is_member = 0`；分母在所选时间范围对应 `sum(pay_qty) where is_member = 0` |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
@@ -241,7 +243,7 @@ ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min],
 | **分子** | `pay_order_cnt`（`is_member = 0`） |
 | **分母** | `user_id`（`sum(pay_amt) > 0`，`is_member = 0`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | **New**：Step 1 筛选 demand sales > 0 的 `user_id`（`pay_amt > 0`，`is_member = 0`，`lp_12m_pay_amt = 0`）；Step 2基于Step 1的user_id汇总 `sum(pay_order_cnt) where is_member = 0`；Step 3 基于Step 1的user_id汇总`sum(pay_order_cnt)/count(distinct user_id)`。<br>**Existing**：同 New（`lp_12m_pay_amt > 0`）。<br>**All**：分子在所选时间范围对应 `sum(pay_order_cnt) where is_member = 0`；分母在所选时间范围对应 `count(distinct user_id)`，`sum(pay_amt) > 0`，`is_member = 0` |
+| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `sum(pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，按 `user_id + shop_info_id` 聚合），再 EXCEPT 第一财月 `sum(lp_12m_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围 start_period`，`is_member = 0`，同粒度聚合后 `SUMMARIZE` 去重到 user_id）；Step 2 基于该新客 user_id 集合（用 TREATAS 作为 user_id 筛选器）在所选时间范围汇总 `sum(pay_order_cnt) where is_member = 0`；Step 3 基于该新客 user_id 集合 `sum(pay_order_cnt)/count(distinct user_id)`（即 `COUNTROWS(__Users_New_Demand)`）。<br>**Existing**：同 New，但 Step 1 与第一财月老客集取 INTERSECT（`lp_12m_pay_amt > 0`）。<br>**All**：分子在所选时间范围对应 `sum(pay_order_cnt) where is_member = 0`；分母在所选时间范围对应 `count(distinct user_id)`，`sum(pay_amt) > 0`，`is_member = 0` |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
@@ -261,7 +263,7 @@ ALL: SUM(net_pay_amt) WHERE data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min],
 | **分子** | `pay_qty`（`is_member = 0`） |
 | **分母** | `pay_order_cnt`（`is_member = 0`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | **New**：Step 1 筛选 demand sales > 0 的 `user_id`（`pay_amt > 0`，`is_member = 0`，`lp_12m_pay_amt = 0`）；Step 2 分子 基于Step 1的user_id汇总`sum(pay_qty) where is_member = 0`；分母基于Step 1的user_id汇总 `sum(pay_order_cnt) where is_member = 0`。<br>**Existing**：同 New（`lp_12m_pay_amt > 0`）。<br>**All**：分子在所选时间范围对应 `sum(pay_qty) where is_member = 0`；分母在所选时间范围对应 `sum(pay_order_cnt) where is_member = 0` |
+| **筛选条件** | **New**：Step 1 筛选所选时间范围内 `sum(pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围`，`is_member = 0`，按 `user_id + shop_info_id` 聚合），再 EXCEPT 第一财月 `sum(lp_12m_pay_amt) > 0` 的 `user_id`（`data_date = 所选时间范围 start_period`，`is_member = 0`，同粒度聚合后 `SUMMARIZE` 去重到 user_id）；Step 2 分子 基于该新客 user_id 集合（用 TREATAS 作为 user_id 筛选器）在所选时间范围汇总 `sum(pay_qty) where is_member = 0`；分母基于该新客 user_id 集合汇总 `sum(pay_order_cnt) where is_member = 0`。<br>**Existing**：同 New，但 Step 1 与第一财月老客集取 INTERSECT（`lp_12m_pay_amt > 0`）。<br>**All**：分子在所选时间范围对应 `sum(pay_qty) where is_member = 0`；分母在所选时间范围对应 `sum(pay_order_cnt) where is_member = 0` |
 | **聚合粒度** | `data_date = 所选时间范围`，`platform, shop_info_id` |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |

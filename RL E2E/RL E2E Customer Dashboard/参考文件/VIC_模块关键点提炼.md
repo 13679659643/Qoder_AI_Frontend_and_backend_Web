@@ -644,8 +644,9 @@ VAR _Result =
 RETURN
 IF(
     __IsDayOrWeek,
-    BLANK(),                          // Day/Week 粒度不计算
-    COUNTROWS(_Result)                // 等价于 SQL 的 COUNT(DISTINCT user_id)
+    BLANK(),
+    // Day/Week 粒度不计算
+    COUNTROWS(SUMMARIZE ( _Result, [user_id] ))  // 等价于 SQL 的 COUNT(DISTINCT user_id)
 )
 ```
 
@@ -784,8 +785,11 @@ IF(
 //   - 引擎对 EXCEPT 有专门优化，大数据量下更快
 // ═══════════════════════════════════════════════════════════
     RETURN
-        COUNTROWS(EXCEPT(_New, _Old))
-)
+        COUNTROWS(
+        EXCEPT (
+        SUMMARIZE ( __New, [user_id] ), -- 去重到用户级
+        SUMMARIZE ( __Old, [user_id] )
+    ))
 ```
 
 ---

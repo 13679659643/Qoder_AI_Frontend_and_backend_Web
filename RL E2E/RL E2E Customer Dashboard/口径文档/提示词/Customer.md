@@ -124,3 +124,200 @@ Slicer_Time_Frame、Slicer_Time_Frame_Min、Slicer_Time_Frame_Max三个日期表
 4、需要体现一种渐变效果，比如：0%到30%的颜色渐变为#d8dee5到#95afcf，30%到50%的颜色渐变为#95afcf到#0c2340，50%到100%的颜色渐变为#0c2340到#000000。
 当值为36%的时候，字体颜色和背景色对比不够清晰，字体颜色调整一下，逐渐向白色渐变，背景越深，字体越白。
 输出两个度量的SVG 热力矩阵图 颜色自适应 圆角代码在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Co-Purchase目录下，命名为Co-Purchase svg.md。
+
+
+# Customer测试第十轮提示词：
+
+这个是原始口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\提示词\Customer.md
+
+日期都通过Slicer_Time_Frame_Min、Slicer_Time_Frame_Max获取：
+    // ── 本期区间（Step 1 时间范围）──
+    VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+    VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+
+    // ── start_period 区间（Step 2 新客判定时间范围，第一个财月）──
+    VAR __StartPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Min])
+    VAR __StartPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max])
+
+    // ── 本期 LY 区间（Step 1 时间范围，LY）──
+    VAR __PeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min_LY])
+    VAR __PeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LY])
+
+    // ── start_period LY 区间（Step 2 新客判定时间范围，LY）──
+    VAR __StartPeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Min_LY])
+    VAR __StartPeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max_LY])
+
+    // ── 本期 LP 区间（Step 1 时间范围，LP）──
+    VAR __PeriodMin_LP = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min_LP])
+    VAR __PeriodMax_LP = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LP])
+
+    // ── start_period LP 区间（Step 2 新客判定时间范围，LP）──
+    VAR __StartPeriodMin_LP = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Min_LP])
+    VAR __StartPeriodMax_LP = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Max_LP])
+
+综合以上信息，修改D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Customer KPIs\Customer_KPIs_ms.md
+使用一下Dax代码，计算本期\LY\LP新客数：
+## 本期的：
+    // ═══════════════════════════════════════
+    // 全店新客数：a03_e2e_customer_data_m
+    // Step1+Step2 不能合并区间计算（参考：维度复用/新客 No. 模板详解.md）：
+    //   Step1（本期有消费的新客候选）：data_date ∈ [__PeriodMin, __PeriodMax]，is_member = 0，SUM(net_pay_amt) > 0
+    //   Step2（第一财月的老客排除集）：data_date ∈ [__StartPeriodMin, __StartPeriodMax]，is_member = 0，SUM(lp_12m_net_pay_amt) > 0
+    //   结果 = COUNTROWS(EXCEPT(Step1, Step2))
+    // 按 user_id + shop_info_id 聚合（platform/shop_info_id 由模型 1:N 关系自动筛选）
+    // ═══════════════════════════════════════
+    VAR __NewCust_Step1 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __PeriodMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_net] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
+        )
+    VAR __OldCust_Step2 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin,
+                    'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_lp12m] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
+        )
+    VAR __TotalNewCustCnt = COUNTROWS(
+        EXCEPT (
+        SUMMARIZE ( __NewCust_Step1, [user_id] ), -- 去重到用户级
+        SUMMARIZE ( __OldCust_Step2, [user_id] )
+    ))
+
+## vs LY：
+    // ═══════════════════════════════════════
+    // 全店新客数：a03_e2e_customer_data_m（去年同期）
+    // Step1+Step2 不能合并区间计算（参考：维度复用/新客 No. 模板详解.md）：
+    //   Step1（去年同期有消费的新客候选）：data_date ∈ [__PeriodMin_LY, __PeriodMax_LY]，is_member = 0，SUM(net_pay_amt) > 0
+    //   Step2（去年同期第一财月的老客排除集）：data_date ∈ [__StartPeriodMin_LY, __StartPeriodMax_LY]，is_member = 0，SUM(lp_12m_net_pay_amt) > 0
+    //   结果 = COUNTROWS(EXCEPT(Step1, Step2))
+    // 按 user_id + shop_info_id 聚合（platform/shop_info_id 由模型 1:N 关系自动筛选）
+    // ═══════════════════════════════════════
+    VAR __NewCust_Step1 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LY,
+                    'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LY,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_net] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
+        )
+    VAR __OldCust_Step2 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LY,
+                    'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LY,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_lp12m] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
+        )
+    VAR __TotalNewCustCnt = COUNTROWS(
+        EXCEPT (
+        SUMMARIZE ( __NewCust_Step1, [user_id] ), -- 去重到用户级
+        SUMMARIZE ( __OldCust_Step2, [user_id] )
+    ))
+
+
+## vs LP：
+    // ═══════════════════════════════════════
+    // 全店新客数：a03_e2e_customer_data_m（去年同期）
+    // Step1+Step2 不能合并区间计算（参考：维度复用/新客 No. 模板详解.md）：
+    //   Step1（去年同期有消费的新客候选）：data_date ∈ [__PeriodMin_LP, __PeriodMax_LP]，is_member = 0，SUM(net_pay_amt) > 0
+    //   Step2（去年同期第一财月的老客排除集）：data_date ∈ [__StartPeriodMin_LP, __StartPeriodMax_LP]，is_member = 0，SUM(lp_12m_net_pay_amt) > 0
+    //   结果 = COUNTROWS(EXCEPT(Step1, Step2))
+    // 按 user_id + shop_info_id 聚合（platform/shop_info_id 由模型 1:N 关系自动筛选）
+    // ═══════════════════════════════════════
+    VAR __NewCust_Step1 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_net", SUM('a03_e2e_customer_data_m'[net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LP,
+                    'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LP,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_net] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
+        )
+    VAR __OldCust_Step2 =
+        SELECTCOLUMNS(
+            FILTER(
+                CALCULATETABLE(
+                    SUMMARIZECOLUMNS(
+                        'a03_e2e_customer_data_m'[user_id],
+                        'a03_e2e_customer_data_m'[shop_info_id],
+                        "_lp12m", SUM('a03_e2e_customer_data_m'[lp_12m_net_pay_amt])
+                    ),
+                    'a03_e2e_customer_data_m'[data_date] >= __StartPeriodMin_LP,
+                    'a03_e2e_customer_data_m'[data_date] <= __StartPeriodMax_LP,
+                    'a03_e2e_customer_data_m'[is_member] = 0
+                ),
+                [_lp12m] > 0
+            ),
+            "user_id", [user_id],
+            "shop_info_id", [shop_info_id]
+        )
+    VAR __TotalNewCustCnt = COUNTROWS(
+        EXCEPT (
+        SUMMARIZE ( __NewCust_Step1, [user_id] ), -- 去重到用户级
+        SUMMARIZE ( __OldCust_Step2, [user_id] )
+    ))
+
+# Customer测试第十一轮提示词：
+根据新客数、新客净销售额的最新逻辑，继续调整D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Performance Indicator\Customer_KPIs_Performance_ms.md解决方案中的相关部分，确保与新客数、新客净销售额的最新逻辑一致。
+注意，这里包括Net和Demand两部分，对应口径中Net / Demand 维度区分，Net和Demand指标个数、逻辑都一致，区别仅在于字段，比如：Net部分字段为net_pay_amt、net_pay_qty、net_pay_order_cnt、 lp_12m_net_pay_amt，Demand部分字段为pay_amt、pay_qty、pay_order_cnt、lp_12m_pay_amt。
+还有New / Existing / All 逻辑的区别，New逻辑只计算新客，Existing逻辑只计算老客，All逻辑计算所有客户。ALL的逻辑不变，New / Existing根据最新的逻辑来，New[_lp12m] = 0的，我理解Existing是[_lp12m] > 0的。不懂就问。
+
+和上述逻辑一致，继续调整新客数、新客净销售额的最新逻辑：New / Existing根据最新的逻辑来；All逻辑是正确的不用管。
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Customer Breakdown Trend\Customer Breakdown Trend.md
+
+和上述逻辑一致，继续调整新客数、新客净销售额的最新逻辑：New / Existing根据最新的逻辑来；All逻辑是正确的不用管。
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Class x Label Drilldown\Class x Label Drilldown.md

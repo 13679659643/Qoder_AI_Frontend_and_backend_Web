@@ -103,7 +103,7 @@ DATATABLE(
         // 数据类型: currency_M_K_Int_0db（分级显示：< 1K 整数千分位 / 1K~1M K 单位 1 位小数 / ≥ 1M M 单位 1 位小数）
         // 颜色规则: Act=固定黑；vs LY/vs LP=正负零三色
         // ════════════════════════════════════════════════════════════════
-        { 7,  "ACV",          "7-ACV",          30, 30,  "ACV",   "currency_M_K_Int_0db", TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 7,  "ACV",          "7-ACV",          30, 30,  "ACV",   "currency",             TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 8,  "ACV",          "8-ACV vs LY",    30, 200, "vs LY", "delta_pct_0dp",        FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 9,  "ACV",          "9-ACV vs LP",    30, 300, "vs LP", "delta_pct_0dp",        FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
@@ -113,27 +113,27 @@ DATATABLE(
         // 数据类型: currency_M_K_Int_0db（分级显示：< 1K 整数千分位 / 1K~1M K 单位 1 位小数 / ≥ 1M M 单位 1 位小数）
         // 颜色规则: Act=固定黑；vs LY/vs LP=正负零三色
         // ════════════════════════════════════════════════════════════════
-        { 10, "AUR",          "10-AUR",          40, 40,  "AUR",   "currency_M_K_Int_0db", TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 10, "AUR",          "10-AUR",          40, 40,  "AUR",   "currency",             TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 11, "AUR",          "11-AUR vs LY",    40, 200, "vs LY", "delta_pct_0dp",        FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 12, "AUR",          "12-AUR vs LP",    40, 300, "vs LP", "delta_pct_0dp",        FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // 分组 5：Freq. — 购买频次（3 列）
         // 口径: 分子 sum(order_cnt)；分母 count(distinct user_id)
-        // 数据类型: integer（整数千分位）
+        // 数据类型: decimal_2dp（小数点后保留2位）
         // 颜色规则: Act=固定黑；vs LY/vs LP=正负零三色
         // ════════════════════════════════════════════════════════════════
-        { 13, "Freq.",        "13-Freq.",        50, 50,  "Freq.", "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 13, "Freq.",        "13-Freq.",        50, 50,  "Freq.", "decimal_2dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 14, "Freq.",        "14-Freq. vs LY",  50, 200, "vs LY", "delta_pct_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 15, "Freq.",        "15-Freq. vs LP",  50, 300, "vs LP", "delta_pct_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // 分组 6：UPT — 客单件（3 列）
         // 口径: 分子 sum(qty)；分母 sum(order_cnt)
-        // 数据类型: integer（整数千分位）
+        // 数据类型: decimal_2dp（小数点后保留2位）
         // 颜色规则: Act=固定黑；vs LY/vs LP=正负零三色
         // ════════════════════════════════════════════════════════════════
-        { 16, "UPT",          "16-UPT",          60, 60,  "UPT",   "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 16, "UPT",          "16-UPT",          60, 60,  "UPT",   "decimal_2dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 17, "UPT",          "17-UPT vs LY",    60, 200, "vs LY", "delta_pct_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 18, "UPT",          "18-UPT vs LP",    60, 300, "vs LP", "delta_pct_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" }
     }

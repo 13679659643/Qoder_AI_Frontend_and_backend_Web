@@ -133,5 +133,8 @@ IF(
 //   - 引擎对 EXCEPT 有专门优化，大数据量下更快
 // ═══════════════════════════════════════════════════════════
     RETURN
-        COUNTROWS(EXCEPT(_New, _Old))
-)
+        COUNTROWS(
+        EXCEPT (
+        SUMMARIZE ( __New, [user_id] ), -- 去重到用户级
+        SUMMARIZE ( __Old, [user_id] )
+    ))

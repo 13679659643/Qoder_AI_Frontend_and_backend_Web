@@ -80,7 +80,7 @@ let
 FROM 
 	    (select t1.*
 from indep_rl_dim.dim_t00_bi_fiscal_calendar t1
-where t1.timeframe_max < current_date())
+where t1.timeframe_max < current_date()) tt
         ORDER BY ID_Sort DESC
     "),
     筛选的行 = Table.SelectRows(源, each ([TimeFrame_ID] <> "Day" and [TimeFrame_ID] <> "Week"))
