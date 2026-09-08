@@ -127,8 +127,8 @@ Crowd Base Value =
 // 架构说明：
 //     行维度筛选上下文由矩阵自然传递，无需 DAX 处理
 //   - 列上下文：DIM_ColMetric_Keyword[Metric_ID] 由 SELECTEDVALUE 获取
-//   - 固定数据范围筛选（SPEC：channel=直通车/引力魔方/全站推）：
-//     * channel IN {"直通车","引力魔方","全站推"} 固定筛选
+//   - 固定数据范围筛选（SPEC：channel={"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}）：
+//     * channel IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"} 固定筛选
 //     * FILTER(VALUES()) 交集模式（channel 不是行维度，但保留筛选语义一致性）
 //   - 切片器筛选：
 //     * Slicer_Platform_Selection（Platform，单选含 ALL，复用 Overview）
@@ -168,12 +168,12 @@ Crowd Base Value =
                 a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
                 a05_e2e_paid_media_crowed_data_d[platform] = __ChannelID))
 
-    // ── Channel 固定数据范围筛选（SPEC：channel=直通车/引力魔方/全站推）──
+    // ── Channel 固定数据范围筛选（SPEC：channel={"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}）──
     // FILTER(VALUES()) 交集模式：保留行维度筛选，仅保留 channel 在 SPEC 范围内的行
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
-            a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
 
     // ── 公共筛选参数（所有指标共用）──
     // 行维度（category / keyword_type / plan_name / keyword_name）由矩阵行上下文自然传递
@@ -206,7 +206,7 @@ Crowd Base Value =
             __PlatformFilter,
             a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle,
             FILTER(ALLSELECTED(a05_e2e_paid_media_crowed_data_d[channel]),
-                a05_e2e_paid_media_crowed_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"}),
+                a05_e2e_paid_media_crowed_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}),
             FILTER(ALL(a05_e2e_paid_media_crowed_data_d[season]),
                 a05_e2e_paid_media_crowed_data_d[season] IN __SuperSeasonVals),
             FILTER(ALL(a05_e2e_paid_media_crowed_data_d[category]),
@@ -591,7 +591,7 @@ Crowd YOY Cell Font Color =
 | Category       | 多选   | Dim_Crowd_Season_C_Label[Category]                  | 全选   |
 | Label          | 多选   | Dim_Crowd_Season_C_Label[Label]                     | 全选   |
 
-注：channel=直通车/引力魔方/全站推 为内置于度量值的固定数据范围筛选，非切片器。
+注：channel={"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"} 为内置于度量值的固定数据范围筛选，非切片器。
 
 ================================================================================
 7. 指标口径与格式汇总（以口径文档 Crowd.md 为 SPEC）

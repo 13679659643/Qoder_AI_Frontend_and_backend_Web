@@ -104,10 +104,10 @@ Cost 引力魔方 Value =
 // Display Folder: KPIs Measure
 // 用途: 引力魔方 TA/新老/OAIPL 层级花费（卡片图）
 // 口径来源: New Acquisition实际使用版本.md 子模块四 §6
-// 计算公式: SUM(cost_amt), channel='引力魔方'
+// 计算公式: SUM(cost_amt), channel in {"引力魔方","触点"}
 // 统计字段: cost_amt
 // 数据底表: a05_e2e_paid_media_crowed_data_d（下钻表，无 page_type 筛选）
-// 筛选条件: channel='引力魔方'
+// 筛选条件: channel in {"引力魔方","触点"}
 // 数据类型: currency（金额类指标，需汇率转换）
 // 汇率方向: 人民币转美元，除以 Currency_ExchangeRate
 // ========================================
@@ -119,7 +119,7 @@ Cost 引力魔方 Value =
     VAR __CostYlmf =
         CALCULATE(
             SUM('a05_e2e_paid_media_crowed_data_d'[cost_amt]),
-            'a05_e2e_paid_media_crowed_data_d'[channel] = "引力魔方",
+            'a05_e2e_paid_media_crowed_data_d'[channel] in {"引力魔方","触点"},
             'a05_e2e_paid_media_crowed_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_crowed_data_d'[data_date] <= __TimeMax
         )
@@ -220,7 +220,7 @@ Cost% 引力魔方 Value =
 //   分子: cost_amt（该 TA 层级，受行维度筛选）
 //   分母: cost_amt（该广告点位 TA 合计，移除所有行维度）
 // 数据底表: a05_e2e_paid_media_crowed_data_d
-// 筛选条件: channel='引力魔方'
+// 筛选条件: channel in {"引力魔方","触点"}
 // 数据类型: percent_1dp → 百分比一位小数，不含正号
 // 说明: 分母用 REMOVEFILTERS 移除行维度（crowed_layer/crowed_type/crowed_name）
 //       卡片图场景下无行维度，REMOVEFILTERS 不影响结果，但保证矩阵场景兼容
@@ -232,7 +232,7 @@ Cost% 引力魔方 Value =
     VAR __Numerator =
         CALCULATE(
             SUM('a05_e2e_paid_media_crowed_data_d'[cost_amt]),
-            'a05_e2e_paid_media_crowed_data_d'[channel] = "引力魔方",
+            'a05_e2e_paid_media_crowed_data_d'[channel] in {"引力魔方","触点"},
             'a05_e2e_paid_media_crowed_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_crowed_data_d'[data_date] <= __TimeMax
         )
@@ -240,7 +240,7 @@ Cost% 引力魔方 Value =
     VAR __Denominator =
         CALCULATE(
             SUM('a05_e2e_paid_media_crowed_data_d'[cost_amt]),
-            'a05_e2e_paid_media_crowed_data_d'[channel] = "引力魔方",
+            'a05_e2e_paid_media_crowed_data_d'[channel] in {"引力魔方","触点"},
             'a05_e2e_paid_media_crowed_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_crowed_data_d'[data_date] <= __TimeMax,
             REMOVEFILTERS(
@@ -285,7 +285,7 @@ ROI 引力魔方 Value =
 //   分子: media_sales_amt（引力魔方 TA 层级成交金额）
 //   分母: cost_amt（引力魔方 TA 层级花费）
 // 数据底表: a05_e2e_paid_media_crowed_data_d
-// 筛选条件: channel='引力魔方'
+// 筛选条件: channel in {"引力魔方","触点"}
 // 数据类型: decimal_1dp → 数值一位小数
 // ========================================
     // ── 时间筛选：本期 ──
@@ -295,7 +295,7 @@ ROI 引力魔方 Value =
     VAR __Sales =
         CALCULATE(
             SUM('a05_e2e_paid_media_crowed_data_d'[media_sales_amt]),
-            'a05_e2e_paid_media_crowed_data_d'[channel] = "引力魔方",
+            'a05_e2e_paid_media_crowed_data_d'[channel] in {"引力魔方","触点"},
             'a05_e2e_paid_media_crowed_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_crowed_data_d'[data_date] <= __TimeMax
         )
@@ -303,7 +303,7 @@ ROI 引力魔方 Value =
     VAR __Cost =
         CALCULATE(
             SUM('a05_e2e_paid_media_crowed_data_d'[cost_amt]),
-            'a05_e2e_paid_media_crowed_data_d'[channel] = "引力魔方",
+            'a05_e2e_paid_media_crowed_data_d'[channel] in {"引力魔方","触点"},
             'a05_e2e_paid_media_crowed_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_crowed_data_d'[data_date] <= __TimeMax
         )
@@ -339,10 +339,10 @@ Cost 直通车 Value =
 // Display Folder: KPIs Measure
 // 用途: 直通车新老/计划层级花费（卡片图）
 // 口径来源: New Acquisition实际使用版本.md 子模块五 §10
-// 计算公式: SUM(cost_amt), channel='直通车'
+// 计算公式: SUM(cost_amt), channel in {"直通车","快车"}
 // 统计字段: cost_amt
 // 数据底表: a05_e2e_paid_media_keyword_data_d（下钻表，无 page_type 筛选）
-// 筛选条件: channel='直通车'
+// 筛选条件: channel in {"直通车","快车"}
 // 数据类型: currency（金额类指标，需汇率转换）
 // 汇率方向: 人民币转美元，除以 Currency_ExchangeRate
 // ========================================
@@ -354,7 +354,7 @@ Cost 直通车 Value =
     VAR __CostZtc =
         CALCULATE(
             SUM('a05_e2e_paid_media_keyword_data_d'[cost_amt]),
-            'a05_e2e_paid_media_keyword_data_d'[channel] = "直通车",
+            'a05_e2e_paid_media_keyword_data_d'[channel] in {"直通车","快车"},
             'a05_e2e_paid_media_keyword_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_keyword_data_d'[data_date] <= __TimeMax
         )
@@ -455,7 +455,7 @@ Cost% 直通车 Value =
 //   分子: cost_amt（该关键词/计划层级，受行维度筛选）
 //   分母: cost_amt（该广告点位合计，移除所有行维度）
 // 数据底表: a05_e2e_paid_media_keyword_data_d
-// 筛选条件: channel='直通车'
+// 筛选条件: channel in {"直通车","快车"}
 // 数据类型: percent_1dp → 百分比一位小数，不含正号
 // 说明: 分母用 REMOVEFILTERS 移除行维度（customer_type/category/plan_name/keyword_name）
 //       卡片图场景下无行维度，REMOVEFILTERS 不影响结果，但保证矩阵场景兼容
@@ -467,7 +467,7 @@ Cost% 直通车 Value =
     VAR __Numerator =
         CALCULATE(
             SUM('a05_e2e_paid_media_keyword_data_d'[cost_amt]),
-            'a05_e2e_paid_media_keyword_data_d'[channel] = "直通车",
+            'a05_e2e_paid_media_keyword_data_d'[channel] in {"直通车","快车"},
             'a05_e2e_paid_media_keyword_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_keyword_data_d'[data_date] <= __TimeMax
         )
@@ -475,7 +475,7 @@ Cost% 直通车 Value =
     VAR __Denominator =
         CALCULATE(
             SUM('a05_e2e_paid_media_keyword_data_d'[cost_amt]),
-            'a05_e2e_paid_media_keyword_data_d'[channel] = "直通车",
+            'a05_e2e_paid_media_keyword_data_d'[channel] in {"直通车","快车"},
             'a05_e2e_paid_media_keyword_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_keyword_data_d'[data_date] <= __TimeMax,
             REMOVEFILTERS(
@@ -521,7 +521,7 @@ ROI 直通车 Value =
 //   分子: media_sales_amt（直通车关键词层级成交金额）
 //   分母: cost_amt（直通车关键词层级花费）
 // 数据底表: a05_e2e_paid_media_keyword_data_d
-// 筛选条件: channel='直通车'
+// 筛选条件: channel in {"直通车","快车"}
 // 数据类型: decimal_1dp → 数值一位小数
 // ========================================
     // ── 时间筛选：本期 ──
@@ -531,7 +531,7 @@ ROI 直通车 Value =
     VAR __Sales =
         CALCULATE(
             SUM('a05_e2e_paid_media_keyword_data_d'[media_sales_amt]),
-            'a05_e2e_paid_media_keyword_data_d'[channel] = "直通车",
+            'a05_e2e_paid_media_keyword_data_d'[channel] in {"直通车","快车"},
             'a05_e2e_paid_media_keyword_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_keyword_data_d'[data_date] <= __TimeMax
         )
@@ -539,7 +539,7 @@ ROI 直通车 Value =
     VAR __Cost =
         CALCULATE(
             SUM('a05_e2e_paid_media_keyword_data_d'[cost_amt]),
-            'a05_e2e_paid_media_keyword_data_d'[channel] = "直通车",
+            'a05_e2e_paid_media_keyword_data_d'[channel] in {"直通车","快车"},
             'a05_e2e_paid_media_keyword_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_keyword_data_d'[data_date] <= __TimeMax
         )
@@ -684,14 +684,14 @@ RETURN
 | Metric_ID | Metric Name                | 口径文档出处   | 计算公式                                      | 数据底表                              | 筛选条件                                          | 数据类型            | 是否金额类 |
 | --------- | -------------------------- | -------------- | --------------------------------------------- | ------------------------------------- | ------------------------------------------------- | ------------------- | ---------- |
 | 1         | Media Cost                 | 子模块二 §1    | SUM(cost_amt)                                 | a05_e2e_paid_media_summary_d          | customer_type='ALL' AND page_type="1"             | currency_M_K_Int_0db | 是         |
-| 6         | Cost 引力魔方              | 子模块四 §6    | SUM(cost_amt), channel='引力魔方'             | a05_e2e_paid_media_crowed_data_d      | channel='引力魔方'                                | currency            | 是         |
+| 6         | Cost 引力魔方              | 子模块四 §6    | SUM(cost_amt), channel in {"引力魔方","触点"}             | a05_e2e_paid_media_crowed_data_d      | channel in {"引力魔方","触点"}                                | currency            | 是         |
 | 7         | Cost 引力魔方 触点占比     | 子模块四 §7    | cost_amt(引力魔方/触点) / cost_amt(四渠道)    | a05_e2e_paid_media_crowed_data_d      | 分子 channel IN {'引力魔方','触点'}；分母四渠道   | percent_0dp         | 否         |
-| 8         | Cost% 引力魔方             | 子模块四 §8    | TA层级Cost / TTL Cost（移除行维度）           | a05_e2e_paid_media_crowed_data_d      | channel='引力魔方'                                | percent_1dp         | 否         |
-| 9         | ROI 引力魔方               | 子模块四 §9    | media_sales_amt / cost_amt                    | a05_e2e_paid_media_crowed_data_d      | channel='引力魔方'                                | decimal_1dp         | 否         |
-| 10        | Cost 直通车                | 子模块五 §10   | SUM(cost_amt), channel='直通车'               | a05_e2e_paid_media_keyword_data_d     | channel='直通车'                                  | currency            | 是         |
+| 8         | Cost% 引力魔方             | 子模块四 §8    | TA层级Cost / TTL Cost（移除行维度）           | a05_e2e_paid_media_crowed_data_d      | channel in {"引力魔方","触点"}                                | percent_1dp         | 否         |
+| 9         | ROI 引力魔方               | 子模块四 §9    | media_sales_amt / cost_amt                    | a05_e2e_paid_media_crowed_data_d      | channel in {"引力魔方","触点"}                                | decimal_1dp         | 否         |
+| 10        | Cost 直通车                | 子模块五 §10   | SUM(cost_amt), channel in {"直通车","快车"}               | a05_e2e_paid_media_keyword_data_d     | channel in {"直通车","快车"}                                  | currency            | 是         |
 | 11        | Cost 直通车 快车占比       | 子模块五 §11   | cost_amt(直通车/快车) / cost_amt(四渠道)      | a05_e2e_paid_media_keyword_data_d     | 分子 channel IN {'直通车','快车'}；分母四渠道     | percent_0dp         | 否         |
-| 12        | Cost% 直通车               | 子模块五 §12   | 关键词层级Cost / TTL Cost（移除行维度）       | a05_e2e_paid_media_keyword_data_d     | channel='直通车'                                  | percent_1dp         | 否         |
-| 13        | ROI 直通车                 | 子模块五 §13   | media_sales_amt / cost_amt                    | a05_e2e_paid_media_keyword_data_d     | channel='直通车'                                  | decimal_1dp         | 否         |
+| 12        | Cost% 直通车               | 子模块五 §12   | 关键词层级Cost / TTL Cost（移除行维度）       | a05_e2e_paid_media_keyword_data_d     | channel in {"直通车","快车"}                                  | percent_1dp         | 否         |
+| 13        | ROI 直通车                 | 子模块五 §13   | media_sales_amt / cost_amt                    | a05_e2e_paid_media_keyword_data_d     | channel in {"直通车","快车"}                                  | decimal_1dp         | 否         |
 
 ---
 

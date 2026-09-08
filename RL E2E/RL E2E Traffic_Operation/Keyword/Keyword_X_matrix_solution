@@ -20,8 +20,8 @@ Keyword_X_matrix_solution 解决方案：
       channel → brand → framework → category → season
 - 列：9 个独立度量值，直接拖入 Table 视觉对象
 - 无同比逻辑：不涉及 Dim_Date_Ly，无 This Year / Last Year / YOY 行路由
-- 全局数据范围筛选（SPEC：channel=直通车/引力魔方/全站推）：
-  * 所有度量值均施加 channel IN {"直通车","引力魔方","全站推"} 固定筛选
+- 全局数据范围筛选（SPEC：channel={"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}）：
+  * 所有度量值均施加 channel IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"} 固定筛选
   * 使用 FILTER(VALUES()) 交集模式，保留行维度筛选上下文
   * channel 同时是行维度（第1级），交集模式下各行仅显示自身值
 - 切片器：
@@ -46,7 +46,7 @@ Keyword_X_matrix_solution 解决方案：
     └── [Label]     列 → 切片器 3（多选）
 
 固定数据范围筛选（内置于所有度量值）
-└── channel IN {"直通车","引力魔方","全站推"}（FILTER(VALUES()) 交集模式）
+└── channel IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}（FILTER(VALUES()) 交集模式）
 
 度量值（9 个核心 + 9 个 Display + 2 个辅助 = 20 个）
 ├── Keyword X Cost          — SUM(cost_amt) × ExchangeRate（金额类）
@@ -135,10 +135,10 @@ Dim_Crowd_Season_C_Label 为单表三列，Power BI 切片器基于同表列自�
     Dim_Crowd_Season_C_Label  ← FILTER(VALUES()) 交集筛选（Keyword X 专属，同源断开维度）
 ```
 
-2.3 全局固定数据范围筛选（SPEC：channel=直通车/引力魔方/全站推）
+2.3 全局固定数据范围筛选（SPEC：channel={"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}）
 ─────────────────────────────────────────────────────────────────
 所有度量值内建 channel 固定筛选，限制数据范围为 SPEC 规定的三个渠道：
-  channel IN {"直通车","引力魔方","全站推"}
+  channel IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
 使用 FILTER(VALUES()) 交集模式（与 Crowd 切片器同模式）：
   - VALUES(channel) 在当前行维度上下文中求值 → 返回当前行的 channel
   - FILTER 进一步限制为 IN {直通车,引力魔方,全站推}
@@ -177,13 +177,13 @@ VAR __PlatformFilter =
 // __ChannelID = "ALL" → platform IN {"TM","JD"}（精确圈定 TM+JD）
 // __ChannelID = "TM"/"JD" → platform = __ChannelID（单平台精确筛选）
 
-// ── Channel 固定数据范围筛选（SPEC：channel=直通车/引力魔方/全站推）──
+// ── Channel 固定数据范围筛选（SPEC：channel={"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}）──
 // FILTER(VALUES()) 交集模式：保留行维度筛选，仅保留 channel 在 SPEC 范围内的行
 // channel 同时是行维度第1级，交集模式下各行仅显示自身值
 VAR __ChannelScopeFilter =
     FILTER(
         VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-        a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
+        a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
 
 // ── 三个专属切片器 FILTER 块 ──
 // FILTER(VALUES(事实表[season]),   事实表[season]   IN __SuperSeasonVals)
@@ -208,9 +208,9 @@ Keyword X Cost =
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
     VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
-    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
-    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
-    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+//    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+//    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+//    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
 
     VAR __PlatformFilter =
         FILTER(
@@ -222,20 +222,21 @@ Keyword X Cost =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-            a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
 
     VAR __BaseValue =
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
     RETURN
         DIVIDE(__BaseValue, __ExchangeRate)
@@ -261,9 +262,9 @@ Keyword X Cost% =
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
 
-    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
-    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
-    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+//    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+//    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+//    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
 
     VAR __PlatformFilter =
         FILTER(
@@ -278,20 +279,22 @@ Keyword X Cost% =
             __PlatformFilter,
             // ── Channel 固定范围（分子用 FILTER(VALUES()) 交集模式，保留行维度）──
             FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-                a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"}),
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+                a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}),
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
 
     VAR __TotalCostAmt =
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
             // ── 移除全部 5 个行维度筛选（channel / brand / framework / category / season）──
+            ALL(Slicer_Channel_Selection_Keyword),
             REMOVEFILTERS(a05_e2e_paid_media_keyword_data_d[channel]),
             REMOVEFILTERS(a05_e2e_paid_media_keyword_data_d[brand]),
             REMOVEFILTERS(a05_e2e_paid_media_keyword_data_d[framework]),
@@ -301,14 +304,15 @@ Keyword X Cost% =
             a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
             // ── Channel 固定范围（分母用 FILTER(ALL()) 仅保留范围筛选，不依赖行维度）──
             FILTER(ALL(a05_e2e_paid_media_keyword_data_d[channel]),
-                a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"}),
-            // ── 分母用 FILTER(ALL()) 仅保留切片器筛选（不用 FILTER(VALUES())）──
-            FILTER(ALL(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(ALL(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(ALL(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+                a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
+            //     ,
+            // // ── 分母用 FILTER(ALL()) 仅保留切片器筛选（不用 FILTER(VALUES())）──
+            // FILTER(ALL(a05_e2e_paid_media_keyword_data_d[season]),
+            //     a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+            // FILTER(ALL(a05_e2e_paid_media_keyword_data_d[category]),
+            //     a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+            // FILTER(ALL(a05_e2e_paid_media_keyword_data_d[brand]),
+            //     a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
 
     RETURN
@@ -323,17 +327,17 @@ Keyword X ROI =
 // 中文名: 媒体ROI
 // Display Folder: Keyword X
 // 用途: 媒体投资回报率
-// 口径: DIVIDE(SUM(media_sales_order_cnt), SUM(cost_amt)) = 成交金额 / 花费
+// 口径: DIVIDE(SUM(media_sales_amt), SUM(cost_amt)) = 成交金额 / 花费
 // 类型: 比率类，不乘汇率
-// 数据字典: media_sales_order_cnt = 成交金额(GMV), cost_amt = 花费
+// 数据字典: media_sales_amt = 成交金额(GMV), cost_amt = 花费
 // 数据格式: #,##0.0（保留一位小数，见 ROI Display）
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
 
-    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
-    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
-    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+//    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+//    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+//    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
 
     VAR __PlatformFilter =
         FILTER(
@@ -345,33 +349,35 @@ Keyword X ROI =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-            a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
 
     VAR __SalesAmt =
         CALCULATE(
-            SUM(a05_e2e_paid_media_keyword_data_d[media_sales_order_cnt]),
+            SUM(a05_e2e_paid_media_keyword_data_d[media_sales_amt]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
     VAR __CostAmt =
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
     RETURN
         DIVIDE(__SalesAmt, __CostAmt)
@@ -393,9 +399,9 @@ Keyword X Click =
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
 
-    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
-    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
-    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+//    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+//    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+//    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
 
     VAR __PlatformFilter =
         FILTER(
@@ -407,20 +413,21 @@ Keyword X Click =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-            a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
 
     RETURN
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[click]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
 
 3.6 Keyword X CPC
@@ -441,9 +448,9 @@ Keyword X CPC =
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
 
-    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
-    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
-    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+//    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+//    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+//    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
 
     VAR __PlatformFilter =
         FILTER(
@@ -455,33 +462,35 @@ Keyword X CPC =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-            a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
 
     VAR __CostAmt =
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
     VAR __Click =
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[click]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
     RETURN
         DIVIDE(__CostAmt, __Click)
@@ -503,9 +512,9 @@ Keyword X CTR =
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
 
-    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
-    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
-    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+//    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+//    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+//    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
 
     VAR __PlatformFilter =
         FILTER(
@@ -517,33 +526,35 @@ Keyword X CTR =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-            a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
 
     VAR __Click =
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[click]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
     VAR __PV =
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[pv]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
     RETURN
         DIVIDE(__Click, __PV)
@@ -565,9 +576,9 @@ Keyword X CVR =
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
 
-    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
-    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
-    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+//    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+//    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+//    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
 
     VAR __PlatformFilter =
         FILTER(
@@ -579,33 +590,35 @@ Keyword X CVR =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-            a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
 
     VAR __Orders =
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[media_sales_order_cnt]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
     VAR __Click =
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[click]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
     RETURN
         DIVIDE(__Orders, __Click)
@@ -627,9 +640,9 @@ Keyword X Add to Cart =
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
 
-    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
-    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
-    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+//    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+//    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+//    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
 
     VAR __PlatformFilter =
         FILTER(
@@ -641,20 +654,21 @@ Keyword X Add to Cart =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-            a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
 
     RETURN
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[add_cart_num]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
 
 3.10 Keyword X CPATC
@@ -675,9 +689,9 @@ Keyword X CPATC =
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
 
-    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
-    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
-    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
+//    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
+//    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
+//    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
 
     VAR __PlatformFilter =
         FILTER(
@@ -689,33 +703,35 @@ Keyword X CPATC =
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-            a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
 
     VAR __CostAmt =
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
     VAR __AddToCart =
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[add_cart_num]),
             __PlatformFilter,
             __ChannelScopeFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+//            ,
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
+//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
+//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
+//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
+//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
     RETURN
         DIVIDE(__CostAmt, __AddToCart)
@@ -1016,7 +1032,7 @@ Keyword X Cell Background Color =
 | Category       | 多选   | Dim_Crowd_Season_C_Label[Category]                  | 全选   |
 | Label          | 多选   | Dim_Crowd_Season_C_Label[Label]                     | 全选   |
 
-注：channel=直通车/引力魔方/全站推 为内置于度量值的固定数据范围筛选，非切片器。
+注：channel={"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"} 为内置于度量值的固定数据范围筛选，非切片器。
 
 ================================================================================
 7. 度量值清单与 Display Folder
@@ -1103,18 +1119,18 @@ FILTER(VALUES()) vs IN + VALUES vs TREATAS：
   - 多选更符合用户操作习惯（Ctrl/Cmd 多选）
   - FILTER(VALUES()) 是行维度来自事实表时的标准断开维度筛选模式
 
-9.2 Channel 固定数据范围筛选（SPEC：channel=直通车/引力魔方/全站推）
+9.2 Channel 固定数据范围筛选（SPEC：channel={"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}）
 ──────────────────────────────────────────────────────────────────
-SPEC 全局规则要求所有指标统一筛选 channel=直通车/引力魔方/全站推。
+SPEC 全局规则要求所有指标统一筛选 channel={"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}。
 channel 同时是行维度第1级，因此采用 FILTER(VALUES()) 交集模式（与 Crowd 切片器同模式）：
 
   分子（保留行维度）：
     FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-        a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
+        a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
 
   分母（Cost% 移除行维度后重新施加范围筛选）：
     FILTER(ALL(a05_e2e_paid_media_keyword_data_d[channel]),
-        a05_e2e_paid_media_keyword_data_d[channel] IN {"直通车", "引力魔方", "全站推","快手","触点"})
+        a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
 
 行为说明：
   - 行维度 channel ∈ {直通车,引力魔方,全站推} → 交集 = 当前行 channel → 正常显示
@@ -1185,7 +1201,7 @@ channel 固定范围筛选在分母中也用 FILTER(ALL()) 模式：
 □ 7.  Keyword X Cost% 口径正确：DIVIDE(当前行 cost_amt, 总计 cost_amt)，分母 REMOVEFILTERS 全部 5 个行维度（channel/brand/framework/category/season），不乘汇率
 □ 8.  Keyword X ROI 口径正确：DIVIDE(SUM(media_sales_order_cnt), SUM(cost_amt))，不乘汇率
 □ 9.  Keyword X Click / CPC / CTR / CVR / Add to Cart / CPATC 口径正确
-□ 10. Channel 固定范围筛选正确：channel IN {"直通车","引力魔方","全站推"}（FILTER(VALUES()) 交集模式）
+□ 10. Channel 固定范围筛选正确：channel IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}（FILTER(VALUES()) 交集模式）
 □ 11. Platform ALL 筛选逻辑正确：FILTER platform IN {"TM","JD"}
 □ 12. CVR 分子字段为 media_sales_order_cnt（非 sales_order_cnt）
 □ 13. Add to Cart / CPATC 字段为 add_cart_num（非 add_cart_cnt）
