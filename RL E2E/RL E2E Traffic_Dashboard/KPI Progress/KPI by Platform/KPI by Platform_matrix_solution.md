@@ -682,7 +682,7 @@ KPI by Platform Base Value =
             13, __CurrentValue,    // Cost Per New Acquisition
             // ─── vs LP 值 ───
             2,  __LP_Value,       // Media Cost Rate vs LP
-            3,  __LP_Value,     // YOY% (Media Cost Rate)
+            3,  __YOY_Result,     // YOY% (Media Cost Rate)
             5,  __LP_Value,       // Media Cost vs LP
             8,  __LP_Value,       // ± Accel cost MOB% vs. store SLS MOB% vs LP
             11, __LP_Value,       // Media Contribution to New Cust% vs LP

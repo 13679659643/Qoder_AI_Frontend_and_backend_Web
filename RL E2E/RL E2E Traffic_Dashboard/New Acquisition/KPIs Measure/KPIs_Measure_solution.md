@@ -142,7 +142,7 @@ Cost 引力魔方 Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+            BLANK(),
             __CurrencySymbol & FORMAT(__Value, "#,##0")
         )
 ```
@@ -267,7 +267,7 @@ Cost% 引力魔方 Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+            BLANK(),
             FORMAT(__Value, "#,##0.0%;-#,##0.0%;0.0%")
         )
 ```
@@ -325,7 +325,7 @@ ROI 引力魔方 Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+            BLANK(),
             FORMAT(__Value, "#,##0.0")
         )
 ```
@@ -377,7 +377,7 @@ Cost 直通车 Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+            BLANK(),
             __CurrencySymbol & FORMAT(__Value, "#,##0")
         )
 ```
@@ -503,7 +503,7 @@ Cost% 直通车 Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+            BLANK(),
             FORMAT(__Value, "#,##0.0%;-#,##0.0%;0.0%")
         )
 ```
@@ -561,7 +561,7 @@ ROI 直通车 Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+            BLANK(),
             FORMAT(__Value, "#,##0.0")
         )
 ```

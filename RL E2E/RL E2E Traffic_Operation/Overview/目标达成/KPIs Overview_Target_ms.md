@@ -724,7 +724,13 @@ SWITCH(
             "user_id", a03_e2e_customer_data_m[user_id],
             "shop_info_id", a03_e2e_customer_data_m[shop_info_id]
         )
-    VAR __NewCustomer = COUNTROWS(EXCEPT(__NewCust_Step1, __OldCust_Step2))
+    VAR __NewCustomer = 
+        COUNTROWS(
+        EXCEPT (
+        SUMMARIZE ( __NewCust_Step1, [user_id] ), -- 去重到用户级
+        SUMMARIZE ( __OldCust_Step2, [user_id] )
+    ))
+    
     RETURN DIVIDE(__MediaMember, __NewCustomer),
 
     // ═══ ID 10: Cost Per New Acquisition = media_cost_amt / media_member_cnt（SUMMARIZE+SUMX 去重） ═══

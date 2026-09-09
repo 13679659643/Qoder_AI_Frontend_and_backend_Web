@@ -135,6 +135,6 @@ IF(
     RETURN
         COUNTROWS(
         EXCEPT (
-        SUMMARIZE ( __New, [user_id] ), -- 去重到用户级
-        SUMMARIZE ( __Old, [user_id] )
+        SUMMARIZE ( _New, [user_id] ), -- 去重到用户级
+        SUMMARIZE ( _Old, [user_id] )
     ))

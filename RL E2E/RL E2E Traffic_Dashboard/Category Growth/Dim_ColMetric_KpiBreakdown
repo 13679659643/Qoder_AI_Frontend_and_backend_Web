@@ -62,10 +62,10 @@ DATATABLE(
         { "TM", 9,  "ROI",                "引力魔方",       9,  11, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { "TM", 10, "ROI",                "全站推",         9,  12, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         // ─── TM > New Customer Cost% 分组 ───
-        { "TM", 11, "New Customer Cost%", "Total",         10, 9,  "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "TM", 12, "New Customer Cost%", "直通车",         10, 10, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "TM", 13, "New Customer Cost%", "引力魔方",       10, 11, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "TM", 14, "New Customer Cost%", "全站推",         10, 12, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "TM", 11, "New Customer Cost%", "Total",         10, 9,  "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "TM", 12, "New Customer Cost%", "直通车",         10, 10, "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "TM", 13, "New Customer Cost%", "引力魔方",       10, 11, "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "TM", 14, "New Customer Cost%", "全站推",         10, 12, "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
         // JD 平台（1 个空格，Sort ×10）
@@ -86,10 +86,10 @@ DATATABLE(
         { "JD", 23, "ROI ",                "触点 ",           90,  110, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { "JD", 24, "ROI ",                "海投 ",           90,  120, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         // ─── JD > New Customer Cost% 分组 ───
-        { "JD", 25, "New Customer Cost% ", "Total ",         100, 90,  "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "JD", 26, "New Customer Cost% ", "快车 ",           100, 100, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "JD", 27, "New Customer Cost% ", "触点 ",           100, 110, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "JD", 28, "New Customer Cost% ", "海投 ",           100, 120, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "JD", 25, "New Customer Cost% ", "Total ",         100, 90,  "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "JD", 26, "New Customer Cost% ", "快车 ",           100, 100, "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "JD", 27, "New Customer Cost% ", "触点 ",           100, 110, "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "JD", 28, "New Customer Cost% ", "海投 ",           100, 120, "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
         // RLE 平台（2 个空格，Sort ×100）
@@ -110,10 +110,10 @@ DATATABLE(
         { "RLE", 37, "ROI  ",                "引力魔方  ",       900,  1100, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { "RLE", 38, "ROI  ",                "全站推  ",         900,  1200, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         // ─── RLE > New Customer Cost% 分组 ───
-        { "RLE", 39, "New Customer Cost%  ", "Total  ",         1000, 900,  "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "RLE", 40, "New Customer Cost%  ", "直通车  ",         1000, 1000, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "RLE", 41, "New Customer Cost%  ", "引力魔方  ",       1000, 1100, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "RLE", 42, "New Customer Cost%  ", "全站推  ",         1000, 1200, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "RLE", 39, "New Customer Cost%  ", "Total  ",         1000, 900,  "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "RLE", 40, "New Customer Cost%  ", "直通车  ",         1000, 1000, "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "RLE", 41, "New Customer Cost%  ", "引力魔方  ",       1000, 1100, "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "RLE", 42, "New Customer Cost%  ", "全站推  ",         1000, 1200, "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
 
         // ════════════════════════════════════════════════════════════════
         // DY 平台（3 个空格，Sort ×1000）
@@ -134,9 +134,9 @@ DATATABLE(
         { "DY", 51, "ROI   ",                "引力魔方   ",       9000,  11000, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { "DY", 52, "ROI   ",                "全站推   ",         9000,  12000, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         // ─── DY > New Customer Cost% 分组 ───
-        { "DY", 53, "New Customer Cost%   ", "Total   ",         10000, 9000,  "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "DY", 54, "New Customer Cost%   ", "直通车   ",         10000, 10000, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "DY", 55, "New Customer Cost%   ", "引力魔方   ",       10000, 11000, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { "DY", 56, "New Customer Cost%   ", "全站推   ",         10000, 12000, "decimal_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+        { "DY", 53, "New Customer Cost%   ", "Total   ",         10000, 9000,  "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "DY", 54, "New Customer Cost%   ", "直通车   ",         10000, 10000, "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "DY", 55, "New Customer Cost%   ", "引力魔方   ",       10000, 11000, "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" },
+        { "DY", 56, "New Customer Cost%   ", "全站推   ",         10000, 12000, "percent_1dp",  "#1A9018", "#D64550", "#E1C233", "#5f6165" }
     }
 )
