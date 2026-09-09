@@ -604,9 +604,12 @@ KPIs Target Base Value =
 // 口径来源: KPI Progress.md 各 TRA ACH% 指标的 Target 行
 // 说明:
 //   - Target 值来自 a05_e2e_paid_media_fcst_data_m（预测专用表）
-//   - 按时间粒度使用不同字段：
-//     Month/Quarter → 按 platform/shop_id/data_month_name 分组聚合
-//     Year → 按 platform/shop_id/data_year 分组聚合，使用 year_ 前缀字段
+//   - rate 类指标(#9/#12/#15/#24)按四种时间选择分别计算：
+//     单选Month → 按 platform/shop_id/data_month_name 分组，取 MAX(rate 字段)
+//     单选Year  → 按 platform/shop_id/data_year 分组，取 MAX(year_rate 字段)
+//     多选Month/单选Quarter/多选Quarter → 按 platform/shop_id/data_month_name 分组，分子÷分母
+//     多选Year  → 按 platform/shop_id/data_year 分组，year_分子÷year_分母
+//   - #3/#5/#18/#21 指标不涉及 rate，按 Month/Quarter 与 Year 两分法处理
 //   - #3/#5 Target 固定 100%（即 1）
 //   - Day/Week 时返回 BLANK
 //   - Target 缺失时返回 BLANK（由 Base Value 层处理展示"-"）
@@ -619,8 +622,44 @@ KPIs Target Base Value =
 
     // ── 时间粒度判断 ──
     VAR __TimeFrameID = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])
+    VAR __TimeFrameValueMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Value])
+    VAR __TimeFrameValueMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Value])
     VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
     VAR __IsYear = __TimeFrameID = "Year"
+    VAR __IsMonth = __TimeFrameID = "Month"
+    VAR __IsQuarter = __TimeFrameID = "Quarter"
+
+    // ── 单选判定：TimeFrame_ID ∈ {"Month"} 且 Min/Max TimeFrame_Value 相等 ──
+    VAR __IsMonthSingleSelection =
+        __IsMonth
+        && NOT ISBLANK(__TimeFrameValueMin)
+        && NOT ISBLANK(__TimeFrameValueMax)
+        && __TimeFrameValueMin = __TimeFrameValueMax
+    // ── 多选判定：非单选（Month多选也有值）──
+    VAR __IsMonthMultiSelection = 
+        __IsMonth
+        && NOT ISBLANK(__TimeFrameValueMin)
+        && NOT ISBLANK(__TimeFrameValueMax)
+        && __TimeFrameValueMin <> __TimeFrameValueMax
+    
+    // ── 多选判定：多选Month/单选Quarter/多选Quarter 有值 ──
+    VAR __IsQuarterOrMonth = 
+        __IsQuarter || __IsMonthMultiSelection
+
+    // ── 单选财年判定：Year 粒度下，比较 Min/Max TimeFrame_Value 的年部分 ──
+    VAR __YearPartMin = __TimeFrameValueMin
+    VAR __YearPartMax = __TimeFrameValueMax
+    VAR __IsYearSingleSelection =
+        __IsYear
+        && NOT ISBLANK(__YearPartMin)
+        && NOT ISBLANK(__YearPartMax)
+        && __YearPartMin = __YearPartMax
+    // ── 多选判定：非单选（Year 多选也有值）──
+    VAR __IsYearMultiSelection =         
+        __IsYear
+        && NOT ISBLANK(__YearPartMin)
+        && NOT ISBLANK(__YearPartMax)
+        && __YearPartMin <> __YearPartMax
 
     // ═══════════════════════════════════════
     // #3 Cost ACH% Target：固定 100%
@@ -629,190 +668,374 @@ KPIs Target Base Value =
 
     // ═══════════════════════════════════════
     // #9 Media Contribution% TRA ACH% Target
-    // Month/Quarter: SUM(media_new_customer_cnt) / SUM(new_customer_cnt)
-    // Year: MAX(year_media_new_customer_contribution_rate)
+    // 单选Month: MAX(media_new_customer_contribution_rate)
+    // 单选Year:  MAX(year_media_new_customer_contribution_rate)
+    // 多选Month/单选Quarter/多选Quarter: SUM(media_new_customer_cnt) / SUM(new_customer_cnt)
+    // 多选Year:  SUM(year_media_new_customer_cnt) / SUM(year_new_customer_cnt)
     // ═══════════════════════════════════════
     VAR __Target_MediaContrib = 
         IF(
             __IsDayOrWeek,
             BLANK(),
             IF(
-                __IsYear,
-                // Year 粒度：按 platform/shop_id/data_year 分组，MAX(year_media_new_customer_contribution_rate)
+                __IsMonthSingleSelection,
+                // 单选 Month：按 platform/shop_id/data_month_name 分组，MAX(media_new_customer_contribution_rate)
                 CALCULATE(
                     SUMX(
                         SUMMARIZE(
                             'a05_e2e_paid_media_fcst_data_m',
                             'a05_e2e_paid_media_fcst_data_m'[platform],
                             'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                            'a05_e2e_paid_media_fcst_data_m'[data_year],
-                            "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[year_media_new_customer_contribution_rate])
+                            'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                            "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[media_new_customer_contribution_rate])
                         ),
                         [__Value]
                     ),
                     'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
                     'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
                 ),
-                // Month/Quarter 粒度：SUM(media_new_customer_cnt) / SUM(new_customer_cnt)
-                CALCULATE(
-                    DIVIDE(
+                IF(
+                    __IsYearSingleSelection,
+                    // 单选 Year：按 platform/shop_id/data_year 分组，MAX(year_media_new_customer_contribution_rate)
+                    CALCULATE(
                         SUMX(
                             SUMMARIZE(
                                 'a05_e2e_paid_media_fcst_data_m',
                                 'a05_e2e_paid_media_fcst_data_m'[platform],
                                 'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                                'a05_e2e_paid_media_fcst_data_m'[data_month_name],
-                                "__Cnt", MAX('a05_e2e_paid_media_fcst_data_m'[media_new_customer_cnt])
+                                'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[year_media_new_customer_contribution_rate])
                             ),
-                            [__Cnt]
+                            [__Value]
                         ),
-                        SUMX(
-                            SUMMARIZE(
-                                'a05_e2e_paid_media_fcst_data_m',
-                                'a05_e2e_paid_media_fcst_data_m'[platform],
-                                'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                                'a05_e2e_paid_media_fcst_data_m'[data_month_name],
-                                "__Cnt", MAX('a05_e2e_paid_media_fcst_data_m'[new_customer_cnt])
-                            ),
-                            [__Cnt]
-                        )
+                        'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+                        'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
                     ),
-                    'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
-                    'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+                    IF(
+                        __IsQuarterOrMonth,
+                        // 多选 Month/单选 Quarter/多选 Quarter：按 platform/shop_id/data_month_name 分组，SUM(media_new_customer_cnt) / SUM(new_customer_cnt)
+                        CALCULATE(
+                            DIVIDE(
+                                SUMX(
+                                    SUMMARIZE(
+                                        'a05_e2e_paid_media_fcst_data_m',
+                                        'a05_e2e_paid_media_fcst_data_m'[platform],
+                                        'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                        'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                                        "__Cnt", MAX('a05_e2e_paid_media_fcst_data_m'[media_new_customer_cnt])
+                                    ),
+                                    [__Cnt]
+                                ),
+                                SUMX(
+                                    SUMMARIZE(
+                                        'a05_e2e_paid_media_fcst_data_m',
+                                        'a05_e2e_paid_media_fcst_data_m'[platform],
+                                        'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                        'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                                        "__Cnt", MAX('a05_e2e_paid_media_fcst_data_m'[new_customer_cnt])
+                                    ),
+                                    [__Cnt]
+                                )
+                            ),
+                            'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+                            'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+                        ),
+                        IF(
+                            __IsYearMultiSelection,
+                            // 多选 Year：按 platform/shop_id/data_year 分组，SUM(year_media_new_customer_cnt) / SUM(year_new_customer_cnt)
+                            CALCULATE(
+                                DIVIDE(
+                                    SUMX(
+                                        SUMMARIZE(
+                                            'a05_e2e_paid_media_fcst_data_m',
+                                            'a05_e2e_paid_media_fcst_data_m'[platform],
+                                            'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                            'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                            "__Cnt", MAX('a05_e2e_paid_media_fcst_data_m'[year_media_new_customer_cnt])
+                                        ),
+                                        [__Cnt]
+                                    ),
+                                    SUMX(
+                                        SUMMARIZE(
+                                            'a05_e2e_paid_media_fcst_data_m',
+                                            'a05_e2e_paid_media_fcst_data_m'[platform],
+                                            'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                            'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                            "__Cnt", MAX('a05_e2e_paid_media_fcst_data_m'[year_new_customer_cnt])
+                                        ),
+                                        [__Cnt]
+                                    )
+                                ),
+                                'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+                                'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+                            ),
+                            BLANK()
+                        )
+                    )
                 )
             )
         )
 
     // ═══════════════════════════════════════
     // #12 Media Cost Per New Acquisition TRA ACH% Target
-    // Month/Quarter: SUM(media_new_customer_cost_amt) / SUM(media_new_customer_cnt)
-    // Year: MAX(year_cost_per_new_acquisition)
+    // 单选Month: MAX(cost_per_new_acquisition)
+    // 单选Year:  MAX(year_cost_per_new_acquisition)
+    // 多选Month/单选Quarter/多选Quarter: SUM(media_new_customer_cost_amt) / SUM(media_new_customer_cnt)
+    // 多选Year:  SUM(year_media_new_customer_cost_amt) / SUM(year_media_new_customer_cnt)
     // ═══════════════════════════════════════
     VAR __Target_CostPerNewAcq = 
         IF(
             __IsDayOrWeek,
             BLANK(),
             IF(
-                __IsYear,
-                // Year 粒度：MAX(year_cost_per_new_acquisition)
+                __IsMonthSingleSelection,
+                // 单选 Month：按 platform/shop_id/data_month_name 分组，MAX(cost_per_new_acquisition)
                 CALCULATE(
                     SUMX(
                         SUMMARIZE(
                             'a05_e2e_paid_media_fcst_data_m',
                             'a05_e2e_paid_media_fcst_data_m'[platform],
                             'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                            'a05_e2e_paid_media_fcst_data_m'[data_year],
-                            "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[year_cost_per_new_acquisition])
+                            'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                            "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[cost_per_new_acquisition])
                         ),
                         [__Value]
                     ),
                     'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
                     'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
                 ),
-                // Month/Quarter 粒度：SUM(media_new_customer_cost_amt) / SUM(media_new_customer_cnt)
-                CALCULATE(
-                    DIVIDE(
+                IF(
+                    __IsYearSingleSelection,
+                    // 单选 Year：按 platform/shop_id/data_year 分组，MAX(year_cost_per_new_acquisition)
+                    CALCULATE(
                         SUMX(
                             SUMMARIZE(
                                 'a05_e2e_paid_media_fcst_data_m',
                                 'a05_e2e_paid_media_fcst_data_m'[platform],
                                 'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                                'a05_e2e_paid_media_fcst_data_m'[data_month_name],
-                                "__Amt", MAX('a05_e2e_paid_media_fcst_data_m'[media_new_customer_cost_amt])
+                                'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[year_cost_per_new_acquisition])
                             ),
-                            [__Amt]
+                            [__Value]
                         ),
-                        SUMX(
-                            SUMMARIZE(
-                                'a05_e2e_paid_media_fcst_data_m',
-                                'a05_e2e_paid_media_fcst_data_m'[platform],
-                                'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                                'a05_e2e_paid_media_fcst_data_m'[data_month_name],
-                                "__Cnt", MAX('a05_e2e_paid_media_fcst_data_m'[media_new_customer_cnt])
-                            ),
-                            [__Cnt]
-                        )
+                        'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+                        'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
                     ),
-                    'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
-                    'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+                    IF(
+                        __IsQuarterOrMonth,
+                        // 多选 Month/单选 Quarter/多选 Quarter：按 platform/shop_id/data_month_name 分组，SUM(media_new_customer_cost_amt) / SUM(media_new_customer_cnt)
+                        CALCULATE(
+                            DIVIDE(
+                                SUMX(
+                                    SUMMARIZE(
+                                        'a05_e2e_paid_media_fcst_data_m',
+                                        'a05_e2e_paid_media_fcst_data_m'[platform],
+                                        'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                        'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                                        "__Amt", MAX('a05_e2e_paid_media_fcst_data_m'[media_new_customer_cost_amt])
+                                    ),
+                                    [__Amt]
+                                ),
+                                SUMX(
+                                    SUMMARIZE(
+                                        'a05_e2e_paid_media_fcst_data_m',
+                                        'a05_e2e_paid_media_fcst_data_m'[platform],
+                                        'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                        'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                                        "__Cnt", MAX('a05_e2e_paid_media_fcst_data_m'[media_new_customer_cnt])
+                                    ),
+                                    [__Cnt]
+                                )
+                            ),
+                            'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+                            'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+                        ),
+                        IF(
+                            __IsYearMultiSelection,
+                            // 多选 Year：按 platform/shop_id/data_year 分组，SUM(year_media_new_customer_cost_amt) / SUM(year_media_new_customer_cnt)
+                            CALCULATE(
+                                DIVIDE(
+                                    SUMX(
+                                        SUMMARIZE(
+                                            'a05_e2e_paid_media_fcst_data_m',
+                                            'a05_e2e_paid_media_fcst_data_m'[platform],
+                                            'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                            'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                            "__Amt", MAX('a05_e2e_paid_media_fcst_data_m'[year_media_new_customer_cost_amt])
+                                        ),
+                                        [__Amt]
+                                    ),
+                                    SUMX(
+                                        SUMMARIZE(
+                                            'a05_e2e_paid_media_fcst_data_m',
+                                            'a05_e2e_paid_media_fcst_data_m'[platform],
+                                            'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                            'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                            "__Cnt", MAX('a05_e2e_paid_media_fcst_data_m'[year_media_new_customer_cnt])
+                                        ),
+                                        [__Cnt]
+                                    )
+                                ),
+                                'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+                                'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+                            ),
+                            BLANK()
+                        )
+                    )
                 )
             )
         )
 
     // ═══════════════════════════════════════
     // #15 ± Accel Cost MOB% vs Store SLS MOB% TRA ACH% Target
-    // Month/Quarter: SUM(acceleration_cost_amt)/SUM(cost_amt) - SUM(acceleration_net_sales_amt)/SUM(net_sales_amt)
-    // Year: MAX(year_acceleration_cost_rate_vs_net_sales_rate)
+    // 单选Month: MAX(acceleration_cost_rate_vs_net_sales_rate)
+    // 单选Year:  MAX(year_acceleration_cost_rate_vs_net_sales_rate)
+    // 多选Month/单选Quarter/多选Quarter: SUM(acceleration_cost_amt)/SUM(cost_amt) - SUM(acceleration_net_sales_amt)/SUM(net_sales_amt)
+    // 多选Year:  SUM(year_acceleration_cost_amt)/SUM(year_cost_amt) - SUM(year_acceleration_net_sales_amt)/SUM(year_net_sales_amt)
     // ═══════════════════════════════════════
     VAR __Target_AccelCostMOB = 
         IF(
             __IsDayOrWeek,
             BLANK(),
             IF(
-                __IsYear,
-                // Year 粒度：MAX(year_acceleration_cost_rate_vs_net_sales_rate)
+                __IsMonthSingleSelection,
+                // 单选 Month：按 platform/shop_id/data_month_name 分组，MAX(acceleration_cost_rate_vs_net_sales_rate)
                 CALCULATE(
                     SUMX(
                         SUMMARIZE(
                             'a05_e2e_paid_media_fcst_data_m',
                             'a05_e2e_paid_media_fcst_data_m'[platform],
                             'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                            'a05_e2e_paid_media_fcst_data_m'[data_year],
-                            "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[year_acceleration_cost_rate_vs_net_sales_rate])
+                            'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                            "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[acceleration_cost_rate_vs_net_sales_rate])
                         ),
                         [__Value]
                     ),
                     'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
                     'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
                 ),
-                // Month/Quarter 粒度：SUM(acceleration_cost_amt)/SUM(cost_amt) - SUM(acceleration_net_sales_amt)/SUM(net_sales_amt)
-                CALCULATE(
-                    DIVIDE(
+                IF(
+                    __IsYearSingleSelection,
+                    // 单选 Year：按 platform/shop_id/data_year 分组，MAX(year_acceleration_cost_rate_vs_net_sales_rate)
+                    CALCULATE(
                         SUMX(
                             SUMMARIZE(
                                 'a05_e2e_paid_media_fcst_data_m',
                                 'a05_e2e_paid_media_fcst_data_m'[platform],
                                 'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                                'a05_e2e_paid_media_fcst_data_m'[data_month_name],
-                                "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[acceleration_cost_amt])
+                                'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[year_acceleration_cost_rate_vs_net_sales_rate])
                             ),
-                            [__Val]
+                            [__Value]
                         ),
-                        SUMX(
-                            SUMMARIZE(
-                                'a05_e2e_paid_media_fcst_data_m',
-                                'a05_e2e_paid_media_fcst_data_m'[platform],
-                                'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                                'a05_e2e_paid_media_fcst_data_m'[data_month_name],
-                                "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[cost_amt])
+                        'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+                        'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+                    ),
+                    IF(
+                        __IsQuarterOrMonth,
+                        // 多选 Month/单选 Quarter/多选 Quarter：按 platform/shop_id/data_month_name 分组，SUM(acceleration_cost_amt)/SUM(cost_amt) - SUM(acceleration_net_sales_amt)/SUM(net_sales_amt)
+                        CALCULATE(
+                            DIVIDE(
+                                SUMX(
+                                    SUMMARIZE(
+                                        'a05_e2e_paid_media_fcst_data_m',
+                                        'a05_e2e_paid_media_fcst_data_m'[platform],
+                                        'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                        'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                                        "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[acceleration_cost_amt])
+                                    ),
+                                    [__Val]
+                                ),
+                                SUMX(
+                                    SUMMARIZE(
+                                        'a05_e2e_paid_media_fcst_data_m',
+                                        'a05_e2e_paid_media_fcst_data_m'[platform],
+                                        'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                        'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                                        "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[cost_amt])
+                                    ),
+                                    [__Val]
+                                )
+                            )
+                            - DIVIDE(
+                                SUMX(
+                                    SUMMARIZE(
+                                        'a05_e2e_paid_media_fcst_data_m',
+                                        'a05_e2e_paid_media_fcst_data_m'[platform],
+                                        'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                        'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                                        "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[acceleration_net_sales_amt])
+                                    ),
+                                    [__Val]
+                                ),
+                                SUMX(
+                                    SUMMARIZE(
+                                        'a05_e2e_paid_media_fcst_data_m',
+                                        'a05_e2e_paid_media_fcst_data_m'[platform],
+                                        'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                        'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                                        "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[net_sales_amt])
+                                    ),
+                                    [__Val]
+                                )
                             ),
-                            [__Val]
+                            'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+                            'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+                        ),
+                        IF(
+                            __IsYearMultiSelection,
+                            // 多选 Year：按 platform/shop_id/data_year 分组，SUM(year_acceleration_cost_amt)/SUM(year_cost_amt) - SUM(year_acceleration_net_sales_amt)/SUM(year_net_sales_amt)
+                            CALCULATE(
+                                DIVIDE(
+                                    SUMX(
+                                        SUMMARIZE(
+                                            'a05_e2e_paid_media_fcst_data_m',
+                                            'a05_e2e_paid_media_fcst_data_m'[platform],
+                                            'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                            'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                            "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[year_acceleration_cost_amt])
+                                        ),
+                                        [__Val]
+                                    ),
+                                    SUMX(
+                                        SUMMARIZE(
+                                            'a05_e2e_paid_media_fcst_data_m',
+                                            'a05_e2e_paid_media_fcst_data_m'[platform],
+                                            'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                            'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                            "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[year_cost_amt])
+                                        ),
+                                        [__Val]
+                                    )
+                                )
+                                - DIVIDE(
+                                    SUMX(
+                                        SUMMARIZE(
+                                            'a05_e2e_paid_media_fcst_data_m',
+                                            'a05_e2e_paid_media_fcst_data_m'[platform],
+                                            'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                            'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                            "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[year_acceleration_net_sales_amt])
+                                        ),
+                                        [__Val]
+                                    ),
+                                    SUMX(
+                                        SUMMARIZE(
+                                            'a05_e2e_paid_media_fcst_data_m',
+                                            'a05_e2e_paid_media_fcst_data_m'[platform],
+                                            'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                            'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                            "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[year_net_sales_amt])
+                                        ),
+                                        [__Val]
+                                    )
+                                ),
+                                'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+                                'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+                            ),
+                            BLANK()
                         )
                     )
-                    - DIVIDE(
-                        SUMX(
-                            SUMMARIZE(
-                                'a05_e2e_paid_media_fcst_data_m',
-                                'a05_e2e_paid_media_fcst_data_m'[platform],
-                                'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                                'a05_e2e_paid_media_fcst_data_m'[data_month_name],
-                                "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[acceleration_net_sales_amt])
-                            ),
-                            [__Val]
-                        ),
-                        SUMX(
-                            SUMMARIZE(
-                                'a05_e2e_paid_media_fcst_data_m',
-                                'a05_e2e_paid_media_fcst_data_m'[platform],
-                                'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                                'a05_e2e_paid_media_fcst_data_m'[data_month_name],
-                                "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[net_sales_amt])
-                            ),
-                            [__Val]
-                        )
-                    ),
-                    'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
-                    'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
                 )
             )
         )
@@ -907,56 +1130,110 @@ KPIs Target Base Value =
 
     // ═══════════════════════════════════════
     // #24 Acceleration SLS MOB% TRA ACH% Target
-    // Month/Quarter: SUM(acceleration_net_sales_amt) / SUM(net_sales_amt)
-    // Year: MAX(year_acceleration_net_sales_rate)
+    // 单选Month: MAX(acceleration_net_sales_rate)
+    // 单选Year:  MAX(year_acceleration_net_sales_rate)
+    // 多选Month/单选Quarter/多选Quarter: SUM(acceleration_net_sales_amt) / SUM(net_sales_amt)
+    // 多选Year:  SUM(year_acceleration_net_sales_amt) / SUM(year_net_sales_amt)
     // ═══════════════════════════════════════
     VAR __Target_AccelSLSMOB = 
         IF(
             __IsDayOrWeek,
             BLANK(),
             IF(
-                __IsYear,
-                // Year 粒度：MAX(year_acceleration_net_sales_rate)
+                __IsMonthSingleSelection,
+                // 单选 Month：按 platform/shop_id/data_month_name 分组，MAX(acceleration_net_sales_rate)
                 CALCULATE(
                     SUMX(
                         SUMMARIZE(
                             'a05_e2e_paid_media_fcst_data_m',
                             'a05_e2e_paid_media_fcst_data_m'[platform],
                             'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                            'a05_e2e_paid_media_fcst_data_m'[data_year],
-                            "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[year_acceleration_net_sales_rate])
+                            'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                            "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[acceleration_net_sales_rate])
                         ),
                         [__Value]
                     ),
                     'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
                     'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
                 ),
-                // Month/Quarter 粒度：SUM(acceleration_net_sales_amt) / SUM(net_sales_amt)
-                CALCULATE(
-                    DIVIDE(
+                IF(
+                    __IsYearSingleSelection,
+                    // 单选 Year：按 platform/shop_id/data_year 分组，MAX(year_acceleration_net_sales_rate)
+                    CALCULATE(
                         SUMX(
                             SUMMARIZE(
                                 'a05_e2e_paid_media_fcst_data_m',
                                 'a05_e2e_paid_media_fcst_data_m'[platform],
                                 'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                                'a05_e2e_paid_media_fcst_data_m'[data_month_name],
-                                "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[acceleration_net_sales_amt])
+                                'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                "__Value", MAX('a05_e2e_paid_media_fcst_data_m'[year_acceleration_net_sales_rate])
                             ),
-                            [__Val]
+                            [__Value]
                         ),
-                        SUMX(
-                            SUMMARIZE(
-                                'a05_e2e_paid_media_fcst_data_m',
-                                'a05_e2e_paid_media_fcst_data_m'[platform],
-                                'a05_e2e_paid_media_fcst_data_m'[shop_id],
-                                'a05_e2e_paid_media_fcst_data_m'[data_month_name],
-                                "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[net_sales_amt])
-                            ),
-                            [__Val]
-                        )
+                        'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+                        'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
                     ),
-                    'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
-                    'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+                    IF(
+                        __IsQuarterOrMonth,
+                        // 多选 Month/单选 Quarter/多选 Quarter：按 platform/shop_id/data_month_name 分组，SUM(acceleration_net_sales_amt) / SUM(net_sales_amt)
+                        CALCULATE(
+                            DIVIDE(
+                                SUMX(
+                                    SUMMARIZE(
+                                        'a05_e2e_paid_media_fcst_data_m',
+                                        'a05_e2e_paid_media_fcst_data_m'[platform],
+                                        'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                        'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                                        "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[acceleration_net_sales_amt])
+                                    ),
+                                    [__Val]
+                                ),
+                                SUMX(
+                                    SUMMARIZE(
+                                        'a05_e2e_paid_media_fcst_data_m',
+                                        'a05_e2e_paid_media_fcst_data_m'[platform],
+                                        'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                        'a05_e2e_paid_media_fcst_data_m'[data_month_name],
+                                        "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[net_sales_amt])
+                                    ),
+                                    [__Val]
+                                )
+                            ),
+                            'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+                            'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+                        ),
+                        IF(
+                            __IsYearMultiSelection,
+                            // 多选 Year：按 platform/shop_id/data_year 分组，SUM(year_acceleration_net_sales_amt) / SUM(year_net_sales_amt)
+                            CALCULATE(
+                                DIVIDE(
+                                    SUMX(
+                                        SUMMARIZE(
+                                            'a05_e2e_paid_media_fcst_data_m',
+                                            'a05_e2e_paid_media_fcst_data_m'[platform],
+                                            'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                            'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                            "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[year_acceleration_net_sales_amt])
+                                        ),
+                                        [__Val]
+                                    ),
+                                    SUMX(
+                                        SUMMARIZE(
+                                            'a05_e2e_paid_media_fcst_data_m',
+                                            'a05_e2e_paid_media_fcst_data_m'[platform],
+                                            'a05_e2e_paid_media_fcst_data_m'[shop_id],
+                                            'a05_e2e_paid_media_fcst_data_m'[data_year],
+                                            "__Val", MAX('a05_e2e_paid_media_fcst_data_m'[year_net_sales_amt])
+                                        ),
+                                        [__Val]
+                                    )
+                                ),
+                                'a05_e2e_paid_media_fcst_data_m'[data_date] >= __TimeMin,
+                                'a05_e2e_paid_media_fcst_data_m'[data_date] <= __TimeMax
+                            ),
+                            BLANK()
+                        )
+                    )
                 )
             )
         )

@@ -6,7 +6,7 @@
 	        brand, 
 	        category
 	    FROM `indep_rl_ads`.a05_e2e_paid_media_summary_d
-	    WHERE platform IN ('JD', 'TM', 'RLE', 'DY')
+	    WHERE platform IN ('JD', 'TM')
 	),
 	-- 将6种Scenario_Type的分组数据通过UNION ALL合并
 	Unioned_Data AS (

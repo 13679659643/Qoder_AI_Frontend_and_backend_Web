@@ -277,3 +277,15 @@ D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_
             "shop_info_id", [shop_info_id]
         )
     VAR __TotalNewCustCnt = COUNTROWS(EXCEPT(__NewCust_Step1, __OldCust_Step2))
+
+
+## 测试阶段，第十六轮提示：
+调整这个文件D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Traffic_Dashboard\KPI Progress\KPIS\KPIs_matrix_solution.md的KPIs Target Base Value部分。
+所有指标分为四个情况判断，以#9 Media Contribution% TRA ACH% Target为例：
+1、__IsMonthSingleSelection：单选Month，MAX('a05_e2e_paid_media_fcst_data_m'[media_new_customer_contribution_rate])，正确。
+2、__IsYearSingleSelection：单选Year，MAX('a05_e2e_paid_media_fcst_data_m'[year_media_new_customer_contribution_rate])，正确。
+3、__IsQuarterOrMonth：多选、单选Quarter或多选Month，'a05_e2e_paid_media_fcst_data_m'[media_new_customer_cnt]÷'a05_e2e_paid_media_fcst_data_m'[new_customer_cnt]，正确。
+4、__IsYearMultiSelection：多选Year，'a05_e2e_paid_media_fcst_data_m'[year_media_new_customer_cnt]÷'a05_e2e_paid_media_fcst_data_m'[year_new_customer_cnt]，正确。
+综合以上信息，__IsMonthSingleSelection和__IsYearSingleSelection使用字段只有前缀的区别，__IsQuarterOrMonth和__IsYearMultiSelection使用字段仅有前缀的区别。9、12、15、24指标需要这样判断计算，主体逻辑保持不变，都是分组再聚合，只是四种情况所用a05_e2e_paid_media_fcst_data_m字段和计算方法不同。
+3、5、18、21指标不涉及rate，我理解保持原状即可。
+
