@@ -222,7 +222,7 @@ Cost% 引力魔方 Value =
 // 数据底表: a05_e2e_paid_media_crowed_data_d
 // 筛选条件: channel in {"引力魔方","触点"}
 // 数据类型: percent_1dp → 百分比一位小数，不含正号
-// 说明: 分母用 REMOVEFILTERS 移除行维度（crowed_layer/crowed_type/crowed_name）
+// 说明: 分母用 REMOVEFILTERS 移除行维度（crowed_layer/crowed_type/customer_type
 //       卡片图场景下无行维度，REMOVEFILTERS 不影响结果，但保证矩阵场景兼容
 // ========================================
     // ── 时间筛选：本期 ──
@@ -246,7 +246,7 @@ Cost% 引力魔方 Value =
             REMOVEFILTERS(
                 'a05_e2e_paid_media_crowed_data_d'[crowed_layer],
                 'a05_e2e_paid_media_crowed_data_d'[crowed_type],
-                'a05_e2e_paid_media_crowed_data_d'[crowed_name]
+                'a05_e2e_paid_media_crowed_data_d'[customer_type]
             )
         )
     RETURN
@@ -606,7 +606,7 @@ IsAnyCrowedNotEmpty =
 
 // 步骤1：获取当前上下文中各字段的值（行粒度下 MAX 即当前行的值）
 VAR LayerValue = MAX('a05_e2e_paid_media_crowed_data_d'[crowed_layer])
-VAR NameValue  = MAX('a05_e2e_paid_media_crowed_data_d'[crowed_name])
+VAR NameValue  = MAX('a05_e2e_paid_media_crowed_data_d'[customer_type])
 VAR TypeValue  = MAX('a05_e2e_paid_media_crowed_data_d'[crowed_type])
 
 // 步骤2：逐字段判断"有效"= 不为 BLANK 且 不为空字符串
@@ -652,6 +652,28 @@ RETURN
     )
 
 ```
+### 2.12 度量加起来等于 0 的行过滤
+
+```dax
+引力魔方 IsZero = 
+VAR _Total = 
+    COALESCE([Cost 引力魔方 Value], 0) +
+    COALESCE([Cost% 引力魔方 Value], 0) +
+    COALESCE([ROI 引力魔方 Value], 0)
+RETURN
+    IF(_Total = 0, 0, 1)
+```
+
+```dax
+直通车 IsZero = 
+VAR _Total = 
+    COALESCE([Cost 直通车 Value], 0) +
+    COALESCE([Cost% 直通车 Value], 0) +
+    COALESCE([ROI 直通车 Value], 0)
+RETURN
+    IF(_Total = 0, 0, 1)
+```
+
 ---
 
 ## 3. 度量值清单与 Display Folder
@@ -707,7 +729,7 @@ RETURN
 │                                                                     │
 │  ② a05_e2e_paid_media_crowed_data_d（引力魔方下钻表）                │
 │     字段: data_date, channel, crowed_layer, crowed_type,            │
-│           crowed_name, cost_amt, media_sales_amt                    │
+│           customer_type, cost_amt, media_sales_amt                    │
 │     → #6 Cost 引力魔方 / #7 触点占比 / #8 Cost% / #9 ROI           │
 │                                                                     │
 │  ③ a05_e2e_paid_media_keyword_data_d（直通车下钻表）                 │
@@ -829,7 +851,7 @@ RETURN
 
 #8 和 #12 的分母是"该广告点位合计"，需要移除所有行维度：
 
-- **#8 引力魔方**：`REMOVEFILTERS(crowed_layer, crowed_type, crowed_name)`
+- **#8 引力魔方**：`REMOVEFILTERS(crowed_layer, crowed_type, customer_type)`
 - **#12 直通车**：`REMOVEFILTERS(customer_type, category, plan_name, keyword_name)`
 
 卡片图场景下无行维度，REMOVEFILTERS 不影响结果；但保证将来用于矩阵/表格时也能正确计算占比。

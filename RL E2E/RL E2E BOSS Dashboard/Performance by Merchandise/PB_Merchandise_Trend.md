@@ -15,14 +15,14 @@
 
 | 子模块 | 指标 | 中文名 | 分类 | calc_type | 底表字段 |
 |--------|------|--------|------|-----------|---------|
-| 一 | Fulfillment% | O2O订单履约率 | 比率类 | fulfillment | o2o_fulfillment_shipped_order_cnt / o2o_fulfillment_request_order_cnt |
-| 一 | Request Order Qty | O2O销售订单量（分母项） | 数量类 | fulfillment | o2o_fulfillment_request_order_cnt |
-| 一 | Shipped Order Qty | O2O已配货订单量（分子项） | 数量类 | fulfillment | o2o_fulfillment_shipped_order_cnt |
-| 二 | Total Unfulfilled Order | O2O失败订单数（W Polo + M Polo） | 数量类 | fulfillment | o2o_fulfillment_unshipped_order_cnt |
-| 二 | W Polo Unfulfilled Order | O2O失败订单数（W Polo） | 数量类 | fulfillment | o2o_fulfillment_unshipped_order_cnt |
-| 二 | M Polo Unfulfilled Order | O2O失败订单数（M Polo） | 数量类 | fulfillment | o2o_fulfillment_unshipped_order_cnt |
-| 二 | W Polo Unfulfilled Order Share | W Polo O2O失败订单数占比 | 比率类 | fulfillment | W Polo / Total（派生） |
-| 二 | M Polo Unfulfilled Order Share | M Polo O2O失败订单数占比 | 比率类 | fulfillment | M Polo / Total（派生） |
+| 一 | Fulfillment% | O2O订单履约率 | 比率类 | fulfillment_brand_season | o2o_fulfillment_shipped_order_cnt / o2o_fulfillment_request_order_cnt |
+| 一 | Request Order Qty | O2O销售订单量（分母项） | 数量类 | fulfillment_brand_season | o2o_fulfillment_request_order_cnt |
+| 一 | Shipped Order Qty | O2O已配货订单量（分子项） | 数量类 | fulfillment_brand_season | o2o_fulfillment_shipped_order_cnt |
+| 二 | Total Unfulfilled Order | O2O失败订单数（W Polo + M Polo） | 数量类 | fulfillment_brand_category_summary | o2o_fulfillment_unshipped_order_cnt |
+| 二 | W Polo Unfulfilled Order | O2O失败订单数（W Polo） | 数量类 | fulffulfillment_brand_category_summaryillment | o2o_fulfillment_unshipped_order_cnt |
+| 二 | M Polo Unfulfilled Order | O2O失败订单数（M Polo） | 数量类 | fulfillment_brand_category_summary | o2o_fulfillment_unshipped_order_cnt |
+| 二 | W Polo Unfulfilled Order Share | W Polo O2O失败订单数占比 | 比率类 | fulfillment_brand_category_summary | W Polo / Total（派生） |
+| 二 | M Polo Unfulfilled Order Share | M Polo O2O失败订单数占比 | 比率类 | fulfillment_brand_category_summary | M Polo / Total（派生） |
 
 **核心设计原则**：
 - 每个指标输出独立 Value + Display 度量对（本期 Act 一对），条形图场景不涉及 LY / vs LY
@@ -63,7 +63,7 @@
 | Slicer_Time_Frame_Max | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max | `data_date <= __TimeMax` |
 | 事实表分组字段（brand / category_summary） | 条形图轴直接拉取，模型自动传递筛选 | DAX 无需显式处理（子模块二 brand 硬编码例外，见 3.3） |
 
-> calc_type 在子模块一/二均固定为 "fulfillment"，直接硬编码。
+> calc_type 在子模块一固定为 "fulfillment_brand_season"/子模块二固定为 "fulfillment_brand_category_summary"，直接硬编码。
 
 ### 3.2 子模块二 brand 硬编码与 REMOVEFILTERS 规则
 
@@ -92,7 +92,7 @@
 ## 子模块一：BOSS Fulfillment - Fulfillment% by Label
 
 > 分组维度：条形图按 `brand` 分组（直接拉取事实表字段天然筛选+分组），度量值内部不处理 brand
-> calc_type = "fulfillment" · 底表 a02_e2e_boss_performance_summary_d
+> calc_type = "fulfillment_brand_season" · 底表 a02_e2e_boss_performance_summary_d
 
 ---
 
@@ -106,7 +106,7 @@
 ```dax
 PBM Fulfillment% by Label Value =
 // ========================================
-// 度量值: Fulfillment% by Label Value
+// 度量值: PBM Fulfillment% by Label Value
 // Display Folder: PB Merchandise
 // 用途: O2O订单履约率 by Label（条形图数值）
 // 口径来源: PB Merchandise.md 子模块一 - Fulfillment%
@@ -114,7 +114,7 @@ PBM Fulfillment% by Label Value =
 //   分子: o2o_fulfillment_shipped_order_cnt
 //   分母: o2o_fulfillment_request_order_cnt
 // 筛选条件:
-//   - calc_type = "fulfillment"
+//   - calc_type = "fulfillment_brand_season"
 //   - data_date ∈ [__TimeMin, __TimeMax]（全局时间范围）
 //   - 分组维度 brand 由条形图 Y 轴直接拉取事实表字段自动传递
 //   - 比率类，不除汇率（数量类相除自动抵消）
@@ -126,7 +126,7 @@ PBM Fulfillment% by Label Value =
     VAR __Numerator =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_brand_season",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -134,7 +134,7 @@ PBM Fulfillment% by Label Value =
     VAR __Denominator =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_brand_season",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -149,10 +149,10 @@ PBM Fulfillment% by Label Display =
 // 度量值: Fulfillment% by Label Display
 // Display Folder: PB Merchandise
 // 用途: O2O订单履约率 by Label 格式化显示
-// 依赖: [Fulfillment% by Label Value]
+// 依赖: [PBM Fulfillment% by Label Value]
 // 格式类型: percent_1dp → #,##0.0%
 // ========================================
-    VAR __Value = [Fulfillment% by Label Value]
+    VAR __Value = [PBM Fulfillment% by Label Value]
     RETURN
         IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0.0%"))
 ```
@@ -161,7 +161,7 @@ PBM Fulfillment% by Label Display =
 
 ### 指标 2：Request Order Qty（O2O销售订单量 - 分母项）
 
-> 数量类 · calc_type = "fulfillment" · SUM(o2o_fulfillment_request_order_cnt)
+> 数量类 · calc_type = "fulfillment_brand_season" · SUM(o2o_fulfillment_request_order_cnt)
 
 ### 4.3 Request Order Qty by Label Value
 
@@ -174,7 +174,7 @@ Request Order Qty by Label Value =
 // 口径来源: PB Merchandise.md 子模块一 - Request Order Qty
 // 计算公式: SUM(o2o_fulfillment_request_order_cnt)
 // 筛选条件:
-//   - calc_type = "fulfillment"
+//   - calc_type = "fulfillment_brand_season"
 //   - data_date ∈ [__TimeMin, __TimeMax]（全局时间范围）
 //   - 分组维度 brand 由条形图 Y 轴直接拉取事实表字段自动传递
 // 数据类型: integer → 整数，千分位整数
@@ -184,7 +184,7 @@ Request Order Qty by Label Value =
     VAR __Result =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_brand_season",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -211,7 +211,7 @@ Request Order Qty by Label Display =
 
 ### 指标 3：Shipped Order Qty（O2O已配货订单量 - 分子项）
 
-> 数量类 · calc_type = "fulfillment" · SUM(o2o_fulfillment_shipped_order_cnt)
+> 数量类 · calc_type = "fulfillment_brand_season" · SUM(o2o_fulfillment_shipped_order_cnt)
 
 ### 4.5 Shipped Order Qty by Label Value
 
@@ -224,7 +224,7 @@ Shipped Order Qty by Label Value =
 // 口径来源: PB Merchandise.md 子模块一 - Shipped Order Qty
 // 计算公式: SUM(o2o_fulfillment_shipped_order_cnt)
 // 筛选条件:
-//   - calc_type = "fulfillment"
+//   - calc_type = "fulfillment_brand_season"
 //   - data_date ∈ [__TimeMin, __TimeMax]（全局时间范围）
 //   - 分组维度 brand 由条形图 Y 轴直接拉取事实表字段自动传递
 // 数据类型: integer → 整数，千分位整数
@@ -234,7 +234,7 @@ Shipped Order Qty by Label Value =
     VAR __Result =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_brand_season",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -257,13 +257,25 @@ Shipped Order Qty by Label Display =
         IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0"))
 ```
 
+### 4.7 PBM Trend IsEmpty
+
+```dax
+PBM Trend IsEmpty =
+    IF(
+        ISBLANK([Request Order Qty by Label Value]) &&
+        ISBLANK([Shipped Order Qty by Label Value]),
+        0,
+        1
+    )
+```
+
 ---
 
 ## 子模块二：BOSS M/W POLO Unfulfilled Order by Category
 
 > 分组维度：条形图按 `category_summary` 分组（直接拉取事实表字段天然筛选+分组）
 > brand 硬编码筛选：W Polo + M Polo（以子模块二具体指标定义为准）
-> calc_type = "fulfillment" · 底表 a02_e2e_boss_performance_summary_d
+> calc_type = "fulfillment_brand_category_summary" · 底表 a02_e2e_boss_performance_summary_d
 > 关键约束：计算总值需 REMOVEFILTERS 移除 a02_e2e_boss_performance_summary_d[category] 字段的影响
 
 ---
@@ -284,12 +296,12 @@ Total Unfulfilled Order Value =
 // 口径来源: PB Merchandise.md 子模块二 - Total Unfulfilled Order
 // 计算公式: SUM(o2o_fulfillment_unshipped_order_cnt)
 // 筛选条件:
-//   - calc_type = "fulfillment"
+//   - calc_type = "fulfillment_brand_category_summary"
 //   - brand in ("W Polo", "M Polo")
 //   - data_date ∈ [__TimeMin, __TimeMax]（全局时间范围）
 //   - 分组维度 category_summary 由条形图 Y 轴直接拉取事实表字段自动传递
-//   - REMOVEFILTERS(a02_e2e_boss_performance_summary_d[category])：按 category_summary
-//     分组时移除 category 维度筛选影响，确保汇总值正确
+//   - REMOVEFILTERS(a02_e2e_boss_performance_summary_d[category_summary])：按 category_summary
+//     分组时移除 category_summary 维度筛选影响，确保汇总值正确
 // 数据类型: integer → 整数，千分位整数
 // ========================================
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
@@ -297,11 +309,11 @@ Total Unfulfilled Order Value =
     VAR __Result =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_unshipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_brand_category_summary",
             'a02_e2e_boss_performance_summary_d'[brand] IN {"W Polo", "M Polo"},
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax,
-            REMOVEFILTERS('a02_e2e_boss_performance_summary_d'[category])
+            REMOVEFILTERS('a02_e2e_boss_performance_summary_d'[category_summary])
         )
     RETURN __Result
 ```
@@ -339,7 +351,7 @@ W Polo Unfulfilled Order Value =
 // 口径来源: PB Merchandise.md 子模块二 - W Polo Unfulfilled Order
 // 计算公式: SUM(o2o_fulfillment_unshipped_order_cnt)
 // 筛选条件:
-//   - calc_type = "fulfillment"
+//   - calc_type = "fulfillment_brand_category_summary"
 //   - brand = "W Polo"
 //   - data_date ∈ [__TimeMin, __TimeMax]（全局时间范围）
 //   - 分组维度 category_summary 由条形图 Y 轴直接拉取事实表字段自动传递
@@ -350,7 +362,7 @@ W Polo Unfulfilled Order Value =
     VAR __Result =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_unshipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_brand_category_summary",
             'a02_e2e_boss_performance_summary_d'[brand] = "W Polo",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
@@ -391,7 +403,7 @@ M Polo Unfulfilled Order Value =
 // 口径来源: PB Merchandise.md 子模块二 - M Polo Unfulfilled Order
 // 计算公式: SUM(o2o_fulfillment_unshipped_order_cnt)
 // 筛选条件:
-//   - calc_type = "fulfillment"
+//   - calc_type = "fulfillment_brand_category_summary"
 //   - brand = "M Polo"
 //   - data_date ∈ [__TimeMin, __TimeMax]（全局时间范围）
 //   - 分组维度 category_summary 由条形图 Y 轴直接拉取事实表字段自动传递
@@ -402,7 +414,7 @@ M Polo Unfulfilled Order Value =
     VAR __Result =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_unshipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_brand_category_summary",
             'a02_e2e_boss_performance_summary_d'[brand] = "M Polo",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
@@ -511,14 +523,75 @@ M Polo Unfulfilled Order Share Display =
         IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0.0%"))
 ```
 
+### 4.17 Category Summary W POLO Color
+
+```dax
+Category Summary W POLO Color = 
+VAR CurrentCategory = SELECTEDVALUE ( a02_e2e_boss_performance_summary_d[category_summary] )
+RETURN
+    SWITCH (
+        CurrentCategory,
+        "Sweater",              "#AD8D5D",
+        "Shirt",                "#b5986d",
+        "Knit",                 "#bca37d",
+        "Dresses",              "#be9f71",
+        "Outerwear",            "#c4a87f",
+        "Pant",                 "#d0ba9a",
+        "Handbags",             "#d5c2a8",
+        "Denim",                "#dacbb4",
+        "Skirt",                "#e0d5c2",
+        "Short",                "#F3E9D7",
+        "Belts",                "#f0e8da",
+        "Footwear",             "#cfcac2",
+        "Small Leathergoods",   "#f5efe5",
+        "Scarf",                "#d1cdc6",
+        "Hdwr/Umbrla/Glv/Scrv", "#ecebe7",
+        "#ffffff"  // 默认颜色
+    )
+```
+
+### 4.18 Category Summary M POLO Color
+
+```dax
+Category Summary M POLO Color = 
+VAR CurrentCategory = SELECTEDVALUE ( a02_e2e_boss_performance_summary_d[category_summary] )
+RETURN
+    SWITCH (
+        CurrentCategory,
+        "Knit",                 "#0C2340",
+        "T-Shirt",              "#243853",
+        "Sport Shirt",          "#3B4E65",
+        "Sweater",              "#536378",
+        "Outerwear",            "#47586E",
+        "Hdwr/Umbrla/Glv/Scrv", "#5E6E81",
+        "Pant",                 "#6A788A",
+        "Short",                "#768393",
+        "Belts",                "#818D9C",
+        "Denim",                "#A5ADB8",
+        "Bags",                 "#99A3AF",
+        "Footwear",             "#8D98A6",
+        "Sportcoat",            "#BBBFC5",
+        "Dress Shirt",          "#C4C8CE",
+        "Hosiery",              "#CBCFD3",
+        "Swim",                 "#D3D6D9",
+        "Trouser",              "#E0E1E1",
+        "Neckwear",             "#E3E3E3",
+        "Small Leathergoods",   "#E9E9EA",
+        "Top Coat",             "#F1F1F1",
+        "Underwear",            "#F1F1F1",
+        "Eyewear",              "#FFFFFF",
+        "#ffffff"  // 默认颜色
+    )
+```
+
 ---
 
 ## 5. 度量值清单与 Display Folder
 
 | 序号 | 度量值名称 | Display Folder | 子模块 | 指标 | 类型 | 格式 |
 |------|-----------|----------------|--------|------|------|------|
-| 1 | Fulfillment% by Label Value | PB Merchandise | 一 | Fulfillment% | Value | percent_1dp |
-| 2 | Fulfillment% by Label Display | PB Merchandise | 一 | Fulfillment% | Display | percent_1dp |
+| 1 | PBM Fulfillment% by Label Value | PB Merchandise | 一 | Fulfillment% | Value | percent_1dp |
+| 2 | PBM Fulfillment% by Label Display | PB Merchandise | 一 | Fulfillment% | Display | percent_1dp |
 | 3 | Request Order Qty by Label Value | PB Merchandise | 一 | Request Order Qty | Value | integer |
 | 4 | Request Order Qty by Label Display | PB Merchandise | 一 | Request Order Qty | Display | integer |
 | 5 | Shipped Order Qty by Label Value | PB Merchandise | 一 | Shipped Order Qty | Value | integer |
@@ -543,7 +616,7 @@ M Polo Unfulfilled Order Share Display =
 | 配置项 | 值 |
 |--------|-----|
 | Y 轴（分组） | a02_e2e_boss_performance_summary_d[brand]（直接拉取，天然筛选+分组） |
-| X 轴（数值） | [Fulfillment% by Label Value] 或 [Fulfillment% by Label Display] |
+| X 轴（数值） | [PBM Fulfillment% by Label Value] 或 [PBM Fulfillment% by Label Display] |
 | 排序 | 按 X 轴数值从高到低排序（口径文档要求） |
 | 全局筛选器 | Slicer_Time_Frame_Min、Slicer_Time_Frame_Max |
 
@@ -589,7 +662,7 @@ SELECT
     SUM(o2o_fulfillment_request_order_cnt) AS Request_Order_Qty,
     SUM(o2o_fulfillment_shipped_order_cnt) * 1.0 / SUM(o2o_fulfillment_request_order_cnt) AS Fulfillment_Pct
 FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'fulfillment'
+WHERE calc_type = 'fulfillment_brand_season'
   AND data_date BETWEEN '2025-06-29' AND '2025-08-09'
 GROUP BY brand
 ORDER BY Fulfillment_Pct DESC;
@@ -604,7 +677,7 @@ SELECT
     category_summary,
     SUM(o2o_fulfillment_unshipped_order_cnt) AS Total_Unfulfilled_Order
 FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'fulfillment'
+WHERE calc_type = 'fulfillment_brand_category_summary'
   AND brand IN ('W Polo', 'M Polo')
   AND data_date BETWEEN '2025-06-29' AND '2025-08-09'
 GROUP BY category_summary
@@ -615,7 +688,7 @@ SELECT
     category_summary,
     SUM(o2o_fulfillment_unshipped_order_cnt) AS W_Polo_Unfulfilled_Order
 FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'fulfillment'
+WHERE calc_type = 'fulfillment_brand_category_summary'
   AND brand = 'W Polo'
   AND data_date BETWEEN '2025-06-29' AND '2025-08-09'
 GROUP BY category_summary
@@ -626,7 +699,7 @@ SELECT
     category_summary,
     SUM(o2o_fulfillment_unshipped_order_cnt) AS M_Polo_Unfulfilled_Order
 FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'fulfillment'
+WHERE calc_type = 'fulfillment_brand_category_summary'
   AND brand = 'M Polo'
   AND data_date BETWEEN '2025-06-29' AND '2025-08-09'
 GROUP BY category_summary
@@ -642,7 +715,7 @@ ORDER BY M_Polo_Unfulfilled_Order DESC;
 
 ## 8. 注意事项
 
-1. **calc_type 固定**：子模块一、二所有度量值均硬编码 `calc_type = "fulfillment"`，与口径文档一致。
+1. **calc_type 固定**：子模块一固定为 `calc_type = "fulfillment_brand_season"`/子模块二固定为 `calc_type = "fulfillment_brand_category_summary"`，与口径文档一致。
 
 2. **brand 取值**：子模块二 brand 取值以子模块二具体指标定义为准 — `brand in ("W Polo", "M Polo")`（口径文档通用规则汇总中出现的 "1. W Polo"、"2. M Polo" 为旧版前缀命名，本方案不采用）。若实际底表 brand 字段为 "1. W Polo"、"2. M Polo" 等带前缀格式，需调整度量值中的硬编码值。
 

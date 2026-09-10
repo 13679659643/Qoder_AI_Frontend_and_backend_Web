@@ -62,7 +62,7 @@ FROM (
                          LEFT(`timeframe_key`, 4),
                          '-',
                          LPAD(
-                             (CAST(RIGHT(`timeframe_key`, 2) AS UNSIGNED) - 1) * 3 + 1,
+                             (CAST(RIGHT(`timeframe_key`, 2) AS INT) - 1) * 3 + 1,
                              2, '0'
                          )
                      )

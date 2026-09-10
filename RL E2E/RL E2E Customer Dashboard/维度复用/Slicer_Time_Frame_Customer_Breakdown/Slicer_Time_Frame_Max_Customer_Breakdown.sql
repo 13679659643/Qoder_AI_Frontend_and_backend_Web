@@ -59,7 +59,7 @@ FROM (
                 THEN CONCAT(
                          LEFT(`timeframe_key`, 4),
                          '-',
-                         LPAD(CAST(RIGHT(`timeframe_key`, 2) AS UNSIGNED) * 3, 2, '0')
+                         LPAD(CAST(RIGHT(`timeframe_key`, 2) AS INT) * 3, 2, '0')
                      )
 
             WHEN `timeframe_label` = '月'

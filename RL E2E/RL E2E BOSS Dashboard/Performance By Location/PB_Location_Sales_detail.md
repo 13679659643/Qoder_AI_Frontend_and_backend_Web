@@ -833,6 +833,22 @@ Return% vs LY Display =
         )
 ```
 
+### 4.31 PBM Sales Detail IsEmpty
+```dax
+PBM Sales Detail IsEmpty = 
+VAR _Total = 
+    COALESCE([SLS Actual Value], 0) +
+    COALESCE([SLS LY Value], 0) +
+    COALESCE([SLS vs LY Value], 0) +
+    COALESCE([Demand SLS Actual Value], 0) +
+    COALESCE([Demand SLS LY Value], 0) +
+    COALESCE([Demand SLS vs LY Value], 0) +
+    COALESCE([SLS Penetration Actual Value], 0) +
+    COALESCE([SLS Penetration LY Value], 0) +
+    COALESCE([SLS Penetration vs LY Value], 0)
+RETURN
+    IF(_Total = 0, 0, 1)
+```
 ---
 
 ## 5. 度量值清单与 Display Folder

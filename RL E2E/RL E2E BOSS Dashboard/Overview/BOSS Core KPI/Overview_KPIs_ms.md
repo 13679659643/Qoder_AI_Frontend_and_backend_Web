@@ -617,7 +617,12 @@ BOSS Core KPI vs LY Base Value =
             BLANK(),
             DIVIDE(__ActValue - __LYValue, __LYValue)
         )
-    VAR __VSLYDiff = __ActValue - __LYValue
+    VAR __VSLYDiff = 
+        IF(
+            ISBLANK(__LYValue) || __LYValue = 0,
+            BLANK(),
+            __ActValue - __LYValue
+        )
 
     RETURN
         SWITCH(

@@ -65,7 +65,7 @@
 | Slicer_Currency_Selection | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate / Currency_Symbol |
 | Dim_ColMetric_Fulfillment_PB_Merchandise | 断开维度 | SELECTEDVALUE 读取 Metric_ID / ColType / Metric_Format_* |
 
-> 不使用行维度表，行字段直接拉取事实表字段。calc_type 在本方案所有指标下固定为 "fulfillment"，直接硬编码。
+> 不使用行维度表，行字段直接拉取事实表字段。calc_type 在本方案所有指标下固定为 "fulfillment_category_summary_category_season_brand"，直接硬编码,除了Avg. No. of Store Passed Before Order Got Accepted和Avg. Processing Time的calc_type = "fulfillment"。
 
 ---
 
@@ -134,7 +134,7 @@ Dim_ColMetric_Fulfillment_PB_Merchandise（断开维度，列头）
 | Slicer_Currency_Selection | 断开维度，SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol | 金额类指标 ÷ Currency_ExchangeRate |
 | 事实表分组字段 | 表格行/列直接拉取，模型自动传递筛选 | DAX 无需显式处理 |
 
-> calc_type 在本方案所有指标下固定为 "fulfillment"，直接硬编码。
+> calc_type 在本方案所有指标下固定为 "fulfillment_category_summary_category_season_brand"，直接硬编码,除了Avg. No. of Store Passed Before Order Got Accepted和Avg. Processing Time的calc_type = "fulfillment"。
 
 ### 3.4 vs LY 时间偏移规则（财历映射）
 
@@ -224,7 +224,8 @@ Fulfillment PB Merchandise Act Base Value =
 //       a02_e2e_boss_performance_summary_d, a02_e2e_boss_fulfillment_request_data_d
 // 口径来源: PB Merchandise.md 子模块三 - 从 4. Avg. No. of Store Passed 起的本期值
 // 筛选上下文:
-//   - calc_type = "fulfillment"（硬编码，本方案所有指标固定）
+//   - calc_type = "fulfillment_category_summary_category_season_brand"（硬编码，本方案所有指标固定）
+//   - 除了Avg. No. of Store Passed Before Order Got Accepted和Avg. Processing Time的calc_type = "fulfillment"。
 //   - data_date ∈ [__TimeMin, __TimeMax]（全局时间范围，区间 SUM）
 //   - Product Volume（Metric_ID 36）特殊处理：库存取 data_date = __TimeMax（末日 SUM），销量取区间 SUM
 //   - 金额类指标（Metric_IsCurrencyAmount=TRUE）÷ __FXRate（汇率）
@@ -240,96 +241,147 @@ Fulfillment PB Merchandise Act Base Value =
     // ── 汇率（金额类指标需要除以汇率）──
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
+    // ── 主表维度：brand, product_type, category_summary, category ──
+    VAR __Brand = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[brand] )
+    VAR __PT    = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[product_type] )
+    VAR __CS    = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[category_summary] )
+    VAR __Cat   = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[category] )
+
+    // 层级动态筛选：未展开（BLANK）时保留该列全部值 = 不筛选
+    VAR __FilterBrand =
+        FILTER (
+            ALL ( 'a02_e2e_boss_fulfillment_request_data_d'[brand] ),
+            __Brand = BLANK () || 'a02_e2e_boss_fulfillment_request_data_d'[brand] = __Brand
+        )
+    VAR __FilterPT =
+        FILTER (
+            ALL ( 'a02_e2e_boss_fulfillment_request_data_d'[product_type] ),
+            __PT = BLANK () || 'a02_e2e_boss_fulfillment_request_data_d'[product_type] = __PT
+        )
+    VAR __FilterCS =
+        FILTER (
+            ALL ( 'a02_e2e_boss_fulfillment_request_data_d'[category_summary] ),
+            __CS = BLANK () || 'a02_e2e_boss_fulfillment_request_data_d'[category_summary] = __CS
+        )
+    VAR __FilterCat =
+        FILTER (
+            ALL ( 'a02_e2e_boss_fulfillment_request_data_d'[category] ),
+            __Cat = BLANK () || 'a02_e2e_boss_fulfillment_request_data_d'[category] = __Cat
+        )
+    
+    
+    // 公共筛选片段（日期 + calc_type），避免重复
+    VAR __BaseFilters =
+        FILTER (
+            ALL ( 'a02_e2e_boss_fulfillment_request_data_d'[data_date],
+                  'a02_e2e_boss_fulfillment_request_data_d'[calc_type] ),
+            'a02_e2e_boss_fulfillment_request_data_d'[calc_type] = "fulfillment"
+                && 'a02_e2e_boss_fulfillment_request_data_d'[data_date] >= __TimeMin
+                && 'a02_e2e_boss_fulfillment_request_data_d'[data_date] <= __TimeMax
+        )
+    
     // ═══════════════════════════════════════
     // a02_e2e_boss_fulfillment_request_data_d 基础聚合（Metric_ID 1, 2 专用）
     // calc_type = "fulfillment"（本期区间 SUM）
+    // 层级规则：展开到哪层匹配到哪层，父行 = 子行之和（含 brand 总计行）
     // ═══════════════════════════════════════
     VAR __RequestTimes_Act =
-        CALCULATE(
-            SUM('a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_times]),
-            'a02_e2e_boss_fulfillment_request_data_d'[calc_type] = "fulfillment",
-            'a02_e2e_boss_fulfillment_request_data_d'[data_date] >= __TimeMin,
-            'a02_e2e_boss_fulfillment_request_data_d'[data_date] <= __TimeMax
+        CALCULATE (
+            SUM ( 'a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_times] ),
+            REMOVEFILTERS ( 'Slicer_Fulfillment_Calc_Type' ),
+            __BaseFilters,
+            __FilterBrand,
+            __FilterPT,
+            __FilterCS,
+            __FilterCat
         )
+    
     VAR __RequestDuration_Act =
-        CALCULATE(
-            SUM('a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_duration]),
-            'a02_e2e_boss_fulfillment_request_data_d'[calc_type] = "fulfillment",
-            'a02_e2e_boss_fulfillment_request_data_d'[data_date] >= __TimeMin,
-            'a02_e2e_boss_fulfillment_request_data_d'[data_date] <= __TimeMax
+        CALCULATE (
+            SUM ( 'a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_duration] ),
+            REMOVEFILTERS ( 'Slicer_Fulfillment_Calc_Type' ),
+            __BaseFilters,
+            __FilterBrand,
+            __FilterPT,
+            __FilterCS,
+            __FilterCat
         )
+    
     VAR __RequestSkuQty_Act =
-        CALCULATE(
-            SUM('a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_sku_qty]),
-            'a02_e2e_boss_fulfillment_request_data_d'[calc_type] = "fulfillment",
-            'a02_e2e_boss_fulfillment_request_data_d'[data_date] >= __TimeMin,
-            'a02_e2e_boss_fulfillment_request_data_d'[data_date] <= __TimeMax
+        CALCULATE (
+            SUM ( 'a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_sku_qty] ),
+            REMOVEFILTERS ( 'Slicer_Fulfillment_Calc_Type' ),
+            __BaseFilters,
+            __FilterBrand,
+            __FilterPT,
+            __FilterCS,
+            __FilterCat
         )
-
+    
     // ═══════════════════════════════════════
     // a02_e2e_boss_performance_summary_d 基础聚合（Metric_ID 3-36）
-    // calc_type = "fulfillment"（本期区间 SUM）
+    // calc_type = "fulfillment_category_summary_category_season_brand"（本期区间 SUM）
     // ═══════════════════════════════════════
     VAR __ShippedOrderCnt_Act =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __RequestOrderCnt_Act =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __RequestQty_Act =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_qty]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __RequestSalesAmt_Act =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_sales_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __ShippedQty_Act =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_qty]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __ShippedSalesAmt_Act =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_sales_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __UnshippedOrderCnt_Act =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_unshipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __UnshippedQty_Act =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_unshipped_qty]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
     VAR __UnshippedSalesAmt_Act =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_unshipped_sales_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -341,7 +393,7 @@ Fulfillment PB Merchandise Act Base Value =
     VAR __StockQty_Act =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[stock_qty]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] = __TimeMax
         )
 
@@ -354,7 +406,7 @@ Fulfillment PB Merchandise Act Base Value =
             __MetricID,
             // ── Order Processing Efficiency 分组（a02_e2e_boss_fulfillment_request_data_d）──
             1,  DIVIDE(__RequestTimes_Act, __RequestSkuQty_Act),                                           // Avg. No. of Store Passed Act
-            2,  DIVIDE(DIVIDE(__RequestDuration_Act, __RequestSkuQty_Act),60),                             // Avg. Processing Time(Hour) Act
+            2,  DIVIDE(__RequestDuration_Act, __RequestSkuQty_Act),                             // Avg. Processing Time(Hour) Act
             // ── Fulfillment% 分组 ──
             3,  DIVIDE(__ShippedOrderCnt_Act, __RequestOrderCnt_Act),                                      // Fulfillment% Act
             // ── Request Order 分组 ──
@@ -405,69 +457,69 @@ Fulfillment PB Merchandise LY Base Value =
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
     // ═══════════════════════════════════════
-    // 基础聚合：calc_type = "fulfillment"（去年同期区间 SUM）
+    // 基础聚合：calc_type = "fulfillment_category_summary_category_season_brand"（去年同期区间 SUM）
     // 注：LY 仅涉及 summary 表，request_data 表的指标 4、5 无 LY 列
     // ═══════════════════════════════════════
     VAR __ShippedOrderCnt_LY =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
     VAR __RequestOrderCnt_LY =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
     VAR __RequestQty_LY =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_qty]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
     VAR __RequestSalesAmt_LY =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_sales_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
     VAR __ShippedQty_LY =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_qty]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
     VAR __ShippedSalesAmt_LY =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_sales_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
     VAR __UnshippedOrderCnt_LY =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_unshipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
     VAR __UnshippedQty_LY =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_unshipped_qty]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
     VAR __UnshippedSalesAmt_LY =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_unshipped_sales_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment_category_summary_category_season_brand",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -998,7 +1050,7 @@ WHERE calc_type = 'fulfillment'
 SELECT
   SUM(o2o_fulfillment_shipped_order_cnt) * 1.0 / SUM(o2o_fulfillment_request_order_cnt) AS Fulfillment_Pct_Actual
 FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'fulfillment'
+WHERE calc_type = 'fulfillment_category_summary_category_season_brand'
   AND data_date BETWEEN '2025-06-29' AND '2025-08-09';
 
 -- Fulfillment% vs LY = Fulfillment_Pct_Actual - Fulfillment_Pct_LY（delta_bp，×10000 转 bp）
@@ -1006,13 +1058,13 @@ WHERE calc_type = 'fulfillment'
 -- Request Order Qty（本期）
 SELECT SUM(o2o_fulfillment_request_order_cnt) AS Request_Order_Qty_Actual
 FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'fulfillment'
+WHERE calc_type = 'fulfillment_category_summary_category_season_brand'
   AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
 
 -- Shipped Order Amt（本期，金额类需 ÷ 汇率）
 SELECT SUM(o2o_fulfillment_shipped_sales_amt) AS Shipped_Order_Amt_Actual
 FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'fulfillment'
+WHERE calc_type = 'fulfillment_category_summary_category_season_brand'
   AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
 
 -- Product Volume（本期，库存取末日 + 销量取区间）
@@ -1020,10 +1072,10 @@ WHERE calc_type = 'fulfillment'
 -- 销量：sum(o2o_fulfillment_shipped_qty) WHERE data_date BETWEEN __TimeMin AND __TimeMax（整个筛选周期）
 SELECT
   (SELECT SUM(stock_qty) FROM a02_e2e_boss_performance_summary_d
-   WHERE calc_type = 'fulfillment' AND data_date = '__TimeMax')  -- 末日库存
+   WHERE calc_type = 'fulfillment_category_summary_category_season_brand' AND data_date = '__TimeMax')  -- 末日库存
   +
   (SELECT SUM(o2o_fulfillment_shipped_qty) FROM a02_e2e_boss_performance_summary_d
-   WHERE calc_type = 'fulfillment' AND data_date BETWEEN '__TimeMin' AND '__TimeMax')  -- 区间销量
+   WHERE calc_type = 'fulfillment_category_summary_category_season_brand' AND data_date BETWEEN '__TimeMin' AND '__TimeMax')  -- 区间销量
   AS Product_Volume_Actual;
 
 -- Unfulfillment% O2O订单未履约率（本期）
@@ -1031,7 +1083,7 @@ SELECT
 SELECT
   SUM(o2o_fulfillment_unshipped_order_cnt) * 1.0 / SUM(o2o_fulfillment_request_order_cnt) AS Unfulfillment_Pct_Actual
 FROM a02_e2e_boss_performance_summary_d
-WHERE calc_type = 'fulfillment'
+WHERE calc_type = 'fulfillment_category_summary_category_season_brand'
   AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
 ```
 
@@ -1055,7 +1107,7 @@ WHERE calc_type = 'fulfillment'
    - 有 LY/vs LY 的分组：Act = 组内首 ID，LY = Act + 1，vs LY = Act + 2；vs LY 行的 Act 对应 Metric_ID - 2，LY 对应 Metric_ID - 1
    - 无 LY/vs LY 的分组（Order Processing Efficiency / Product Volume）：Metric_ID 直接返回 Act 值，不进入 vs LY 派生分支
 
-5. **calc_type 固定**：本方案所有度量值均硬编码 `calc_type = "fulfillment"`。
+5. **calc_type 固定**：本方案所有度量值均硬编码 `calc_type = "fulfillment_category_summary_category_season_brand"`,除了Avg. No. of Store Passed Before Order Got Accepted和Avg. Processing Time的calc_type = "fulfillment"`。
 
 6. **LY 财历映射**：周/月/季/年粒度按财年定义，LY 采用财历映射（直接读取日期表内置 TimeFrame_Min_LY / TimeFrame_Max_LY 字段），不使用 EDATE -12。
 
