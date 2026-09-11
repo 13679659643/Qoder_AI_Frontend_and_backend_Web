@@ -126,7 +126,7 @@ let
 	    Platform_Sort,
 	    Channel,
 	     IF(Platform = 'TM',Channel_Sort,Channel_Sort*10) AS Channel_Sort,
-		//  Channel_Label,
+		--  Channel_Label,
 	    IF(Platform = 'TM',Channel_Label,CONCAT(Channel_Label,CHAR(8203))) AS Channel_Label,
 	    Channel_Description,
 	    Channel_Type,

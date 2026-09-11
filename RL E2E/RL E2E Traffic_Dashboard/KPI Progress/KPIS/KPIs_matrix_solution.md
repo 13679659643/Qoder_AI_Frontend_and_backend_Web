@@ -314,7 +314,13 @@ KPIs Current Base Value =
             "user_id", [user_id],
             "shop_info_id", [shop_info_id]
         )
-    VAR __TotalNewCustCnt = COUNTROWS(EXCEPT(__NewCust_Step1, __OldCust_Step2))
+
+    VAR __TotalNewCustCnt = 
+        COUNTROWS(
+        EXCEPT (
+        SUMMARIZE ( __NewCust_Step1, [user_id] ), -- 去重到用户级
+        SUMMARIZE ( __OldCust_Step2, [user_id] )
+    ))
 
     // ═══════════════════════════════════════
     // 第二品类：a05_e2e_paid_media_product_data_d

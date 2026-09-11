@@ -1,5 +1,32 @@
 let
-    源 = Odbc.Query("dsn=bytehouse_rl", "-- ========================================#(lf)-- SQL: 同期日期维度数据#(lf)-- 用途: Power BI 日期表加载，用于""同期""（同比/上期）筛选器#(lf)-- 表: indep_rl_ads.a05_e2e_paid_media_channel_data#(lf)-- 说明: #(lf)--   - 同期日期用于 vs LY 计算，日期范围与本期独立#(lf)--   - 通过 SELECTEDVALUE 在 DAX 中读取，断开维度加载#(lf)--   - 字段加 LY_ 前缀区分，避免与本期字段混淆#(lf)--   - dt 和 data_date 转为 DATE 类型#(lf)--   - etl_time 保持原始 STRING 保留时间部分#(lf)-- ========================================#(lf)#(lf)SELECT DISTINCT#(lf)    etl_time                                    AS `LY_数据更新时间`,#(lf)    STR_TO_DATE(dt, '%Y-%m-%d')                   AS `LY_分区字段_数据快照日期`,#(lf)    data_type                                   AS `LY_数据类型`,#(lf)    STR_TO_DATE(data_date, '%Y-%m-%d')            AS `LY_数据日期`,#(lf)    data_week                                   AS `LY_数据周`,#(lf)    data_week_name                              AS `LY_数据周名称`,#(lf)    data_month                                  AS `LY_数据月份`,#(lf)    data_month_name                             AS `LY_数据月份名称`,#(lf)    data_quarter                                AS `LY_数据季度`,#(lf)    data_quarter_name                           AS `LY_数据季度名称`,#(lf)    data_year                                   AS `LY_数据年份`,#(lf)    data_year_name                              AS `LY_数据年份名称`#(lf)FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d#(lf)WHERE data_type = 'day'#(lf)ORDER BY STR_TO_DATE(data_date, '%Y-%m-%d');"),
+    源 = Odbc.Query("dsn=bytehouse_rl", "
+-- ======================================== 
+-- SQL: 同期日期维度数据 
+-- 用途: Power BI 日期表加载，用于""同期""（同比/上期）筛选器 
+-- 表: indep_rl_ads.a05_e2e_paid_media_channel_data 
+-- 说明:  
+-- - 同期日期用于 vs LY 计算，日期范围与本期独立 
+-- - 通过 SELECTEDVALUE 在 DAX 中读取，断开维度加载 
+-- - 字段加 LY_ 前缀区分，避免与本期字段混淆 
+-- - dt 和 data_date 转为 DATE 类型 
+-- - etl_time 保持原始 STRING 保留时间部分 
+-- ========================================  
+SELECT 
+    DISTINCT etl_time                           AS `LY_数据更新时间`,     
+    STR_TO_DATE(dt, '%Y-%m-%d')                 AS `LY_分区字段_数据快照日期`,     
+    data_type                                   AS `LY_数据类型`,     
+    STR_TO_DATE(data_date, '%Y-%m-%d')          AS `LY_数据日期`,     
+    data_week                                   AS `LY_数据周`,     
+    data_week_name                              AS `LY_数据周名称`,    
+    data_month                                  AS `LY_数据月份`,     
+    data_month_name                             AS `LY_数据月份名称`,     
+    data_quarter                                AS `LY_数据季度`,     
+    data_quarter_name                           AS `LY_数据季度名称`,     
+    data_year                                   AS `LY_数据年份`,     
+    data_year_name                              AS `LY_数据年份名称` 
+FROM indep_rl_ads.a05_e2e_paid_media_channel_data_d 
+    WHERE data_type = 'day' ORDER BY STR_TO_DATE(data_date, '%Y-%m-%d');
+    "),
     筛选的行 = Table.SelectRows(源, each ([LY_数据日期] <> null))
 in
     筛选的行
