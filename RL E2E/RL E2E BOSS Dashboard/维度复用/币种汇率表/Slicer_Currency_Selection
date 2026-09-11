@@ -1,0 +1,46 @@
+Slicer_Currency_Selection = 
+// 功能：创建币种维度表，用于报表中的货币单位切换与汇率转换
+// 用途：用户可通过此表选择以人民币或美元展示 KPI 金额类数据
+//       数据源仅存储 RMB，选择 USD 时通过 Currency_ExchangeRate 进行汇率换算
+// 参数表名称：Currency
+// 遵循通用参数表模板规范
+// 注意：USD 汇率动态取自数仓 dim_t00_currency 表，随数据刷新自动更新
+
+VAR _ExchangeRate = 
+    // 从数仓汇率表中获取 USD→CNY 最新有效汇率
+    MAXX(
+        FILTER(
+            'dim_t00_currency',
+            'dim_t00_currency'[source_currency_code] = "USD"       // 源币种：美元
+                && 'dim_t00_currency'[target_currency_code] = "CNY" // 目标币种：人民币
+                && 'dim_t00_currency'[is_valid] = 1                 // 仅取有效记录
+        ),
+        'dim_t00_currency'[exchange_rate]
+    )
+
+RETURN
+UNION(
+    // ==================== RMB - 人民币（基准币种，汇率 = 1，即原始值） ====================
+    ROW(
+        "Currency_ID",              "RMB",                              // 主键标识
+        "Currency_Label",           "RMB",                              // 显示标签
+        "Currency_Sort",            10,                                 // 排序顺序（起始10，步长10）
+        "Currency_Description",     "人民币，中国境内业务默认结算货币",    // 详细描述
+        "Currency_IsDefault",       TRUE,                               // 是否默认选中
+        "Currency_IsActive",        TRUE,                               // 是否激活状态
+        "Currency_Symbol",          "¥",                                // 货币符号
+        "Currency_ExchangeRate",    1.0                                 // 汇率乘数：原始值不转换
+    ),
+
+    // ==================== USD - 美元（汇率动态取自数仓） ====================
+    ROW(
+        "Currency_ID",              "USD",                              // 主键标识
+        "Currency_Label",           "USD",                              // 显示标签
+        "Currency_Sort",            20,                                 // 排序顺序（起始10，步长10）
+        "Currency_Description",     "美元，用于跨境业务或集团汇报口径",   // 详细描述
+        "Currency_IsDefault",       FALSE,                              // 非默认选项
+        "Currency_IsActive",        TRUE,                               // 是否激活状态
+        "Currency_Symbol",          "$",                                // 货币符号
+        "Currency_ExchangeRate",    _ExchangeRate                       // 汇率乘数：动态取自数仓，RMB ÷ 汇率 = USD
+    )
+)
