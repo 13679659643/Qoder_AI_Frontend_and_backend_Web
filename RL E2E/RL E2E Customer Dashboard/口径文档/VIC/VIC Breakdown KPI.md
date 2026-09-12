@@ -7,6 +7,7 @@
 > **is_member使用**: VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)，如果没有筛选，则默认TTL VIC。这样过滤事实表a03_e2e_customer_data_m[is_member] = __IsMemberFilter
 > **is_employee使用**: VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)，如果没有筛选，则默认Yes。这样过滤事实表a03_e2e_customer_data_m[is_employee] = __IsEmployeeFilter
 > **is_member和is_employee维度表路径**:is_member： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\IsMemberFilter；is_employee： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\Slicer_Is_Employee_Selection
+> **口径修订**: 2026-09-12 — 澄清子模块五 DCom VIC Breakdown 的 Step 1 + Step 2 分步口径（两步时间范围不同不能合并，Step 2 = 切片器所选完整时间范围，见子模块五说明）；全客分母（vs Store / SLS% 分母）同样 Step 1 + Step 2 分步，与 VIC 侧唯一区别是 Step 1 的筛选条件（is_xxx_vic in (0,1) vs =1）；修正全局逻辑 end period 说明示例笔误
 
 ---
 
@@ -24,13 +25,20 @@
 | **is_member使用** | VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)，如果没有筛选，则默认TTL VIC。这样过滤事实表a03_e2e_customer_data_m[is_member] = __IsMemberFilter |
 | **is_employee使用** | VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)，如果没有筛选，则默认Yes。这样过滤事实表a03_e2e_customer_data_m[is_employee] = __IsEmployeeFilter |
 | **is_member和is_employee维度表路径** | is_member： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\IsMemberFilter；is_employee： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\Slicer_Is_Employee_Selection |
-| **end period说明** | 所选时间范围的最后一个财月,Slicer_Time_Frame_Max维度表已经给出了具体的Last_Fiscal_Month、Last_Fiscal_Month_Min等字段，只关注Slicer_Time_Frame_Max值,比如2026-09，只关注2023-09；2026 Q2，只关注2026-06；财年2026，对应最后一个财月只关注2026-12； |
+| **end period说明** | 所选时间范围的最后一个财月,Slicer_Time_Frame_Max维度表已经给出了具体的Last_Fiscal_Month、Last_Fiscal_Month_Min等字段，只关注Slicer_Time_Frame_Max值,比如 2023-09 ~ 2026-09，只关注 2026-09；2026 Q2，只关注2026-06；财年2026，对应最后一个财月只关注2026-12； |
 
 ---
 
 ## 子模块五：DCom VIC Breakdown
 
 > **分组维度**: 按 VIC 类型（New VIC / Retention VIC）区分，都是基于dt = 所选时间范围end period的情况下，New VIC和Retention VIC的区别仅在于is_new_vic = 1和is_retention_vic = 1的筛选条件。其他的，按 `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理分组。
+>
+> **Step 1 + Step 2 分步口径（2026-09-12 澄清）**: SLS / SLS% / ACV / UPT / AUR / Freq. 的计算公式均为两步法，**两步时间范围不同，不能合并区间计算**：
+> - **Step 1**（end period 当月框定 VIC 买家）: `dt = 所选时间范围 end period`（`Last_Fiscal_Month_Min ~ Last_Fiscal_Month_Max` 当月单月），筛选 `is_new_vic = 1`（或 `is_retention_vic = 1`），框定 user_id 范围
+> - **Step 2**（所选时间范围聚合）: 切片器所选完整时间范围（`TimeFrame_Min ~ TimeFrame_Max`），对 Step 1 框定的 user_id 集合做 `sum(net_pay_amt)` / `sum(net_pay_qty)` / `sum(net_pay_order_cnt)` 聚合；`is_xxx_vic = 1` 仅用于 Step 1 框定，Step 2 不再施加；`platform, shop_info_id` 分组维度由模型自动传递保留（Step 2 不移除分组维度，DAX 无需显式处理）
+> - **例外（单步口径）**: ACV / Freq. 分母 `count(distinct user_id)` 口径明确为 "dt = 所选时间范围 end period，筛选 is_xxx_vic = 1"，保持 end period 当月单步聚合（即 Step 1 框定的 user_id 数量）
+> - **全客分母口径（同样分步）**: SLS% 分母与 vs Store 全客分母均为 Step 1 + Step 2 分步——Step 1 在 end period 当月筛选 `is_xxx_vic in (0, 1)` 框定全客 user_id 集合，Step 2 在所选时间范围（TimeFrame 区间）对该集合做 sum 聚合（`is_xxx_vic in (0,1)` 不再施加）；user_id 计数部分为 end period 当月单步（Step 1 集合数量，同 ACV/Freq. 例外口径）。全客与 VIC 侧唯一区别是 Step 1 的筛选条件（`in (0,1)` 全客 vs `=1` VIC）
+> - **LY / LP 版本**: Step 1 用 LY/LP end period 当月（`Last_Fiscal_Month_*_LY/LP`），Step 2 用 LY/LP 所选时间范围（`TimeFrame_Min/Max_LY/LP`），全部从 Slicer_Time_Frame_Max 维度表读取
 
 ### 1. SLS（Net_New VIC） — 净销售额
 
@@ -84,7 +92,7 @@
 | **指标名称** | SLS% |
 | **指标名称中文** | 净销售额占比 |
 | **业务定义** | New VIC 买家净销售额/总买家净销售额 |
-| **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 is_new_vic = 1，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_amt)。分母：所选时间范围对应的 sum(net_pay_amt) |
+| **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 is_new_vic = 1，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_amt)。分母：Step 1 在 dt = 所选时间范围 end period，筛选 is_new_vic in (0, 1)，框定全客 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_amt) |
 | **分子** | `net_pay_amt`（`is_new_vic = 1`） |
 | **分母** | `net_pay_amt`（`is_new_vic in (0, 1)`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
@@ -174,7 +182,7 @@
 | **指标名称** | ACV vs Store |
 | **指标名称中文** | 客单价对比全客 |
 | **业务定义** | New VIC 客单价相对全客客单价的变化率 |
-| **计算公式** | New VIC ACV / 全客 ACV - 1 |
+| **计算公式** | New VIC ACV / 全客 ACV - 1（分子分母口径对称，均为 Step1+Step2 分步：Step 1 在 end period 当月框定 user_id（VIC 筛选 is_new_vic = 1，全客筛选 is_new_vic in (0,1)），Step 2 在所选时间范围做 sum 聚合；count(distinct user_id) = end period 当月单步） |
 | **分子** | New VIC ACV：`net_pay_amt`（`is_new_vic = 1`）；全客 ACV：`net_pay_amt`（`is_new_vic in (0, 1)`） |
 | **分母** | New VIC ACV：`user_id`（`is_new_vic = 1`）；全客 ACV：`user_id`（`is_new_vic in (0, 1)`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
@@ -236,7 +244,7 @@
 | **指标名称** | UPT vs Store |
 | **指标名称中文** | 客单件对比全客 |
 | **业务定义** | New VIC 客单件相对全客客单件的变化率 |
-| **计算公式** | New VIC UPT / 全客 UPT - 1 |
+| **计算公式** | New VIC UPT / 全客 UPT - 1（分子分母口径对称，均为 Step1+Step2 分步：Step 1 在 end period 当月框定 user_id（VIC 筛选 is_new_vic = 1，全客筛选 is_new_vic in (0,1)），Step 2 在所选时间范围聚合） |
 | **分子** | New VIC UPT：`net_pay_qty`（`is_new_vic = 1`）；全客 UPT：`net_pay_qty`（`is_new_vic in (0, 1)`） |
 | **分母** | New VIC UPT：`net_pay_order_cnt`（`is_new_vic = 1`）；全客 UPT：`net_pay_order_cnt`（`is_new_vic in (0, 1)`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
@@ -298,7 +306,7 @@
 | **指标名称** | AUR vs Store |
 | **指标名称中文** | 件单价对比全客 |
 | **业务定义** | New VIC 件单价相对全客件单价的变化率 |
-| **计算公式** | New VIC AUR / 全客 AUR - 1 |
+| **计算公式** | New VIC AUR / 全客 AUR - 1（分子分母口径对称，均为 Step1+Step2 分步：Step 1 在 end period 当月框定 user_id（VIC 筛选 is_new_vic = 1，全客筛选 is_new_vic in (0,1)），Step 2 在所选时间范围聚合） |
 | **分子** | New VIC AUR：`net_pay_amt`（`is_new_vic = 1`）；全客 AUR：`net_pay_amt`（`is_new_vic in (0, 1)`） |
 | **分母** | New VIC AUR：`net_pay_qty`（`is_new_vic = 1`）；全客 AUR：`net_pay_qty`（`is_new_vic in (0, 1)`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
@@ -360,7 +368,7 @@
 | **指标名称** | Freq. vs Store |
 | **指标名称中文** | 购买频次对比全客 |
 | **业务定义** | New VIC 购买频次相对全客购买频次的变化率 |
-| **计算公式** | New VIC Freq. / 全客 Freq. - 1 |
+| **计算公式** | New VIC Freq. / 全客 Freq. - 1（分子分母口径对称，均为 Step1+Step2 分步：Step 1 在 end period 当月框定 user_id（VIC 筛选 is_new_vic = 1，全客筛选 is_new_vic in (0,1)），Step 2 在所选时间范围聚合；count(distinct user_id) = end period 当月单步） |
 | **分子** | New VIC Freq.：`net_pay_order_cnt`（`is_new_vic = 1`）；全客 Freq.：`net_pay_order_cnt`（`is_new_vic in (0, 1)`） |
 | **分母** | New VIC Freq.：`user_id`（`is_new_vic = 1`）；全客 Freq.：`user_id`（`is_new_vic in (0, 1)`） |
 | **数据底表** | `a03_e2e_customer_data_m` |
@@ -379,6 +387,7 @@
 | **筛选逻辑** | 模块全局影响：除了特殊说明之外的指标不需要判断is_member和is_employee，其余都默认需要判断is_member和is_employee来确定筛选事实表的值  |
 | **货币转换规则** | 数据源默认为 RMB，转化为美元需要除以固定值 7 |
 | **派生指标** | LY（去年同期）、LP（上期）、vs LY（同比）、vs LP（环比）、占比、YOY、vs Store 等为派生指标，依据基础指标计算生成 |
+| **Step1+Step2 分步口径** | SLS / SLS% / ACV / UPT / AUR / Freq. 的计算公式为两步法：Step 1 在 end period 当月框定 is_xxx_vic=1 的 user_id，Step 2 在所选时间范围（TimeFrame 区间）聚合，两步时间范围不同不能合并；例外：ACV / Freq. 分母 count(distinct user_id) 为 end period 当月单步；全客分母（SLS% / vs Store）同样 Step1+Step2 分步（Step 1 筛选 is_xxx_vic in (0,1) 框定全客集合），与 VIC 侧唯一区别是 Step 1 的筛选条件（见子模块五说明） |
 | **分组维度** | 根据 `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理、`timeframe`（Month/Quarter/Year）、`customer_tier`（T1/T2/T3/T4/T5）、`last_fy_last_order_month_type`（R3/R4-6/R7-9/R10-12/TTL）、VIC 类型（New VIC/Retention VIC/Direct VIC/T4-5 Upgrade）分组 |
 | **必须遵守** | 口径文档中定义的所有指标，必须遵守其数据类型和数据格式，如果和解决方案中存在争议的，一切以口径文档为准，必须按照口径文档中的格式进行调整 |
 | **DAX 语法规范** | 文本常量必须使用双引号 `" "`，禁止使用单引号；单引号 `' '` 仅用于表名，列名使用方括号 `[ ]`，例如：`[is_vic] = 1` |

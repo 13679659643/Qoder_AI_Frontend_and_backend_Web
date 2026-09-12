@@ -200,3 +200,79 @@
   - 指标 9/10/11/12 计算公式未改动：与指标 5/7 共用同一 Step 模板，语义由子模块四新增分步口径说明块统一定义
   - 口径文档为业务口径权威（"一切以口径文档为准"），本次同步方向：解决方案口径变更回写口径文档（澄清/修正），并以口径文档为准反向修正解决方案描述文字
 ---
+
+## [2026-09-12 19:13] 解决方案修改 — VIC_Breakdown_ms.md Step1+Step2 分步口径调整（SLS/SLS%/ACV/UPT/AUR/Freq.）
+
+- **模块**: VIC
+- **任务**: 按用户要求将 VIC Breakdown 矩阵中 "Step 1: dt = 所选时间范围 end period；Step 2: 再看所选时间范围" 口径的指标由"合并为 end period 当月单步聚合"调整为分步实现（分步范式参考用户已验证的"新客" DAX，即 Customer Breakdown Trend 的 TREATAS 模式）；两套区间字段均从 Slicer_Time_Frame_Max_VIC_Breakdown 读取（日期表不改动，防止日期表互相依赖）
+- **操作**: 修改
+- **变更内容**:
+  - **§4.2 Act Base Value**: 重写为 Step1（end period 当月 UNION+FILTER 框定 is_xxx_vic=1 user_id 集合，避免 IF 返回表被降级为标量）+ Step2（TREATAS 传递 + TimeFrame_Min~Max 区间聚合，不再施加 is_xxx_vic=1）；__UserCount_Act（ACV/Freq. 分母）保持 end period 当月单步口径（COUNTROWS(Step1 集合)，口径文档明确"dt = 所选时间范围 end period"）；旧逻辑块注释保留可回退
+  - **§4.3 LY Base Value / §4.4 LP Base Value**: 与 Act 对称分步重写，Step1 用 Last_Fiscal_Month_*_LY/LP，Step2 用 TimeFrame_Min/Max_LY/LP（均从 Max 表读取）；__UserCount_LY/LP 单步口径保持；旧逻辑块注释保留
+  - **§4.5 Store Base Value**: 聚合类（SLS/qty/order_cnt）区间由 Last_Fiscal_Month 路由改为 TimeFrame 路由（Metric_ID 5/27→LY TimeFrame、6/28→LP TimeFrame、其他→Act TimeFrame），与分子 Step2 对齐（SLS% 分母口径文档明确"所选时间范围"）；__UserCount_Store（ACV/Freq. vs Store 分母）改用本期 end period 当月（Last_Fiscal_Month_Min/Max），与 VIC 侧口径对齐；旧逻辑块注释保留
+  - **§头部/§1.2/§3.2/§3.3/§3.4/§3.6（第一批，17:50 前完成）**: 头部 revised 行；§1.2 Step1+Step2 分步说明块与历史口径说明；§3.2 度量值模型设计分步描述；§3.3 筛选器上下文两套区间表；§3.4 两套区间（Step1 end period / Step2 TimeFrame 及 LY/LP 偏移）；§3.6 SLS% 分子分母时间口径说明
+  - **§4.6 总路由注释 / §5 度量值清单 / §6 血缘图 / §7 注意事项**: SLS% 派生规则注释补分步口径；清单 1-4 行用途说明；血缘图四个 Base Value 框说明；item 2 重写为两套区间、item 8 SLS% 分母改 TimeFrame 区间、item 11 补"Step2 不移除分组维度（REMOVEFILTERS 会破坏行上下文分组传递），全客分母保留行分组无需 ALLSELECTED"、item 12 重写为分步实现说明（原"时间范围一致合并"说法废弃）
+- **关联文件**:
+  - `VIC/5 VIC Breakdown/VIC_Breakdown_ms.md`
+- **备注**:
+  - Step2 所需 TimeFrame_Min/Max 及 LY/LP 偏移字段均已内置在 Slicer_Time_Frame_Max_VIC_Breakdown.sql（L17-26/L45-54），无需改表；Slicer_Time_Frame_Min_VIC_Breakdown 本方案不使用，避免日期表互相依赖
+  - VIC Breakdown 行维度为事实表字段（platform/shop_info_id）直接拉取，与 VIC Segment 的断开维度表 DIM_Row_VIC_Tier 不同：Step2 无需 ALLSELECTED（无占比类分母移除行上下文需求，SLS%/vs Store 全客分母保留行分组为行内占比口径）
+  - 如需回退合并口径：4.2/4.3/4.4/4.5 中注释"新逻辑"段并取消"旧逻辑"块注释即可
+---
+
+## [2026-09-12 19:16] 口径文档修改 — VIC Breakdown KPI.md 同步 Step1+Step2 分步口径澄清与 vs Store 全客分母时间口径
+
+- **模块**: VIC
+- **任务**: 将解决方案文档 VIC_Breakdown_ms.md 的 Step1+Step2 分步口径调整（19:13）同步回口径文档（业务口径权威），补充 vs Store 全客分母时间口径（原口径文档未明示，按与分子对齐原则处理）
+- **操作**: 修改
+- **变更内容**:
+  - **头部**: 新增口径修订行（2026-09-12，指向子模块五分步口径说明）
+  - **全局逻辑 end period 说明**: 示例笔误修正（"比如2026-09，只关注2023-09" → "比如 2023-09 ~ 2026-09，只关注 2026-09"，与 VIC Segment.md 同款笔误同款修复）
+  - **子模块五**: 分组维度说明补"基于 dt = 所选时间范围 end period 的情况下 New/Retention VIC 的区别仅在于 is_new_vic=1 / is_retention_vic=1 筛选条件"；新增 Step 1 + Step 2 分步口径集中说明块（Step1 end period 当月框定 is_xxx_vic=1 user_id / Step2 TimeFrame 区间聚合且不再施加 is_xxx_vic=1、分组维度自动传递不移除 / 例外：ACV、Freq. 分母 count(distinct user_id) 保持 end period 当月单步 / 全客分母：SLS% 与 vs Store 聚合为所选时间范围全量、user_id 计数为 end period 当月 / LY、LP 版本双区间偏移）
+  - **指标 1 SLS / 2 SLS% / 3 ACV / 4 UPT / 5 AUR / 6 Freq.**: 计算公式改写为分步表述（SLS、UPT、AUR 分子分母均分步；SLS% 分子分步、分母所选时间范围全量；ACV、Freq. 分子分步、分母 end period 当月单步）
+  - **指标 3.3 ACV vs Store / 4.3 UPT vs Store / 5.3 AUR vs Store / 6.3 Freq. vs Store**: 计算公式补充时间口径说明（ACV/Freq.：sum 聚合 = Step1+Step2 所选时间范围、count(distinct user_id) = end period 当月；UPT/AUR：分子分母聚合均 Step1+Step2；全客为 is_xxx_vic in (0,1) 全量口径无 Step 1 框定）
+  - **通用规则汇总**: 新增 Step1+Step2 分步口径规则行
+- **关联文件**:
+  - `口径文档/VIC/VIC Breakdown KPI.md`
+- **备注**:
+  - vs Store 全客分母时间口径原口径文档未明示，本次按与分子对齐原则补充（聚合 sum = 所选时间范围、user_id 计数为 end period 当月），如与业务理解不符请指正
+  - 口径文档为业务口径权威（"一切以口径文档为准"），本次同步方向：解决方案口径变更回写口径文档（澄清/补充）
+---
+
+## [2026-09-12 20:24] 解决方案修改 — VIC_Breakdown_ms.md Step1+Step2 分步口径调整（回退后重新应用）
+
+- **模块**: VIC
+- **任务**: VIC_Breakdown_ms.md 此前被整体回退至原始版本（1650 行），本次基于回退后状态将 Step1+Step2 分步口径调整完整重新应用（用户指示"重新修改一份就好了，不要纠结我有没有回退"）；变更明细与 [2026-09-12 19:13] 条目完全一致，解决方案文档以本条目对应版本为准
+- **操作**: 修改
+- **变更内容**: 按 19:13 条目重新落盘全部七批编辑（文件 1650 → 1711 行）:
+  - 头部 revised 行 / §1 筛选器两套区间说明 / §1.2 Step1+Step2 分步说明块与历史口径说明
+  - §2.2 维度表清单 / §3.2 度量值模型分步描述 / §3.3 筛选器上下文两套区间表 / §3.4 两套区间 / §3.6 SLS% 分子分母时间口径
+  - §4.2 Act / §4.3 LY / §4.4 LP Base Value 分步重写（Step1 end period 当月 UNION+FILTER 框定 is_xxx_vic=1 user_id 集合 + Step2 TREATAS + TimeFrame 区间聚合；__UserCount 保持 end period 当月单步口径；旧逻辑块注释保留可回退）
+  - §4.5 Store Base Value（聚合类按 Metric_ID 路由 TimeFrame 区间 + __UserCount_Store 固定本期 end period 当月）
+  - §4.6 总路由注释 / §5 度量值清单 / §6 血缘图 / §7 注意事项（item 2/8/11/12）同步更新
+- **关联文件**:
+  - `VIC/5 VIC Breakdown/VIC_Breakdown_ms.md`
+- **备注**:
+  - 口径文档 VIC Breakdown KPI.md 未受文件回退影响，[2026-09-12 19:16] 条目对应的同步编辑完整在位，本次验证后无需重做
+  - 重新应用后已验证：TREATAS 传递 10 处（Act/LY/LP 各 3 + §7 说明 1）、旧逻辑块 4 处、两套区间字段（Last_Fiscal_Month_* / TimeFrame_* 含 _LY/_LP 偏移）全部落盘
+  - 完整变更明细见 [2026-09-12 19:13] 条目，本条目仅记录重新应用事实，避免重复
+---
+
+## [2026-09-12 20:47] 解决方案修改 — VIC Breakdown Store Base Value 全客分母 Step1+Step2 分步化 + 口径文档同步
+
+- **模块**: VIC
+- **任务**: 按用户澄清，VIC Breakdown 的全客分母（Store Base Value，vs Store / SLS% 分母）由"单步 TimeFrame 区间聚合（is_xxx_vic IN {0,1} 施加于聚合本身，无 Step 1 框定）"调整为 Step1+Step2 分步——与 VIC 侧分子对称，唯一区别是 Step 1 的筛选条件（IN {0,1} 全客 vs =1 VIC）；单步版人群包含"TimeFrame 内活跃但 end period 当月不活跃"的 user，与分子（end period 当月框定人群）基准不一致
+- **操作**: 修改
+- **变更内容**:
+  - **§4.5 Store Base Value**: 分步重写——Step 1 新增 __EndPeriodMin/__EndPeriodMax 按 Metric_ID 路由 end period 当月（5/27→LY、6/28→LP、其他→本期）+ __AllUsers UNION+FILTER 框定 is_xxx_vic IN {0,1} 全客 user_id 集合；Step 2 __SLS_Store/__NetPayQty_Store/__NetPayOrderCnt_Store 改 TREATAS(__AllUsers) + 路由后 TimeFrame 区间（is_xxx_vic IN {0,1} 不再施加）；__UserCount_Store 改 COUNTROWS(__AllUsers)；旧逻辑块更新为两段演进说明（演进一 Last_Fiscal_Month 路由单步 / 演进二单步 TimeFrame 版含完整可回退 DAX）
+  - **正文同步**: 头部 revised 行；§1.2 SLS% 分母说明；§1.6 vs Store（分母同样分步）；§3.2 Store 框；§3.6 标题/表格分母列/说明块；§5 清单第 4 行；§6 血缘图 Store 框；§7 item 6（含人群基准不一致原因与 UNION+FILTER 实现方式）/ item 8（SLS% 分母分步表述 + Act/LY/LP 两套区间路由）/ item 12（补全客分母同样分步）
+  - **§4.6 总路由注释**: 派生规则 SLS% Act 注释、SLS% 计算注释、Store Base Value 两套区间路由注释、SLS% 分母注释同步分步口径（代码逻辑不变，仅注释）
+  - **口径文档同步**: 口径文档/VIC/VIC Breakdown KPI.md 共 8 处——头部口径修订行、子模块五全客分母口径行（改写为同样分步）、SLS% 计算公式（分母补 Step1/Step2 分步表述）、ACV/UPT/AUR/Freq. vs Store 四个计算公式（分子分母口径对称分步表述）、通用规则汇总 Step1+Step2 分步口径行
+- **关联文件**:
+  - `VIC/5 VIC Breakdown/VIC_Breakdown_ms.md`
+  - `口径文档/VIC/VIC Breakdown KPI.md`
+- **备注**:
+  - Step 1 区间按 Metric_ID 路由：SLS% vs LY（5/27）分母的 Step 1 用 LY end period 当月、SLS% vs LP（6/28）用 LP end period 当月、其他（vs Store 分母 10/14/18/22/32/36/40/44、SLS% Act 分母 4/26）用本期 end period 当月——与 Step 2 TimeFrame 路由同步，SLS% vs LY/LP 的分子分母期间完全对齐
+  - __UserCount_Store 从"固定本期 end period 当月 DISTINCTCOUNT"改为 COUNTROWS(__AllUsers)：vs Store 场景路由结果即本期 end period 当月，口径等价且实现统一
+  - 如需回退单步口径：§4.5 旧逻辑块内含演进二（单步 TimeFrame 版）完整实现与恢复步骤
+---
