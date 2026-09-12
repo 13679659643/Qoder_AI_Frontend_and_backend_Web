@@ -276,3 +276,21 @@
   - __UserCount_Store 从"固定本期 end period 当月 DISTINCTCOUNT"改为 COUNTROWS(__AllUsers)：vs Store 场景路由结果即本期 end period 当月，口径等价且实现统一
   - 如需回退单步口径：§4.5 旧逻辑块内含演进二（单步 TimeFrame 版）完整实现与恢复步骤
 ---
+
+## [2026-09-12 21:04] 解决方案修改 — VIC_Breakdown_Trend.md Step1+Step2 分步口径调整
+
+- **模块**: VIC
+- **任务**: 按用户要求将 VIC Breakdown Trend 柱形图 4 个 Value 度量（Metric_ID 1/4/23/26，SLS Act / SLS% Act × New/Retention VIC）由"X 轴时间点 end period 当月单步聚合"改为 Step1+Step2 分步（与主表 VIC_Breakdown_ms.md 同步，范式参考 Customer Breakdown Trend 的 TREATAS 模式）；两套区间均从 Slicer_Time_Frame_VIC_Breakdown（X 轴表）读取，日期表不改动
+- **操作**: 修改
+- **变更内容**:
+  - **§4.2 / §4.6 SLS Trend Value (New/Retention VIC)**: Step 1 新增 __CurrentTFMin/Max 变量（X 轴表 TimeFrame_Min/Max）+ __VICUsers CALCULATETABLE 框定 end period 当月（Last_Fiscal_Month_Min/Max）is_xxx_vic=1 user_id 集合；Step 2 __Result 改 TREATAS(__VICUsers) + X 轴时间点自身范围（+全局冗余，is_xxx_vic=1 不再施加）；旧逻辑块注释保留可回退
+  - **§4.4 / §4.8 SLS% Trend Value (New/Retention VIC)**: 分子分母均分步——Step 1 各自框定 __VICUsers（is_xxx_vic=1）与 __AllUsers（is_xxx_vic IN {0,1}，与分子唯一区别是筛选条件，与主表 Store 分母分步化一致）；Step 2 各自 TREATAS + TimeFrame 区间聚合；旧逻辑块注释保留
+  - **正文同步**: 头部 revised 行；§1 指标表计算方式分步表述；§1 核心设计原则；§1.2 分步范式说明（含 Month/Quarter 粒度两步区间差异说明）；§2.2 X 轴表字段说明补 TimeFrame_Min/Max；§3.1 筛选上下文表拆 Step 1/Step 2 两行；§7.1/§7.2 验证 SQL 改分步版（WITH CTE 框定集合 + JOIN 聚合）；§8 item 3 重写分步说明、item 4 补 Step 1 表述与"无需 UNION 分支"说明、item 9 重写口径等价性
+- **关联文件**:
+  - `VIC/5 VIC Breakdown/VIC_Breakdown_Trend.md`
+- **备注**:
+  - Trend 场景与主表的关键差异：主表两套区间从 Slicer_Time_Frame_Max_VIC_Breakdown（切片器所选范围）读取；Trend 从 Slicer_Time_Frame_VIC_Breakdown（X 轴当前时间点）读取——Step 1 = 该时间点 end period 当月，Step 2 = 该时间点自身时间范围，每个柱子独立代表一个时间点
+  - Month 粒度时 Step 1 与 Step 2 区间重合（同为当月），但 Step 1 有 is_xxx_vic 筛选而 Step 2 无（语义：当月被识别为 VIC 的人在当月的消费）；Quarter 粒度时 Step 1 为季末当月、Step 2 为整季
+  - 每个度量值 VICType 固定，Step 1 直接 CALCULATETABLE 框定，无需主表的 UNION+FILTER 分支（主表因单度量值动态路由 VICType 才需要）
+  - X 轴表 Slicer_Time_Frame_VIC_Breakdown.sql 已内置 TimeFrame_Min/Max（L17-18/L45-46），无需改表；口径文档 VIC Breakdown KPI.md 的分步口径说明（子模块五）已覆盖 Trend 场景，无需另行同步
+---

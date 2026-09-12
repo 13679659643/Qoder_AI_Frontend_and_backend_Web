@@ -365,6 +365,7 @@ VIC No. (Net_Retention VIC) Value =
             DISTINCTCOUNT('t05_customer_order_data_d'[user_id]),
             't05_customer_order_data_d'[dt] >= __TimeMin,
             't05_customer_order_data_d'[dt] <= __TimeMax,
+            't05_customer_order_data_d'[net_pay_amt] > 0,
             TREATAS(__VICUserIds, 't05_customer_order_data_d'[user_id]),
             (
                 __IsMemberFilter = 0
@@ -440,6 +441,7 @@ VIC No. (Net_T4-5 Upgrade) Value =
             DISTINCTCOUNT('t05_customer_order_data_d'[user_id]),
             't05_customer_order_data_d'[dt] >= __TimeMin,
             't05_customer_order_data_d'[dt] <= __TimeMax,
+            't05_customer_order_data_d'[net_pay_amt] > 0,
             TREATAS(__VICUserIds, 't05_customer_order_data_d'[user_id]),
             (
                 __IsMemberFilter = 0
@@ -515,6 +517,7 @@ VIC No. (Net_Direct VIC) Value =
             DISTINCTCOUNT('t05_customer_order_data_d'[user_id]),
             't05_customer_order_data_d'[dt] >= __TimeMin,
             't05_customer_order_data_d'[dt] <= __TimeMax,
+            't05_customer_order_data_d'[net_pay_amt] > 0,
             TREATAS(__VICUserIds, 't05_customer_order_data_d'[user_id]),
             (
                 __IsMemberFilter = 0
@@ -590,6 +593,7 @@ VIC No. (Net_New VIC) Value =
             DISTINCTCOUNT('t05_customer_order_data_d'[user_id]),
             't05_customer_order_data_d'[dt] >= __TimeMin,
             't05_customer_order_data_d'[dt] <= __TimeMax,
+            't05_customer_order_data_d'[net_pay_amt] > 0,
             TREATAS(__VICUserIds, 't05_customer_order_data_d'[user_id]),
             (
                 __IsMemberFilter = 0
