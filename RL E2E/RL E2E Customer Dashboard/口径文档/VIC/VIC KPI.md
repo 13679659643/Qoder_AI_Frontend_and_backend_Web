@@ -7,6 +7,7 @@
 > **is_member使用**: VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)，如果没有筛选，则默认TTL VIC。这样过滤事实表a03_e2e_customer_data_m[is_member] = __IsMemberFilter
 > **is_employee使用**: VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)，如果没有筛选，则默认Yes。这样过滤事实表a03_e2e_customer_data_m[is_employee] = __IsEmployeeFilter
 > **is_member和is_employee维度表路径**:is_member： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\IsMemberFilter；is_employee： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\Slicer_Is_Employee_Selection
+> **口径修订**: 2026-09-12 — VIC Retention%（Metric_ID=6）分母由 Rolling 12 个财月区间调整为"以 end period 为基准往前推 12 个月的单月"（ACT=-12 / LY=-24 / LP=-13），原 Rolling 12 口径已弃用、保留备查，详见子模块一 §2 VIC Retention%
 
 ---
 
@@ -111,15 +112,25 @@
 |---|---|
 | **指标名称** | VIC Retention% |
 | **指标名称中文** | VIC留存率 |
-| **业务定义** | 在指定日期范围仍为 VIC 且上一周期也是 VIC 的人数/上一周期 VIC 人数 |
-| **计算公式** | 分子：count(distinct user_id) where is_retention_vic = 1；分母：所选时间范围 end period 往前 Rolling 12 个财月 count(distinct user_id) where is_vic = 1 |
+| **业务定义** | 在指定日期范围仍为 VIC 且上一周期也是 VIC 的人数 / 以所选时间范围 end period 为基准往前推 12 个月的单月 VIC 人数（分母 2026-09-12 由 Rolling 12 个财月区间调整为单月，原口径已弃用保留备查，见下方分母目标月基准） |
+| **计算公式** | 分子：count(distinct user_id) where is_retention_vic = 1；分母：以所选时间范围 end period 为基准往前推 12 个月的单月 count(distinct user_id) where is_vic = 1（ACT=-12 / LY=-24 / LP=-13，见下方分母目标月基准） |
 | **分子** | `user_id`（`is_retention_vic = 1`） |
-| **分母** | `user_id`（所选时间范围 end period 往前 Rolling 12 个财月 count(distinct user_id)，Rolling 12 个财月 = 当前月 + 往前 11 个月，共 12 个月、 `is_vic = 1`） |
+| **分母** | `user_id`（以所选时间范围 end period 为基准往前推 12 个月的单月 count(distinct user_id)、`is_vic = 1`）；分母计算方式（单月 DISTINCT）：在上述目标月的单月区间内 count(distinct user_id) where is_vic = 1 |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** |  `is_member`和`is_employee`筛选  |
 | **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id` |
 | **数据类型** | percent_1dp → 百分比，保留一位小数，不含正号 |
 | **数据格式** | `#,##0.0%` |
+
+> **分母目标月基准（2026-09-12 调整，措辞与解决方案文档 VIC_KPIs_Table.md 第 1.4 节保持一致）**：
+>
+> - **ACT**：直接往前推 12 个月（如 "2027-09" → "2026-09"）
+> - **LY**：直接往前推 12 个月，再推 12 个月（如 "2027-09" → "2025-09"，等价于往前推 24 个月）
+> - **LP**：直接往前推 1 个月，再推 12 个月（如 "2027-09" → "2027-08" → "2026-08"，等价于往前推 13 个月）
+>
+> **历史口径（Rolling 12 个财月区间，2026-09-12 弃用，保留备查；旧 DAX 逻辑已以块注释保留在 Act/LY/LP Base Value 的 Metric_ID=6 分支中，如需回退取消注释即可）**：
+>
+> - 原分母：end period 往前 Rolling 12 个财月（当前月 + 往前 11 个月，共 12 个月）区间内 `count(distinct user_id) where is_vic=1`，同一用户只计一次（非按月 SUM 累加）
 
 ### 2.1 VIC Retention% vs LY — VIC留存率同比
 

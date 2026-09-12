@@ -115,3 +115,13 @@ Slicer_Time_Frame维度表：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backe
 实际值得逻辑是已经写好了得，不要修改，我写的是正确的，请根据我的实际值逻辑，完善解决方案中实际值的取数逻辑部分就行。
 判断是否是选择单个财月/年，我理解，可以直接判断Slicer_Time_Frame[TimeFrame_ID]是否等于"Month"或者"Year"、并且Slicer_Time_Frame_Min[TimeFrame_Value]和Slicer_Time_Frame_Max[TimeFrame_Value]是否相等,我这里使用了两个切片器来实现日期区间的效果，所以可以直接判断是否相等，如果相等，说明是选择了单个财月/年，比如Slicer_Time_Frame_Min[TimeFrame_Value]="2027-04"，Slicer_Time_Frame_Max[TimeFrame_Value]="2027-04"，说明是选择了2027年4月。
 目标值没有`is_member`和`is_employee`筛选，不懂就问，确保逻辑正确。
+
+# Vic测试第十二轮提示词：
+
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\1 VIC KPI\VIC_KPIs_Table.md
+调整这个文件的Metric_ID=6计算，不要Rolling 12区间，比如现在end period="2027-09"，计算分母__RetentionDenominator时：
+ACT:直接往前推 12 个月（如 "2027-09" → "2026-09"）
+LY：直接往前推 12 个月，再推12个月（如 "2027-09" → "2025-09"）
+LP：直接往前推 1 个月，再推12个月（如 "2027-08" → "2026-08"）
+之前的逻辑部分注释，不要删除，避免因逻辑调整又改回去。
+然后其余指标逻辑不变，仅改变这一个。

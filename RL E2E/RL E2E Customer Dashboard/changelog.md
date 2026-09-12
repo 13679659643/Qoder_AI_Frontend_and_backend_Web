@@ -84,3 +84,45 @@
   - 通过 AskUserQuestion 两次澄清：聚合方式为"区间 DISTINCT 汇总"；Rolling 12 起始日通过 EDATE + 维度表查 TimeFrame_Min 获取
   - Share 类指标分母保持不变（end period 当月 is_vic=1，等价 Metric_ID=1）
 ---
+
+## [2026-09-12 11:32] DAX 修改 — VIC Retention%（Metric_ID=6）分母由 Rolling 12 区间调整为"往前推 12 个月单月"
+
+- **模块**: VIC
+- **任务**: VIC_KPIs_Table.md Metric_ID=6 分母口径调整（用户需求）
+- **操作**: 修改
+- **变更内容**:
+  - **VIC KPIs Act Base Value（Metric_ID=6 分支）**:
+    - 分母弃用 Rolling 12 区间（原：起始月 EDATE(-11) → 区间 [起始月 TimeFrame_Min, Last_Fiscal_Month_Max]）
+    - 新逻辑：分母目标月 = end period 直接往前推 12 个月（如 "2027-09" → "2026-09"），按 TimeFrame_Value 查目标月 TimeFrame_Min/TimeFrame_Max，分母 = 目标月单月区间内 is_vic=1 的 DISTINCTCOUNT(user_id)
+    - 旧 Rolling 12 逻辑以 /* */ 块注释保留，如需回退取消注释即可
+  - **VIC KPIs LY Base Value（Metric_ID=6 分支）**:
+    - 分母目标月 = Last_Fiscal_Month EDATE(-12) 得 LY 月份字符串，再 EDATE(-12)（等价往前推 24 个月，如 "2027-09" → "2025-09"）
+    - 区间起止日均取目标月行 TimeFrame_Min/TimeFrame_Max（不再复用 Last_Fiscal_Month_Max_LY）；旧逻辑块注释保留
+  - **VIC KPIs LP Base Value（Metric_ID=6 分支）**:
+    - 分母目标月 = Last_Fiscal_Month EDATE(-1) 得 LP 月份字符串，再 EDATE(-12)（等价往前推 13 个月，如 "2027-09" → "2027-08" → "2026-08"）
+    - 区间起止日均取目标月行 TimeFrame_Min/TimeFrame_Max（不再复用 Last_Fiscal_Month_Max_LP）；旧逻辑块注释保留
+  - **其余指标逻辑不变**：分子（is_retention_vic=1 end period 当月）、其他 Metric_ID 分支、总路由/Display/颜色度量值均未改动（仅同步描述性注释）
+  - **文档同步**：头部 revised、1.4 节（新口径 + 历史口径备查块）、2.2/3.1/3.2/3.3/3.6/4.1、4.2-4.5 度量值注释、第 5 章度量值清单、第 6 章血缘图、第 7 章注意事项（item 4 重写 + item 6/14 措辞）同步更新
+- **关联文件**:
+  - `VIC/1 VIC KPI/VIC_KPIs_Table.md`
+- **备注**:
+  - 分母目标月依赖 Slicer_Time_Frame_Max 的 TimeFrame_Max 字段（此前仅用 TimeFrame_Min），该字段已存在于维度表 SQL 中无需改表
+  - 如需回退 Rolling 12 口径：删除/注释各 Base Value 中"新逻辑"段，取消"旧逻辑"块注释
+---
+
+## [2026-09-12 12:18] 口径文档修改 — VIC KPI.md VIC Retention%（Metric_ID=6）分母定义同步为"往前推 12 个月单月"
+
+- **模块**: VIC
+- **任务**: 口径文档同步 VIC_KPIs_Table.md Metric_ID=6 分母口径调整（用户需求）
+- **操作**: 修改
+- **变更内容**:
+  - **头部引用块**: 新增"口径修订: 2026-09-12"行（分母由 Rolling 12 个财月区间调整为"以 end period 为基准往前推 12 个月的单月"，ACT=-12 / LY=-24 / LP=-13）
+  - **§2 VIC Retention% 表格**: 业务定义 / 计算公式 / 分母三行由 Rolling 12 区间改为"以所选时间范围 end period 为基准往前推 12 个月的单月"（分母计算方式：目标月单月区间内 count(distinct user_id) where is_vic = 1）
+  - **§2 表格后新增说明块**: 分母目标月基准（ACT/LY/LP 三条偏移示例，与 VIC_KPIs_Table.md 第 1.4 节措辞一致）+ 历史 Rolling 12 口径（2026-09-12 弃用，保留备查，含旧 DAX 块注释回退提示）
+  - **其余内容零改动**: VIC No. / Direct VIC No. / 通用规则汇总中的 "Rolling 12" 为 VIC 买家定义（net sales >= 20k），与 Retention 分母无关，未改动；其他指标口径未改动
+- **关联文件**:
+  - `口径文档/VIC/VIC KPI.md`
+  - 关联解决方案文档: `VIC/1 VIC KPI/VIC_KPIs_Table.md`（第 1.4 节为措辞基准）
+- **备注**:
+  - 措辞与 VIC_KPIs_Table.md 第 1.4 节保持一致；实现细节（财月字段偏移、TimeFrame_Min/Max 查询）仍归解决方案文档，口径文档仅保留业务口径定义
+---
