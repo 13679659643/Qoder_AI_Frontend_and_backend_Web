@@ -1044,6 +1044,27 @@ RETURN
     )
 ```
 
+--------------------------------------------------------------------------------
+1.14 ShowRow
+--------------------------------------------------------------------------------
+
+```dax
+ShowRow = 
+VAR SelectedPlatform = 
+    SELECTEDVALUE('Slicer_Platform_Selection'[Platform_ID], "ALL")
+VAR RowHasData = 
+    CALCULATE(
+        COUNTROWS('a05_e2e_paid_media_product_data_d'),
+        'a05_e2e_paid_media_product_data_d'[platform] = SelectedPlatform
+    )
+RETURN
+    IF(
+        SelectedPlatform = "ALL",
+        1,                          -- ALL 时显示所有行
+        IF(RowHasData > 0, 1, 0)   -- 非ALL时，只显示有数据的行
+    )
+
+```
 ================================================================================
 二、Display 格式化显示度量值（11 个，按页面展示顺序）
 ================================================================================

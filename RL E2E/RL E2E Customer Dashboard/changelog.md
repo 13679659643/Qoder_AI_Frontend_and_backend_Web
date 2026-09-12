@@ -126,3 +126,77 @@
 - **备注**:
   - 措辞与 VIC_KPIs_Table.md 第 1.4 节保持一致；实现细节（财月字段偏移、TimeFrame_Min/Max 查询）仍归解决方案文档，口径文档仅保留业务口径定义
 ---
+
+## [2026-09-12 17:04] 解决方案修改 — VIC_Segment_Table.md SLS 类指标 Step1+Step2 由"合并为 end period 当月"调整为分步实现
+
+- **模块**: VIC
+- **任务**: VIC Segment 表格 SLS 类指标（口径文档指标 5/7/9/10/11/12）Step1+Step2 口径调整（用户需求：两步时间范围不同不能合并，需分步计算，参考"新客 No."度量值分步范式）
+- **操作**: 修改
+- **变更内容**:
+  - **头部**: 新增 revised 行（Step1 在 end period 当月框定 user_id，Step2 在所选时间范围 TimeFrame 区间聚合，两步时间范围不同不能合并）
+  - **§1.1**: 重写为"end period 时间筛选与所选时间范围筛选"，区分两套时间范围（Step1 = Last_Fiscal_Month_*；Step2 = TimeFrame_Min/Max，TimeFrame_Min 读 Slicer_Time_Frame_Min，TimeFrame_Max 读 Slicer_Time_Frame_Max；各自含 LY 偏移）
+  - **§1.4**: 重写为"Step 1 + Step 2 口径（分步计算，不能合并）"，新增 2026-09-12 口径修订说明（Step2 "所选时间范围"即切片器所选完整时间范围，回归口径文档原文本意），旧"合并实现"口径降级为历史口径备查块
+  - **§2.2**: 维度表清单新增 Slicer_Time_Frame_Min（TimeFrame_Min / TimeFrame_Min_LY，Step2 区间起点），Slicer_Time_Frame_Max 行补充 TimeFrame_Max / TimeFrame_Max_LY
+  - **§3.1/3.2/3.3/3.4/3.5**: 架构图、Base 层描述、筛选器上下文表（拆为 Step1/Step2 四行 + DIM_Row_VIC_Tier 分步处理说明）、时间偏移规则（两套区间不能合并）、指标公式表（指标 5/7/9/10/11/12 明确 Step 时间范围）同步更新
+  - **§4.1.5/4.1.6 _SLS Base Act/LY**: 重写为分步实现——Step1 `CALCULATETABLE(VALUES(user_id), ...)` end period 当月按当前行 customer_tier 框定 user_id 集合；Step2 `TREATAS(__TierUsers, user_id)` + TimeFrame 区间聚合 + `REMOVEFILTERS(DIM_Row_VIC_Tier)`（Step2 只按 user_id 主体聚合）；旧单步逻辑以 /* */ 块注释保留可回退
+  - **§4.1.7/4.1.8 _SLS Total Base Act/LY**: 分母时间范围由 end period 当月调整为所选时间范围（TimeFrame 区间，与分子 Step2 对齐；分母为全量口径不涉及 Step1 user_id 框定）；旧逻辑块注释保留
+  - **§4.1.9~4.1.12 _Net Pay Qty / _Net Pay Order Cnt Base Act/LY**: 同 _SLS Base 模式重写为分步实现（SUM(net_pay_qty) / SUM(net_pay_order_cnt)）；旧逻辑块注释保留
+  - **§4.1.1~4.1.4 Customer 类 Base 度量值**: 不变（单步 end period 当月口径，不涉及 Step1+Step2；指标 1~4 及 ACV/Freq. 分母仍为 end period 当月 count(distinct user_id)）
+  - **§4.2 Value 层**: SLS / SLS vs LY / SLS% / SLS% vs LY / ACV / AUR / UPT / Freq. 8 个 Value 度量值注释同步分步口径（DAX 表达式不变，仍引用 Base 层）
+  - **§5/§6/§7**: 度量值清单（序号 5~12 用途标注分步）、血缘关系图（数据源层新增 Slicer_Time_Frame_Min/Max，_SLS/Qty/OrderCnt Base 标注 Step1+2，传递链标注 Step1 保留 tier / Step2 REMOVEFILTERS）、注意事项（item 1/5/9/10/16/17/18 重写或微调）同步更新
+- **关联文件**:
+  - `VIC/4 VIC Segment/VIC_Segment_Table.md`
+- **备注**:
+  - Step2 所需 TimeFrame_Min / TimeFrame_Min_LY 字段已存在于 Slicer_Time_Frame_Min 维度表 SQL（维度复用/Slicer_Time_Frame/Slicer_Time_Frame_Min.sql），无需改表
+  - Step2 的 REMOVEFILTERS(DIM_Row_VIC_Tier) 语义：口径中 customer_tier 仅用于 Step1 框定 user_id，Step2 只按 user_id 主体聚合；platform / shop_info_id 分组维度由模型自动传递保留
+  - 如需回退合并口径：各 Base 度量值中注释"新逻辑"段并取消"旧逻辑"块注释即可
+---
+
+## [2026-09-12 18:00] 解决方案修改 — VIC_Segment_Table.md Step2 移除误加的 REMOVEFILTERS，占比类分母统一 ALLSELECTED(Row Label)
+
+- **模块**: VIC
+- **任务**: 纠正 Step1+Step2 分步度量值中误加的 REMOVEFILTERS(DIM_Row_VIC_Tier)（用户指正：行维度 DIM_Row_VIC_Tier[Row Label] 与事实表 1:N 关联自动传递分组，Step2 无需也无需显式移除；只有占比类分母才需要移除且用 ALLSELECTED 保留外部切片器影响）
+- **操作**: 修改
+- **变更内容**:
+  - **§4.1.5/4.1.6 _SLS Base Act/LY、§4.1.9~4.1.12 _Net Pay Qty / _Net Pay Order Cnt Base Act/LY（6 个 Step1+Step2 分步度量值）**: Step2 CALCULATE 中删除 REMOVEFILTERS(DIM_Row_VIC_Tier)——customer_tier / platform / shop_info_id 分组维度由模型自动传递保留（Step2 与 Step1 行上下文一致，分组维度无需显式 DAX 处理），同步修正头部注释；旧逻辑块注释不受影响
+  - **§4.1.7/4.1.8 _SLS Total Base Act/LY**: REMOVEFILTERS(DIM_Row_VIC_Tier) → ALLSELECTED('DIM_Row_VIC_Tier'[Row Label])，与用户已修改的 _Customer Total Base Act/LY（4.1.3/4.1.4）实现方式统一：移除视觉行上下文的 customer_tier 筛选传递（分母=全部 Tier 合计），保留外部切片器/筛选器影响（口径文档第 157 行原话）；旧逻辑块注释保留原样（备查）
+  - **§1 行维度/§1.4 Step2 描述/§1.7 差异表/§3.1 架构图/§3.2 度量值模型/§3.3 筛选器上下文表**: 行维度字段名修正 Tier ID → Row Label（Tier ID 为 1:N 关系关联列，Row Label 为图片展示行标签）；Step2 描述改为"不移除分组维度筛选"；DIM_Row_VIC_Tier 传递规则改为"Step1/Step2 均保留自动传递，仅占比类分母用 ALLSELECTED(Row Label)"
+  - **§3.5 公式表/§6 血缘图/§7 注意事项**: 指标 0 行维度字段、数据源层传递链（Step1/Step2 均保留 tier 自动传递）、_SLS Total 框（ALLSELECTED(RowLbl)）、item 4/5/9/15/18 同步更新（item 5 明确"Step2 不移除任何分组维度筛选，若加 REMOVEFILTERS 会破坏行上下文分组传递"；item 9 改为 ALLSELECTED 实现说明）
+- **关联文件**:
+  - `VIC/4 VIC Segment/VIC_Segment_Table.md`
+- **备注**:
+  - 行维度实际承载列为 DIM_Row_VIC_Tier[Row Label]（图片展示行标签，如 "T1 (≧ 200K)"），Tier ID 为与事实表 customer_tier 的 1:N 关系关联列（见 DIM_Row_VIC_Tier.md）
+  - 6 个 Step1+Step2 分步度量值的旧逻辑块注释（合并为 end period 当月版本）不受影响，保留可回退
+  - 用户在 4.1.3/4.1.4 手工修改的 ALLSELECTED（本条变更前已存在）保留不动，本次将 4.1.7/4.1.8 统一为同款写法
+---
+
+## [2026-09-12 18:26] 口径文档修改 — VIC Segment.md 同步 Step1+Step2 分步口径澄清与 ALLSELECTED 说明；解决方案文档指标 4 描述文字修正（差值 pts）
+
+- **模块**: VIC
+- **任务**: 将解决方案文档 Step1+Step2 分步调整（17:04）与 Step2 分组维度修正/占比类分母 ALLSELECTED 统一（18:00）同步回口径文档；同步核对过程中发现并修正解决方案文档指标 4（Customer% vs LY）描述文字与 DAX 实现/口径文档不一致问题
+- **操作**: 修改
+- **变更内容**:
+  - **口径文档/VIC/VIC Segment.md**:
+    - 头部新增口径修订行（2026-09-12）
+    - 全局逻辑 end period 说明示例笔误修正（"比如2026-09，只关注2023-09" → "比如 2023-09 ~ 2026-09，只关注 2026-09"，按"区间→ end period"模式修复）
+    - 子模块四：DIM_Row_VIC_Tier.md 参考文件路径修正（VIC\VIC Segment → VIC\4 VIC Segment）；新增行维度列职责说明（Row Label 行标签 / Tier ID 关联列）；新增 Step 1 + Step 2 分步口径集中说明块（适用指标 5/7/9/10/11/12；两步时间范围不同不能合并；Step 2 = 切片器所选完整时间范围；Step 1/Step 2 均不移除分组维度；仅占比类分母 ALLSELECTED；LY 版本双区间偏移）
+    - 指标 3：分母补"全部 customer_tier，需移除 customer_tier 影响但保留外部切片器（ALLSELECTED）"说明（与指标 7 分母对齐）
+    - 指标 5：计算公式显式 Step 1 = end period 当月单月 / Step 2 = 切片器所选完整时间范围 + 不能合并；聚合粒度补两步时间范围
+    - 指标 6：聚合粒度修正（原误标 dt = 所选时间范围 end period，实际继承指标 5 分步口径，今年/去年均先分步计算再求 YOY，LY 版本双区间）
+    - 指标 7：分子补不能合并；分母补"与分子 Step 2 同一完整区间、全量口径不框定 user_id"
+    - 指标 8：聚合粒度补同指标 7 口径说明
+    - 通用规则汇总：新增 Step1+Step2 分步口径规则行
+  - **VIC/4 VIC Segment/VIC_Segment_Table.md（指标 4 Customer% vs LY 描述文字修正，共 12 处；DAX 实现与口径文档本就一致，无代码改动）**:
+    - §1.6：指标 2/6（比值 YOY）与指标 4/8（差值 YOY）分组说明重写；Customer% vs LY 派生公式由"今年%/去年%-1"改为"今年% - 去年%（差值，×100 转 pts）"
+    - §2.3 架构图 / §3.2 度量值模型：Customer% vs LY Value 描述改为差值；Display 由 percent_1dp 改为 integer_pts 格式
+    - §3.5 公式表：指标 4 行改为"今年 - 去年（差值，×100 转 pts）/ integer_pts / #,##0pts;-#,##0pts;0pts"；YOY 格式说明改为指标 2/6 与指标 4/8 两组
+    - 4.2.4 注释：计算公式修正为"今年买家人数占比 - 去年买家人数占比（差值，pts 指标）"；4.3.4 注释：数据格式修正为 integer_pts 差值 pts 格式
+    - §5 度量值清单（序号 16/28）/ §6 血缘图 / §7 注意事项（item 10 拆分、item 11 重新分组）：同步修正
+- **关联文件**:
+  - `口径文档/VIC/VIC Segment.md`
+  - `VIC/4 VIC Segment/VIC_Segment_Table.md`
+- **备注**:
+  - 指标 4 的 DAX 实现（4.2.4 Value 差值 ActCustomer - LYCustomer、4.3.4 Display FORMAT pts 格式）与口径文档指标 4（差值 + integer_pts）本就一致，本次仅修正解决方案文档描述文字，无 DAX 代码改动
+  - 指标 9/10/11/12 计算公式未改动：与指标 5/7 共用同一 Step 模板，语义由子模块四新增分步口径说明块统一定义
+  - 口径文档为业务口径权威（"一切以口径文档为准"），本次同步方向：解决方案口径变更回写口径文档（澄清/修正），并以口径文档为准反向修正解决方案描述文字
+---
