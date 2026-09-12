@@ -2,7 +2,7 @@ Category_Growth_matrix_solution 解决方案：
 
 > status: updated
 > created: 2026-06-23
-> updated: 2026-09-09
+> updated: 2026-09-12
 > complexity: 🟡中等
 > type: 度量值开发
 > naming: 遵循 dax-style.md 规范
@@ -18,7 +18,13 @@ Category_Growth_matrix_solution 解决方案：
 
 全局筛选规则（所有度量值必须遵守）：
   - 第1~4层级（framework / brand / category / channel）：筛选 mix_msg IS NULL
-  - 第5层级（mix_msg_Label_01 明细）：不做任何过滤，取当前明细值
+  - 第5层级（mix_msg_Label_01 明细）：
+    · 值为 "other" 时：筛选 mix_msg IS NULL，值与第4层 channel 完全一致
+    · 其余明细：mix_msg_Label_01 = 当前明细值
+占比类分母规则（EOH(OMS)% / Net Sales% / Cost%，2026-09-12 起）：
+  - 第5层非other明细行：分母 = 当前1~4层分组下，排除other（mix_msg IS NULL）的明细总和，比值合计 = 100%
+  - 第5层other行：分子分母均与第4层 channel 行一致，比值完全相同
+  - 其余行（第1~4层 / 总计行）：分母 = 全店口径（移除全部行维度 + mix_msg）
 
 指标顺序（页面展示顺序）：
   1  EOH(OMS)%          — 占位=1（比率类）→ 已补齐口径
@@ -49,11 +55,12 @@ Category Growth EOH(OMS)% =
 // 用途: 库存占比指标
 // 口径: 该分组 stock_qty / 总 stock_qty
 //       分子 = 当前分组 SUM(stock_qty)
-//       分母 = 全店 SUM(stock_qty)（移除全部 5 个行维度）
+//       分母 = 全店 SUM(stock_qty)（移除全部行维度 + mix_msg）
+//              例外：第5层非other明细行，分母 = 当前1~4层分组下排除other（mix_msg IS NULL）的明细总和
 // 类型: 比率类，不除汇率
 // 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
-// 筛选: 全局筛选（mix_msg IS NULL / 第5层不做过滤取当前明细值）
+// 筛选: 全局筛选（第1~4层 mix_msg IS NULL / 第5层 other 行取 mix_msg IS NULL，其余明细取当前值）
 //       Platform（单选含 ALL，ALL → platform IN {"TM","JD"}）
 //       trans_cycle（单选，数据口径）
 // ========================================
@@ -82,15 +89,25 @@ Category Growth EOH(OMS)% =
     VAR __IsMixMsg    = ISINSCOPE(a05_e2e_paid_media_product_data_d[mix_msg_Label_01])
 
     // ── 3. 层级过滤 (转为显式的 FILTER 表) ──
-    // 第1~4层：只要 mix_msg_Label_01 = 'ALL' 的数据
-    // 第5层：不做任何过滤，取当前明细值
+    // 第1~4层：只要 mix_msg IS NULL 的数据
+    // 第5层：other 行取 mix_msg IS NULL（值与第4层 channel 完全一致），其余明细取当前明细值
     VAR __CurrentMixMsg = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[mix_msg_Label_01])
     VAR __LevelFilter =
         FILTER(
             ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_01],a05_e2e_paid_media_product_data_d[mix_msg]),
             SWITCH(
                 TRUE(),
+                __IsMixMsg,
+                    SWITCH(
+                        TRUE(),
+                        // other 行：取 mix_msg IS NULL 的数据（值与第4层 channel 完全一致）
+                        __CurrentMixMsg = "other", ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]),
+                        // 其余明细：取当前明细值
+                        a05_e2e_paid_media_product_data_d[mix_msg_Label_01] = __CurrentMixMsg
+                    ),
+                /* 旧逻辑：第5层统一取当前明细值（2026-09-12 弃用，保留备查）
                 __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg_Label_01] = __CurrentMixMsg,
+                如需回退：删除/注释上方 __IsMixMsg 嵌套 SWITCH 分支，恢复上一行旧逻辑即可 */
                 ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态  
             )
         )
@@ -117,23 +134,46 @@ Category Growth EOH(OMS)% =
         )
 
 
-    // ── 分母：全店 stock_qty（移除全部 5 个行维度）──
+    // ── 分母：分两种口径 ──
+    // ① 第5层非other明细行：分母 = 当前1~4层分组下，排除other（mix_msg IS NULL）的明细总和，比值合计=100%
+    // ② 其余行（第1~4层/第5层other行/总计行）：分母 = 全店 stock_qty（移除全部行维度 + mix_msg）
+    //    第5层other行：分子分母均与第4层 channel 行一致，比值完全相同
     VAR __Denominator =
-        CALCULATE(
-            SUM(a05_e2e_paid_media_product_data_d[stock_qty]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[framework]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[brand]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[category]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[channel]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg_Label_01]),
-            REMOVEFILTERS(Dim_Date_Current),
-            FILTER(
+        IF(
+            __IsMixMsg && __CurrentMixMsg <> "other",
+            // ① 第5层非other明细：保留当前1~4层分组，分母 = 分组内排除other的明细总和（A+B+C）
+            CALCULATE(
+                SUM(a05_e2e_paid_media_product_data_d[stock_qty]),
+                REMOVEFILTERS(Dim_Date_Current),
+                FILTER(
                     ALL(Dim_Date_Current),
                     Dim_Date_Current[数据日期] = __Current_End
                 ),
-            __PlatformFilter,   // 交集 1：限定平台
-            __TransCycleFilter, // 交集 2：限定周期
-            __LevelFilter
+                __PlatformFilter,   // 交集 1：限定平台
+                __TransCycleFilter, // 交集 2：限定周期
+                FILTER(
+                    ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_01],a05_e2e_paid_media_product_data_d[mix_msg]),
+                    NOT ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 排除other，只保留明细行
+                )
+            ),
+            // ② 其余行：移除全部行维度（含 mix_msg），全店口径
+            CALCULATE(
+                SUM(a05_e2e_paid_media_product_data_d[stock_qty]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[framework]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[brand]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[category]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[channel]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg_Label_01]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg]), // 新增：同步移除 mix_msg 列筛选
+                REMOVEFILTERS(Dim_Date_Current),
+                FILTER(
+                        ALL(Dim_Date_Current),
+                        Dim_Date_Current[数据日期] = __Current_End
+                    ),
+                __PlatformFilter,   // 交集 1：限定平台
+                __TransCycleFilter, // 交集 2：限定周期
+                __LevelFilter
+            )
         )
 
     RETURN
@@ -156,7 +196,7 @@ Category Growth Active IDs =
 // 筛选: 层级过滤
 //       1~3层：限制 mix_msg is null and channel = 'ALL'
 //       4层：限制 mix_msg is null，不限制 channel = 'ALL'
-//       5层:取当前渠道，mix_msg_Label_01 取当前明细值
+//       5层:取当前渠道；other 行取 mix_msg IS NULL（值与第4层 channel 完全一致），其余明细取当前明细值
 //       Platform（单选含 ALL，ALL → platform IN {"TM","JD"}）
 //       trans_cycle（单选，数据口径）
 // ========================================
@@ -195,7 +235,7 @@ Category Growth Active IDs =
 
         // ── 层级过滤：严格隔离层级，防止重复汇总 ──
     // 规则1：1~4层之间，当前层级字段有具体值(<>ALL)，其他三个层级字段必须为 "ALL"，且 mix_msg IS NULL
-    // 规则2：第5层，不做任何过滤，取当前明细值（五个字段与当前行上下文一致）
+    // 规则2：第5层，other 行取 mix_msg IS NULL（值与第4层 channel 完全一致）；其余明细取当前明细值（五个字段与当前行上下文一致）
     VAR __LevelFilter =
         FILTER(
             // 必须把所有五个层级字段放入 ALL，彻底清除外部矩阵/切片器对它们的筛选干扰
@@ -213,13 +253,31 @@ Category Growth Active IDs =
                 TRUE(),
                 
                 // ── 第5层：mix_msg_Label_01 明细行 ──
-                // 不做任何过滤，取当前明细值：五个字段与当前行上下文一致
+                // other 行：取 mix_msg IS NULL 的数据（值与第4层 channel 完全一致）
+                // 其余明细：取当前明细值（五个字段与当前行上下文一致）
+                __IsMixMsg,
+                    SWITCH(
+                        TRUE(),
+                        __CurrentMixMsg = "other",
+                            ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg])
+                            && a05_e2e_paid_media_product_data_d[framework] = __CurrentFramework
+                            && a05_e2e_paid_media_product_data_d[brand] = __CurrentBrand
+                            && a05_e2e_paid_media_product_data_d[category] = __CurrentCategory
+                            && a05_e2e_paid_media_product_data_d[channel] = __CurrentChannel,
+                        a05_e2e_paid_media_product_data_d[framework] = __CurrentFramework
+                        && a05_e2e_paid_media_product_data_d[brand] = __CurrentBrand
+                        && a05_e2e_paid_media_product_data_d[category] = __CurrentCategory
+                        && a05_e2e_paid_media_product_data_d[channel] = __CurrentChannel
+                        && a05_e2e_paid_media_product_data_d[mix_msg_Label_01] = __CurrentMixMsg
+                    ),
+                /* 旧逻辑：第5层统一按五字段匹配当前明细值（2026-09-12 弃用，保留备查）
                 __IsMixMsg,
                     a05_e2e_paid_media_product_data_d[framework] = __CurrentFramework
                 && a05_e2e_paid_media_product_data_d[brand] = __CurrentBrand
                 && a05_e2e_paid_media_product_data_d[category] = __CurrentCategory
                 && a05_e2e_paid_media_product_data_d[channel] = __CurrentChannel
                 && a05_e2e_paid_media_product_data_d[mix_msg_Label_01] = __CurrentMixMsg,
+                如需回退：删除/注释上方 __IsMixMsg 嵌套 SWITCH 分支，恢复本段旧逻辑即可 */
 
                 // ── 第4层：channel 小计行 ──
                 // mix_msg IS NULL，不限制 channel = 'ALL' (保留当前 channel 上下文)
@@ -341,7 +399,8 @@ Category Growth Net Sales% =
 // 用途: 退后销售额占比指标
 // 口径: 品类 net_sales_amt / TTL net_sales_amt
 //       分子 = 当前分组 SUM(net_sales_amt)
-//       分母 = 全店 SUM(net_sales_amt)（移除全部 5 个行维度）
+//       分母 = 全店 SUM(net_sales_amt)（移除全部行维度 + mix_msg）
+//              例外：第5层非other明细行，分母 = 当前1~4层分组下排除other（mix_msg IS NULL）的明细总和
 // 类型: 比率类，不除汇率
 // 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
@@ -373,14 +432,24 @@ Category Growth Net Sales% =
 
     // ── 3. 层级过滤 (转为显式的 FILTER 表) ──
     // 第1~4层：只要 mix_msg IS NULL 的数据
-    // 第5层：不做任何过滤，取当前明细值
+    // 第5层：other 行取 mix_msg IS NULL（值与第4层 channel 完全一致），其余明细取当前明细值
     VAR __CurrentMixMsg = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[mix_msg_Label_01])
     VAR __LevelFilter =
         FILTER(
             ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_01],a05_e2e_paid_media_product_data_d[mix_msg]),
             SWITCH(
                 TRUE(),
+                __IsMixMsg,
+                    SWITCH(
+                        TRUE(),
+                        // other 行：取 mix_msg IS NULL 的数据（值与第4层 channel 完全一致）
+                        __CurrentMixMsg = "other", ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]),
+                        // 其余明细：取当前明细值
+                        a05_e2e_paid_media_product_data_d[mix_msg_Label_01] = __CurrentMixMsg
+                    ),
+                /* 旧逻辑：第5层统一取当前明细值（2026-09-12 弃用，保留备查）
                 __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg_Label_01] = __CurrentMixMsg,
+                如需回退：删除/注释上方 __IsMixMsg 嵌套 SWITCH 分支，恢复上一行旧逻辑即可 */
                 ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态  
             )
         )
@@ -401,18 +470,36 @@ Category Growth Net Sales% =
             __LevelFilter
         )
 
-    // ── 分母：全店 net_sales_amt（移除全部 5 个行维度）──
+    // ── 分母：分两种口径 ──
+    // ① 第5层非other明细行：分母 = 当前1~4层分组下，排除other（mix_msg IS NULL）的明细总和，比值合计=100%
+    // ② 其余行（第1~4层/第5层other行/总计行）：分母 = 全店 net_sales_amt（移除全部行维度 + mix_msg）
+    //    第5层other行：分子分母均与第4层 channel 行一致，比值完全相同
     VAR __Denominator =
-        CALCULATE(
-            SUM(a05_e2e_paid_media_product_data_d[net_sales_amt]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[framework]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[brand]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[category]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[channel]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg_Label_01]),
-            __PlatformFilter,   // 交集 1：限定平台
-            __TransCycleFilter, // 交集 2：限定周期
-            __LevelFilter
+        IF(
+            __IsMixMsg && __CurrentMixMsg <> "other",
+            // ① 第5层非other明细：保留当前1~4层分组，分母 = 分组内排除other的明细总和（A+B+C）
+            CALCULATE(
+                SUM(a05_e2e_paid_media_product_data_d[net_sales_amt]),
+                __PlatformFilter,   // 交集 1：限定平台
+                __TransCycleFilter, // 交集 2：限定周期
+                FILTER(
+                    ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_01],a05_e2e_paid_media_product_data_d[mix_msg]),
+                    NOT ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 排除other，只保留明细行
+                )
+            ),
+            // ② 其余行：移除全部行维度（含 mix_msg），全店口径
+            CALCULATE(
+                SUM(a05_e2e_paid_media_product_data_d[net_sales_amt]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[framework]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[brand]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[category]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[channel]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg_Label_01]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg]), // 新增：同步移除 mix_msg 列筛选
+                __PlatformFilter,   // 交集 1：限定平台
+                __TransCycleFilter, // 交集 2：限定周期
+                __LevelFilter
+            )
         )
 
     RETURN
@@ -485,7 +572,7 @@ Category Growth Cost =
 // 类型: 金额类，除汇率
 // 数据格式: #,##0（在 DAX 中用 __CurrencySymbol & FORMAT(__Value, "#,##0") 拼接币种符号）
 // 数据底表: a05_e2e_paid_media_product_data_d
-// 筛选: 全局筛选（mix_msg IS NULL / 第5层不做过滤取当前明细值）
+// 筛选: 全局筛选（第1~4层 mix_msg IS NULL / 第5层 other 行取 mix_msg IS NULL，其余明细取当前值）
 //       Platform（单选含 ALL，ALL → platform IN {"TM","JD"}）
 //       trans_cycle（单选，数据口径）
 // 日期上下文: Dim_Date_Current 关系自然筛选
@@ -515,14 +602,24 @@ Category Growth Cost =
 
     // ── 3. 层级过滤 (转为显式的 FILTER 表) ──
     // 第1~4层：只要 mix_msg IS NULL 的数据
-    // 第5层：不做任何过滤，取当前明细值
+    // 第5层：other 行取 mix_msg IS NULL（值与第4层 channel 完全一致），其余明细取当前明细值
     VAR __CurrentMixMsg = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[mix_msg_Label_01])
     VAR __LevelFilter =
         FILTER(
             ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_01],a05_e2e_paid_media_product_data_d[mix_msg]),
             SWITCH(
                 TRUE(),
+                __IsMixMsg,
+                    SWITCH(
+                        TRUE(),
+                        // other 行：取 mix_msg IS NULL 的数据（值与第4层 channel 完全一致）
+                        __CurrentMixMsg = "other", ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]),
+                        // 其余明细：取当前明细值
+                        a05_e2e_paid_media_product_data_d[mix_msg_Label_01] = __CurrentMixMsg
+                    ),
+                /* 旧逻辑：第5层统一取当前明细值（2026-09-12 弃用，保留备查）
                 __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg_Label_01] = __CurrentMixMsg,
+                如需回退：删除/注释上方 __IsMixMsg 嵌套 SWITCH 分支，恢复上一行旧逻辑即可 */
                 ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态  
             )
         )
@@ -612,7 +709,8 @@ Category Growth Cost% =
 // 用途: 各品类推广花费占总花费的百分比
 // 口径: 品类 cost_amt / TTL cost_amt
 //       分母不受行维度（framework / brand / category / channel / mix_msg_Label_01）筛选上下文影响
-//       分母使用 REMOVEFILTERS 移除全部 5 个行维度 + 保留切片器筛选
+//       分母使用 REMOVEFILTERS 移除全部行维度 + mix_msg + 保留切片器筛选
+//       例外：第5层非other明细行，分母 = 当前1~4层分组下排除other（mix_msg IS NULL）的明细总和
 // 类型: 比率类，不除汇率
 // 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
@@ -632,14 +730,24 @@ Category Growth Cost% =
     VAR __IsMixMsg = ISINSCOPE(a05_e2e_paid_media_product_data_d[mix_msg_Label_01])
 
     // 第1~4层：只要 mix_msg IS NULL 的数据
-    // 第5层：不做任何过滤，取当前明细值
+    // 第5层：other 行取 mix_msg IS NULL（值与第4层 channel 完全一致），其余明细取当前明细值
     VAR __CurrentMixMsg = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[mix_msg_Label_01])
     VAR __LevelFilter =
         FILTER(
             ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_01],a05_e2e_paid_media_product_data_d[mix_msg]),
             SWITCH(
                 TRUE(),
+                __IsMixMsg,
+                    SWITCH(
+                        TRUE(),
+                        // other 行：取 mix_msg IS NULL 的数据（值与第4层 channel 完全一致）
+                        __CurrentMixMsg = "other", ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]),
+                        // 其余明细：取当前明细值
+                        a05_e2e_paid_media_product_data_d[mix_msg_Label_01] = __CurrentMixMsg
+                    ),
+                /* 旧逻辑：第5层统一取当前明细值（2026-09-12 弃用，保留备查）
                 __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg_Label_01] = __CurrentMixMsg,
+                如需回退：删除/注释上方 __IsMixMsg 嵌套 SWITCH 分支，恢复上一行旧逻辑即可 */
                 ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态  
             )
         )
@@ -660,18 +768,36 @@ Category Growth Cost% =
             __LevelFilter
         )
 
-    // ── 分母：总计 cost_amt（移除全部 5 个行维度）──
+    // ── 分母：分两种口径 ──
+    // ① 第5层非other明细行：分母 = 当前1~4层分组下，排除other（mix_msg IS NULL）的明细总和，比值合计=100%
+    // ② 其余行（第1~4层/第5层other行/总计行）：分母 = 总计 cost_amt（移除全部行维度 + mix_msg）
+    //    第5层other行：分子分母均与第4层 channel 行一致，比值完全相同
     VAR __TotalCostAmt =
-        CALCULATE(
-            SUM(a05_e2e_paid_media_product_data_d[cost_amt]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[framework]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[brand]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[category]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[channel]),
-            REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg_Label_01]),
-            __PlatformFilter,   // 交集 1：限定平台
-            __TransCycleFilter, // 交集 2：限定周期
-            __LevelFilter
+        IF(
+            __IsMixMsg && __CurrentMixMsg <> "other",
+            // ① 第5层非other明细：保留当前1~4层分组，分母 = 分组内排除other的明细总和（A+B+C）
+            CALCULATE(
+                SUM(a05_e2e_paid_media_product_data_d[cost_amt]),
+                __PlatformFilter,   // 交集 1：限定平台
+                __TransCycleFilter, // 交集 2：限定周期
+                FILTER(
+                    ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_01],a05_e2e_paid_media_product_data_d[mix_msg]),
+                    NOT ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 排除other，只保留明细行
+                )
+            ),
+            // ② 其余行：移除全部行维度（含 mix_msg），总计口径
+            CALCULATE(
+                SUM(a05_e2e_paid_media_product_data_d[cost_amt]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[framework]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[brand]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[category]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[channel]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg_Label_01]),
+                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg]), // 新增：同步移除 mix_msg 列筛选
+                __PlatformFilter,   // 交集 1：限定平台
+                __TransCycleFilter, // 交集 2：限定周期
+                __LevelFilter
+            )
         )
 
     RETURN
@@ -742,7 +868,7 @@ Category Growth ROI =
 // 类型: 比率类，不除汇率
 // 数据格式: #,##0.0;-#,##0.0;0.0
 // 数据底表: a05_e2e_paid_media_product_data_d
-// 筛选: 全局筛选（mix_msg IS NULL / 第5层不做过滤取当前明细值）
+// 筛选: 全局筛选（第1~4层 mix_msg IS NULL / 第5层 other 行取 mix_msg IS NULL，其余明细取当前值）
 //       Platform（单选含 ALL，ALL → platform IN {"TM","JD"}）
 //       trans_cycle（单选，数据口径）
 // ========================================
@@ -761,14 +887,24 @@ Category Growth ROI =
     VAR __IsMixMsg = ISINSCOPE(a05_e2e_paid_media_product_data_d[mix_msg_Label_01])
 
     // 第1~4层：只要 mix_msg IS NULL 的数据
-    // 第5层：不做任何过滤，取当前明细值
+    // 第5层：other 行取 mix_msg IS NULL（值与第4层 channel 完全一致），其余明细取当前明细值
     VAR __CurrentMixMsg = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[mix_msg_Label_01])
     VAR __LevelFilter =
         FILTER(
             ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_01],a05_e2e_paid_media_product_data_d[mix_msg]),
             SWITCH(
                 TRUE(),
+                __IsMixMsg,
+                    SWITCH(
+                        TRUE(),
+                        // other 行：取 mix_msg IS NULL 的数据（值与第4层 channel 完全一致）
+                        __CurrentMixMsg = "other", ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]),
+                        // 其余明细：取当前明细值
+                        a05_e2e_paid_media_product_data_d[mix_msg_Label_01] = __CurrentMixMsg
+                    ),
+                /* 旧逻辑：第5层统一取当前明细值（2026-09-12 弃用，保留备查）
                 __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg_Label_01] = __CurrentMixMsg,
+                如需回退：删除/注释上方 __IsMixMsg 嵌套 SWITCH 分支，恢复上一行旧逻辑即可 */
                 ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态  
             )
         )
@@ -872,6 +1008,40 @@ VAR _Total =
     COALESCE([Category Growth ROI VS LP], 0)
 RETURN
     IF(_Total = 0, 0, 1)
+```
+
+--------------------------------------------------------------------------------
+1.13 Category_Growth_matrix_solution IsEmpty
+--------------------------------------------------------------------------------
+```dax
+Category_Growth_matrix_solution IsEmpty =
+/*
+功能：实现跨字段并集（OR）筛选
+逻辑：三个字段中任一字段"不为空"（既非 BLANK 也非空字符串 ""）即显示
+返回：1（显示）或 0（隐藏）
+*/
+
+// 步骤1：获取当前上下文中各字段的值（行粒度下 MAX 即当前行的值）
+VAR FrameworkValue = MAX('a05_e2e_paid_media_product_data_d'[framework])
+VAR BrandValue  = MAX('a05_e2e_paid_media_product_data_d'[brand])
+VAR CategoryValue  = MAX('a05_e2e_paid_media_product_data_d'[category])
+VAR ChannelValue  = MAX('a05_e2e_paid_media_product_data_d'[channel])
+VAR Mix_msg_Label_01Value  = MAX('a05_e2e_paid_media_product_data_d'[mix_msg_Label_01])
+
+// 步骤2：逐字段判断"有效"= 不为 BLANK 且 不为空字符串
+VAR IsFrameworkValid = NOT ISBLANK(FrameworkValue) && FrameworkValue <> ""
+VAR IsBrandValid  = NOT ISBLANK(BrandValue)  && BrandValue  <> ""
+VAR IsCategoryValid  = NOT ISBLANK(CategoryValue)  && CategoryValue  <> ""
+VAR IsChannelValid  = NOT ISBLANK(ChannelValue)  && ChannelValue  <> ""
+VAR IsMix_msg_Label_01Valid  = NOT ISBLANK(Mix_msg_Label_01Value)  && Mix_msg_Label_01Value  <> ""
+
+// 步骤3：并集（OR）—— 任一字段有效即显示
+RETURN
+    IF(
+        IsFrameworkValid || IsBrandValid || IsCategoryValid || IsChannelValid || IsMix_msg_Label_01Valid,
+        1,  // 任一不为空：显示
+        0   // 全为空：隐藏
+    )
 ```
 
 ================================================================================
@@ -1275,17 +1445,22 @@ _Measures
 
 | # | 指标名            | 状态     | 口径                                              | 汇率 | 数据类型 | 格式字符串                    |
 |---|------------------|----------|---------------------------------------------------|------|----------|-------------------------------|
-| 1 | EOH(OMS)%        | ✅已实现  | stock_qty / TTL stock_qty（REMOVEFILTERS 5维度）   | ❌   | 百分比   | #,##0.0%        |
+| 1 | EOH(OMS)%        | ✅已实现  | stock_qty / TTL stock_qty（占比类分母规则①）        | ❌   | 百分比   | #,##0.0%        |
 | 2 | Active IDs       | ✅已实现  | SUM(living_sku_cnt) + 层级过滤                     | ❌   | 整数     | #,##0;(#,##0);0               |
 | 3 | Active IDs VS LP | ✅已实现  | 本期/同期 - 1 + 层级过滤                           | ❌   | 百分比   | #,##0.0%        |
-| 4 | Net Sales%       | ✅已实现  | net_sales_amt / TTL net_sales_amt（REMOVEFILTERS） | ❌   | 百分比   | #,##0.0%        |
+| 4 | Net Sales%       | ✅已实现  | net_sales_amt / TTL net_sales_amt（占比类分母规则①） | ❌   | 百分比   | #,##0.0%        |
 | 5 | SLS% VS LP       | ✅已实现  | 本期 Net Sales% / 同期 Net Sales% - 1              | ❌   | 百分比   | #,##0.0%        |
 | 6 | Cost             | ✅已修正  | SUM(cost_amt) × ExchangeRate                       | ✅乘 | 货币     | #,##0（拼接币种符号）          |
 | 7 | Cost VS LP       | ✅已修正  | 本期 Cost / 同期 Cost - 1                          | ❌   | 百分比   | #,##0.0%        |
-| 8 | Cost%            | ✅已修正  | cost_amt / TTL cost_amt（REMOVEFILTERS）           | ❌   | 百分比   | #,##0.0%        |
+| 8 | Cost%            | ✅已修正  | cost_amt / TTL cost_amt（占比类分母规则①）           | ❌   | 百分比   | #,##0.0%        |
 | 9 | Cost% VS LP      | ✅已修正  | 本期 Cost% / 同期 Cost% - 1                        | ❌   | 百分比   | #,##0.0%        |
 | 10| ROI              | ✅已实现  | media_sales_amt / cost_amt                          | ❌   | 小数     | #,##0.0;-#,##0.0;0.0          |
 | 11| ROI VS LP        | ✅已实现  | 本期 ROI / 同期 ROI - 1                             | ❌   | 百分比   | #,##0.0%        |
+
+注① 占比类分母规则（EOH(OMS)% / Net Sales% / Cost%，2026-09-12 起）：
+  - 第5层非other明细行：分母 = 当前1~4层分组下，排除other（mix_msg IS NULL）的明细总和，比值合计 = 100%
+  - 第5层other行：分子分母均与第4层 channel 行一致，比值完全相同
+  - 其余行（第1~4层 / 总计行）：分母 = 全店口径（移除全部行维度 + mix_msg）
 
 ================================================================================
 七、变更记录
@@ -1308,3 +1483,11 @@ _Measures
 |            | ③ 影响度量值：EOH(OMS)%、Active IDs、Net Sales%、Cost、Cost%、ROI（共6个核心度量值）                |
 |            | ④ VS LP 系列度量值（5个）通过调用基础度量值自动继承变更                                            |
 |            | ⑤ Active IDs 的 ALLSELECTED 层级过滤同步调整：各层 ISBLANK(mix_msg_Label_01) → mix_msg_Label_01 = "ALL"            |
+| 2026-09-12 | 第5层 other 行口径调整 + 占比类分母口径调整：                                                |
+|            | ① 第5层（mix_msg_Label_01 明细）值为 "other" 时：改取 mix_msg IS NULL 的数据，值与第4层 channel 完全一致；          |
+|            |    其余明细仍取当前明细值（mix_msg_Label_01 = 当前明细值）                                  |
+|            | ② 占比类分母（EOH(OMS)% / Net Sales% / Cost%）：新增 REMOVEFILTERS(mix_msg)；第5层非other明细行的分母改为        |
+|            |    当前1~4层分组下排除other（mix_msg IS NULL）的明细总和，比值合计 = 100%；第5层other行分母不变，比值与channel行相同 |
+|            | ③ 影响度量值：EOH(OMS)%、Active IDs、Net Sales%、Cost、Cost%、ROI（共6个核心度量值）                          |
+|            | ④ VS LP 系列度量值（5个）通过调用基础度量值自动继承变更                                        |
+|            | ⑤ 旧逻辑以 DAX 块注释保留在 __LevelFilter / 分母原位置，支持快速回退                              |
