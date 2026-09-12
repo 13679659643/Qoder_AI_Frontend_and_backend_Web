@@ -5,7 +5,7 @@
 > type: 度量值开发 + 卡片图视觉对象
 > 口径来源: 口径文档/Member.md Performance Indicator 子板块
 > 参考实现: Performance By Location/PB_Location_Sales_detail.md（Value/Display 范式、LY 财历映射）
-> 底表: a03_e2e_customer_data_m
+> 底表: a03_e2e_customer_data_m、t05_customer_info
 
 ---
 
@@ -52,7 +52,7 @@
 
 | 对象 | 名称 | 出处 |
 |------|------|------|
-| 事实表 | a03_e2e_customer_data_m | Member.md 全局逻辑 |
+| 事实表 | a03_e2e_customer_data_m、t05_customer_info | Member.md 全局逻辑 |
 | 关键字段 | data_date, register_date, user_id, is_member, platform, shop_info_id, net_pay_amt, net_pay_amt, pay_amt, pay_amt | Member.md |
 
 ### 2.2 维度表清单（断开维度，沿用项目现有切片器）
@@ -149,10 +149,10 @@ DCom New Member Recruitment Value =
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
     VAR __Result =
         CALCULATE(
-            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = 1,
-            'a03_e2e_customer_data_m'[register_date] >= __TimeMin,
-            'a03_e2e_customer_data_m'[register_date] <= __TimeMax
+            DISTINCTCOUNT('t05_customer_info'[user_id]),
+            // 't05_customer_info'[is_member] = 1,
+            't05_customer_info'[register_date] >= __TimeMin,
+            't05_customer_info'[register_date] <= __TimeMax
         )
     RETURN __Result
 ```
@@ -200,10 +200,10 @@ DCom New Member Recruitment LY Value =
     VAR __LYTimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LY])
     VAR __Result =
         CALCULATE(
-            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = 1,
-            'a03_e2e_customer_data_m'[register_date] >= __LYTimeMin,
-            'a03_e2e_customer_data_m'[register_date] <= __LYTimeMax
+            DISTINCTCOUNT('t05_customer_info'[user_id]),
+            // 't05_customer_info'[is_member] = 1,
+            't05_customer_info'[register_date] >= __LYTimeMin,
+            't05_customer_info'[register_date] <= __LYTimeMax
         )
     RETURN __Result
 ```
@@ -296,10 +296,10 @@ DCom New Member Recruitment LP Value =
     VAR __LPTimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LP])
     VAR __Result =
         CALCULATE(
-            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = 1,
-            'a03_e2e_customer_data_m'[register_date] >= __LPTimeMin,
-            'a03_e2e_customer_data_m'[register_date] <= __LPTimeMax
+            DISTINCTCOUNT('t05_customer_info'[user_id]),
+            // 't05_customer_info'[is_member] = 1,
+            't05_customer_info'[register_date] >= __LPTimeMin,
+            't05_customer_info'[register_date] <= __LPTimeMax
         )
     RETURN __Result
 ```

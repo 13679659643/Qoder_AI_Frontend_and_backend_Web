@@ -33,8 +33,8 @@
 | **业务定义** | 注册日期在指定日期范围内的会员人数 |
 | **计算公式** | count(distinct user_id) |
 | **统计字段** | `user_id` |
-| **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `is_member = 1`，`register_date` 在所选时间范围内,即a03_e2e_customer_data_m[register_date]在[__TimeMin, __TimeMax]中的数据 |
+| **数据底表** | `t05_customer_info` |
+| **筛选条件** | `register_date` 在所选时间范围内,即t05_customer_info[register_date]在[__TimeMin, __TimeMax]中的数据 |
 | **聚合粒度** | `register_date = 所选时间范围`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
@@ -47,8 +47,8 @@
 | **指标名称中文** | DCom新增会员数同比 |
 | **业务定义** | DCom新增会员数今年较去年同期的变化率 |
 | **计算公式** | 今年 / 去年 - 1 |
-| **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `is_member = 1`，`register_date` 在所选时间范围内,即a03_e2e_customer_data_m[register_date]在[__TimeMin, __TimeMax]中的数据 |
+| **数据底表** | `t05_customer_info` |
+| **筛选条件** | `register_date` 在所选时间范围内,即t05_customer_info[register_date]在[__TimeMin, __TimeMax]中的数据 |
 | **聚合粒度** | `register_date = 所选时间范围`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | 两种数据格式：percent_1dp → 百分比，保留一位小数，不含正号 或者 delta_pct_1dp → 百分比，保留一位小数，含正号：+14.5% / -3.2%|
 | **数据格式** | `#,##0.0%`/IF(__Value > 0, "+", "") & FORMAT(__Value, "0.0%") |
@@ -61,8 +61,8 @@
 | **指标名称中文** | DCom新增会员数环比 |
 | **业务定义** | DCom新增会员数当期较上期的变化率 |
 | **计算公式** | 当期 / 上期 - 1 |
-| **数据底表** | `a03_e2e_customer_data_m` |
-| **筛选条件** | `is_member = 1`，`register_date` 在所选时间范围内,即a03_e2e_customer_data_m[register_date]在[__TimeMin, __TimeMax]中的数据 |
+| **数据底表** | `t05_customer_info` |
+| **筛选条件** | `register_date` 在所选时间范围内,即t05_customer_info[register_date]在[__TimeMin, __TimeMax]中的数据 |
 | **聚合粒度** | `register_date = 所选时间范围`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | 两种数据格式：percent_1dp → 百分比，保留一位小数，不含正号 或者 delta_pct_1dp → 百分比，保留一位小数，含正号：+14.5% / -3.2%|
 | **数据格式** | `#,##0.0%`/IF(__Value > 0, "+", "") & FORMAT(__Value, "0.0%") |

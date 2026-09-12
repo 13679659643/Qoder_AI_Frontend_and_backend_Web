@@ -722,7 +722,7 @@ Fulfillment PB Merchandise Cell Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+            BLANK(), // 过滤前端整行数据为空的，pbi为自动过滤，'-'不会。
             SWITCH(
                 __Format,
                 // ─── 整数（千分位）──────────────────────────

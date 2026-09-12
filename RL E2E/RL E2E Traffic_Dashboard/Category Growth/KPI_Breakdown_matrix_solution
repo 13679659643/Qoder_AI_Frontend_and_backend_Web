@@ -94,8 +94,8 @@ KPI Breakdown Base Value =
 
     // ── channel 列表（按平台区分）──
     // TM/RLE/DY → 直通车/引力魔方/全站推
-    // JD       → 快车/触点/海投
-    // JD 渠道映射：直通车→快车、引力魔方→触点、全站推→海投
+    // JD       → 快车/触点/全站推
+    // JD 渠道映射：直通车→快车、引力魔方→触点、全站推→全站推
     // ── channel 筛选器 ──
     // __MetricNameTrim = "Total" → 保留三渠道范围（不施加单 channel 筛选）
     // __MetricNameTrim = 具体渠道 → 筛选 channel = 该渠道
@@ -105,7 +105,7 @@ KPI Breakdown Base Value =
 	        VALUES(a05_e2e_paid_media_summary_d[channel]),
 	        IF(
 	            __MetricNameTrim = "Total",
-	            (__PlatformID = "JD" && a05_e2e_paid_media_summary_d[channel] IN {"快车", "触点", "海投"})
+	            (__PlatformID = "JD" && a05_e2e_paid_media_summary_d[channel] IN {"快车", "触点", "全站推"})
 	            ||
 	            (__PlatformID <> "JD" && a05_e2e_paid_media_summary_d[channel] IN {"直通车", "引力魔方", "全站推"}),
                 IF(
@@ -244,7 +244,7 @@ KPI Breakdown Base Value =
             a05_e2e_paid_media_summary_d[page_type] = "2",
             a05_e2e_paid_media_summary_d[Total] = "Total",
             FILTER(ALLSELECTED(a05_e2e_paid_media_summary_d[channel]),
-	            (__PlatformID = "JD" && a05_e2e_paid_media_summary_d[channel] IN {"快车", "触点", "海投"})
+	            (__PlatformID = "JD" && a05_e2e_paid_media_summary_d[channel] IN {"快车", "触点", "全站推"})
 	            ||
 	            (__PlatformID <> "JD" && a05_e2e_paid_media_summary_d[channel] IN {"直通车", "引力魔方", "全站推"})
 	        ),
@@ -299,7 +299,7 @@ KPI Breakdown Base Value =
     VAR __CostMOB_Total =
         IF(__IsTotalRow || __IsTotalTTL, 1, DIVIDE(__Cost_ALL, __Cost_ALL_TTL))
 
-    // ── Cost MOB% 渠道（直通车/引力魔方/全站推 或 快车/触点/海投）──
+    // ── Cost MOB% 渠道（直通车/引力魔方/全站推 或 快车/触点/全站推）──
     // Total 行：渠道 cost / 三渠道总 cost（分母为三渠道汇总）
     // 明细行：分组渠道 cost / 移除分组渠道 TTL cost（分母为当前渠道 TTL）
     VAR __CostMOB_Channel =
@@ -597,4 +597,4 @@ KPI Breakdown Cell Background Color =
 | 11 | New Customer Cost% Total | 三渠道 NEW / 三渠道(NEW+EXISTING) | decimal_1dp | 三渠道汇总 |
 | 12-14 | New Customer Cost% 渠道 | 渠道 NEW / 渠道(NEW+EXISTING) | decimal_1dp | 渠道 NEW / 渠道(NEW+EXISTING) |
 
-**TM/JD channel 映射**：直通车→快车、引力魔方→触点、全站推→海投
+**TM/JD channel 映射**：直通车→快车、引力魔方→触点、全站推→全站推

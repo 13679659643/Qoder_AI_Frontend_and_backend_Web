@@ -16,7 +16,7 @@ Category Growth Diff EOH(OMS)% =
 // 口径: 该分组 stock_qty / 总 stock_qty
 //       分子 = 当前分组 SUM(stock_qty)
 //       分母 = 全店 SUM(stock_qty)（移除全部 5 个行维度）
-// 类型: 比率类，不乘汇率
+// 类型: 比率类，不除汇率
 // 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 筛选: 全局筛选（mix_msg IS NULL / 第5层不做过滤取当前明细值）
@@ -51,6 +51,15 @@ Category Growth Diff EOH(OMS)% =
     // 第1~4层：只要 mix_msg IS NULL 的数据
     // 第5层：不做任何过滤，取当前明细值
     VAR __CurrentMixMsg = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[mix_msg_Label_02])
+    VAR __LevelFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_02],a05_e2e_paid_media_product_data_d[mix_msg]),
+            SWITCH(
+                TRUE(),
+                __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg_Label_02] = __CurrentMixMsg,
+                ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态  
+            )
+        )
         
     // ── 4. 周期筛选 (显式声明，覆盖该列原有上下文) ──
     VAR __TransCycleFilter =
@@ -70,7 +79,7 @@ Category Growth Diff EOH(OMS)% =
                 ),
             __PlatformFilter,   // 交集 1：限定平台
             __TransCycleFilter, // 交集 2：限定周期
-            ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态 
+            __LevelFilter 
         )
 
 
@@ -90,7 +99,7 @@ Category Growth Diff EOH(OMS)% =
                 ),
             __PlatformFilter,   // 交集 1：限定平台
             __TransCycleFilter, // 交集 2：限定周期
-            ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态 
+            __LevelFilter 
         )
 
     RETURN
@@ -100,20 +109,20 @@ Category Growth Diff EOH(OMS)% =
 1.2 Category Growth Diff Active IDs
 --------------------------------------------------------------------------------
 
-Category Growth Diff Active IDs =
+Category Growth Diff Active IDs = 
 // ========================================
 // 度量值: Category Growth Diff Active IDs
 // 中文名: 在推ID数量
 // Display Folder: Category Growth Diff
 // 用途: 推广中SKU数，统计周期最后一天仍在推的商品ID去重计数
 // 口径: 获取当前时间周期的最大日期，然后对 living_sku_cnt 聚合 SUM
-// 类型: 计数类，不乘汇率
+// 类型: 计数类，不除汇率
 // 数据格式: #,##0;(#,##0);0
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 筛选: 层级过滤
 //       1~3层：限制 mix_msg is null and channel = 'ALL'
 //       4层：限制 mix_msg is null，不限制 channel = 'ALL'
-//       5层:取当前渠道，mix_msg_Label_01 取当前明细值
+//       5层:取当前渠道，mix_msg_Label_02 取当前明细值
 //       Platform（单选含 ALL，ALL → platform IN {"TM","JD"}）
 //       trans_cycle（单选，数据口径）
 // ========================================
@@ -246,7 +255,7 @@ Category Growth Diff Active IDs VS LP =
 // 口径: YOY同比 = 本期值 / 同期(LP)值 - 1
 //       本期 = Dim_Date_Current 关系自然筛选
 //       同期 = Dim_Date_Ly 断开维度，MIN/MAX 取范围，CALCULATE 覆盖日期上下文
-// 类型: 同比增长率，不乘汇率
+// 类型: 同比增长率，不除汇率
 // 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 同比机制:
@@ -299,7 +308,7 @@ Category Growth Diff Net Sales% =
 // 口径: 品类 net_sales_amt / TTL net_sales_amt
 //       分子 = 当前分组 SUM(net_sales_amt)
 //       分母 = 全店 SUM(net_sales_amt)（移除全部 5 个行维度）
-// 类型: 比率类，不乘汇率
+// 类型: 比率类，不除汇率
 // 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 筛选: 全局筛选条件下直接 SUM
@@ -332,6 +341,15 @@ Category Growth Diff Net Sales% =
     // 第1~4层：只要 mix_msg IS NULL 的数据
     // 第5层：不做任何过滤，取当前明细值
     VAR __CurrentMixMsg = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[mix_msg_Label_02])
+    VAR __LevelFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_02],a05_e2e_paid_media_product_data_d[mix_msg]),
+            SWITCH(
+                TRUE(),
+                __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg_Label_02] = __CurrentMixMsg,
+                ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态  
+            )
+        )
         
     // ── 4. 周期筛选 (显式声明，覆盖该列原有上下文) ──
     VAR __TransCycleFilter =
@@ -346,7 +364,7 @@ Category Growth Diff Net Sales% =
             SUM(a05_e2e_paid_media_product_data_d[net_sales_amt]),
             __PlatformFilter,
             __TransCycleFilter,
-            ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态
+            __LevelFilter
         )
 
     // ── 分母：全店 net_sales_amt（移除全部 5 个行维度）──
@@ -360,7 +378,7 @@ Category Growth Diff Net Sales% =
             REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg_Label_02]),
             __PlatformFilter,   // 交集 1：限定平台
             __TransCycleFilter, // 交集 2：限定周期
-            ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态
+            __LevelFilter
         )
 
     RETURN
@@ -379,7 +397,7 @@ Category Growth Diff SLS% VS LP =
 // 口径: YOY同比 = 本期 Net Sales% / 同期(LP) Net Sales% - 1
 //       本期 Net Sales% = 本期品类 net_sales_amt / 本期 TTL net_sales_amt
 //       同期 Net Sales% = 同期品类 net_sales_amt / 同期 TTL net_sales_amt
-// 类型: 同比增长率，不乘汇率
+// 类型: 同比增长率，不除汇率
 // 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 同比机制:
@@ -429,8 +447,8 @@ Category Growth Diff Cost =
 // 中文名: 花费
 // Display Folder: Category Growth Diff
 // 用途: 实际总媒体花费
-// 口径: 各品类推广花费加总 SUM(cost_amt) × 汇率
-// 类型: 金额类，乘汇率
+// 口径: 各品类推广花费加总 SUM(cost_amt) ÷ 汇率
+// 类型: 金额类，除汇率
 // 数据格式: #,##0（在 DAX 中用 __CurrencySymbol & FORMAT(__Value, "#,##0") 拼接币种符号）
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 筛选: 全局筛选（mix_msg IS NULL / 第5层不做过滤取当前明细值）
@@ -465,6 +483,15 @@ Category Growth Diff Cost =
     // 第1~4层：只要 mix_msg IS NULL 的数据
     // 第5层：不做任何过滤，取当前明细值
     VAR __CurrentMixMsg = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[mix_msg_Label_02])
+    VAR __LevelFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_02],a05_e2e_paid_media_product_data_d[mix_msg]),
+            SWITCH(
+                TRUE(),
+                __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg_Label_02] = __CurrentMixMsg,
+                ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态  
+            )
+        )
 
         
     // ── 4. 周期筛选 (显式声明，覆盖该列原有上下文) ──
@@ -479,10 +506,10 @@ Category Growth Diff Cost =
             SUM(a05_e2e_paid_media_product_data_d[cost_amt]),
             __PlatformFilter,
             __TransCycleFilter,
-            ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态
+            __LevelFilter
         )
     RETURN
-        __BaseValue * __ExchangeRate
+        DIVIDE(__BaseValue, __ExchangeRate)
 
 --------------------------------------------------------------------------------
 1.7 Category Growth Diff Cost VS LP
@@ -495,9 +522,9 @@ Category Growth Diff Cost VS LP =
 // Display Folder: Category Growth Diff
 // 用途: Cost 同比增长率
 // 口径: YOY同比 = 本期 Cost / 同期(LP) Cost - 1
-// 类型: 同比增长率，不乘汇率
+// 类型: 同比增长率，不除汇率
 // 汇率说明: 增长率不受汇率影响（本期与同期乘相同汇率约分抵消）
-//           内部用原始值（不乘汇率）计算，结果与乘汇率后计算一致
+//           内部用原始值（不除汇率）计算，结果与除汇率后计算一致
 // 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 同比机制:
@@ -508,7 +535,7 @@ Category Growth Diff Cost VS LP =
 //   边界: 同期为 0/空 → BLANK；本期为 0/空且同期有值 → -1
 // ========================================
 
-    // ── 本期 Cost（原始值，不乘汇率，同比约分）──
+    // ── 本期 Cost（原始值，不除汇率，同比约分）──
     VAR __CurrentValue = [Category Growth Diff Cost]
 
     // ── 同期 Cost（覆盖日期上下文为 LP 日期范围）──
@@ -552,7 +579,7 @@ Category Growth Diff Cost% =
 // 口径: 品类 cost_amt / TTL cost_amt
 //       分母不受行维度（season / brand / category / channel / mix_msg_Label_02）筛选上下文影响
 //       分母使用 REMOVEFILTERS 移除全部 5 个行维度 + 保留切片器筛选
-// 类型: 比率类，不乘汇率
+// 类型: 比率类，不除汇率
 // 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // ========================================
@@ -573,6 +600,15 @@ Category Growth Diff Cost% =
     // 第1~4层：只要 mix_msg IS NULL 的数据
     // 第5层：不做任何过滤，取当前明细值
     VAR __CurrentMixMsg = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[mix_msg_Label_02])
+    VAR __LevelFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_02],a05_e2e_paid_media_product_data_d[mix_msg]),
+            SWITCH(
+                TRUE(),
+                __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg_Label_02] = __CurrentMixMsg,
+                ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态  
+            )
+        )
 
     // ── 周期筛选 (显式声明，覆盖该列原有上下文) ──
     VAR __TransCycleFilter =
@@ -587,7 +623,7 @@ Category Growth Diff Cost% =
             SUM(a05_e2e_paid_media_product_data_d[cost_amt]),
             __PlatformFilter,
             __TransCycleFilter,
-            ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态
+            __LevelFilter
         )
 
     // ── 分母：总计 cost_amt（移除全部 5 个行维度）──
@@ -601,7 +637,7 @@ Category Growth Diff Cost% =
             REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg_Label_02]),
             __PlatformFilter,   // 交集 1：限定平台
             __TransCycleFilter, // 交集 2：限定周期
-            ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态
+            __LevelFilter
         )
 
     RETURN
@@ -618,7 +654,7 @@ Category Growth Diff Cost% VS LP =
 // Display Folder: Category Growth Diff
 // 用途: Cost% 同比增长率
 // 口径: YOY同比 = 本期 Cost% / 同期(LP) Cost% - 1
-// 类型: 同比增长率，不乘汇率
+// 类型: 同比增长率，不除汇率
 // 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 同比机制:
@@ -669,7 +705,7 @@ Category Growth Diff ROI =
 // Display Folder: Category Growth Diff
 // 用途: 成交金额 / 花费，计算出 ROI
 // 口径: 品类 media_sales_amt / 品类 cost_amt
-// 类型: 比率类，不乘汇率
+// 类型: 比率类，不除汇率
 // 数据格式: #,##0.0;-#,##0.0;0.0
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 筛选: 全局筛选（mix_msg IS NULL / 第5层不做过滤取当前明细值）
@@ -693,6 +729,15 @@ Category Growth Diff ROI =
     // 第1~4层：只要 mix_msg IS NULL 的数据
     // 第5层：不做任何过滤，取当前明细值
     VAR __CurrentMixMsg = SELECTEDVALUE(a05_e2e_paid_media_product_data_d[mix_msg_Label_02])
+    VAR __LevelFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_product_data_d[mix_msg_Label_02],a05_e2e_paid_media_product_data_d[mix_msg]),
+            SWITCH(
+                TRUE(),
+                __IsMixMsg, a05_e2e_paid_media_product_data_d[mix_msg_Label_02] = __CurrentMixMsg,
+                ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态  
+            )
+        )
 
     // ── 周期筛选 (显式声明，覆盖该列原有上下文) ──
     VAR __TransCycleFilter =
@@ -707,7 +752,7 @@ Category Growth Diff ROI =
             SUM(a05_e2e_paid_media_product_data_d[media_sales_amt]),
             __PlatformFilter,
             __TransCycleFilter,
-            ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态
+            __LevelFilter
         )
 
     // ── 分母：品类 cost_amt（花费）──
@@ -716,7 +761,7 @@ Category Growth Diff ROI =
             SUM(a05_e2e_paid_media_product_data_d[cost_amt]),
             __PlatformFilter,
             __TransCycleFilter,
-            ISBLANK(a05_e2e_paid_media_product_data_d[mix_msg]) // 交集 3：限定层级与 mix_msg 状态
+            __LevelFilter
         )
 
     RETURN
@@ -733,7 +778,7 @@ Category Growth Diff ROI VS LP =
 // Display Folder: Category Growth Diff
 // 用途: ROI 同比增长率
 // 口径: YOY同比 = 本期 ROI / 同期(LP) ROI - 1
-// 类型: 同比增长率，不乘汇率
+// 类型: 同比增长率，不除汇率
 // 数据格式: #,##0.0%
 // 数据底表: a05_e2e_paid_media_product_data_d
 // 同比机制:
