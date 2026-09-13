@@ -26,19 +26,23 @@
 ### 1.1 关键特殊逻辑一：双数据底表
 
 口径文档明确要求（指标 4、5）：
+
 > 数据底表为 `a02_e2e_boss_fulfillment_request_data_d`
 
 其余指标（6-17）数据底表为 `a02_e2e_boss_performance_summary_d`。因此 Act Base Value 需要同时聚合两张事实表：
+
 - Metric_ID 1, 2（Order Processing Efficiency 分组）→ `a02_e2e_boss_fulfillment_request_data_d`
 - Metric_ID 3-36（其余分组）→ `a02_e2e_boss_performance_summary_d`
 
 ### 1.2 关键特殊逻辑二：Product Volume 库存期末取末日 + 销量区间聚合
 
 口径文档明确要求（指标 17 Product Volume）：
+
 > 库存：sum(stock_qty)【看所选时间范围的期末库存】，库存需要根据筛选日期，只要最后一天的数据。
 > 销量：sum(o2o_fulfillment_shipped_qty)【看所有时间范围的销量总和】，销量整个筛选周期的数据聚合。
 
 因此 Product Volume（Metric_ID 36）的聚合为：
+
 - 库存部分：取 `__TimeMax`（本期末日）当天的 `SUM(stock_qty)`
 - 销量部分：取 `[__TimeMin, __TimeMax]` 区间的 `SUM(o2o_fulfillment_shipped_qty)`
 - 最终值 = 末日库存 + 区间销量
@@ -49,21 +53,21 @@
 
 ### 2.1 数据底表
 
-| 对象 | 名称 | 出处 |
-|------|------|------|
-| 事实表 1 | a02_e2e_boss_performance_summary_d | PB Merchandise.md 全局逻辑 |
-| 事实表 2 | a02_e2e_boss_fulfillment_request_data_d | PB Merchandise.md 指标 4、5 |
-| 关键字段（summary 表） | data_date, brand, product_type, category_summary, category, calc_type, o2o_fulfillment_shipped_order_cnt, o2o_fulfillment_request_order_cnt, o2o_fulfillment_request_qty, o2o_fulfillment_request_sales_amt, o2o_fulfillment_shipped_qty, o2o_fulfillment_shipped_sales_amt, o2o_fulfillment_unshipped_order_cnt, o2o_fulfillment_unshipped_qty, o2o_fulfillment_unshipped_sales_amt, stock_qty | PB Merchandise.md 子模块三 6-17 |
-| 关键字段（request_data 表） | data_date, brand, product_type, category_summary, category, calc_type, o2o_fulfillment_request_times, o2o_fulfillment_request_duration, o2o_fulfillment_request_sku_qty | PB Merchandise.md 子模块三 4、5 |
+| 对象                        | 名称                                                                                                                                                                                                                                                                                                                                                                                            | 出处                            |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| 事实表 1                    | a02_e2e_boss_performance_summary_d                                                                                                                                                                                                                                                                                                                                                              | PB Merchandise.md 全局逻辑      |
+| 事实表 2                    | a02_e2e_boss_fulfillment_request_data_d                                                                                                                                                                                                                                                                                                                                                         | PB Merchandise.md 指标 4、5     |
+| 关键字段（summary 表）      | data_date, brand, product_type, category_summary, category, calc_type, o2o_fulfillment_shipped_order_cnt, o2o_fulfillment_request_order_cnt, o2o_fulfillment_request_qty, o2o_fulfillment_request_sales_amt, o2o_fulfillment_shipped_qty, o2o_fulfillment_shipped_sales_amt, o2o_fulfillment_unshipped_order_cnt, o2o_fulfillment_unshipped_qty, o2o_fulfillment_unshipped_sales_amt, stock_qty | PB Merchandise.md 子模块三 6-17 |
+| 关键字段（request_data 表） | data_date, brand, product_type, category_summary, category, calc_type, o2o_fulfillment_request_times, o2o_fulfillment_request_duration, o2o_fulfillment_request_sku_qty                                                                                                                                                                                                                         | PB Merchandise.md 子模块三 4、5 |
 
 ### 2.2 维度表清单
 
-| 维度表 | 类型 | 连接方式 |
-|--------|------|---------|
-| Slicer_Time_Frame_Min | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Min / TimeFrame_Min_LY |
-| Slicer_Time_Frame_Max | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Max / TimeFrame_Max_LY |
-| Slicer_Currency_Selection | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate / Currency_Symbol |
-| Dim_ColMetric_Fulfillment_PB_Merchandise | 断开维度 | SELECTEDVALUE 读取 Metric_ID / ColType / Metric_Format_* |
+| 维度表                                   | 类型     | 连接方式                                                   |
+| ---------------------------------------- | -------- | ---------------------------------------------------------- |
+| Slicer_Time_Frame_Min                    | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Min / TimeFrame_Min_LY        |
+| Slicer_Time_Frame_Max                    | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Max / TimeFrame_Max_LY        |
+| Slicer_Currency_Selection                | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate / Currency_Symbol |
+| Dim_ColMetric_Fulfillment_PB_Merchandise | 断开维度 | SELECTEDVALUE 读取 Metric_ID / ColType / Metric_Format_*   |
 
 > 不使用行维度表，行字段直接拉取事实表字段。calc_type 在本方案所有指标下固定为 "fulfillment_category_summary_category_season_brand"，直接硬编码,除了Avg. No. of Store Passed Before Order Got Accepted和Avg. Processing Time的calc_type = "fulfillment"。
 
@@ -127,41 +131,42 @@ Dim_ColMetric_Fulfillment_PB_Merchandise（断开维度，列头）
 
 ### 3.3 筛选器上下文
 
-| 筛选器 | 作用方式 | DAX 处理 |
-|--------|---------|---------|
-| Slicer_Time_Frame_Min | 断开维度，SELECTEDVALUE 读取 TimeFrame_Min | `data_date >= __TimeMin`（区间指标） |
-| Slicer_Time_Frame_Max | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max | `data_date <= __TimeMax`（区间指标）；`data_date = __TimeMax`（Product Volume 库存部分末日） |
-| Slicer_Currency_Selection | 断开维度，SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol | 金额类指标 ÷ Currency_ExchangeRate |
-| 事实表分组字段 | 表格行/列直接拉取，模型自动传递筛选 | DAX 无需显式处理 |
+| 筛选器                    | 作用方式                                                            | DAX 处理                                                                                         |
+| ------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Slicer_Time_Frame_Min     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Min                          | `data_date >= __TimeMin`（区间指标）                                                           |
+| Slicer_Time_Frame_Max     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max                          | `data_date <= __TimeMax`（区间指标）；`data_date = __TimeMax`（Product Volume 库存部分末日） |
+| Slicer_Currency_Selection | 断开维度，SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol | 金额类指标 ÷ Currency_ExchangeRate                                                              |
+| 事实表分组字段            | 表格行/列直接拉取，模型自动传递筛选                                 | DAX 无需显式处理                                                                                 |
 
 > calc_type 在本方案所有指标下固定为 "fulfillment_category_summary_category_season_brand"，直接硬编码,除了Avg. No. of Store Passed Before Order Got Accepted和Avg. Processing Time的calc_type = "fulfillment"。
 
 ### 3.4 vs LY 时间偏移规则（财历映射）
 
 直接读取日期表内置 LY 字段：
+
 - 全局 LY 起始日：`Slicer_Time_Frame_Min[TimeFrame_Min_LY]`
 - 全局 LY 结束日：`Slicer_Time_Frame_Max[TimeFrame_Max_LY]`
 - 无需 EDATE -12 或 Key 偏移计算
 
 ### 3.5 vs LY 派生计算分类
 
-| KPI 分类 | vs LY 计算方式 | Metric_Format_VsLY | 展示示例 |
-|---------|---------------|-------------------|---------|
-| 数量类（Request Order Qty/Units、Shipped Order Qty/Units、Unfulfilled Order Qty/Units） | 今年 / 去年 − 1 | percent_1dp | 14.5% |
-| 金额类（Request Order Amt、Shipped Order Amt、Unfulfilled Amt） | 今年 / 去年 − 1 | percent_1dp | 14.5% |
-| 比率类（Fulfillment%、Unfulfillment%） | 今年 − 去年（差值，×10000 转 bp） | delta_bp | +120bp |
+| KPI 分类                                                                                | vs LY 计算方式                      | Metric_Format_VsLY | 展示示例 |
+| --------------------------------------------------------------------------------------- | ----------------------------------- | ------------------ | -------- |
+| 数量类（Request Order Qty/Units、Shipped Order Qty/Units、Unfulfilled Order Qty/Units） | 今年 / 去年 − 1                    | percent_1dp        | 14.5%    |
+| 金额类（Request Order Amt、Shipped Order Amt、Unfulfilled Amt）                         | 今年 / 去年 − 1                    | percent_1dp        | 14.5%    |
+| 比率类（Fulfillment%、Unfulfillment%）                                                  | 今年 − 去年（差值，×10000 转 bp） | delta_bp           | +120bp   |
 
 > Order Processing Efficiency 分组（Metric_ID 1, 2）和 Product Volume 分组（Metric_ID 36）只含单列，无 LY 与 vs LY 列，不需要派生计算。
 
 ### 3.6 格式规范
 
-| 格式类型 | 格式串 | 示例 | 适用度量 |
-|---------|--------|------|---------|
-| integer | `#,##0` | 1,234 | 所有数量类 Act、LY；Product Volume |
-| currency | `__CurrencySymbol & FORMAT(__Value, "#,##0")` | ¥1,234 | Request Order Amt / Shipped Order Amt / Unfulfilled Amt 的 Act、LY |
-| percent_1dp | `#,##0.0%` | 14.5% | 比率类 Act、LY；数量/金额类 vs LY |
-| delta_bp | `IF(ROUND(__Value*10000,0)>0,"+","") & FORMAT(__Value*10000, "#,##0bp;-#,##0bp;0bp")` | +120bp | 比率类 vs LY |
-| decimal_1dp | `#,##0.0` | 1,234.5 | Order Processing Efficiency 分组（Avg. No. of Store Passed / Avg. Processing Time） |
+| 格式类型    | 格式串                                                                                  | 示例    | 适用度量                                                                            |
+| ----------- | --------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------- |
+| integer     | `#,##0`                                                                               | 1,234   | 所有数量类 Act、LY；Product Volume                                                  |
+| currency    | `__CurrencySymbol & FORMAT(__Value, "#,##0")`                                         | ¥1,234 | Request Order Amt / Shipped Order Amt / Unfulfilled Amt 的 Act、LY                  |
+| percent_1dp | `#,##0.0%`                                                                            | 14.5%   | 比率类 Act、LY；数量/金额类 vs LY                                                   |
+| delta_bp    | `IF(ROUND(__Value*10000,0)>0,"+","") & FORMAT(__Value*10000, "#,##0bp;-#,##0bp;0bp")` | +120bp  | 比率类 vs LY                                                                        |
+| decimal_1dp | `#,##0.0`                                                                             | 1,234.5 | Order Processing Efficiency 分组（Avg. No. of Store Passed / Avg. Processing Time） |
 
 ---
 
@@ -171,44 +176,44 @@ Dim_ColMetric_Fulfillment_PB_Merchandise（断开维度，列头）
 
 > 维度表已存在于 `Dim_ColMetric_Fulfillment_PB_Merchandise.md`，此处不再重复定义，直接引用。下文明晰映射关系：
 
-| Metric_ID | KPIGroup | ColName | ColType | 口径文档对应指标 | Act 字段 | LY 字段 | 数据底表 |
-|-----------|----------|---------|---------|-----------------|---------|---------|---------|
-| 1 | Order Processing Efficiency | 1-Avg. No. of Store Passed Before Order Got Accepted | Avg. No. of Store Passed Before Order Got Accepted | 4. Avg. No. of Store Passed | o2o_fulfillment_request_times / o2o_fulfillment_request_sku_qty | — | request_data 表 |
-| 2 | Order Processing Efficiency | 2-Avg. Processing Time(Hour) | Avg. Processing Time(Hour) | 5. Avg. Processing Time(Hour) | o2o_fulfillment_request_duration / o2o_fulfillment_request_sku_qty | — | request_data 表 |
-| 3 | Fulfillment% | 3-Act | Act | 6. Fulfillment%（本期） | o2o_fulfillment_shipped_order_cnt / o2o_fulfillment_request_order_cnt | — | summary 表 |
-| 4 | Fulfillment% | 4-LY | LY | 6.1 Fulfillment% LY | — | 同上（LY 区间） | summary 表 |
-| 5 | Fulfillment% | 5-vs LY | vs LY | 6.2 Fulfillment% vs LY | — | — | summary 表 |
-| 6 | Request Order | 6-Orders | Orders | 7. Request Order Qty | o2o_fulfillment_request_order_cnt | — | summary 表 |
-| 7 | Request Order | 7-LY | LY | 7.1 Request Order Qty LY | — | o2o_fulfillment_request_order_cnt | summary 表 |
-| 8 | Request Order | 8-vs LY | vs LY | 7.2 Request Order Qty vs LY | — | — | summary 表 |
-| 9 | Request Order | 9-Units | Units | 8. Request Units | o2o_fulfillment_request_qty | — | summary 表 |
-| 10 | Request Order | 10-LY | LY | 8.1 Request Units LY | — | o2o_fulfillment_request_qty | summary 表 |
-| 11 | Request Order | 11-vs LY | vs LY | 8.2 Request Units vs LY | — | — | summary 表 |
-| 12 | Request Order | 12-Amt | Amt | 9. Request Order Amt | o2o_fulfillment_request_sales_amt | — | summary 表 |
-| 13 | Request Order | 13-LY | LY | 9.1 Request Order Amt LY | — | o2o_fulfillment_request_sales_amt | summary 表 |
-| 14 | Request Order | 14-vs LY | vs LY | 9.2 Request Order Amt vs LY | — | — | summary 表 |
-| 15 | Shipped Order | 15-Orders | Orders | 10. Shipped Order Qty | o2o_fulfillment_shipped_order_cnt | — | summary 表 |
-| 16 | Shipped Order | 16-LY | LY | 10.1 Shipped Order Qty LY | — | o2o_fulfillment_shipped_order_cnt | summary 表 |
-| 17 | Shipped Order | 17-vs LY | vs LY | 10.2 Shipped Order Qty vs LY | — | — | summary 表 |
-| 18 | Shipped Order | 18-Units | Units | 11. Shipped Units | o2o_fulfillment_shipped_qty | — | summary 表 |
-| 19 | Shipped Order | 19-LY | LY | 11.1 Shipped Units LY | — | o2o_fulfillment_shipped_qty | summary 表 |
-| 20 | Shipped Order | 20-vs LY | vs LY | 11.2 Shipped Units vs LY | — | — | summary 表 |
-| 21 | Shipped Order | 21-Amt | Amt | 12. Shipped Order Amt | o2o_fulfillment_shipped_sales_amt | — | summary 表 |
-| 22 | Shipped Order | 22-LY | LY | 12.1 Shipped Order Amt LY | — | o2o_fulfillment_shipped_sales_amt | summary 表 |
-| 23 | Shipped Order | 23-vs LY | vs LY | 12.2 Shipped Order Amt vs LY | — | — | summary 表 |
-| 24 | Unfulfillment% | 24-Act | Act | 13. Unfulfillment% | o2o_fulfillment_unshipped_order_cnt / o2o_fulfillment_request_order_cnt | — | summary 表 |
-| 25 | Unfulfillment% | 25-LY | LY | 13.1 Unfulfillment% LY | — | 同上（LY 区间） | summary 表 |
-| 26 | Unfulfillment% | 26-vs LY | vs LY | 13.2 Unfulfillment% vs LY | — | — | summary 表 |
-| 27 | Unfulfilled Order | 27-Orders | Orders | 14. Unfulfilled Order | o2o_fulfillment_unshipped_order_cnt | — | summary 表 |
-| 28 | Unfulfilled Order | 28-LY | LY | 14.1 Unfulfilled Order LY | — | o2o_fulfillment_unshipped_order_cnt | summary 表 |
-| 29 | Unfulfilled Order | 29-vs LY | vs LY | 14.2 Unfulfilled Order vs LY | — | — | summary 表 |
-| 30 | Unfulfilled Order | 30-Units | Units | 15. Unfulfilled Units | o2o_fulfillment_unshipped_qty | — | summary 表 |
-| 31 | Unfulfilled Order | 31-LY | LY | 15.1 Unfulfilled Units LY | — | o2o_fulfillment_unshipped_qty | summary 表 |
-| 32 | Unfulfilled Order | 32-vs LY | vs LY | 15.2 Unfulfilled Units vs LY | — | — | summary 表 |
-| 33 | Unfulfilled Order | 33-Amt | Amt | 16. Unfulfilled Amt | o2o_fulfillment_unshipped_sales_amt | — | summary 表 |
-| 34 | Unfulfilled Order | 34-LY | LY | 16.1 Unfulfilled Amt LY | — | o2o_fulfillment_unshipped_sales_amt | summary 表 |
-| 35 | Unfulfilled Order | 35-vs LY | vs LY | 16.2 Unfulfilled Amt vs LY | — | — | summary 表 |
-| 36 | Product Volume | 36-Product Volume | Product Volume | 17. Product Volume | stock_qty（末日）+ o2o_fulfillment_shipped_qty（区间） | — | summary 表 |
+| Metric_ID | KPIGroup                    | ColName                                              | ColType                                            | 口径文档对应指标              | Act 字段                                                                | LY 字段                             | 数据底表        |
+| --------- | --------------------------- | ---------------------------------------------------- | -------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------- | ----------------------------------- | --------------- |
+| 1         | Order Processing Efficiency | 1-Avg. No. of Store Passed Before Order Got Accepted | Avg. No. of Store Passed Before Order Got Accepted | 4. Avg. No. of Store Passed   | o2o_fulfillment_request_times / o2o_fulfillment_request_sku_qty         | —                                  | request_data 表 |
+| 2         | Order Processing Efficiency | 2-Avg. Processing Time(Hour)                         | Avg. Processing Time(Hour)                         | 5. Avg. Processing Time(Hour) | o2o_fulfillment_request_duration / o2o_fulfillment_request_sku_qty      | —                                  | request_data 表 |
+| 3         | Fulfillment%                | 3-Act                                                | Act                                                | 6. Fulfillment%（本期）       | o2o_fulfillment_shipped_order_cnt / o2o_fulfillment_request_order_cnt   | —                                  | summary 表      |
+| 4         | Fulfillment%                | 4-LY                                                 | LY                                                 | 6.1 Fulfillment% LY           | —                                                                      | 同上（LY 区间）                     | summary 表      |
+| 5         | Fulfillment%                | 5-vs LY                                              | vs LY                                              | 6.2 Fulfillment% vs LY        | —                                                                      | —                                  | summary 表      |
+| 6         | Request Order               | 6-Orders                                             | Orders                                             | 7. Request Order Qty          | o2o_fulfillment_request_order_cnt                                       | —                                  | summary 表      |
+| 7         | Request Order               | 7-LY                                                 | LY                                                 | 7.1 Request Order Qty LY      | —                                                                      | o2o_fulfillment_request_order_cnt   | summary 表      |
+| 8         | Request Order               | 8-vs LY                                              | vs LY                                              | 7.2 Request Order Qty vs LY   | —                                                                      | —                                  | summary 表      |
+| 9         | Request Order               | 9-Units                                              | Units                                              | 8. Request Units              | o2o_fulfillment_request_qty                                             | —                                  | summary 表      |
+| 10        | Request Order               | 10-LY                                                | LY                                                 | 8.1 Request Units LY          | —                                                                      | o2o_fulfillment_request_qty         | summary 表      |
+| 11        | Request Order               | 11-vs LY                                             | vs LY                                              | 8.2 Request Units vs LY       | —                                                                      | —                                  | summary 表      |
+| 12        | Request Order               | 12-Amt                                               | Amt                                                | 9. Request Order Amt          | o2o_fulfillment_request_sales_amt                                       | —                                  | summary 表      |
+| 13        | Request Order               | 13-LY                                                | LY                                                 | 9.1 Request Order Amt LY      | —                                                                      | o2o_fulfillment_request_sales_amt   | summary 表      |
+| 14        | Request Order               | 14-vs LY                                             | vs LY                                              | 9.2 Request Order Amt vs LY   | —                                                                      | —                                  | summary 表      |
+| 15        | Shipped Order               | 15-Orders                                            | Orders                                             | 10. Shipped Order Qty         | o2o_fulfillment_shipped_order_cnt                                       | —                                  | summary 表      |
+| 16        | Shipped Order               | 16-LY                                                | LY                                                 | 10.1 Shipped Order Qty LY     | —                                                                      | o2o_fulfillment_shipped_order_cnt   | summary 表      |
+| 17        | Shipped Order               | 17-vs LY                                             | vs LY                                              | 10.2 Shipped Order Qty vs LY  | —                                                                      | —                                  | summary 表      |
+| 18        | Shipped Order               | 18-Units                                             | Units                                              | 11. Shipped Units             | o2o_fulfillment_shipped_qty                                             | —                                  | summary 表      |
+| 19        | Shipped Order               | 19-LY                                                | LY                                                 | 11.1 Shipped Units LY         | —                                                                      | o2o_fulfillment_shipped_qty         | summary 表      |
+| 20        | Shipped Order               | 20-vs LY                                             | vs LY                                              | 11.2 Shipped Units vs LY      | —                                                                      | —                                  | summary 表      |
+| 21        | Shipped Order               | 21-Amt                                               | Amt                                                | 12. Shipped Order Amt         | o2o_fulfillment_shipped_sales_amt                                       | —                                  | summary 表      |
+| 22        | Shipped Order               | 22-LY                                                | LY                                                 | 12.1 Shipped Order Amt LY     | —                                                                      | o2o_fulfillment_shipped_sales_amt   | summary 表      |
+| 23        | Shipped Order               | 23-vs LY                                             | vs LY                                              | 12.2 Shipped Order Amt vs LY  | —                                                                      | —                                  | summary 表      |
+| 24        | Unfulfillment%              | 24-Act                                               | Act                                                | 13. Unfulfillment%            | o2o_fulfillment_unshipped_order_cnt / o2o_fulfillment_request_order_cnt | —                                  | summary 表      |
+| 25        | Unfulfillment%              | 25-LY                                                | LY                                                 | 13.1 Unfulfillment% LY        | —                                                                      | 同上（LY 区间）                     | summary 表      |
+| 26        | Unfulfillment%              | 26-vs LY                                             | vs LY                                              | 13.2 Unfulfillment% vs LY     | —                                                                      | —                                  | summary 表      |
+| 27        | Unfulfilled Order           | 27-Orders                                            | Orders                                             | 14. Unfulfilled Order         | o2o_fulfillment_unshipped_order_cnt                                     | —                                  | summary 表      |
+| 28        | Unfulfilled Order           | 28-LY                                                | LY                                                 | 14.1 Unfulfilled Order LY     | —                                                                      | o2o_fulfillment_unshipped_order_cnt | summary 表      |
+| 29        | Unfulfilled Order           | 29-vs LY                                             | vs LY                                              | 14.2 Unfulfilled Order vs LY  | —                                                                      | —                                  | summary 表      |
+| 30        | Unfulfilled Order           | 30-Units                                             | Units                                              | 15. Unfulfilled Units         | o2o_fulfillment_unshipped_qty                                           | —                                  | summary 表      |
+| 31        | Unfulfilled Order           | 31-LY                                                | LY                                                 | 15.1 Unfulfilled Units LY     | —                                                                      | o2o_fulfillment_unshipped_qty       | summary 表      |
+| 32        | Unfulfilled Order           | 32-vs LY                                             | vs LY                                              | 15.2 Unfulfilled Units vs LY  | —                                                                      | —                                  | summary 表      |
+| 33        | Unfulfilled Order           | 33-Amt                                               | Amt                                                | 16. Unfulfilled Amt           | o2o_fulfillment_unshipped_sales_amt                                     | —                                  | summary 表      |
+| 34        | Unfulfilled Order           | 34-LY                                                | LY                                                 | 16.1 Unfulfilled Amt LY       | —                                                                      | o2o_fulfillment_unshipped_sales_amt | summary 表      |
+| 35        | Unfulfilled Order           | 35-vs LY                                             | vs LY                                              | 16.2 Unfulfilled Amt vs LY    | —                                                                      | —                                  | summary 表      |
+| 36        | Product Volume              | 36-Product Volume                                    | Product Volume                                     | 17. Product Volume            | stock_qty（末日）+ o2o_fulfillment_shipped_qty（区间）                  | —                                  | summary 表      |
 
 > 注：Order Processing Efficiency 分组（1/2）和 Product Volume 分组（36）只有单列，无 LY/vs LY 列。这些组在总路由中直接返回 Act 值，不进入 vs LY 派生分支。
 
@@ -268,8 +273,8 @@ Fulfillment PB Merchandise Act Base Value =
             ALL ( 'a02_e2e_boss_fulfillment_request_data_d'[category] ),
             __Cat = BLANK () || 'a02_e2e_boss_fulfillment_request_data_d'[category] = __Cat
         )
-    
-    
+  
+  
     // 公共筛选片段（日期 + calc_type），避免重复
     VAR __BaseFilters =
         FILTER (
@@ -279,7 +284,7 @@ Fulfillment PB Merchandise Act Base Value =
                 && 'a02_e2e_boss_fulfillment_request_data_d'[data_date] >= __TimeMin
                 && 'a02_e2e_boss_fulfillment_request_data_d'[data_date] <= __TimeMax
         )
-    
+  
     // ═══════════════════════════════════════
     // a02_e2e_boss_fulfillment_request_data_d 基础聚合（Metric_ID 1, 2 专用）
     // calc_type = "fulfillment"（本期区间 SUM）
@@ -295,7 +300,7 @@ Fulfillment PB Merchandise Act Base Value =
             __FilterCS,
             __FilterCat
         )
-    
+  
     VAR __RequestDuration_Act =
         CALCULATE (
             SUM ( 'a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_duration] ),
@@ -306,7 +311,7 @@ Fulfillment PB Merchandise Act Base Value =
             __FilterCS,
             __FilterCat
         )
-    
+  
     VAR __RequestSkuQty_Act =
         CALCULATE (
             SUM ( 'a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_sku_qty] ),
@@ -317,7 +322,7 @@ Fulfillment PB Merchandise Act Base Value =
             __FilterCS,
             __FilterCat
         )
-    
+  
     // ═══════════════════════════════════════
     // a02_e2e_boss_performance_summary_d 基础聚合（Metric_ID 3-36）
     // calc_type = "fulfillment_category_summary_category_season_brand"（本期区间 SUM）
@@ -879,16 +884,16 @@ Fulfillment PB Merchandise Cell SVG Icon =
 
 ## 5. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称 | Display Folder | 用途 |
-|------|-----------|----------------|------|
-| 1 | Fulfillment PB Merchandise Act Base Value | Base Metrics | 本期基础值（区间 SUM；Product Volume 末日库存+区间销量；双数据底表） |
-| 2 | Fulfillment PB Merchandise LY Base Value | Base Metrics | 去年同期基础值（财历映射，区间 SUM） |
-| 3 | Fulfillment PB Merchandise Base Value | Base Metrics | 总路由（含 vs LY 派生 + REMOVEFILTERS） |
-| 4 | Fulfillment PB Merchandise Cell Value | Cell Values | 对外值 = Base Value |
-| 5 | Fulfillment PB Merchandise Cell Display | Formatting | 格式化显示文本 |
-| 6 | Fulfillment PB Merchandise Cell Font Color | Formatting | 字体颜色 |
-| 7 | Fulfillment PB Merchandise Cell Background Color | Formatting | 背景色 |
-| 8 | Fulfillment PB Merchandise Cell SVG Icon | Formatting | SVG 图标（仅 vs LY 列 + KPI 行） |
+| 序号 | 度量值名称                                       | Display Folder | 用途                                                                 |
+| ---- | ------------------------------------------------ | -------------- | -------------------------------------------------------------------- |
+| 1    | Fulfillment PB Merchandise Act Base Value        | Base Metrics   | 本期基础值（区间 SUM；Product Volume 末日库存+区间销量；双数据底表） |
+| 2    | Fulfillment PB Merchandise LY Base Value         | Base Metrics   | 去年同期基础值（财历映射，区间 SUM）                                 |
+| 3    | Fulfillment PB Merchandise Base Value            | Base Metrics   | 总路由（含 vs LY 派生 + REMOVEFILTERS）                              |
+| 4    | Fulfillment PB Merchandise Cell Value            | Cell Values    | 对外值 = Base Value                                                  |
+| 5    | Fulfillment PB Merchandise Cell Display          | Formatting     | 格式化显示文本                                                       |
+| 6    | Fulfillment PB Merchandise Cell Font Color       | Formatting     | 字体颜色                                                             |
+| 7    | Fulfillment PB Merchandise Cell Background Color | Formatting     | 背景色                                                               |
+| 8    | Fulfillment PB Merchandise Cell SVG Icon         | Formatting     | SVG 图标（仅 vs LY 列 + KPI 行）                                     |
 
 ---
 
@@ -980,18 +985,18 @@ Fulfillment PB Merchandise Cell SVG Icon =
 
 ### 7.1 字段配置
 
-| 区域 | 字段 |
-|------|------|
+| 区域         | 字段                                                                       |
+| ------------ | -------------------------------------------------------------------------- |
 | **行** | 事实表字段（brand / product_type / category_summary / category，直接拉取） |
-| **列** | 'Dim_ColMetric_Fulfillment_PB_Merchandise'[KPIGroup] > [ColName] |
-| **值** | [Fulfillment PB Merchandise Cell Display] |
+| **列** | 'Dim_ColMetric_Fulfillment_PB_Merchandise'[KPIGroup] > [ColName]           |
+| **值** | [Fulfillment PB Merchandise Cell Display]                                  |
 
 ### 7.2 排序配置
 
-| 字段 | 排序依据 |
-|------|---------|
+| 字段                                                 | 排序依据      |
+| ---------------------------------------------------- | ------------- |
 | 'Dim_ColMetric_Fulfillment_PB_Merchandise'[KPIGroup] | KPIGroup_Sort |
-| 'Dim_ColMetric_Fulfillment_PB_Merchandise'[ColName] | ColName_Sort |
+| 'Dim_ColMetric_Fulfillment_PB_Merchandise'[ColName]  | ColName_Sort  |
 
 ### 7.3 格式设置
 
@@ -1015,15 +1020,15 @@ Fulfillment PB Merchandise Cell SVG Icon =
 
 ### 8.1 矩阵结构验证
 
-| 验证项 | 方法 |
-|--------|------|
-| 列数 | 确认 36 列（7 KPI 分组：2 个独立单列 + 5 个 3 列组 × 3 + 1 个独立单列） |
-| 列排序 | KPIGroup 按 KPIGroup_Sort（10/20/.../70），ColName 按 ColName_Sort |
-| 同名区分 | 确认各 KPI 同名 Act/LY/vs LY 在 ColName 中通过 Metric_ID 前缀区分 |
-| KPIGroup 行颜色 | 字体黑色 #252423，背景中米色 #E6D9C7 |
-| KPI 行颜色 | 非 vs LY 列字体深灰 #5F6165，背景白色 #FFFFFF；vs LY 列正/负/零三色 |
-| SVG 图标 | 仅 vs LY 列 + KPI 行显示圆形图标 |
-| 行展开 | brand 粒度行支持展开到 product_type → category_summary → category |
+| 验证项          | 方法                                                                     |
+| --------------- | ------------------------------------------------------------------------ |
+| 列数            | 确认 36 列（7 KPI 分组：2 个独立单列 + 5 个 3 列组 × 3 + 1 个独立单列） |
+| 列排序          | KPIGroup 按 KPIGroup_Sort（10/20/.../70），ColName 按 ColName_Sort       |
+| 同名区分        | 确认各 KPI 同名 Act/LY/vs LY 在 ColName 中通过 Metric_ID 前缀区分        |
+| KPIGroup 行颜色 | 字体黑色#252423，背景中米色 #E6D9C7                                      |
+| KPI 行颜色      | 非 vs LY 列字体深灰#5F6165，背景白色 #FFFFFF；vs LY 列正/负/零三色       |
+| SVG 图标        | 仅 vs LY 列 + KPI 行显示圆形图标                                         |
+| 行展开          | brand 粒度行支持展开到 product_type → category_summary → category      |
 
 ### 8.2 验证 SQL
 
@@ -1089,40 +1094,33 @@ WHERE calc_type = 'fulfillment_category_summary_category_season_brand'
 
 ### 8.3 LY 日期范围获取方式说明
 
-| TimeFrame_ID | LY 范围获取方式 | 说明 |
-|--------------|-----------------|------|
-| Day / Week / Month / Quarter / Year | 直接读日期表 `TimeFrame_Min_LY` / `TimeFrame_Max_LY` | 日期表已内置，无需 EDATE -12 或 Key 偏移 |
+| TimeFrame_ID                        | LY 范围获取方式                                         | 说明                                     |
+| ----------------------------------- | ------------------------------------------------------- | ---------------------------------------- |
+| Day / Week / Month / Quarter / Year | 直接读日期表`TimeFrame_Min_LY` / `TimeFrame_Max_LY` | 日期表已内置，无需 EDATE -12 或 Key 偏移 |
 
 ---
 
 ## 9. 注意事项
 
 1. **双数据底表（关键逻辑）**：Order Processing Efficiency 分组（Metric_ID 1, 2）的数据底表为 `a02_e2e_boss_fulfillment_request_data_d`，字段为 `o2o_fulfillment_request_times` / `o2o_fulfillment_request_duration` / `o2o_fulfillment_request_sku_qty`；其余分组（Metric_ID 3-36）的数据底表为 `a02_e2e_boss_performance_summary_d`。Act Base Value 度量值同时聚合两张事实表，按 Metric_ID 路由分发。
-
 2. **Product Volume 库存期末取末日 + 销量区间聚合（关键逻辑）**：Product Volume（Metric_ID 36）的聚合为 `SUM(stock_qty) WHERE data_date = __TimeMax`（末日库存）+ `SUM(o2o_fulfillment_shipped_qty) WHERE data_date ∈ [__TimeMin, __TimeMax]`（区间销量）。此口径严格遵循 PB Merchandise.md 指标 17 的要求：库存看所选时间范围的期末库存，只要最后一天的数据；销量看所有时间范围的销量总和，整个筛选周期的数据聚合。
-
 3. **REMOVEFILTERS 机制**：vs LY 行的派生计算必须先 `REMOVEFILTERS('Dim_ColMetric_Fulfillment_PB_Merchandise')` 再应用目标 Metric_ID，否则矩阵行标题保留的筛选器会导致冲突返回 BLANK。这与 PB_Location_Fulfillment_detail_ms.md 的总路由范式完全一致。
-
 4. **Metric_ID 编码规则**：
+
    - 有 LY/vs LY 的分组：Act = 组内首 ID，LY = Act + 1，vs LY = Act + 2；vs LY 行的 Act 对应 Metric_ID - 2，LY 对应 Metric_ID - 1
    - 无 LY/vs LY 的分组（Order Processing Efficiency / Product Volume）：Metric_ID 直接返回 Act 值，不进入 vs LY 派生分支
-
 5. **calc_type 固定**：本方案所有度量值均硬编码 `calc_type = "fulfillment_category_summary_category_season_brand"`,除了Avg. No. of Store Passed Before Order Got Accepted和Avg. Processing Time的calc_type = "fulfillment"`。
-
 6. **LY 财历映射**：周/月/季/年粒度按财年定义，LY 采用财历映射（直接读取日期表内置 TimeFrame_Min_LY / TimeFrame_Max_LY 字段），不使用 EDATE -12。
-
 7. **汇率换算**：金额类指标 ÷ Currency_ExchangeRate；比率类分子分母同币种相除自动抵消。vs LY 同比值因相除/相减自动抵消汇率影响。
-
 8. **vs LY 派生分类**：
+
    - 数量类（Request Order Qty/Units、Shipped Order Qty/Units、Unfulfilled Order Qty/Units）：今年 / 去年 − 1 → percent_1dp
    - 金额类（Request Order Amt、Shipped Order Amt、Unfulfilled Amt）：今年 / 去年 − 1 → percent_1dp
    - 比率类（Fulfillment%、Unfulfillment%）：今年 − 去年 → delta_bp（展示时 ×10000 转 bp）
-
 9. **无 LY/vs LY 分组的处理**：Order Processing Efficiency 分组（Metric_ID 1, 2）和 Product Volume 分组（Metric_ID 36）在列指标维度表中只设计了单列，没有 LY 和 vs LY 列。总路由中对这些 Metric_ID 直接返回 Act 值，Cell Display 中 ColType 非 Act/LY/vs LY 时统一使用 Metric_Format_Act 格式。
-
 10. **行维度处理**：无行维度表，直接拉取事实表字段（brand / product_type / category_summary / category），天然形成筛选与分组，DAX 度量值无需显式处理。支持 brand 粒度行展开看 product_type → category_summary → category 粒度明细数据。
-
 11. **与 PB_Location_Fulfillment_detail_ms.md 的关系**：本方案为 PB Merchandise Fulfillment 部分的矩阵 SWITCH 路由版本，与 PB Location 版本共享相同的架构范式（断开列维度 + SWITCH 动态路由 + REMOVEFILTERS 修复上下文），差异在于：
+
     - 行维度由 store 字段改为 merchandise 字段（brand/product_type/category_summary/category）
     - 列指标维度表替换为 Dim_ColMetric_Fulfillment_PB_Merchandise（36 行 vs 46 行）
     - 新增双数据底表逻辑（Metric_ID 1, 2 用 a02_e2e_boss_fulfillment_request_data_d）

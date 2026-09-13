@@ -13,17 +13,18 @@
 
 为 Performance By Location 页面输出 Sales 分组下五个指标的独立度量值（Value + Display），用于表格视觉对象：
 
-| 指标 | 中文名 | 分类 | calc_type | 底表字段 |
-|------|--------|------|-----------|---------|
-| SLS | O2O销售净额 | 金额类 | payment | o2o_net_sales_amt |
-| Demand SLS | O2O退前销售额 | 金额类 | payment | o2o_sales_amt |
-| SLS Penetration | O2O销售渗透率 | 比率类 | payment | o2o_sales_amt / sales_amt |
-| Return | O2O退货金额 | 金额类 | payment | o2o_return_amt |
-| Return% | O2O退货率（金额） | 比率类 | payment | o2o_return_amt / o2o_sales_amt |
+| 指标            | 中文名            | 分类   | calc_type | 底表字段                       |
+| --------------- | ----------------- | ------ | --------- | ------------------------------ |
+| SLS             | O2O销售净额       | 金额类 | payment   | o2o_net_sales_amt              |
+| Demand SLS      | O2O退前销售额     | 金额类 | payment   | o2o_sales_amt                  |
+| SLS Penetration | O2O销售渗透率     | 比率类 | payment   | o2o_sales_amt / sales_amt      |
+| Return          | O2O退货金额       | 金额类 | payment   | o2o_return_amt                 |
+| Return%         | O2O退货率（金额） | 比率类 | payment   | o2o_return_amt / o2o_sales_amt |
 
 **每个指标输出 6 个度量值**（Actual / LY / vs LY 各一对 Value+Display），共 30 个度量值。
 
 **核心设计原则**：
+
 - 无需矩阵 SWITCH 路由分发，每个指标独立编写 Value/Display 度量
 - 表格视觉对象：用户依次拉取单个度量值，分组维度（store_region/store_type 等）直接拉取事实表字段，天然形成筛选与分组
 - 仅用全局时间范围筛选（Slicer_Time_Frame_Min/Max），无 X 轴时间段双层筛选
@@ -37,18 +38,18 @@
 
 ### 2.1 数据底表
 
-| 对象 | 名称 | 出处 |
-|------|------|------|
-| 事实表 | a02_e2e_boss_performance_summary_d | Overview_KPIs_ms.md 2.1 |
+| 对象     | 名称                                                                                          | 出处                    |
+| -------- | --------------------------------------------------------------------------------------------- | ----------------------- |
+| 事实表   | a02_e2e_boss_performance_summary_d                                                            | Overview_KPIs_ms.md 2.1 |
 | 关键字段 | data_date, store_name, calc_type, o2o_net_sales_amt, o2o_sales_amt, sales_amt, o2o_return_amt | Overview_KPIs_ms.md 2.1 |
 
 ### 2.2 维度表清单
 
-| 维度表 | 类型 | 连接方式 |
-|--------|------|---------|
-| Slicer_Time_Frame_Min | 断开维度 | 起始切片器；SELECTEDVALUE 读取 TimeFrame_Min / TimeFrame_Min_LY |
-| Slicer_Time_Frame_Max | 断开维度 | 结束切片器；SELECTEDVALUE 读取 TimeFrame_Max / TimeFrame_Max_LY |
-| Slicer_Currency_Selection | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate / Currency_Symbol |
+| 维度表                    | 类型     | 连接方式                                                        |
+| ------------------------- | -------- | --------------------------------------------------------------- |
+| Slicer_Time_Frame_Min     | 断开维度 | 起始切片器；SELECTEDVALUE 读取 TimeFrame_Min / TimeFrame_Min_LY |
+| Slicer_Time_Frame_Max     | 断开维度 | 结束切片器；SELECTEDVALUE 读取 TimeFrame_Max / TimeFrame_Max_LY |
+| Slicer_Currency_Selection | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate / Currency_Symbol      |
 
 > 不使用 Slicer_Time_Frame（X 轴维度），不使用 Dim_RowKPIs_BossCoreKPI_Overview / Dim_ColKPIs_BossCoreKPI_Overview（矩阵行列维度）。
 
@@ -58,36 +59,37 @@
 
 ### 3.1 筛选上下文
 
-| 筛选器 | 作用方式 | DAX 处理 |
-|--------|---------|---------|
-| Slicer_Time_Frame_Min | 断开维度，SELECTEDVALUE 读取 TimeFrame_Min | `data_date >= __TimeMin` |
-| Slicer_Time_Frame_Max | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max | `data_date <= __TimeMax` |
-| Slicer_Currency_Selection | 断开维度，SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol | 金额类指标 ÷ Currency_ExchangeRate |
-| 事实表分组字段（store_region/store_type 等） | 表格行/列直接拉取，模型自动传递筛选 | DAX 无需显式处理 |
+| 筛选器                                       | 作用方式                                                            | DAX 处理                            |
+| -------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------- |
+| Slicer_Time_Frame_Min                        | 断开维度，SELECTEDVALUE 读取 TimeFrame_Min                          | `data_date >= __TimeMin`          |
+| Slicer_Time_Frame_Max                        | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max                          | `data_date <= __TimeMax`          |
+| Slicer_Currency_Selection                    | 断开维度，SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol | 金额类指标 ÷ Currency_ExchangeRate |
+| 事实表分组字段（store_region/store_type 等） | 表格行/列直接拉取，模型自动传递筛选                                 | DAX 无需显式处理                    |
 
 > calc_type 在 Sales 分组下固定为 "payment"，直接硬编码，不再通过 KPI_CalcType 读取。
 
 ### 3.2 时间偏移规则（LY — 财历映射）
 
 直接读取日期表内置 LY 字段：
+
 - 全局 LY 起始日：`Slicer_Time_Frame_Min[TimeFrame_Min_LY]`
 - 全局 LY 结束日：`Slicer_Time_Frame_Max[TimeFrame_Max_LY]`
 - 无需 EDATE -12 或 Key 偏移计算
 
 ### 3.3 vs LY 派生计算分类
 
-| KPI 分类 | vs LY 计算方式 | 格式 | 展示示例 |
-|---------|---------------|------|---------|
-| 金额类（SLS / Demand SLS / Return） | 今年 / 去年 − 1 | percent_1dp | 14.5% |
-| 比率类（SLS Penetration / Return%） | 今年 − 去年（差值，×10000 转 bp） | delta_bp | +120bp |
+| KPI 分类                            | vs LY 计算方式                      | 格式        | 展示示例 |
+| ----------------------------------- | ----------------------------------- | ----------- | -------- |
+| 金额类（SLS / Demand SLS / Return） | 今年 / 去年 − 1                    | percent_1dp | 14.5%    |
+| 比率类（SLS Penetration / Return%） | 今年 − 去年（差值，×10000 转 bp） | delta_bp    | +120bp   |
 
 ### 3.4 格式规范
 
-| 格式类型 | 格式串 | 示例 | 适用度量 |
-|---------|--------|------|---------|
-| currency | `__CurrencySymbol & FORMAT(__Value, "#,##0")` | ¥1,234 | SLS / Demand SLS / Return 的 Actual、LY |
-| percent_1dp | `#,##0.0%` | 14.5% | SLS Penetration / Return% 的 Actual、LY；金额类 vs LY |
-| delta_bp | `IF(ROUND(__Value*10000,0)>0,"+","") & FORMAT(__Value*10000, "#,##0bp;-#,##0bp;0bp")` | +120bp | 比率类 vs LY |
+| 格式类型    | 格式串                                                                                  | 示例    | 适用度量                                              |
+| ----------- | --------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------- |
+| currency    | `__CurrencySymbol & FORMAT(__Value, "#,##0")`                                         | ¥1,234 | SLS / Demand SLS / Return 的 Actual、LY               |
+| percent_1dp | `#,##0.0%`                                                                            | 14.5%   | SLS Penetration / Return% 的 Actual、LY；金额类 vs LY |
+| delta_bp    | `IF(ROUND(__Value*10000,0)>0,"+","") & FORMAT(__Value*10000, "#,##0bp;-#,##0bp;0bp")` | +120bp  | 比率类 vs LY                                          |
 
 ---
 
@@ -834,6 +836,7 @@ Return% vs LY Display =
 ```
 
 ### 4.31 PBM Sales Detail IsEmpty
+
 ```dax
 PBM Sales Detail IsEmpty = 
 VAR _Total = 
@@ -849,42 +852,64 @@ VAR _Total =
 RETURN
     IF(_Total = 0, 0, 1)
 ```
+
+### 4.31 PBL Sales Detail IsEmpty
+
+```dax
+PBL Sales Detail IsEmpty = 
+VAR _Total = 
+    COALESCE([SLS Actual Value], 0) +
+    COALESCE([SLS LY Value], 0) +
+    COALESCE([SLS vs LY Value], 0) +
+    COALESCE([Demand SLS Actual Value], 0) +
+    COALESCE([Demand SLS LY Value], 0) +
+    COALESCE([Demand SLS vs LY Value], 0) +
+    COALESCE([Return Actual Value], 0) +
+    COALESCE([Return LY Value], 0) +
+    COALESCE([Return vs LY Value], 0) +
+    COALESCE([Return% Actual Value], 0) +
+    COALESCE([Return% LY Value], 0) +
+    COALESCE([Return% vs LY Value], 0)
+RETURN
+    IF(_Total = 0, 0, 1)
+```
+
 ---
 
 ## 5. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称 | Display Folder | 指标 | 类型 | 格式 |
-|------|-----------|----------------|------|------|------|
-| 1 | SLS Actual Value | PB Location | SLS | Value | currency |
-| 2 | SLS Actual Display | PB Location | SLS | Display | currency |
-| 3 | SLS LY Value | PB Location | SLS | Value | currency |
-| 4 | SLS LY Display | PB Location | SLS | Display | currency |
-| 5 | SLS vs LY Value | PB Location | SLS | Value | percent_1dp |
-| 6 | SLS vs LY Display | PB Location | SLS | Display | percent_1dp |
-| 7 | Demand SLS Actual Value | PB Location | Demand SLS | Value | currency |
-| 8 | Demand SLS Actual Display | PB Location | Demand SLS | Display | currency |
-| 9 | Demand SLS LY Value | PB Location | Demand SLS | Value | currency |
-| 10 | Demand SLS LY Display | PB Location | Demand SLS | Display | currency |
-| 11 | Demand SLS vs LY Value | PB Location | Demand SLS | Value | percent_1dp |
-| 12 | Demand SLS vs LY Display | PB Location | Demand SLS | Display | percent_1dp |
-| 13 | SLS Penetration Actual Value | PB Location | SLS Penetration | Value | percent_1dp |
-| 14 | SLS Penetration Actual Display | PB Location | SLS Penetration | Display | percent_1dp |
-| 15 | SLS Penetration LY Value | PB Location | SLS Penetration | Value | percent_1dp |
-| 16 | SLS Penetration LY Display | PB Location | SLS Penetration | Display | percent_1dp |
-| 17 | SLS Penetration vs LY Value | PB Location | SLS Penetration | Value | delta_bp |
-| 18 | SLS Penetration vs LY Display | PB Location | SLS Penetration | Display | delta_bp |
-| 19 | Return Actual Value | PB Location | Return | Value | currency |
-| 20 | Return Actual Display | PB Location | Return | Display | currency |
-| 21 | Return LY Value | PB Location | Return | Value | currency |
-| 22 | Return LY Display | PB Location | Return | Display | currency |
-| 23 | Return vs LY Value | PB Location | Return | Value | percent_1dp |
-| 24 | Return vs LY Display | PB Location | Return | Display | percent_1dp |
-| 25 | Return% Actual Value | PB Location | Return% | Value | percent_1dp |
-| 26 | Return% Actual Display | PB Location | Return% | Display | percent_1dp |
-| 27 | Return% LY Value | PB Location | Return% | Value | percent_1dp |
-| 28 | Return% LY Display | PB Location | Return% | Display | percent_1dp |
-| 29 | Return% vs LY Value | PB Location | Return% | Value | delta_bp |
-| 30 | Return% vs LY Display | PB Location | Return% | Display | delta_bp |
+| 序号 | 度量值名称                     | Display Folder | 指标            | 类型    | 格式        |
+| ---- | ------------------------------ | -------------- | --------------- | ------- | ----------- |
+| 1    | SLS Actual Value               | PB Location    | SLS             | Value   | currency    |
+| 2    | SLS Actual Display             | PB Location    | SLS             | Display | currency    |
+| 3    | SLS LY Value                   | PB Location    | SLS             | Value   | currency    |
+| 4    | SLS LY Display                 | PB Location    | SLS             | Display | currency    |
+| 5    | SLS vs LY Value                | PB Location    | SLS             | Value   | percent_1dp |
+| 6    | SLS vs LY Display              | PB Location    | SLS             | Display | percent_1dp |
+| 7    | Demand SLS Actual Value        | PB Location    | Demand SLS      | Value   | currency    |
+| 8    | Demand SLS Actual Display      | PB Location    | Demand SLS      | Display | currency    |
+| 9    | Demand SLS LY Value            | PB Location    | Demand SLS      | Value   | currency    |
+| 10   | Demand SLS LY Display          | PB Location    | Demand SLS      | Display | currency    |
+| 11   | Demand SLS vs LY Value         | PB Location    | Demand SLS      | Value   | percent_1dp |
+| 12   | Demand SLS vs LY Display       | PB Location    | Demand SLS      | Display | percent_1dp |
+| 13   | SLS Penetration Actual Value   | PB Location    | SLS Penetration | Value   | percent_1dp |
+| 14   | SLS Penetration Actual Display | PB Location    | SLS Penetration | Display | percent_1dp |
+| 15   | SLS Penetration LY Value       | PB Location    | SLS Penetration | Value   | percent_1dp |
+| 16   | SLS Penetration LY Display     | PB Location    | SLS Penetration | Display | percent_1dp |
+| 17   | SLS Penetration vs LY Value    | PB Location    | SLS Penetration | Value   | delta_bp    |
+| 18   | SLS Penetration vs LY Display  | PB Location    | SLS Penetration | Display | delta_bp    |
+| 19   | Return Actual Value            | PB Location    | Return          | Value   | currency    |
+| 20   | Return Actual Display          | PB Location    | Return          | Display | currency    |
+| 21   | Return LY Value                | PB Location    | Return          | Value   | currency    |
+| 22   | Return LY Display              | PB Location    | Return          | Display | currency    |
+| 23   | Return vs LY Value             | PB Location    | Return          | Value   | percent_1dp |
+| 24   | Return vs LY Display           | PB Location    | Return          | Display | percent_1dp |
+| 25   | Return% Actual Value           | PB Location    | Return%         | Value   | percent_1dp |
+| 26   | Return% Actual Display         | PB Location    | Return%         | Display | percent_1dp |
+| 27   | Return% LY Value               | PB Location    | Return%         | Value   | percent_1dp |
+| 28   | Return% LY Display             | PB Location    | Return%         | Display | percent_1dp |
+| 29   | Return% vs LY Value            | PB Location    | Return%         | Value   | delta_bp    |
+| 30   | Return% vs LY Display          | PB Location    | Return%         | Display | delta_bp    |
 
 ---
 
@@ -892,23 +917,23 @@ RETURN
 
 ### 6.1 表格视觉对象（Table）
 
-| 配置项 | 值 |
-|--------|-----|
-| 行/分组 | 事实表字段（store_region / store_type / store_name 等，直接拉取，天然筛选+分组） |
-| 值 | 依次拉取所需的 [* Value] 或 [* Display] 度量 |
-| 全局筛选器 | Slicer_Time_Frame_Min、Slicer_Time_Frame_Max、Slicer_Currency_Selection |
+| 配置项     | 值                                                                               |
+| ---------- | -------------------------------------------------------------------------------- |
+| 行/分组    | 事实表字段（store_region / store_type / store_name 等，直接拉取，天然筛选+分组） |
+| 值         | 依次拉取所需的 [* Value] 或 [* Display] 度量                                     |
+| 全局筛选器 | Slicer_Time_Frame_Min、Slicer_Time_Frame_Max、Slicer_Currency_Selection          |
 
 > 无需 IsTimeFrameVisible 视觉对象级别筛选器（无 X 轴时间段）。
 
 ### 6.2 度量值拉取示例
 
-| 场景 | 拉取度量 |
-|------|---------|
-| SLS 本期金额（带符号） | [SLS Actual Display] |
-| SLS 去年同期金额（带符号） | [SLS LY Display] |
-| SLS 同比百分比 | [SLS vs LY Display] |
-| SLS Penetration 本期率 | [SLS Penetration Actual Display] |
-| SLS Penetration 同比差值(bp) | [SLS Penetration vs LY Display] |
+| 场景                         | 拉取度量                         |
+| ---------------------------- | -------------------------------- |
+| SLS 本期金额（带符号）       | [SLS Actual Display]             |
+| SLS 去年同期金额（带符号）   | [SLS LY Display]                 |
+| SLS 同比百分比               | [SLS vs LY Display]              |
+| SLS Penetration 本期率       | [SLS Penetration Actual Display] |
+| SLS Penetration 同比差值(bp) | [SLS Penetration vs LY Display]  |
 
 ---
 
@@ -965,31 +990,27 @@ WHERE calc_type = 'payment'
 
 ### 7.2 LY 日期范围获取方式说明
 
-| TimeFrame_ID | LY 范围获取方式 | 说明 |
-|--------------|-----------------|------|
-| Day / Week / Month / Quarter / Year | 直接读日期表 `ly_timeframe_min` / `ly_timeframe_max` | 日期表已内置，无需 EDATE -12 或 Key 偏移 |
+| TimeFrame_ID                        | LY 范围获取方式                                         | 说明                                     |
+| ----------------------------------- | ------------------------------------------------------- | ---------------------------------------- |
+| Day / Week / Month / Quarter / Year | 直接读日期表`ly_timeframe_min` / `ly_timeframe_max` | 日期表已内置，无需 EDATE -12 或 Key 偏移 |
 
 ---
 
 ## 8. 注意事项
 
 1. **calc_type 固定**：本方案所有度量值均硬编码 `calc_type = "payment"`（Sales 分组），与 Overview_KPIs_ms.md 中通过 KPI_CalcType 动态读取不同。Sales 分组下五个指标均属 payment 类型。
-
 2. **LY 财历映射**：周/月/季/年粒度按财年定义，LY 采用财历映射（直接读取日期表内置 TimeFrame_Min_LY / TimeFrame_Max_LY 字段），不使用 EDATE -12。日期表需包含至少2年历史数据。若数据历史不足1年，LY 字段返回 BLANK，显示"-"，属可接受行为。
-
 3. **汇率换算**：金额类指标（SLS / Demand SLS / Return）÷ Currency_ExchangeRate；比率类（SLS Penetration / Return%）分子分母同币种相除自动抵消，不除汇率。vs LY 同比值因相除/相减自动抵消汇率影响。
-
 4. **vs LY 派生分类**：
+
    - 金额类（SLS / Demand SLS / Return）：今年 / 去年 − 1 → percent_1dp
    - 比率类（SLS Penetration / Return%）：今年 − 去年 → delta_bp（展示时 ×10000 转 bp）
-
 5. **分组维度传递**：store_region / store_type / store_name 等分组字段直接从事实表拉取到表格行/列，DAX 度量值无需显式处理分组逻辑，模型自动传递筛选。
-
 6. **与 Overview_KPIs_ms.md 差异**：
+
    - 去除矩阵 SWITCH 路由，每个指标独立度量
    - 去除 Dim_RowKPIs_BossCoreKPI_Overview（行维度）依赖
    - 去除 Dim_ColKPIs_BossCoreKPI_Overview（列维度）依赖及 StoreGroup_ID → store_name 筛选
    - 去除 Slicer_Fulfillment_Calc_Type 依赖（Sales 分组不涉及）
    - calc_type 由动态读取改为硬编码 "payment"
-
 7. **display 命名约定**：遵循 PB_Location_Trend.md 风格，Actual / LY / vs LY 三类各出 Value + Display，便于表格视觉对象按列拉取。
