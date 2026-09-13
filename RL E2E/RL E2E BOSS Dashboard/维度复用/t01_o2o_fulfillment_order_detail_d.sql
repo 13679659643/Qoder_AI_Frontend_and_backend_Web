@@ -3,6 +3,6 @@ let
     "
 select * from `indep_rl_dw`.`t01_o2o_fulfillment_order_detail_d`
    "),
-    更改的类型 = Table.TransformColumnTypes(源,{{"dt", type date}})
+    更改的类型 = Table.TransformColumnTypes(源,{{"dt", type date}, {"push_time", type datetime}})
 in
     更改的类型

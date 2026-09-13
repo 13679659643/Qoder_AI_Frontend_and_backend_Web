@@ -12,14 +12,15 @@
 
 为 Performance By Location 页面的四个子模块提供独立度量值（Value + Display），用于柱形图/趋势图：
 
-| 子模块 | 指标 | 可视化类型 | 数据底表 | calc_type |
-|--------|------|-----------|---------|-----------|
-| 一：Fulfilled Order by Region/Store Type | Shipped Order Qty, Shipped Order Amt（含 LY/YOY） | 柱形图 | a02_e2e_boss_performance_summary_d | fulfillment |
-| 二：Fulfillment% Trend | Fulfillment%（趋势） | 柱形图/趋势图 | a02_e2e_boss_performance_summary_d | fulfillment |
-| 三：Unfulfilled Order by Region | Unfulfilled Order 四分类 + Share 四分类 + Tooltip | 柱形图 | t01_o2o_fulfillment_order_detail_d | — |
-| 四：Failed Request by Reason | Failed Request | 柱形图 | a02_e2e_boss_fulfillment_fail_reason_d | — |
+| 子模块                                   | 指标                                              | 可视化类型    | 数据底表                               | calc_type   |
+| ---------------------------------------- | ------------------------------------------------- | ------------- | -------------------------------------- | ----------- |
+| 一：Fulfilled Order by Region/Store Type | Shipped Order Qty, Shipped Order Amt（含 LY/YOY） | 柱形图        | a02_e2e_boss_performance_summary_d     | fulfillment |
+| 二：Fulfillment% Trend                   | Fulfillment%（趋势）                              | 柱形图/趋势图 | a02_e2e_boss_performance_summary_d     | fulfillment |
+| 三：Unfulfilled Order by Region          | Unfulfilled Order 四分类 + Share 四分类 + Tooltip | 柱形图        | t01_o2o_fulfillment_order_detail_d     | —          |
+| 四：Failed Request by Reason             | Failed Request                                    | 柱形图        | a02_e2e_boss_fulfillment_fail_reason_d | —          |
 
 **核心设计原则**：
+
 - 无需矩阵 SWITCH 路由分发，每个指标独立编写 Value/Display 度量
 - 分组维度（store_region/store_type）直接拉取数据表字段到视觉对象，无需在 DAX 中添加分组维度
 - 柱形图/趋势图 X 轴 = Slicer_Time_Frame[TimeFrame_Value]，需配置 [IsTimeFrameVisible] = 1 视觉对象级别筛选器
@@ -33,19 +34,20 @@
 
 ### 2.1 数据底表
 
-| 对象 | 名称 | 出处 |
-|------|------|------|
-| 事实表1 | a02_e2e_boss_performance_summary_d | 子模块一/二 |
-| 事实表2 | t01_o2o_fulfillment_order_detail_d | 子模块三 |
-| 事实表3 | a02_e2e_boss_fulfillment_fail_reason_d | 子模块四 |
+| 对象    | 名称                                   | 出处        |
+| ------- | -------------------------------------- | ----------- |
+| 事实表1 | a02_e2e_boss_performance_summary_d     | 子模块一/二 |
+| 事实表2 | t01_o2o_fulfillment_order_detail_d     | 子模块三    |
+| 事实表3 | a02_e2e_boss_fulfillment_fail_reason_d | 子模块四    |
 
 ### 2.2 维度表清单
 
-| 维度表 | 类型 | 连接方式 |
-|--------|------|---------|
-| Slicer_Time_Frame | 断开维度 | 柱形图/趋势图 X 轴；SELECTEDVALUE 读取 TimeFrame_ID/Key/Value/Min/Max/LY 字段 |
-| Slicer_Time_Frame_Min | 断开维度 | 起始切片器；SELECTEDVALUE 读取 TimeFrame_Min/TimeFrame_Key/TimeFrame_ID/LY 字段 |
-| Slicer_Time_Frame_Max | 断开维度 | 结束切片器；SELECTEDVALUE 读取 TimeFrame_Max/TimeFrame_Key/TimeFrame_ID/LY 字段 |
+| 维度表                       | 类型     | 连接方式                                                                                        |
+| ---------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| Slicer_Time_Frame            | 断开维度 | 柱形图/趋势图 X 轴；SELECTEDVALUE 读取 TimeFrame_ID/Key/Value/Min/Max/LY 字段                   |
+| Slicer_Time_Frame_Min        | 断开维度 | 起始切片器；SELECTEDVALUE 读取 TimeFrame_Min/TimeFrame_Key/TimeFrame_ID/LY 字段                 |
+| Slicer_Time_Frame_Max        | 断开维度 | 结束切片器；SELECTEDVALUE 读取 TimeFrame_Max/TimeFrame_Key/TimeFrame_ID/LY 字段                 |
+| Slicer_Fulfillment_Calc_Type | 断开维度 | 子模块三专用；SELECTEDVALUE 读取 Calc_Type_ID，控制 is_pay_date_cancel / is_ec_fulfillment 筛选 |
 
 ---
 
@@ -54,6 +56,7 @@
 ### 3.1 粒度处理机制
 
 范式：
+
 - 用户在 Slicer_Time_Frame_Min/Max 切片器选择起止时间
 - 所选行的 TimeFrame_ID 决定当前粒度
 - 柱形图/趋势图 X 轴 = Slicer_Time_Frame[TimeFrame_Value]
@@ -63,18 +66,19 @@
 ### 3.2 时间偏移规则（LY — 财历映射）
 
 直接读取日期表内置 LY 字段：
+
 - 全局范围：Slicer_Time_Frame_Min[TimeFrame_Min_LY] / Slicer_Time_Frame_Max[TimeFrame_Max_LY]
 - X 轴时间段：Slicer_Time_Frame[TimeFrame_Min_LY] / Slicer_Time_Frame[TimeFrame_Max_LY]
 - 无需 EDATE -12 或 Key 偏移计算
 
 ### 3.3 格式规范
 
-| 格式类型 | 格式串 | 示例 | 适用度量 |
-|---------|--------|------|---------|
-| integer | `#,##0` | 1,234 | Shipped Order Qty, Failed Request, Unfulfilled Order |
-| currency | `__CurrencySymbol & FORMAT(__Value, "#,##0")` | ¥1,234 | Shipped Order Amt |
-| percent_1dp | `#,##0.0%` | 85.5% | Fulfillment%, YOY, Share |
-| delta_bp | `+#,##0bp;-#,##0bp;0bp` | +120bp | vs LY（率类差值 bp） |
+| 格式类型    | 格式串                                          | 示例    | 适用度量                                             |
+| ----------- | ----------------------------------------------- | ------- | ---------------------------------------------------- |
+| integer     | `#,##0`                                       | 1,234   | Shipped Order Qty, Failed Request, Unfulfilled Order |
+| currency    | `__CurrencySymbol & FORMAT(__Value, "#,##0")` | ¥1,234 | Shipped Order Amt                                    |
+| percent_1dp | `#,##0.0%`                                    | 85.5%   | Fulfillment%, YOY, Share                             |
+| delta_bp    | `+#,##0bp;-#,##0bp;0bp`                       | +120bp  | vs LY（率类差值 bp）                                 |
 
 ---
 
@@ -134,7 +138,7 @@ IsTimeFrameVisible =
 ## 子模块一：BOSS Fulfillment - Fulfilled Order by Region/Store Type
 
 > 柱形图 X 轴 =  store_region 或 store_type（直接拉取）
-> calc_type = "fulfillment"
+> calc_type = "fulfillment_region"/"fulfillment_store_type"
 
 ### 4.2 TY Shipped Order Qty Value
 
@@ -147,7 +151,7 @@ TY Shipped Order Qty Value =
 // 口径来源: PB Location.md 子模块一 - Shipped Order Qty
 // 计算公式: SUM(o2o_fulfillment_shipped_order_cnt)
 // 筛选条件:
-//   - calc_type = "fulfillment"
+//   - calc_type = "fulfillment系列"
 //   - 柱形图 X 轴 =  store_region 或 store_type（直接拉取）
 // 数据类型: integer → 千分位整数
 // 格式: #,##0
@@ -157,7 +161,7 @@ TY Shipped Order Qty Value =
     VAR __Result =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            // 'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -200,7 +204,7 @@ LY Shipped Order Qty Value =
     VAR __Result =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            // 'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -267,7 +271,7 @@ TY Shipped Order Amt Value =
 // 口径来源: PB Location.md 子模块一 - Shipped Order Amt
 // 计算公式: SUM(o2o_fulfillment_shipped_sales_amt)
 // 筛选条件:
-//   - calc_type = "fulfillment"
+//   - calc_type = "fulfillment系列"
 //   - 柱形图 X 轴 =  store_region 或 store_type（直接拉取）
 //   - 金额类指标 ÷ __FXRate（汇率换算）
 // 数据类型: currency → 货币符号由币种切片器决定，千分位整数
@@ -279,7 +283,7 @@ TY Shipped Order Amt Value =
     VAR __Result =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_sales_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            // 'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
@@ -329,7 +333,7 @@ LY Shipped Order Amt Value =
     VAR __Result =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_sales_amt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            // 'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax
         )
@@ -395,7 +399,7 @@ Shipped Order Amt YOY Display =
 ## 子模块二：Fulfillment% Trend
 
 > 柱形图/趋势图 X 轴 = Slicer_Time_Frame[TimeFrame_Value]，折线 = store_region 或 store_type（直接拉取）
-> calc_type = "fulfillment"
+> calc_type = "fulfillment系列"
 
 ### 4.14 TY Fulfillment% Value
 
@@ -410,7 +414,7 @@ TY Fulfillment% Value =
 //   分子: o2o_fulfillment_shipped_order_cnt
 //   分母: o2o_fulfillment_request_order_cnt
 // 筛选条件:
-//   - calc_type = "fulfillment"
+//   - calc_type = "fulfillment系列"
 //   - 全局时间范围 + X 轴上下文（双层时间筛选）
 //   - 比率类，不除汇率（分子分母同币种，相除自动抵消）
 // 数据类型: percent_1dp → 百分比，保留一位小数，不含正号
@@ -423,7 +427,7 @@ TY Fulfillment% Value =
     VAR __Numerator =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            // 'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __CurrentTFMin,
@@ -433,7 +437,7 @@ TY Fulfillment% Value =
     VAR __Denominator =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            // 'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __CurrentTFMin,
@@ -482,7 +486,7 @@ LY Fulfillment% Value =
     VAR __Numerator =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_shipped_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            // 'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYCurrentTFMin,
@@ -492,7 +496,7 @@ LY Fulfillment% Value =
     VAR __Denominator =
         CALCULATE(
             SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_order_cnt]),
-            'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
+            // 'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYTimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __LYTimeMax,
             'a02_e2e_boss_performance_summary_d'[data_date] >= __LYCurrentTFMin,
@@ -521,13 +525,12 @@ LY Fulfillment% Display =
 
 ## 子模块三：BOSS Unfulfillment - Unfulfilled Order by Region
 
-> 不按 timeframe 聚合，仅按全局时间范围筛选
-> 图例/分组 = store_region 或 store_type（直接拉取 t01_o2o_fulfillment_order_detail_d 表字段）
 > 数据底表: t01_o2o_fulfillment_order_detail_d
-> 时间字段: dt（PBI 中已转换为 date 类型，对应 data_date）
+> 时间字段: dt（PBI 中已转换为 date 类型）
+> 预处理: 所选时间范围 dt 内，按 order_code + ext_code2 分组取 push_time 最新一条；根据 Slicer_Fulfillment_Calc_Type[Calc_Type_ID] 筛选 is_pay_date_cancel / is_ec_fulfillment
 > Unfulfilled Order Scope: failure_remark 不为空的记录（PBI 上实现，四个子分类各自按 failure_remark 值筛选）
 
-### 4.18 Rejected Order by Store Value
+#### 4.18 Rejected Order by Store Value
 
 ```dax
 Rejected Order by Store Value =
@@ -536,23 +539,63 @@ Rejected Order by Store Value =
 // Display Folder: PB Location
 // 用途: O2O失败订单数 - 门店拒绝接单分类，用于柱形图 Y 轴
 // 口径来源: PB Location.md 子模块三 - Unfulfilled Order
-// 计算公式: COUNTROWS(按 failure_remark 筛选后的订单去重)
-//   对 order_code 去重计数
-// 筛选条件:
-//   - failure_remark in ("门店拒绝接单", "门店接单后取消配货")
-//   - dt ∈ [__TimeMin, __TimeMax]（全局时间范围）
+// 计算公式: 预处理后按 failure_remark 筛选 + order_code 去重计数
+// 预处理:
+//   Step 1: dt ∈ [__TimeMin, __TimeMax]（全局时间范围）
+//   Step 2: 根据 Slicer_Fulfillment_Calc_Type[Calc_Type_ID] 筛选
+//     - Calc_Type_ID = 1: is_pay_date_cancel = 0
+//     - Calc_Type_ID = 2: is_pay_date_cancel = 0 AND is_ec_fulfillment = 0
+//   Step 3: 按 order_code + ext_code2 分组，取 push_time 最大的一条记录
+// 分类筛选:
+//   - failure_remark IN ("门店拒绝接单", "门店接单后取消配货")
 //   - store_region/store_type 由视觉对象图例自动传递
 // 数据类型: integer → 千分位整数
 // 格式: #,##0
 // ========================================
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+    VAR __CalcTypeID = SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
+    // Step 1 + Step 2: 时间范围筛选 + Calc_Type 条件筛选
+    VAR __FilteredTable =
+        FILTER(
+            't01_o2o_fulfillment_order_detail_d',
+            't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin
+            && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+            && SWITCH(
+                __CalcTypeID,
+                "1", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
+                "2", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
+                    && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
+                TRUE()
+            )
+        )
+    // Step 3: 按 order_code + ext_code2 分组取 push_time 最新一条
+    VAR __LatestTable =
+        SELECTCOLUMNS(
+            FILTER(
+                SUMMARIZE(
+                    __FilteredTable,
+                    't01_o2o_fulfillment_order_detail_d'[order_code],
+                    't01_o2o_fulfillment_order_detail_d'[ext_code2],
+                    't01_o2o_fulfillment_order_detail_d'[push_time],
+                    't01_o2o_fulfillment_order_detail_d'[failure_remark],
+                    "_MaxPush", CALCULATE(MAX('t01_o2o_fulfillment_order_detail_d'[push_time]))
+                ),
+                't01_o2o_fulfillment_order_detail_d'[push_time] = [_MaxPush]
+            ),
+            "order_code", 't01_o2o_fulfillment_order_detail_d'[order_code],
+            "failure_remark", 't01_o2o_fulfillment_order_detail_d'[failure_remark]
+        )
+    // 按 failure_remark 筛选，SUMMARIZE 去重到 order_code 维度计数
     VAR __Result =
-        CALCULATE(
-            DISTINCTCOUNT('t01_o2o_fulfillment_order_detail_d'[order_code]),
-            't01_o2o_fulfillment_order_detail_d'[failure_remark] IN { "门店拒绝接单", "门店接单后取消配货" },
-            't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin,
-            't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+        COUNTROWS(
+            SUMMARIZE(
+                FILTER(
+                    __LatestTable,
+                    [failure_remark] IN { "门店拒绝接单", "门店接单后取消配货" }
+                ),
+                [order_code]
+            )
         )
     RETURN __Result
 ```
@@ -582,20 +625,53 @@ Cancelled Order by Overdue Value =
 // Display Folder: PB Location
 // 用途: O2O失败订单数 - 超时分类，用于柱形图 Y 轴
 // 口径来源: PB Location.md 子模块三 - Unfulfilled Order
-// 计算公式: DISTINCTCOUNT(order_code)
-// 筛选条件:
-//   - failure_remark in ("待接单超时", "门店接单后超时未处理", "接单超时")
-//   - dt ∈ [__TimeMin, __TimeMax]（全局时间范围）
+// 计算公式: 预处理后按 failure_remark 筛选 + order_code 去重计数
+// 预处理: 同 Rejected Order by Store Value（时间范围 + Calc_Type + push_time 取最新）
+// 分类筛选:
+//   - failure_remark IN ("待接单超时", "门店接单后超时未处理", "接单超时")
 // 数据类型: integer → 千分位整数
 // ========================================
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+    VAR __CalcTypeID = SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
+    VAR __FilteredTable =
+        FILTER(
+            't01_o2o_fulfillment_order_detail_d',
+            't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin
+            && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+            && SWITCH(
+                __CalcTypeID,
+                "1", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
+                "2", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
+                    && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
+                TRUE()
+            )
+        )
+    VAR __LatestTable =
+        SELECTCOLUMNS(
+            FILTER(
+                SUMMARIZE(
+                    __FilteredTable,
+                    't01_o2o_fulfillment_order_detail_d'[order_code],
+                    't01_o2o_fulfillment_order_detail_d'[ext_code2],
+                    't01_o2o_fulfillment_order_detail_d'[push_time],
+                    't01_o2o_fulfillment_order_detail_d'[failure_remark],
+                    "_MaxPush", CALCULATE(MAX('t01_o2o_fulfillment_order_detail_d'[push_time]))
+                ),
+                't01_o2o_fulfillment_order_detail_d'[push_time] = [_MaxPush]
+            ),
+            "order_code", 't01_o2o_fulfillment_order_detail_d'[order_code],
+            "failure_remark", 't01_o2o_fulfillment_order_detail_d'[failure_remark]
+        )
     VAR __Result =
-        CALCULATE(
-            DISTINCTCOUNT('t01_o2o_fulfillment_order_detail_d'[order_code]),
-            't01_o2o_fulfillment_order_detail_d'[failure_remark] IN { "待接单超时", "门店接单后超时未处理", "接单超时" },
-            't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin,
-            't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+        COUNTROWS(
+            SUMMARIZE(
+                FILTER(
+                    __LatestTable,
+                    [failure_remark] IN { "待接单超时", "门店接单后超时未处理", "接单超时" }
+                ),
+                [order_code]
+            )
         )
     RETURN __Result
 ```
@@ -625,20 +701,53 @@ Cancelled Order by Customer Value =
 // Display Folder: PB Location
 // 用途: O2O失败订单数 - 顾客取消分类，用于柱形图 Y 轴
 // 口径来源: PB Location.md 子模块三 - Unfulfilled Order
-// 计算公式: DISTINCTCOUNT(order_code)
-// 筛选条件:
-//   - failure_remark in ("顾客取消订单", "消费者取消")
-//   - dt ∈ [__TimeMin, __TimeMax]（全局时间范围）
+// 计算公式: 预处理后按 failure_remark 筛选 + order_code 去重计数
+// 预处理: 同 Rejected Order by Store Value（时间范围 + Calc_Type + push_time 取最新）
+// 分类筛选:
+//   - failure_remark IN ("顾客取消订单", "消费者取消")
 // 数据类型: integer → 千分位整数
 // ========================================
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+    VAR __CalcTypeID = SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
+    VAR __FilteredTable =
+        FILTER(
+            't01_o2o_fulfillment_order_detail_d',
+            't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin
+            && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+            && SWITCH(
+                __CalcTypeID,
+                "1", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
+                "2", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
+                    && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
+                TRUE()
+            )
+        )
+    VAR __LatestTable =
+        SELECTCOLUMNS(
+            FILTER(
+                SUMMARIZE(
+                    __FilteredTable,
+                    't01_o2o_fulfillment_order_detail_d'[order_code],
+                    't01_o2o_fulfillment_order_detail_d'[ext_code2],
+                    't01_o2o_fulfillment_order_detail_d'[push_time],
+                    't01_o2o_fulfillment_order_detail_d'[failure_remark],
+                    "_MaxPush", CALCULATE(MAX('t01_o2o_fulfillment_order_detail_d'[push_time]))
+                ),
+                't01_o2o_fulfillment_order_detail_d'[push_time] = [_MaxPush]
+            ),
+            "order_code", 't01_o2o_fulfillment_order_detail_d'[order_code],
+            "failure_remark", 't01_o2o_fulfillment_order_detail_d'[failure_remark]
+        )
     VAR __Result =
-        CALCULATE(
-            DISTINCTCOUNT('t01_o2o_fulfillment_order_detail_d'[order_code]),
-            't01_o2o_fulfillment_order_detail_d'[failure_remark] IN { "顾客取消订单", "消费者取消" },
-            't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin,
-            't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+        COUNTROWS(
+            SUMMARIZE(
+                FILTER(
+                    __LatestTable,
+                    [failure_remark] IN { "顾客取消订单", "消费者取消" }
+                ),
+                [order_code]
+            )
         )
     RETURN __Result
 ```
@@ -668,26 +777,59 @@ Cancelled Order by Other Value =
 // Display Folder: PB Location
 // 用途: O2O失败订单数 - 其他原因分类，用于柱形图 Y 轴
 // 口径来源: PB Location.md 子模块三 - Unfulfilled Order
-// 计算公式: DISTINCTCOUNT(order_code)
-// 筛选条件:
+// 计算公式: 预处理后按 failure_remark 筛选 + order_code 去重计数
+// 预处理: 同 Rejected Order by Store Value（时间范围 + Calc_Type + push_time 取最新）
+// 分类筛选:
 //   - failure_remark NOT IN ("门店拒绝接单", "门店接单后取消配货", "待接单超时",
 //     "门店接单后超时未处理", "接单超时", "顾客取消订单", "消费者取消")
 //   - 即排除以上三类后，failure_remark 不为空的所有其他原因
-//   - dt ∈ [__TimeMin, __TimeMax]（全局时间范围）
 // 数据类型: integer → 千分位整数
 // ========================================
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+    VAR __CalcTypeID = SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
+    VAR __FilteredTable =
+        FILTER(
+            't01_o2o_fulfillment_order_detail_d',
+            't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin
+            && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+            && SWITCH(
+                __CalcTypeID,
+                "1", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
+                "2", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
+                    && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
+                TRUE()
+            )
+        )
+    VAR __LatestTable =
+        SELECTCOLUMNS(
+            FILTER(
+                SUMMARIZE(
+                    __FilteredTable,
+                    't01_o2o_fulfillment_order_detail_d'[order_code],
+                    't01_o2o_fulfillment_order_detail_d'[ext_code2],
+                    't01_o2o_fulfillment_order_detail_d'[push_time],
+                    't01_o2o_fulfillment_order_detail_d'[failure_remark],
+                    "_MaxPush", CALCULATE(MAX('t01_o2o_fulfillment_order_detail_d'[push_time]))
+                ),
+                't01_o2o_fulfillment_order_detail_d'[push_time] = [_MaxPush]
+            ),
+            "order_code", 't01_o2o_fulfillment_order_detail_d'[order_code],
+            "failure_remark", 't01_o2o_fulfillment_order_detail_d'[failure_remark]
+        )
     VAR __Result =
-        CALCULATE(
-            DISTINCTCOUNT('t01_o2o_fulfillment_order_detail_d'[order_code]),
-            NOT 't01_o2o_fulfillment_order_detail_d'[failure_remark] IN {
-                "门店拒绝接单", "门店接单后取消配货",
-                "待接单超时", "门店接单后超时未处理", "接单超时",
-                "顾客取消订单", "消费者取消"
-            },
-            't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin,
-            't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+        COUNTROWS(
+            SUMMARIZE(
+                FILTER(
+                    __LatestTable,
+                    NOT [failure_remark] IN {
+                        "门店拒绝接单", "门店接单后取消配货",
+                        "待接单超时", "门店接单后超时未处理", "接单超时",
+                        "顾客取消订单", "消费者取消"
+                    }
+                ),
+                [order_code]
+            )
         )
     RETURN __Result
 ```
@@ -1003,6 +1145,7 @@ Failed Request Ratio Value =
         DIVIDE(__Numerator, __Denominator, 0)
     RETURN __Result
 ```
+
 ### 4.38 Failed Request Ratio Display
 
 ```dax
@@ -1023,44 +1166,44 @@ Failed Request Ratio Display =
 
 ## 5. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称 | Display Folder | 用途 | 子模块 |
-|------|-----------|----------------|------|--------|
-| 1 | IsTimeFrameVisible | PB Location | X 轴视觉对象级别筛选器 | 通用 |
-| 2 | TY Shipped Order Qty Value | PB Location | 柱形图 Y 轴（本期订单量） | 一 |
-| 3 | TY Shipped Order Qty Display | PB Location | 柱形图标签 | 一 |
-| 4 | LY Shipped Order Qty Value | PB Location | 柱形图 Y 轴（去年同期订单量） | 一 |
-| 5 | LY Shipped Order Qty Display | PB Location | 柱形图标签 | 一 |
-| 6 | Shipped Order Qty YOY Value | PB Location | 柱形图 Y 轴（同比） | 一 |
-| 7 | Shipped Order Qty YOY Display | PB Location | 柱形图标签 | 一 |
-| 8 | TY Shipped Order Amt Value | PB Location | 柱形图 Y 轴（本期金额） | 一 |
-| 9 | TY Shipped Order Amt Display | PB Location | 柱形图标签 | 一 |
-| 10 | LY Shipped Order Amt Value | PB Location | 柱形图 Y 轴（去年同期金额） | 一 |
-| 11 | LY Shipped Order Amt Display | PB Location | 柱形图标签 | 一 |
-| 12 | Shipped Order Amt YOY Value | PB Location | 柱形图 Y 轴（同比） | 一 |
-| 13 | Shipped Order Amt YOY Display | PB Location | 柱形图标签 | 一 |
-| 14 | TY Fulfillment% Value | PB Location | 趋势图 Y 轴（本期履约率） | 二 |
-| 15 | TY Fulfillment% Display | PB Location | 趋势图标签 | 二 |
-| 16 | LY Fulfillment% Value | PB Location | 趋势图 Y 轴（去年同期履约率） | 二 |
-| 17 | LY Fulfillment% Display | PB Location | 趋势图标签 | 二 |
-| 18 | Rejected Order by Store Value | PB Location | 柱形图 Y 轴（门店拒绝接单） | 三 |
-| 19 | Rejected Order by Store Display | PB Location | 柱形图标签 | 三 |
-| 20 | Cancelled Order by Overdue Value | PB Location | 柱形图 Y 轴（超时） | 三 |
-| 21 | Cancelled Order by Overdue Display | PB Location | 柱形图标签 | 三 |
-| 22 | Cancelled Order by Customer Value | PB Location | 柱形图 Y 轴（顾客取消） | 三 |
-| 23 | Cancelled Order by Customer Display | PB Location | 柱形图标签 | 三 |
-| 24 | Cancelled Order by Other Value | PB Location | 柱形图 Y 轴（其他原因） | 三 |
-| 25 | Cancelled Order by Other Display | PB Location | 柱形图标签 | 三 |
-| 26 | Rejected Order Share by Store Value | PB Location | 柱形图 Y 轴（门店拒绝占比） | 三 |
-| 27 | Rejected Order Share by Store Display | PB Location | 柱形图标签 | 三 |
-| 28 | Cancelled Order Share by Overdue Value | PB Location | 柱形图 Y 轴（超时占比） | 三 |
-| 29 | Cancelled Order Share by Overdue Display | PB Location | 柱形图标签 | 三 |
-| 30 | Cancelled Order Share by Customer Value | PB Location | 柱形图 Y 轴（顾客取消占比） | 三 |
-| 31 | Cancelled Order Share by Customer Display | PB Location | 柱形图标签 | 三 |
-| 32 | Cancelled Order Share by Other Value | PB Location | 柱形图 Y 轴（其他原因占比） | 三 |
-| 33 | Cancelled Order Share by Other Display | PB Location | 柱形图标签 | 三 |
-| 34 | Unfulfilled Order Tooltip Display | PB Location | 工具提示 | 三 |
-| 35 | Failed Request Value | PB Location | 柱形图 Y 轴（失败次数） | 四 |
-| 36 | Failed Request Display | PB Location | 柱形图标签 | 四 |
+| 序号 | 度量值名称                                | Display Folder | 用途                          | 子模块 |
+| ---- | ----------------------------------------- | -------------- | ----------------------------- | ------ |
+| 1    | IsTimeFrameVisible                        | PB Location    | X 轴视觉对象级别筛选器        | 通用   |
+| 2    | TY Shipped Order Qty Value                | PB Location    | 柱形图 Y 轴（本期订单量）     | 一     |
+| 3    | TY Shipped Order Qty Display              | PB Location    | 柱形图标签                    | 一     |
+| 4    | LY Shipped Order Qty Value                | PB Location    | 柱形图 Y 轴（去年同期订单量） | 一     |
+| 5    | LY Shipped Order Qty Display              | PB Location    | 柱形图标签                    | 一     |
+| 6    | Shipped Order Qty YOY Value               | PB Location    | 柱形图 Y 轴（同比）           | 一     |
+| 7    | Shipped Order Qty YOY Display             | PB Location    | 柱形图标签                    | 一     |
+| 8    | TY Shipped Order Amt Value                | PB Location    | 柱形图 Y 轴（本期金额）       | 一     |
+| 9    | TY Shipped Order Amt Display              | PB Location    | 柱形图标签                    | 一     |
+| 10   | LY Shipped Order Amt Value                | PB Location    | 柱形图 Y 轴（去年同期金额）   | 一     |
+| 11   | LY Shipped Order Amt Display              | PB Location    | 柱形图标签                    | 一     |
+| 12   | Shipped Order Amt YOY Value               | PB Location    | 柱形图 Y 轴（同比）           | 一     |
+| 13   | Shipped Order Amt YOY Display             | PB Location    | 柱形图标签                    | 一     |
+| 14   | TY Fulfillment% Value                     | PB Location    | 趋势图 Y 轴（本期履约率）     | 二     |
+| 15   | TY Fulfillment% Display                   | PB Location    | 趋势图标签                    | 二     |
+| 16   | LY Fulfillment% Value                     | PB Location    | 趋势图 Y 轴（去年同期履约率） | 二     |
+| 17   | LY Fulfillment% Display                   | PB Location    | 趋势图标签                    | 二     |
+| 18   | Rejected Order by Store Value             | PB Location    | 柱形图 Y 轴（门店拒绝接单）   | 三     |
+| 19   | Rejected Order by Store Display           | PB Location    | 柱形图标签                    | 三     |
+| 20   | Cancelled Order by Overdue Value          | PB Location    | 柱形图 Y 轴（超时）           | 三     |
+| 21   | Cancelled Order by Overdue Display        | PB Location    | 柱形图标签                    | 三     |
+| 22   | Cancelled Order by Customer Value         | PB Location    | 柱形图 Y 轴（顾客取消）       | 三     |
+| 23   | Cancelled Order by Customer Display       | PB Location    | 柱形图标签                    | 三     |
+| 24   | Cancelled Order by Other Value            | PB Location    | 柱形图 Y 轴（其他原因）       | 三     |
+| 25   | Cancelled Order by Other Display          | PB Location    | 柱形图标签                    | 三     |
+| 26   | Rejected Order Share by Store Value       | PB Location    | 柱形图 Y 轴（门店拒绝占比）   | 三     |
+| 27   | Rejected Order Share by Store Display     | PB Location    | 柱形图标签                    | 三     |
+| 28   | Cancelled Order Share by Overdue Value    | PB Location    | 柱形图 Y 轴（超时占比）       | 三     |
+| 29   | Cancelled Order Share by Overdue Display  | PB Location    | 柱形图标签                    | 三     |
+| 30   | Cancelled Order Share by Customer Value   | PB Location    | 柱形图 Y 轴（顾客取消占比）   | 三     |
+| 31   | Cancelled Order Share by Customer Display | PB Location    | 柱形图标签                    | 三     |
+| 32   | Cancelled Order Share by Other Value      | PB Location    | 柱形图 Y 轴（其他原因占比）   | 三     |
+| 33   | Cancelled Order Share by Other Display    | PB Location    | 柱形图标签                    | 三     |
+| 34   | Unfulfilled Order Tooltip Display         | PB Location    | 工具提示                      | 三     |
+| 35   | Failed Request Value                      | PB Location    | 柱形图 Y 轴（失败次数）       | 四     |
+| 36   | Failed Request Display                    | PB Location    | 柱形图标签                    | 四     |
 
 ---
 
@@ -1068,46 +1211,46 @@ Failed Request Ratio Display =
 
 ### 6.1 子模块一：柱形图（Fulfilled Order by Region/Store Type）
 
-| 配置项 | 值 |
-|--------|-----|
-| X 轴 | Slicer_Time_Frame[TimeFrame_Value] |
-| Y 轴 | [TY Shipped Order Qty Value] / [LY Shipped Order Qty Value] / [TY Shipped Order Amt Value] / [LY Shipped Order Amt Value] |
-| 图例 | 事实表[store_region] 或 [store_type]（直接拉取） |
-| 数据标签 | 对应 [* Display] 度量 |
-| 视觉对象级别筛选器 | Slicer_Time_Frame 表上 [IsTimeFrameVisible] = 1 |
-| 全局筛选器 | Slicer_Time_Frame_Min/Max、Slicer_Currency_Selection |
+| 配置项             | 值                                                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| X 轴               | Slicer_Time_Frame[TimeFrame_Value]                                                                                        |
+| Y 轴               | [TY Shipped Order Qty Value] / [LY Shipped Order Qty Value] / [TY Shipped Order Amt Value] / [LY Shipped Order Amt Value] |
+| 图例               | 事实表[store_region] 或 [store_type]（直接拉取）                                                                          |
+| 数据标签           | 对应 [* Display] 度量                                                                                                     |
+| 视觉对象级别筛选器 | Slicer_Time_Frame 表上 [IsTimeFrameVisible] = 1                                                                           |
+| 全局筛选器         | Slicer_Time_Frame_Min/Max、Slicer_Currency_Selection                                                                      |
 
 ### 6.2 子模块二：柱形图/趋势图（Fulfillment% Trend）
 
-| 配置项 | 值 |
-|--------|-----|
-| X 轴 | Slicer_Time_Frame[TimeFrame_Value] |
-| Y 轴 | [TY Fulfillment% Value] / [LY Fulfillment% Value] |
-| 折线/图例 | 事实表[store_region] 或 [store_type]（直接拉取） |
-| 数据标签 | 对应 [* Display] 度量 |
-| 视觉对象级别筛选器 | Slicer_Time_Frame 表上 [IsTimeFrameVisible] = 1 |
-| 全局筛选器 | Slicer_Time_Frame_Min/Max |
+| 配置项             | 值                                                |
+| ------------------ | ------------------------------------------------- |
+| X 轴               | Slicer_Time_Frame[TimeFrame_Value]                |
+| Y 轴               | [TY Fulfillment% Value] / [LY Fulfillment% Value] |
+| 折线/图例          | 事实表[store_region] 或 [store_type]（直接拉取）  |
+| 数据标签           | 对应 [* Display] 度量                             |
+| 视觉对象级别筛选器 | Slicer_Time_Frame 表上 [IsTimeFrameVisible] = 1   |
+| 全局筛选器         | Slicer_Time_Frame_Min/Max                         |
 
 ### 6.3 子模块三：柱形图（Unfulfilled Order by Region）
 
-| 配置项 | 值 |
-|--------|-----|
-| Y 轴 | [Rejected Order by Store Value] / [Cancelled Order by Overdue Value] / [Cancelled Order by Customer Value] / [Cancelled Order by Other Value] |
-| 图例 | 事实表[store_region] 或 [store_type]（直接拉取） |
-| 数据标签 | 对应 [* Display] 度量 |
-| Tooltip | [Unfulfilled Order Tooltip Display] |
-| 全局筛选器 | Slicer_Time_Frame_Min/Max |
+| 配置项     | 值                                                                                                                                            |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Y 轴       | [Rejected Order by Store Value] / [Cancelled Order by Overdue Value] / [Cancelled Order by Customer Value] / [Cancelled Order by Other Value] |
+| 图例       | 事实表[store_region] 或 [store_type]（直接拉取）                                                                                              |
+| 数据标签   | 对应 [* Display] 度量                                                                                                                         |
+| Tooltip    | [Unfulfilled Order Tooltip Display]                                                                                                           |
+| 全局筛选器 | Slicer_Time_Frame_Min/Max                                                                                                                     |
 
 > 不按 timeframe 聚合，不使用 X 轴 = Slicer_Time_Frame
 
 ### 6.4 子模块四：柱形图（Failed Request by Reason）
 
-| 配置项 | 值 |
-|--------|-----|
-| Y 轴 | [Failed Request Value] |
-| 图例 | 事实表[store_region] 或 [store_type]（直接拉取） |
-| 数据标签 | [Failed Request Display] |
-| 全局筛选器 | Slicer_Time_Frame_Min/Max |
+| 配置项     | 值                                               |
+| ---------- | ------------------------------------------------ |
+| Y 轴       | [Failed Request Value]                           |
+| 图例       | 事实表[store_region] 或 [store_type]（直接拉取） |
+| 数据标签   | [Failed Request Display]                         |
+| 全局筛选器 | Slicer_Time_Frame_Min/Max                        |
 
 > 不按 timeframe 聚合，不使用 X 轴 = Slicer_Time_Frame
 
@@ -1153,33 +1296,49 @@ WHERE calc_type = 'fulfillment'
 ### 7.3 子模块三验证 SQL
 
 ```sql
+-- 预处理: 按 order_code + ext_code2 分组取 push_time 最新一条
+-- 再按 Calc_Type 条件筛选: is_pay_date_cancel / is_ec_fulfillment
+WITH latest AS (
+  SELECT order_code, ext_code2, MAX(push_time) AS max_push_time
+  FROM t01_o2o_fulfillment_order_detail_d
+  WHERE dt BETWEEN '__TimeMin' AND '__TimeMax'
+    AND is_pay_date_cancel = 0
+    -- Calc_Type_ID = 2 时追加: AND is_ec_fulfillment = 0
+  GROUP BY order_code, ext_code2
+)
+SELECT t.order_code, t.ext_code2, t.push_time, t.failure_remark, t.store_region
+FROM t01_o2o_fulfillment_order_detail_d t
+INNER JOIN latest l
+  ON t.order_code = l.order_code
+  AND t.ext_code2 = l.ext_code2
+  AND t.push_time = l.max_push_time
+WHERE t.dt BETWEEN '__TimeMin' AND '__TimeMax'
+  AND t.is_pay_date_cancel = 0;
+-- 基于上述结果集按 failure_remark 分类:
+
 -- Rejected Order by Store
 SELECT COUNT(DISTINCT order_code) AS RejectedByStore
-FROM t01_o2o_fulfillment_order_detail_d
-WHERE failure_remark IN ('门店拒绝接单', '门店接单后取消配货')
-  AND dt BETWEEN '__TimeMin' AND '__TimeMax';
+FROM (... 上述结果集 ...)
+WHERE failure_remark IN ('门店拒绝接单', '门店接单后取消配货');
 
 -- Cancelled Order by Overdue
 SELECT COUNT(DISTINCT order_code) AS CancelledByOverdue
-FROM t01_o2o_fulfillment_order_detail_d
-WHERE failure_remark IN ('待接单超时', '门店接单后超时未处理', '接单超时')
-  AND dt BETWEEN '__TimeMin' AND '__TimeMax';
+FROM (... 上述结果集 ...)
+WHERE failure_remark IN ('待接单超时', '门店接单后超时未处理', '接单超时');
 
 -- Cancelled Order by Customer
 SELECT COUNT(DISTINCT order_code) AS CancelledByCustomer
-FROM t01_o2o_fulfillment_order_detail_d
-WHERE failure_remark IN ('顾客取消订单', '消费者取消')
-  AND dt BETWEEN '__TimeMin' AND '__TimeMax';
+FROM (... 上述结果集 ...)
+WHERE failure_remark IN ('顾客取消订单', '消费者取消');
 
 -- Cancelled Order by Other
 SELECT COUNT(DISTINCT order_code) AS CancelledByOther
-FROM t01_o2o_fulfillment_order_detail_d
+FROM (... 上述结果集 ...)
 WHERE failure_remark NOT IN (
     '门店拒绝接单', '门店接单后取消配货',
     '待接单超时', '门店接单后超时未处理', '接单超时',
     '顾客取消订单', '消费者取消'
-  )
-  AND dt BETWEEN '__TimeMin' AND '__TimeMax';
+  );
 
 -- Rejected Order Share by Store
 -- 分母 = 四类之和（不使用 REMOVEFILTERS）
@@ -1200,15 +1359,9 @@ WHERE data_date BETWEEN '__TimeMin' AND '__TimeMax';
 ## 8. 注意事项
 
 1. **粒度联动假设**：Slicer_Time_Frame_Min 和 Slicer_Time_Frame_Max 切片器应受同一粒度选择器联动筛选（保持同粒度）。若两者粒度不一致，IsTimeFrameVisible 返回 0 隐藏所有柱子。
-
 2. **LY 财历映射**：周/月/季/年粒度按财年定义，LY 采用财历映射（直接读取日期表内置 TimeFrame_Min_LY / TimeFrame_Max_LY 字段），不使用 EDATE -12。日期表需包含至少2年历史数据。
-
-3. **子模块三数据底表差异**：t01_o2o_fulfillment_order_detail_d 表的时间字段在 PBI 模型中为 `dt`（已转换为 date 类型），而非 `data_date`。该表不含 calc_type 字段，通过 failure_remark 分类逻辑界定 Unfulfilled Order Scope。
-
+3. **子模块三数据底表差异**：t01_o2o_fulfillment_order_detail_d 表的时间字段为 `dt`（PBI 中已转换为 date 类型）。该表不含 calc_type 字段，通过 failure_remark 分类逻辑界定 Unfulfilled Order Scope。新增预处理逻辑（2026-09-13）：所选时间范围内按 order_code + ext_code2 分组取 push_time 最新一条，并根据 Slicer_Fulfillment_Calc_Type[Calc_Type_ID] 筛选 is_pay_date_cancel / is_ec_fulfillment。
 4. **子模块三分母计算**：Unfulfilled Order Share 分母使用四个指标相加，不使用 REMOVEFILTERS 函数，确保与口径文档一致。
-
 5. **分组维度传递**：store_region / store_type 直接从数据表字段拉取到视觉对象图例/轴，DAX 度量值无需显式处理分组逻辑。
-
 6. **汇率换算**：金额类指标（Shipped Order Amt）÷ Currency_ExchangeRate；比率类（Fulfillment%）分子分母同币种相除自动抵消，不除汇率。
-
 7. **全局筛选冗余性**：柱形图/趋势图中 X 轴时间段筛选是全局范围筛选的子集，全局筛选冗余但保留，防止 X 轴超出全局范围时的异常显示。
