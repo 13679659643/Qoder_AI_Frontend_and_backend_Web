@@ -77,7 +77,7 @@ DATATABLE(
         // 口径: 分子 DCom New Customer No.；分母 count(distinct user_id) where net_pay_amt>0 AND is_member=0
         // 颜色规则: Act=默认色；vs LY/vs LP=正负零三色；TAR ACH% Monthly/TAR ACH% Yearly=正负零三色
         // ════════════════════════════════════════════════════════════════
-        { 6,  "Customer%",    "6-DCom New Customer%",               20, 100, "Act",              "percent_1dp",   "fixed_default", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 6,  "Customer%",    "6-DCom New Customer%",               20, 100, "Act",              "percent_1dp",   "fixed_black", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 7,  "Customer%",    "7-DCom New Customer% vs LY",        20, 200, "vs LY",            "delta_pts",     "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 8,  "Customer%",    "8-DCom New Customer% vs LP",        20, 300, "vs LP",            "delta_pts",     "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 9,  "Customer%",    "9-Customer% Monthly TAR ACH%",      20, 400, "TAR ACH% Monthly", "percent_1dp",   "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },

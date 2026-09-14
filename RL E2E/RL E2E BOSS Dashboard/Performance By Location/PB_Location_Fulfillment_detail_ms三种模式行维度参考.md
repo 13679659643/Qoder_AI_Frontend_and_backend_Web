@@ -13,7 +13,12 @@
 
 为 Performance By Location 页面实现 Fulfillment 分组（子模块五从 6. Fulfillment% 开始的剩余指标）的中国式矩阵效果：
 
-- **行**：无行维度表，直接拉取事实表字段（store_region / store_type / shop_code 等），天然实现行维度分组和筛选，DAX 无需显式处理
+- **行**：无行维度表，直接拉取 summary 表字段，共三种布局模式（由 `Slicer_Row_Dimension_Selection` 切换）：
+  1. **Table**（表格）：store_code / store_name / store_region / store_type 四字段并行
+  2. **Region**（矩阵）：store_region > store_name 两级层级
+  3. **StoreType**（矩阵）：store_type > store_name 两级层级
+
+  除 Failed Request / Failed%（Metric_ID 42/43）外，指标与行同表（summary 表），筛选自动生效；Metric_ID 42/43 底表为 request_data 表，行维度值通过 `__LevelFilter` 按模式显式桥接（见 1.2）
 - **列**：`Dim_ColMetric_Fulfillment_PB_Location` 的两级层级 `KPIGroup`（父）> `ColName`（子）
   - 11 个 KPI 分组：Fulfillment% / Request Order / Shipped Order / Unfulfillment% / Unfulfilled Order / Rejected Order / Cancelled Order by Overdue / Cancelled Order by Customer / Others / Failed Request / Inventory
   - 共 46 列指标
@@ -34,6 +39,20 @@
 - 不使用 `[data_date] >= __TimeMin AND [data_date] <= __TimeMax` 的区间 SUM
 - 而是取 `__TimeMax`（本期末日）或 `__LYTimeMax`（去年同期末日）当天的 SUM
 
+### 1.2 关键特殊逻辑二：request_data 表指标的行维度桥接（三种模式）
+
+Failed Request / Failed%（Metric_ID 42/43）数据底表为 `a02_e2e_boss_fulfillment_request_data_d`，其余指标底表为 `a02_e2e_boss_performance_summary_d`。矩阵/表格行字段拉取自 summary 表（两张事实表间无模型关系），行维度值无法自动传递到 request_data 表。
+
+页面存在三种行维度布局，通过新建参数表 `Slicer_Row_Dimension_Selection` 切换，度量值按所选模式执行对应的行维度匹配（参照 Category Growth Active IDs 层级过滤范式）：
+
+| 模式（Row_Dim_ID） | 视觉对象 | 行字段布局 | 匹配逻辑 |
+| ----------------- | -------- | ---------- | -------- |
+| Table             | 表格     | store_code / store_name / store_region / store_type 四字段并行 | 明细行四字段全匹配当前行值，总计行放行全部 |
+| Region            | 矩阵     | store_region > store_name 两级层级 | 展开到哪层匹配到哪层：store_name 行匹配 region + name，store_region 行仅匹配 region，总计行放行全部 |
+| StoreType         | 矩阵     | store_type > store_name 两级层级 | 展开到哪层匹配到哪层：store_name 行匹配 type + name，store_type 行仅匹配 type，总计行放行全部 |
+
+> 仅 Metric_ID 42/43 走 `__LevelFilter` 桥接；其余指标的行字段与 summary 表同表，天然筛选自动生效，不受模式切换影响。切换视觉对象布局时需同步切换切片器选中值，保证匹配逻辑与行字段一致。
+
 ---
 
 ## 2. 现状分析
@@ -42,19 +61,22 @@
 
 | 对象     | 名称                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 出处                         |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
-| 事实表   | a02_e2e_boss_performance_summary_d                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | PB Location.md 全局逻辑      |
-| 关键字段 | data_date, store_region, store_type, shop_code, calc_type, o2o_fulfillment_shipped_order_cnt, o2o_fulfillment_request_order_cnt, o2o_fulfillment_request_qty, o2o_fulfillment_request_sales_amt, o2o_fulfillment_shipped_qty, o2o_fulfillment_shipped_sales_amt, o2o_fulfillment_unshipped_order_cnt, o2o_fulfillment_unshipped_qty, o2o_fulfillment_unshipped_sales_amt, o2o_fulfillment_unshipped_store_rejected_order_cnt, o2o_fulfillment_unshipped_overdue_order_cnt, o2o_fulfillment_unshipped_customer_cancelled_order_cnt, o2o_fulfillment_unshipped_others_order_cnt, o2o_fulfillment_request_failed_times, o2o_fulfillment_request_times, stock_qty, bsr_stock_qty, seasonal_stock_qty | PB Location.md 子模块五 6-29 |
+| 事实表 1 | a02_e2e_boss_performance_summary_d                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | PB Location.md 全局逻辑      |
+| 关键字段（summary 表）  | data_date, store_code, store_name, store_region, store_type, shop_code, calc_type, o2o_fulfillment_shipped_order_cnt, o2o_fulfillment_request_order_cnt, o2o_fulfillment_request_qty, o2o_fulfillment_request_sales_amt, o2o_fulfillment_shipped_qty, o2o_fulfillment_shipped_sales_amt, o2o_fulfillment_unshipped_order_cnt, o2o_fulfillment_unshipped_qty, o2o_fulfillment_unshipped_sales_amt, o2o_fulfillment_unshipped_store_rejected_order_cnt, o2o_fulfillment_unshipped_overdue_order_cnt, o2o_fulfillment_unshipped_customer_cancelled_order_cnt, o2o_fulfillment_unshipped_others_order_cnt, stock_qty, bsr_stock_qty, seasonal_stock_qty | PB Location.md 子模块五 6-24、27-29 |
+| 事实表 2                | a02_e2e_boss_fulfillment_request_data_d                                  | PB Location.md 子模块五 25-26 |
+| 关键字段（request_data 表） | data_date, store_code, store_name, store_region, store_type, calc_type, o2o_fulfillment_request_failed_times, o2o_fulfillment_request_times | PB Location.md 子模块五 25-26 |
 
 ### 2.2 维度表清单
 
-| 维度表                                | 类型     | 连接方式                                                   |
-| ------------------------------------- | -------- | ---------------------------------------------------------- |
+| 维度表                                | 类型     | 连接方式                                                     |
+| ------------------------------------- | -------- | ------------------------------------------------------------ |
 | Slicer_Time_Frame_Min                 | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Min / TimeFrame_Min_LY        |
 | Slicer_Time_Frame_Max                 | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Max / TimeFrame_Max_LY        |
 | Slicer_Currency_Selection             | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate / Currency_Symbol |
+| Slicer_Row_Dimension_Selection        | 断开维度 | SELECTEDVALUE 读取 Row_Dim_ID（Table / Region / StoreType） |
 | Dim_ColMetric_Fulfillment_PB_Location | 断开维度 | SELECTEDVALUE 读取 Metric_ID / ColType / Metric_Format_*   |
 
-> 不使用行维度表，行字段直接拉取事实表字段。calc_type 在 Fulfillment 分组下固定为 "fulfillment"，直接硬编码。
+> 不使用行维度表，行字段直接拉取 summary 表字段。calc_type 在 Fulfillment 分组下固定为 "fulfillment"，直接硬编码。Slicer_Row_Dimension_Selection 仅影响 Metric_ID 42/43（request_data 表指标）的行维度桥接逻辑，不影响其余指标。
 
 ---
 
@@ -73,7 +95,8 @@ Dim_ColMetric_Fulfillment_PB_Location（断开维度，列头）
     │
     ▼
     ┌─────────────────────────── Matrix 视觉对象 ──────────────────────────┐
-    │  行 = 事实表字段（store_region / store_type / shop_code 等，直接拉取）│
+    │  行 = summary 表字段（按 Slicer_Row_Dimension_Selection 模式：      │
+    │       Table 四字段并行 / Region 矩阵 / StoreType 矩阵）             │
     │  列 = 'Dim_ColMetric_Fulfillment_PB_Location'[KPIGroup]              │
     │        > 'Dim_ColMetric_Fulfillment_PB_Location'[ColName]            │
     │  值 = [Fulfillment PB Location Cell Display]                        │
@@ -112,14 +135,17 @@ Dim_ColMetric_Fulfillment_PB_Location（断开维度，列头）
 
 ### 3.3 筛选器上下文
 
-| 筛选器                    | 作用方式                                                            | DAX 处理                                                                            |
-| ------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Slicer_Time_Frame_Min     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Min                          | `data_date >= __TimeMin`（区间指标）                                              |
-| Slicer_Time_Frame_Max     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max                          | `data_date <= __TimeMax`（区间指标）；`data_date = __TimeMax`（Inventory 末日） |
-| Slicer_Currency_Selection | 断开维度，SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol | 金额类指标 ÷ Currency_ExchangeRate                                                 |
-| 事实表分组字段            | 表格行/列直接拉取，模型自动传递筛选                                 | DAX 无需显式处理                                                                    |
+| 筛选器                      | 作用方式                                                              | DAX 处理                                                                            |
+| --------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Slicer_Time_Frame_Min       | 断开维度，SELECTEDVALUE 读取 TimeFrame_Min                            | `data_date >= __TimeMin`（区间指标）                                              |
+| Slicer_Time_Frame_Max       | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max                            | `data_date <= __TimeMax`（区间指标）；`data_date = __TimeMax`（Inventory 末日） |
+| Slicer_Currency_Selection   | 断开维度，SELECTEDVALUE 读取 Currency_ExchangeRate / Currency_Symbol | 金额类指标 ÷ Currency_ExchangeRate                                                 |
+| Slicer_Row_Dimension_Selection | 断开维度，SELECTEDVALUE 读取 Row_Dim_ID                            | 仅 Metric_ID 42/43：`__LevelFilter` 按模式桥接行维度到 request_data 表          |
+| 事实表分组字段              | 表格行/列直接拉取，模型自动传递筛选                                   | summary 表指标天然筛选生效；request_data 表指标（42/43）走 __LevelFilter          |
 
 > calc_type 在 Fulfillment 分组下固定为 "fulfillment"，直接硬编码。
+
+> 行维度桥接说明：矩阵/表格行字段拉取自 summary 表。除 Failed Request / Failed%（Metric_ID 42/43）外，指标与行同表，筛选自动生效；Metric_ID 42/43 底表为 request_data 表，行维度值通过 Slicer_Row_Dimension_Selection 选择模式 + `__LevelFilter` 显式传递（Table 四字段并行 / Region 矩阵 / StoreType 矩阵，展开到哪层匹配到哪层，父行 = 子行之和）。
 
 ### 3.4 vs LY 时间偏移规则（财历映射）
 
@@ -188,6 +214,69 @@ Dim_ColMetric_Fulfillment_PB_Location（断开维度，列头）
 
 > 注：Rejected/Overdue/Customer/Others/Failed 分组只有 Orders+率 两列，无 LY/vs LY 列；Inventory 分组只有 Total/BSR/Seasonal 三列，无 LY/vs LY 列。这些组在总路由中直接返回 Act 值，不进入 vs LY 派生分支。
 
+### 4.1.1 Slicer_Row_Dimension_Selection（行维度模式参数表）
+
+```dax
+Slicer_Row_Dimension_Selection = 
+// ========================================
+// 表: Slicer_Row_Dimension_Selection
+// 类型: 参数表（Slicer_ 前缀），断开维度
+// 用途: 控制行维度布局模式，Performance By Location 页面存在三种行维度布局，
+//       用户切换布局时同步切换本切片器，度量值按所选模式执行对应的行维度匹配
+// 影响范围: 仅 request_data 表指标（Failed Request / Failed%，Metric_ID 42/43）
+//           的 __LevelFilter 桥接逻辑；其余指标不受影响
+// 遵循: 通用参数表模板规范（参照 Slicer_Platform_Selection / Slicer_Fulfillment_Calc_Type）
+//
+// 字段说明:
+//   Row_Dim_ID          主键标识：Table / Region / StoreType
+//   Row_Dim_Label       显示标签，在报表界面中向用户展示的模式名称
+//   Row_Dim_Sort        排序顺序，控制选项在切片器中的显示顺序
+//   Row_Dim_Description 详细描述，说明该模式的行维度布局与匹配逻辑
+//   Row_Dim_IsDefault   是否默认选中
+//   Row_Dim_IsActive    是否激活状态，控制该模式选项是否可用
+// ========================================
+DATATABLE(
+    // 基础字段 - 必选字段
+    "Row_Dim_ID", STRING,          // 主键标识：Table / Region / StoreType
+    "Row_Dim_Label", STRING,       // 显示标签
+    "Row_Dim_Sort", INTEGER,       // 排序顺序
+    "Row_Dim_Description", STRING, // 详细描述
+    // 扩展字段 - 可选字段
+    "Row_Dim_IsDefault", BOOLEAN,  // 是否默认选中
+    "Row_Dim_IsActive", BOOLEAN,   // 是否激活状态
+    // 数据行
+    {
+        // 模式1: 表格布局，四字段并行
+        {
+            "Table",               // 模式代码
+            "Store Detail",        // 模式显示名称
+            10,                     // 排序顺序
+            "表格：store_code/store_name/store_region/store_type 四字段并行，明细行四字段全匹配当前行值，总计行放行全部", // 模式描述
+            TRUE,                   // 默认选中
+            TRUE                    // 激活状态，当前可用
+        },
+        // 模式2: 矩阵布局，Region 层级
+        {
+            "Region",              // 模式代码
+            "Region × Store",      // 模式显示名称
+            20,                     // 排序顺序
+            "矩阵：store_region > store_name 两级层级，展开到哪层匹配到哪层（store_name 行匹配 region+name，store_region 行仅匹配 region）", // 模式描述
+            FALSE,                  // 非默认选项
+            TRUE                    // 激活状态，当前可用
+        },
+        // 模式3: 矩阵布局，Store Type 层级
+        {
+            "StoreType",           // 模式代码
+            "Store Type × Store",  // 模式显示名称
+            30,                     // 排序顺序
+            "矩阵：store_type > store_name 两级层级，展开到哪层匹配到哪层（store_name 行匹配 type+name，store_type 行仅匹配 type）", // 模式描述
+            FALSE,                  // 非默认选项
+            TRUE                    // 激活状态，当前可用
+        }
+    }
+)
+```
+
 ### 4.2 Fulfillment PB Location Act Base Value（本期基础值）
 
 ```dax
@@ -197,13 +286,17 @@ Fulfillment PB Location Act Base Value =
 // Display Folder: Base Metrics
 // 用途: 根据 Metric_ID 路由到本期（Act）基础值
 // 依赖: 'Dim_ColMetric_Fulfillment_PB_Location'[Metric_ID, Metric_IsCurrencyAmount],
-//       a02_e2e_boss_performance_summary_d
+//       a02_e2e_boss_performance_summary_d, a02_e2e_boss_fulfillment_request_data_d,
+//       Slicer_Row_Dimension_Selection[Row_Dim_ID]
 // 口径来源: PB Location.md 子模块五 - 从 6. Fulfillment% 起的本期值
 // 筛选上下文:
 //   - calc_type = "fulfillment"（硬编码，Fulfillment 分组固定）
 //   - data_date ∈ [__TimeMin, __TimeMax]（全局时间范围，区间 SUM）
 //   - Inventory 分组（Metric_ID 44/45/46）特殊处理：data_date = __TimeMax（末日 SUM）
 //   - 金额类指标（Metric_IsCurrencyAmount=TRUE）÷ __FXRate（汇率）
+//   - Failed Request / Failed%（Metric_ID 42/43）：行字段拉取自 summary 表，通过
+//     Slicer_Row_Dimension_Selection 选择行维度模式，__LevelFilter 按模式将行维度值
+//     显式传递给 request_data 表（Table 四字段并行 / Region 矩阵 / StoreType 矩阵）
 // ========================================
     VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_Fulfillment_PB_Location'[Metric_ID])
     VAR __IsCurrencyAmount = SELECTEDVALUE('Dim_ColMetric_Fulfillment_PB_Location'[Metric_IsCurrencyAmount], FALSE)
@@ -212,6 +305,79 @@ Fulfillment PB Location Act Base Value =
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
     // ── 汇率（金额类指标需要除以汇率）──
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
+
+    // ── 行维度模式读取（控制 request_data 表指标的行维度传递逻辑，仅 Metric_ID 42/43）──
+    // Table：表格四字段并行；Region：矩阵 store_region > store_name；StoreType：矩阵 store_type > store_name
+    VAR __RowDimMode = SELECTEDVALUE ( Slicer_Row_Dimension_Selection[Row_Dim_ID], "Table" )
+
+    // ── 层级判断（矩阵/表格行字段拉取自 summary 表，ISINSCOPE 判定当前行所处层级）──
+    VAR __IsStoreCode = ISINSCOPE ( 'a02_e2e_boss_performance_summary_d'[store_code] )
+    VAR __IsStoreName = ISINSCOPE ( 'a02_e2e_boss_performance_summary_d'[store_name] )
+    VAR __IsRegion    = ISINSCOPE ( 'a02_e2e_boss_performance_summary_d'[store_region] )
+    VAR __IsStoreType = ISINSCOPE ( 'a02_e2e_boss_performance_summary_d'[store_type] )
+
+    // ── 当前行上下文的行维度值（从 summary 表读取，用于桥接到 request_data 表）──
+    VAR __CurrentStoreCode = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[store_code] )
+    VAR __CurrentStoreName = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[store_name] )
+    VAR __CurrentRegion    = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[store_region] )
+    VAR __CurrentStoreType = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[store_type] )
+
+    // ── 行维度层级过滤：按模式分支，将行维度值显式传递给 request_data 表 ──
+    // 仅 Failed Request / Failed%（Metric_ID 42/43）使用；summary 表指标靠行字段天然筛选，不走本过滤
+    VAR __LevelFilter =
+        FILTER (
+            // 四个行维度字段全部放入 ALLSELECTED，清除外部矩阵/切片器对它们的筛选干扰
+            ALLSELECTED (
+                'a02_e2e_boss_fulfillment_request_data_d'[store_code],
+                'a02_e2e_boss_fulfillment_request_data_d'[store_name],
+                'a02_e2e_boss_fulfillment_request_data_d'[store_region],
+                'a02_e2e_boss_fulfillment_request_data_d'[store_type]
+            ),
+            SWITCH (
+                TRUE (),
+                // ── 模式1（Table）：表格，四字段并行 —— 明细行四字段全匹配，总计行放行全部 ──
+                __RowDimMode = "Table",
+                    SWITCH (
+                        TRUE (),
+                        __IsStoreCode,
+                            'a02_e2e_boss_fulfillment_request_data_d'[store_code] = __CurrentStoreCode
+                            && 'a02_e2e_boss_fulfillment_request_data_d'[store_name] = __CurrentStoreName
+                            && 'a02_e2e_boss_fulfillment_request_data_d'[store_region] = __CurrentRegion
+                            && 'a02_e2e_boss_fulfillment_request_data_d'[store_type] = __CurrentStoreType,
+                        TRUE (), TRUE ()
+                    ),
+                // ── 模式2（Region）：矩阵 store_region > store_name —— 展开到哪层匹配到哪层 ──
+                __RowDimMode = "Region",
+                    SWITCH (
+                        TRUE (),
+                        // 第2层：store_name 明细行 —— 两字段全匹配
+                        __IsStoreName,
+                            'a02_e2e_boss_fulfillment_request_data_d'[store_region] = __CurrentRegion
+                            && 'a02_e2e_boss_fulfillment_request_data_d'[store_name] = __CurrentStoreName,
+                        // 第1层：store_region 小计行 —— 仅匹配 store_region
+                        __IsRegion,
+                            'a02_e2e_boss_fulfillment_request_data_d'[store_region] = __CurrentRegion,
+                        // 总计行 —— 放行全部
+                        TRUE (), TRUE ()
+                    ),
+                // ── 模式3（StoreType）：矩阵 store_type > store_name —— 展开到哪层匹配到哪层 ──
+                __RowDimMode = "StoreType",
+                    SWITCH (
+                        TRUE (),
+                        // 第2层：store_name 明细行 —— 两字段全匹配
+                        __IsStoreName,
+                            'a02_e2e_boss_fulfillment_request_data_d'[store_type] = __CurrentStoreType
+                            && 'a02_e2e_boss_fulfillment_request_data_d'[store_name] = __CurrentStoreName,
+                        // 第1层：store_type 小计行 —— 仅匹配 store_type
+                        __IsStoreType,
+                            'a02_e2e_boss_fulfillment_request_data_d'[store_type] = __CurrentStoreType,
+                        // 总计行 —— 放行全部
+                        TRUE (), TRUE ()
+                    ),
+                // ── 兜底：模式未选择时放行全部 ──
+                TRUE (), TRUE ()
+            )
+        )
 
     // ═══════════════════════════════════════
     // 基础聚合：calc_type = "fulfillment"（本期区间 SUM）
@@ -308,19 +474,28 @@ Fulfillment PB Location Act Base Value =
             'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
             'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
         )
+    // ═══════════════════════════════════════
+    // request_data 表基础聚合（Metric_ID 42/43 专用，Failed Request / Failed%）
+    // calc_type = "fulfillment"（本期区间 SUM）
+    // 层级规则：__LevelFilter 按行维度模式将行维度值传递给 request_data 表
+    //   - Table：表格四字段并行，明细行四字段全匹配
+    //   - Region / StoreType：矩阵两级层级，展开到哪层匹配到哪层，父行 = 子行之和
+    // ═══════════════════════════════════════
     VAR __RequestFailedTimes_Act =
         CALCULATE(
-            SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_failed_times]),
-            // 'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
-            'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
-            'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
+            SUM('a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_failed_times]),
+            'a02_e2e_boss_fulfillment_request_data_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_fulfillment_request_data_d'[data_date] >= __TimeMin,
+            'a02_e2e_boss_fulfillment_request_data_d'[data_date] <= __TimeMax,
+            __LevelFilter
         )
     VAR __RequestTimes_Act =
         CALCULATE(
-            SUM('a02_e2e_boss_performance_summary_d'[o2o_fulfillment_request_times]),
-            // 'a02_e2e_boss_performance_summary_d'[calc_type] = "fulfillment",
-            'a02_e2e_boss_performance_summary_d'[data_date] >= __TimeMin,
-            'a02_e2e_boss_performance_summary_d'[data_date] <= __TimeMax
+            SUM('a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_times]),
+            'a02_e2e_boss_fulfillment_request_data_d'[calc_type] = "fulfillment",
+            'a02_e2e_boss_fulfillment_request_data_d'[data_date] >= __TimeMin,
+            'a02_e2e_boss_fulfillment_request_data_d'[data_date] <= __TimeMax,
+            __LevelFilter
         )
 
     // ═══════════════════════════════════════
@@ -391,6 +566,12 @@ Fulfillment PB Location Act Base Value =
             46, __SeasonalStockQty_Act,                                                                   // Inventory Seasonal Act
             BLANK()
         )
+// ═══ 行维度模式 × ISINSCOPE 层级真值表（仅 Metric_ID 42/43 request_data 表指标使用）═══
+// | 模式（Row_Dim_ID） | 视觉对象 | 行字段布局                | 明细行匹配         | 小计/父行匹配   | 总计行   |
+// | Table              | 表格     | 四字段并行                | 四字段全匹配       | —              | 放行全部 |
+// | Region             | 矩阵     | store_region > store_name | region + name 匹配 | region 匹配    | 放行全部 |
+// | StoreType          | 矩阵     | store_type > store_name   | type + name 匹配   | type 匹配      | 放行全部 |
+// ═══════════════════════════════════════════════════════════════════════════════════════════
 ```
 
 ### 4.3 Fulfillment PB Location LY Base Value（去年同期基础值，财历映射）
@@ -894,8 +1075,9 @@ Fulfillment PB Location Cell SVG Icon =
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        数据源层                                      │
-│  a02_e2e_boss_performance_summary_d（事实表）                        │
-│  字段: data_date, store_region, store_type, shop_code, calc_type,    │
+│  a02_e2e_boss_performance_summary_d（事实表 1，行维度来源）           │
+│  字段: data_date, store_code, store_name, store_region, store_type,  │
+│        shop_code, calc_type,
 │        o2o_fulfillment_shipped_order_cnt, o2o_fulfillment_request_   │
 │        order_cnt, o2o_fulfillment_request_qty, o2o_fulfillment_      │
 │        request_sales_amt, o2o_fulfillment_shipped_qty,               │
@@ -907,12 +1089,19 @@ Fulfillment PB Location Cell SVG Icon =
 │        o2o_fulfillment_unshipped_overdue_order_cnt,                  │
 │        o2o_fulfillment_unshipped_customer_cancelled_order_cnt,       │
 │        o2o_fulfillment_unshipped_others_order_cnt,                   │
-│        o2o_fulfillment_request_failed_times,                         │
-│        o2o_fulfillment_request_times,                                │
 │        stock_qty, bsr_stock_qty, seasonal_stock_qty                  │
+└──────────────────────────────┬────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  a02_e2e_boss_fulfillment_request_data_d（事实表 2，Metric_ID 42/43）│
+│  字段: data_date, store_code, store_name, store_region, store_type,  │
+│        calc_type, o2o_fulfillment_request_failed_times,              │
+│        o2o_fulfillment_request_times                                 │
+│  注: 与 summary 表无模型关系，行维度值经 __LevelFilter 显式桥接       │
+│      （模式由 Slicer_Row_Dimension_Selection 控制）                  │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
-                               │ 模型自动传递（行维度 = 事实表字段直接拉取）
+                               │ summary 表指标：天然筛选（行字段直接拉取）
+                               │ request_data 表指标（42/43）：__LevelFilter 桥接
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -960,7 +1149,8 @@ Fulfillment PB Location Cell SVG Icon =
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        可视化层                                      │
 │  Matrix 视觉对象                                                     │
-│  行: 事实表字段（store_region / store_type / shop_code 等，直接拉取）│
+│  行: summary 表字段（按 Slicer_Row_Dimension_Selection 模式：        │
+│      Table 四字段并行 / Region 矩阵 / StoreType 矩阵）               │
 │  列: 'Dim_ColMetric_Fulfillment_PB_Location'[KPIGroup]               │
 │      > 'Dim_ColMetric_Fulfillment_PB_Location'[ColName]              │
 │  值: [Fulfillment PB Location Cell Display]                         │
@@ -979,7 +1169,7 @@ Fulfillment PB Location Cell SVG Icon =
 
 | 区域         | 字段                                                             |
 | ------------ | ---------------------------------------------------------------- |
-| **行** | 事实表字段（store_region / store_type / shop_code 等，直接拉取） |
+| **行** | summary 表字段（按 Slicer_Row_Dimension_Selection 模式：Table 四字段并行 / Region 矩阵 store_region > store_name / StoreType 矩阵 store_type > store_name；切换布局时同步切换切片器） |
 | **列** | 'Dim_ColMetric_Fulfillment_PB_Location'[KPIGroup] > [ColName]    |
 | **值** | [Fulfillment PB Location Cell Display]                           |
 
@@ -1072,13 +1262,18 @@ FROM a02_e2e_boss_performance_summary_d
 WHERE calc_type = 'fulfillment'
   AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
 
--- Failed% O2O门店订单失败率（本期）
+-- Failed% O2O门店订单失败率（本期，数据底表 request_data，按行维度模式过滤）
+-- 例：Region 矩阵模式 store_region = 'EAST' 行
 SELECT
   SUM(o2o_fulfillment_request_failed_times) * 1.0
   / SUM(o2o_fulfillment_request_times) AS Failed_Pct_Actual
-FROM a02_e2e_boss_performance_summary_d
+FROM a02_e2e_boss_fulfillment_request_data_d
 WHERE calc_type = 'fulfillment'
-  AND data_date BETWEEN '__TimeMin' AND '__TimeMax';
+  AND data_date BETWEEN '__TimeMin' AND '__TimeMax'
+  AND store_region = 'EAST';
+  -- Table 模式：store_code/store_name/store_region/store_type 四字段全等
+  -- StoreType 模式：store_type = ?（store_name 明细行另加 store_name = ?）
+  -- 总计行：无行维度条件
 ```
 
 ### 8.3 LY 日期范围获取方式说明
@@ -1106,7 +1301,7 @@ WHERE calc_type = 'fulfillment'
    - 金额类（Request Order Amt、Shipped Order Amt、Unfulfilled Amt）：今年 / 去年 − 1 → percent_1dp
    - 比率类（Fulfillment%、Unfulfillment%）：今年 − 去年 → delta_bp（展示时 ×10000 转 bp）
 8. **无 LY/vs LY 分组的处理**：Rejected Order / Cancelled Order by Overdue / Cancelled Order by Customer / Others / Failed Request / Inventory 这 6 个分组在列指标维度表中只设计了 Orders+率（或 Total/BSR/Seasonal）两类列，没有 LY 和 vs LY 列。总路由中对这些 Metric_ID 直接返回 Act 值，Cell Display 中 ColType 非 Act/LY/vs LY 时统一使用 Metric_Format_Act 格式。
-9. **行维度处理**：无行维度表，直接拉取事实表字段（store_region / store_type / shop_code 等），天然形成筛选与分组，DAX 度量值无需显式处理。支持 store_region/store_type 粒度行展开看 shop_code 粒度明细数据。
+9. **行维度处理**：无行维度表，直接拉取 summary 表字段，共三种布局模式（Slicer_Row_Dimension_Selection 切换）：Table 表格（store_code/store_name/store_region/store_type 四字段并行）、Region 矩阵（store_region > store_name）、StoreType 矩阵（store_type > store_name）。summary 表指标靠行字段天然筛选；仅 Failed Request / Failed%（Metric_ID 42/43）底表为 request_data 表，通过 __LevelFilter 按模式显式桥接（展开到哪层匹配到哪层，父行 = 子行之和）。切换视觉对象布局时必须同步切换 Slicer_Row_Dimension_Selection 选中值。
 10. **与 PB_Location_Sales_detail_ms.md 的关系**：本方案为 Fulfillment 部分的矩阵 SWITCH 路由版本，与 Sales 版本共享相同的架构范式（断开列维度 + SWITCH 动态路由 + REMOVEFILTERS 修复上下文），差异在于：
 
     - calc_type 由 "payment" 改为 "fulfillment"

@@ -13,7 +13,7 @@
 
 为 Performance By Merchandise 页面实现 Fulfillment 分组（子模块三从 4. Avg. No. of Store Passed Before Order Got Accepted 开始的剩余指标）的中国式矩阵效果：
 
-- **行**：无行维度表，直接拉取事实表字段（brand / product_type / category_summary / category），天然实现行维度分组和筛选，DAX 无需显式处理
+- **行**：无行维度表，直接拉取 summary 表字段（brand / product_type / category_summary / category）。Metric_ID 3-36 与行同表，筛选自动生效；Metric_ID 1, 2 底表为 request_data 表，行维度值通过 ISINSCOPE 层级过滤显式桥接（见 1.1）
 - **列**：`Dim_ColMetric_Fulfillment_PB_Merchandise` 的两级层级 `KPIGroup`（父）> `ColName`（子）
   - 7 个 KPI 分组：Order Processing Efficiency / Fulfillment% / Request Order / Shipped Order / Unfulfillment% / Unfulfilled Order / Product Volume
   - 共 36 列指标
@@ -33,6 +33,8 @@
 
 - Metric_ID 1, 2（Order Processing Efficiency 分组）→ `a02_e2e_boss_fulfillment_request_data_d`
 - Metric_ID 3-36（其余分组）→ `a02_e2e_boss_performance_summary_d`
+
+由于矩阵行字段拉取自 summary 表（两张事实表间无模型关系），Metric_ID 1, 2 的行维度值无法自动传递到 request_data 表，采用 **ISINSCOPE 层级过滤**显式桥接（参照 Category Growth Active IDs 范式）：展开到哪层就匹配到哪层——category 层明细行四字段全匹配当前行值，父行逐级放行子级字段（父行 = 子行之和），总计行放行全部。
 
 ### 1.2 关键特殊逻辑二：Product Volume 库存期末取末日 + 销量区间聚合
 
@@ -140,6 +142,8 @@ Dim_ColMetric_Fulfillment_PB_Merchandise（断开维度，列头）
 
 > calc_type 在本方案所有指标下固定为 "fulfillment_category_summary_category_season_brand"，直接硬编码,除了Avg. No. of Store Passed Before Order Got Accepted和Avg. Processing Time的calc_type = "fulfillment"。
 
+> 行维度桥接说明：矩阵行字段拉取自 summary 表。Metric_ID 3-36 与行同表，筛选自动生效；Metric_ID 1, 2 底表为 request_data 表，行维度值通过 ISINSCOPE 层级判断 + `__LevelFilter` 显式传递（展开到哪层匹配到哪层，父行 = 子行之和）。
+
 ### 3.4 vs LY 时间偏移规则（财历映射）
 
 直接读取日期表内置 LY 字段：
@@ -232,6 +236,9 @@ Fulfillment PB Merchandise Act Base Value =
 //   - calc_type = "fulfillment_category_summary_category_season_brand"（硬编码，本方案所有指标固定）
 //   - 除了Avg. No. of Store Passed Before Order Got Accepted和Avg. Processing Time的calc_type = "fulfillment"。
 //   - data_date ∈ [__TimeMin, __TimeMax]（全局时间范围，区间 SUM）
+//   - Metric_ID 1, 2：矩阵行字段拉取自 summary 表，通过 ISINSCOPE 层级判断 + __LevelFilter
+//     将行维度值（brand/product_type/category_summary/category）显式传递给 request_data 表，
+//     展开到哪层匹配到哪层，父行 = 子行之和（参照 Category Growth Active IDs 层级过滤范式）
 //   - Product Volume（Metric_ID 36）特殊处理：库存取 data_date = __TimeMax（末日 SUM），销量取区间 SUM
 //   - 金额类指标（Metric_IsCurrencyAmount=TRUE）÷ __FXRate（汇率）
 // 数据底表:
@@ -246,32 +253,53 @@ Fulfillment PB Merchandise Act Base Value =
     // ── 汇率（金额类指标需要除以汇率）──
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
-    // ── 主表维度：brand, product_type, category_summary, category ──
-    VAR __Brand = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[brand] )
-    VAR __PT    = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[product_type] )
-    VAR __CS    = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[category_summary] )
-    VAR __Cat   = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[category] )
+    // ── 层级判断（矩阵行字段拉取自 summary 表，ISINSCOPE 判定当前行所处层级）──
+    VAR __IsBrand = ISINSCOPE ( 'a02_e2e_boss_performance_summary_d'[brand] )
+    VAR __IsPT    = ISINSCOPE ( 'a02_e2e_boss_performance_summary_d'[product_type] )
+    VAR __IsCS    = ISINSCOPE ( 'a02_e2e_boss_performance_summary_d'[category_summary] )
+    VAR __IsCat   = ISINSCOPE ( 'a02_e2e_boss_performance_summary_d'[category] )
 
-    // 层级动态筛选：未展开（BLANK）时保留该列全部值 = 不筛选
-    VAR __FilterBrand =
+    // ── 当前行上下文的层级值（从 summary 表读取，用于桥接到 request_data 表）──
+    VAR __CurrentBrand = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[brand] )
+    VAR __CurrentPT    = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[product_type] )
+    VAR __CurrentCS    = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[category_summary] )
+    VAR __CurrentCat   = SELECTEDVALUE ( 'a02_e2e_boss_performance_summary_d'[category] )
+
+    // ── 层级过滤：展开到哪层匹配到哪层，将行维度值显式传递给 request_data 表 ──
+    // 严格隔离层级：category 明细行四字段全匹配；父行逐级放行子级字段（父行 = 子行之和）；总计行放行全部
+    VAR __LevelFilter =
         FILTER (
-            ALL ( 'a02_e2e_boss_fulfillment_request_data_d'[brand] ),
-            __Brand = BLANK () || 'a02_e2e_boss_fulfillment_request_data_d'[brand] = __Brand
-        )
-    VAR __FilterPT =
-        FILTER (
-            ALL ( 'a02_e2e_boss_fulfillment_request_data_d'[product_type] ),
-            __PT = BLANK () || 'a02_e2e_boss_fulfillment_request_data_d'[product_type] = __PT
-        )
-    VAR __FilterCS =
-        FILTER (
-            ALL ( 'a02_e2e_boss_fulfillment_request_data_d'[category_summary] ),
-            __CS = BLANK () || 'a02_e2e_boss_fulfillment_request_data_d'[category_summary] = __CS
-        )
-    VAR __FilterCat =
-        FILTER (
-            ALL ( 'a02_e2e_boss_fulfillment_request_data_d'[category] ),
-            __Cat = BLANK () || 'a02_e2e_boss_fulfillment_request_data_d'[category] = __Cat
+            // 四个行维度字段全部放入 ALLSELECTED，清除外部矩阵/切片器对它们的筛选干扰
+            ALLSELECTED (
+                'a02_e2e_boss_fulfillment_request_data_d'[brand],
+                'a02_e2e_boss_fulfillment_request_data_d'[product_type],
+                'a02_e2e_boss_fulfillment_request_data_d'[category_summary],
+                'a02_e2e_boss_fulfillment_request_data_d'[category]
+            ),
+            SWITCH (
+                TRUE (),
+                // ── 第4层：category 明细行 —— 四个层级字段全部匹配当前行值 ──
+                __IsCat,
+                    'a02_e2e_boss_fulfillment_request_data_d'[brand] = __CurrentBrand
+                    && 'a02_e2e_boss_fulfillment_request_data_d'[product_type] = __CurrentPT
+                    && 'a02_e2e_boss_fulfillment_request_data_d'[category_summary] = __CurrentCS
+                    && 'a02_e2e_boss_fulfillment_request_data_d'[category] = __CurrentCat,
+                // ── 第3层：category_summary 小计行 —— 前三层匹配，category 放行 ──
+                __IsCS,
+                    'a02_e2e_boss_fulfillment_request_data_d'[brand] = __CurrentBrand
+                    && 'a02_e2e_boss_fulfillment_request_data_d'[product_type] = __CurrentPT
+                    && 'a02_e2e_boss_fulfillment_request_data_d'[category_summary] = __CurrentCS,
+                // ── 第2层：product_type 小计行 —— 前两层匹配 ──
+                __IsPT,
+                    'a02_e2e_boss_fulfillment_request_data_d'[brand] = __CurrentBrand
+                    && 'a02_e2e_boss_fulfillment_request_data_d'[product_type] = __CurrentPT,
+                // ── 第1层：brand 行 —— 仅匹配 brand ──
+                __IsBrand,
+                    'a02_e2e_boss_fulfillment_request_data_d'[brand] = __CurrentBrand,
+                // ── 总计行 —— 全部放行 ──
+                TRUE (),
+                    TRUE ()
+            )
         )
   
   
@@ -288,40 +316,32 @@ Fulfillment PB Merchandise Act Base Value =
     // ═══════════════════════════════════════
     // a02_e2e_boss_fulfillment_request_data_d 基础聚合（Metric_ID 1, 2 专用）
     // calc_type = "fulfillment"（本期区间 SUM）
-    // 层级规则：展开到哪层匹配到哪层，父行 = 子行之和（含 brand 总计行）
+    // 层级规则：__LevelFilter 按当前行层级匹配行维度值（展开到哪层匹配到哪层，父行 = 子行之和）
     // ═══════════════════════════════════════
     VAR __RequestTimes_Act =
         CALCULATE (
             SUM ( 'a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_times] ),
             REMOVEFILTERS ( 'Slicer_Fulfillment_Calc_Type' ),
             __BaseFilters,
-            __FilterBrand,
-            __FilterPT,
-            __FilterCS,
-            __FilterCat
+            __LevelFilter
         )
-  
+
     VAR __RequestDuration_Act =
         CALCULATE (
             SUM ( 'a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_duration] ),
             REMOVEFILTERS ( 'Slicer_Fulfillment_Calc_Type' ),
             __BaseFilters,
-            __FilterBrand,
-            __FilterPT,
-            __FilterCS,
-            __FilterCat
+            __LevelFilter
         )
-  
+
     VAR __RequestSkuQty_Act =
         CALCULATE (
             SUM ( 'a02_e2e_boss_fulfillment_request_data_d'[o2o_fulfillment_request_sku_qty] ),
             REMOVEFILTERS ( 'Slicer_Fulfillment_Calc_Type' ),
             __BaseFilters,
-            __FilterBrand,
-            __FilterPT,
-            __FilterCS,
-            __FilterCat
+            __LevelFilter
         )
+
   
     // ═══════════════════════════════════════
     // a02_e2e_boss_performance_summary_d 基础聚合（Metric_ID 3-36）
@@ -432,6 +452,14 @@ Fulfillment PB Merchandise Act Base Value =
             36, __StockQty_Act + __ShippedQty_Act,                                                         // Product Volume Act
             BLANK()
         )
+// ═══ ISINSCOPE 层级真值表（矩阵行：brand > product_type > category_summary > category）═══
+// | 行类型                      | __IsBrand | __IsPT | __IsCS | __IsCat | __LevelFilter 匹配字段                |
+// | 总计行                      | FALSE     | FALSE  | FALSE  | FALSE   | 无（放行全部）                          |
+// | brand 行（第1层）           | TRUE      | FALSE  | FALSE  | FALSE   | brand                                   |
+// | product_type 行（第2层）    | TRUE      | TRUE   | FALSE  | FALSE   | brand + product_type                    |
+// | category_summary 行（第3层）| TRUE      | TRUE   | TRUE   | FALSE   | brand + product_type + category_summary |
+// | category 行（第4层）        | TRUE      | TRUE   | TRUE   | TRUE    | 四字段全匹配当前行值                    |
+// ═════════════════════════════════════════════════════════════════════════════════════════════
 ```
 
 ### 4.3 Fulfillment PB Merchandise LY Base Value（去年同期基础值，财历映射）
