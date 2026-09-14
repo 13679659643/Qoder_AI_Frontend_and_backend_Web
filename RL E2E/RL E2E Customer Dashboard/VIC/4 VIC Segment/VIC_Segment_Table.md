@@ -3,6 +3,7 @@
 > status: ready
 > created: 2026-08-14
 > revised: 2026-09-12（SLS 类指标 Step1+Step2 由"合并为 end period 当月单步聚合"调整为分步实现：Step1 在 end period 当月框定 user_id，Step2 在所选时间范围 TimeFrame 区间聚合，两步时间范围不同不能合并）
+> revised: 2026-09-14（占比类分母口径调整：_Customer Total 去掉 net_pay_amt>0 与分子完全对称；_SLS Total 由"所选时间范围单步全量"改为与 _SLS 同结构 Step1+Step2 分步；两者 customer_tier 均扩为全部 T1-T5，Total = T1+T2+T3+T4+T5 加总；LY 版本同步，旧逻辑块注释删除）
 > type: 度量值开发 + 表格可视化
 > 口径来源: 口径文档/VIC Segment.md（子模块四 VIC Segment，12 个指标，指标 0 为行维度本身）
 > 参考实现: VIC/LY Last Purchase Time/LY_Last_Purchase_Time_Table.md（表格 + 每指标独立 Value/Display 范式，无 SWITCH 路由，无 x 轴时间处理）
@@ -35,11 +36,11 @@
 - **Step 1 时间范围（end period 当月，用于框定分层买家 user_id）**：
   - 本期：`data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]`
   - LY（用于 YOY 分子）：`data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]`
-  - 适用：指标 5/7/9/10/11/12 的 Step 1（框定 customer_tier 分层买家 user_id 集合），以及指标 1/2/3/4/6 及其分母的单步 end period 聚合
+  - 适用：指标 5/7/9/10/11/12 的 Step 1（框定 customer_tier 分层买家 user_id 集合；指标 7 分母同结构框定全部 tier user_id），以及指标 1/2/3/4/6 及其分母的单步 end period 聚合
 - **Step 2 时间范围（所选时间范围，用于对 Step 1 user_id 聚合）**：
   - 本期：`data_date ∈ [TimeFrame_Min, TimeFrame_Max]`（TimeFrame_Min 读 Slicer_Time_Frame_Min，TimeFrame_Max 读 Slicer_Time_Frame_Max）
   - LY（用于 YOY 分子）：`data_date ∈ [TimeFrame_Min_LY, TimeFrame_Max_LY]`
-  - 适用：指标 5/7/9/10/11/12 的 Step 2 聚合，以及指标 7 分母（所选时间范围 sum(net_pay_amt)，移除 customer_tier）
+  - 适用：指标 5/7/9/10/11/12 的 Step 2 聚合，以及指标 7 分母（Step1+Step2 与分子同结构分步，仅 customer_tier 扩为全部 T1-T5，见 4.1.7）
 
 `Slicer_Time_Frame_Max` 已内置 `Last_Fiscal_Month_*` / `TimeFrame_Max*` 系列字段，`Slicer_Time_Frame_Min` 已内置 `TimeFrame_Min*` 系列字段，直接 SELECTEDVALUE 读取即可，无需 EDATE 计算。
 
@@ -71,12 +72,12 @@
 **2026-09-12 口径修订**：Step 1 与 Step 2 时间范围不一致（Step 1 = end period 当月，Step 2 = 所选时间范围），**不能直接合并区间计算**，必须分步实现（分步范式参考："新客 No." 度量值的 Step1+Step2 实现，两步各自独立框定/聚合，不做区间合并）：
 
 - **Step 1（end period 当月框定分层买家）**：`CALCULATETABLE(VALUES(user_id), ...)`，data_date ∈ end period 当月区间，customer_tier 分组由 DIM_Row_VIC_Tier 1:N 模型关系自动传递（当前行筛选即为 T1/T2/.../T5），is_member / is_employee 双重人群筛选，框定 user_id 集合
-- **Step 2（所选时间范围聚合）**：`CALCULATE(SUM(...), TREATAS(__TierUsers, a03_e2e_customer_data_m[user_id]), ...)`，data_date ∈ TimeFrame 区间，TREATAS 将 Step 1 的 user_id 集合传递回事实表，is_member / is_employee 双重人群筛选；customer_tier / platform / shop_info_id 分组维度由模型自动传递保留（Step 2 **不移除分组维度筛选**，与 Step 1 行上下文一致，分组维度无需显式 DAX 处理；仅占比类分母用 `ALLSELECTED('DIM_Row_VIC_Tier'[Row Label])` 移除行上下文 tier 筛选，见 4.1.3/4.1.4/4.1.7/4.1.8）
+- **Step 2（所选时间范围聚合）**：`CALCULATE(SUM(...), TREATAS(__TierUsers, a03_e2e_customer_data_m[user_id]), ...)`，data_date ∈ TimeFrame 区间，TREATAS 将 Step 1 的 user_id 集合传递回事实表，is_member / is_employee 双重人群筛选；customer_tier / platform / shop_info_id 分组维度由模型自动传递保留（Step 2 **不移除分组维度筛选**，与 Step 1 行上下文一致，分组维度无需显式 DAX 处理；仅占比类分母（4.1.3/4.1.4 Customer Total、4.1.7/4.1.8 SLS Total）用 `ALLSELECTED('DIM_Row_VIC_Tier')` 将 customer_tier 扩为全部 T1-T5——2026-09-14 修订：_SLS Total 与分子同结构 Step1+Step2 分步，_Customer Total 与分子完全对称去掉 net_pay_amt>0，Total = T1-T5 加总口径）
 - **LY 版本对应偏移**：Step 1 用 `Last_Fiscal_Month_Min_LY ~ Last_Fiscal_Month_Max_LY`（LY end period 当月），Step 2 用 `TimeFrame_Min_LY ~ TimeFrame_Max_LY`（LY 所选时间范围）
 
 > **历史口径（弃用，保留备查）**：
 > 2026-08-14 初版方案曾"经业务确认"将 Step 2 的"所选时间范围"理解为 end period 当月（与 Step 1 一致），从而将 Step1+Step2 合并为：在 end period 当月对事实表直接按当前 customer_tier 行上下文做 SUM/DISTINCTCOUNT，无需显式用 TREATAS/CONTAINS 做 user_id 传递。
-> 2026-09-12 口径修订回归口径文档原文本意：Step 2 的"所选时间范围"即切片器所选的完整时间范围（TimeFrame_Min ~ TimeFrame_Max），两步时间范围不一致，必须分步计算。旧逻辑在相关 Base 度量值（4.1.5~4.1.12）中以块注释保留，如需回退可取消块注释并注释新逻辑。
+> 2026-09-12 口径修订回归口径文档原文本意：Step 2 的"所选时间范围"即切片器所选的完整时间范围（TimeFrame_Min ~ TimeFrame_Max），两步时间范围不一致，必须分步计算。旧逻辑在相关 Base 度量值（4.1.5/4.1.6/4.1.9~4.1.12）中以块注释保留，如需回退可取消块注释并注释新逻辑（4.1.7/4.1.8 的旧逻辑块注释已随 2026-09-14 占比类分母口径调整删除，不再保留）。
 
 ### 1.5 关键特殊逻辑五：货币转换
 
@@ -189,7 +190,8 @@ a03_e2e_customer_data_m（事实表）
               │  ├ _Customer No. Base Act / _Customer No. Base LY│
               │  ├ _SLS Base Act / _SLS Base LY                  │
               │  └ _SLS Total Base Act / _SLS Total Base LY      │
-              │     （SLS Total = 移除 customer_tier 的所选时间范围总净销售额）│
+              │     （SLS Total = 同 _SLS Step1+Step2 分步，      │
+              │       仅 customer_tier 扩为全部 T1-T5 加总）      │
               │     统一应用 is_member / is_employee 筛选         │
               │     Customer 类单步 end period 当月；SLS 类为     │
               │     Step1 end period + Step2 所选时间范围分步     │
@@ -220,10 +222,10 @@ _Customer No. Base Act                  ← end period 当月 DISTINCTCOUNT(user
 _Customer No. Base LY                   ← LY end period 当月 DISTINCTCOUNT(user_id)
 _SLS Base Act                           ← Step1（end period 当月框定 user_id）+ Step2（所选时间范围 SUM(net_pay_amt)），不÷1000（基础值保留原值，÷1000 在 SLS Value 中做）
 _SLS Base LY                            ← Step1（LY end period 当月框定 user_id）+ Step2（LY 所选时间范围 SUM(net_pay_amt)）
-_SLS Total Base Act                     ← 移除 customer_tier（ALLSELECTED Row Label，保留外部切片器），所选时间范围 SUM(net_pay_amt)
-_SLS Total Base LY                      ← 移除 customer_tier（ALLSELECTED Row Label，保留外部切片器），LY 所选时间范围 SUM(net_pay_amt)
-_Customer Total Base Act                ← end period 当月 sum(net_pay_amt)>0 的 DISTINCTCOUNT(user_id)（Customer% 分母，单步口径）
-_Customer Total Base LY                 ← LY end period 当月 sum(net_pay_amt)>0 的 DISTINCTCOUNT(user_id)（Customer% vs LY 分母）
+_SLS Total Base Act                     ← 与 _SLS 同 Step1+Step2 分步，仅 customer_tier 扩为全部 T1-T5（ALLSELECTED Row Label，保留外部切片器），SUM(net_pay_amt)，Total = 五行加总口径
+_SLS Total Base LY                      ← 与 _SLS Base LY 同 LY Step1+Step2 分步，仅 customer_tier 扩为全部 T1-T5（ALLSELECTED Row Label），SUM(net_pay_amt)
+_Customer Total Base Act                ← end period 当月 DISTINCTCOUNT(user_id)，customer_tier 全部 T1-T5（ALLSELECTED Row Label），与分子完全对称（Customer% 分母，单步口径）
+_Customer Total Base LY                 ← LY end period 当月 DISTINCTCOUNT(user_id)，customer_tier 全部 T1-T5（ALLSELECTED Row Label），与分子对称（Customer% vs LY 分母）
 _Net Pay Qty Base Act                   ← Step1（end period 当月框定 user_id）+ Step2（所选时间范围 SUM(net_pay_qty)）
 _Net Pay Qty Base LY                    ← Step1（LY end period 当月框定 user_id）+ Step2（LY 所选时间范围 SUM(net_pay_qty)）
 _Net Pay Order Cnt Base Act             ← Step1（end period 当月框定 user_id）+ Step2（所选时间范围 SUM(net_pay_order_cnt)）
@@ -268,7 +270,7 @@ Freq. Display                           ← decimal_1dp 格式 #,##0.0
 | Slicer_Time_Frame_Min/Max（Step2 LY 所选时间范围） | SELECTEDVALUE 读取`TimeFrame_Min_LY`（Min 表）/ `TimeFrame_Max_LY`（Max 表） | `data_date >= __PeriodMin_LY AND data_date <= __PeriodMax_LY`（LY Step2） |
 | Slicer_Is_Employee_Selection              | 断开维度，SELECTEDVALUE 读取`IsEmployee_Code`                            | `a03_e2e_customer_data_m[is_employee] in __IsEmployeeFilter`           |
 | IsMemberFilter                            | 断开维度，SELECTEDVALUE 读取`IsMember`                                   | `a03_e2e_customer_data_m[is_member] = __IsMemberFilter`                |
-| DIM_Row_VIC_Tier                          | 1:N 模型关系                                                               | Step1/Step2 均保留自动传递（分组维度，无需显式处理）；仅占比类分母用 ALLSELECTED(Row Label) 移除行上下文 tier 筛选（保留外部切片器） |
+| DIM_Row_VIC_Tier                          | 1:N 模型关系；视觉对象筛选：Tier ≠ 空白（排除未分层买家，保占比类分母 tier 范围 = T1-T5） | Step1/Step2 均保留自动传递（分组维度，无需显式处理）；仅占比类分母用 ALLSELECTED(Row Label) 将 tier 扩为全部 T1-T5（保留外部切片器与视觉筛选影响，Total = 五行加总口径） |
 | Slicer_Currency_Selection                 | 断开维度，SELECTEDVALUE 读取`Currency_ExchangeRate`、`Currency_Symbol` | 金额类指标 ÷`Currency_ExchangeRate`；Display 拼接 `Currency_Symbol` |
 | 事实表分组字段（platform / shop_info_id） | 表格行直接拉取，模型自动传递筛选                                           | Step1/Step2 均保留自动传递（分组维度）                                 |
 
@@ -287,11 +289,11 @@ Freq. Display                           ← decimal_1dp 格式 #,##0.0
 | 0    | Tier                   | 行维度字段直接拉取（DIM_Row_VIC_Tier[Row Label]），不需要度量值                                          | —          | —                          |
 | 1    | Customer No.           | count(distinct user_id)                                                                                    | integer     | `#,##0`                   |
 | 2    | Customer No. vs LY     | 今年 / 去年 - 1                                                                                            | percent_1dp | `#,##0.0%`                |
-| 3    | % of Total (Customer%) | 分子：count(distinct user_id) where customer_tier=T1-T5；分母：count(distinct user_id) where net_pay_amt>0 | percent_1dp | `#,##0.0%`                |
+| 3    | % of Total (Customer%) | 分子：count(distinct user_id) where customer_tier=T1-T5；分母：count(distinct user_id) where customer_tier in T1-T5（与分子对称，Total = 五行加总） | percent_1dp | `#,##0.0%`                |
 | 4    | Customer% vs LY        | 今年 - 去年（差值，×100 转 pts）                                                                          | integer_pts | `#,##0pts;-#,##0pts;0pts` |
 | 5    | SLS (in K)             | Step1（end period 当月框定 user_id）+ Step2（所选时间范围 sum(net_pay_amt)），÷1000，÷汇率                | currency    | `#,##0`（拼接货币符号）   |
 | 6    | SLS vs LY              | 今年 / 去年 - 1                                                                                            | percent_1dp | `#,##0.0%`                |
-| 7    | % of Total (SLS%)      | 分子：Step1+Step2 同指标 5；分母：所选时间范围 sum(net_pay_amt)（移除 customer_tier）                      | percent_1dp | `#,##0.0%`                |
+| 7    | % of Total (SLS%)      | 分子：Step1+Step2 同指标 5；分母：Step1+Step2 同分子结构，仅 customer_tier 扩为全部 T1-T5（Total = 五行加总） | percent_1dp | `#,##0.0%`                |
 | 8    | SLS % vs LY            | 今年 - 去年（差值，×100 转 pts）                                                                          | integer_pts | `#,##0pts;-#,##0pts;0pts` |
 | 9    | ACV                    | 分子：SLS（Step1+Step2 同指标 5）；分母：end period 当月 count(distinct user_id)                            | currency    | `#,##0`（拼接货币符号）   |
 | 10   | AUR                    | 分子：Step1+Step2 sum(net_pay_amt)；分母：Step1+Step2 sum(net_pay_qty)                                      | currency    | `#,##0`（拼接货币符号）   |
@@ -377,24 +379,27 @@ _Customer No. Base LY =
         )
 ```
 
-#### 4.1.3 _Customer Total Base Act（买家人数占比分母本期基础值）
+#### 4.1.3 _Customer Total Base Act（买家人数占比分母本期基础值，customer_tier 全量，与分子对称）
 
 ```dax
 _Customer Total Base Act = 
 // ========================================
 // 度量值: _Customer Total Base Act
 // Display Folder: Base Metrics
-// 用途: Customer% 分母（总买家人数，net_pay_amt > 0）本期基础值
+// 用途: Customer% 分母（总买家人数）本期基础值
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min/Max],
 //       Slicer_Is_Employee_Selection[IsEmployee_Code],
-//       IsMemberFilter[IsMember]
-// 口径来源: 口径文档/VIC Segment.md 指标 3（分母）
+//       IsMemberFilter[IsMember],
+//       DIM_Row_VIC_Tier
+// 口径来源: 口径文档/VIC Segment.md 指标 3（分母，2026-09-14 修订）
 // 筛选上下文:
-//   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
-//   - net_pay_amt > 0（有购买的买家）
-//   - is_member / is_employee 双重人群筛选
-//   - 注意：分母不限制 customer_tier，但保留 platform/shop_info_id 分组维度
+//   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月，与分子一致）
+//   - customer_tier ∈ 全部 T1-T5（ALLSELECTED Row Label 移除行上下文 tier 筛选，
+//     保留外部切片器/视觉筛选影响，Total = T1+T2+T3+T4+T5 加总口径）
+//   - is_member / is_employee 双重人群筛选（与分子一致）
+//   - 与分子完全对称（无 net_pay_amt > 0 附加筛选，2026-09-14 修订删除），
+//     保留 platform/shop_info_id 分组维度
 // 聚合粒度: DISTINCTCOUNT(user_id)
 // ========================================
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
@@ -405,32 +410,32 @@ _Customer Total Base Act =
     RETURN
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax,
-            ALLSELECTED('DIM_Row_VIC_Tier'[Row Label])
+            ALLSELECTED('DIM_Row_VIC_Tier')
         )
 ```
 
-#### 4.1.4 _Customer Total Base LY（买家人数占比分母去年同期基础值）
+#### 4.1.4 _Customer Total Base LY（买家人数占比分母去年同期基础值，customer_tier 全量，与分子对称）
 
 ```dax
 _Customer Total Base LY = 
 // ========================================
 // 度量值: _Customer Total Base LY
 // Display Folder: Base Metrics
-// 用途: Customer% 分母（总买家人数，net_pay_amt > 0）去年同期基础值
+// 用途: Customer% 分母（总买家人数）去年同期基础值
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY/Max_LY],
 //       Slicer_Is_Employee_Selection[IsEmployee_Code],
-//       IsMemberFilter[IsMember]
-// 口径来源: 口径文档/VIC Segment.md 指标 3（分母 LY 版本，用于指标 4 YOY 分母）
+//       IsMemberFilter[IsMember],
+//       DIM_Row_VIC_Tier
+// 口径来源: 口径文档/VIC Segment.md 指标 3（分母 LY 版本，用于指标 4 YOY 分母，2026-09-14 修订）
 // 筛选上下文:
-//   - data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]（LY end period 当月）
-//   - net_pay_amt > 0
-//   - is_member / is_employee 双重人群筛选
+//   - data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]（LY end period 当月，与分子一致）
+//   - customer_tier ∈ 全部 T1-T5（ALLSELECTED Row Label，同 4.1.3，Total = 五行加总口径）
+//   - is_member / is_employee 双重人群筛选（与分子一致，无 net_pay_amt > 0 附加筛选）
 // 时间偏移: 财历映射
 // ========================================
     VAR __LYMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY])
@@ -441,12 +446,11 @@ _Customer Total Base LY =
     RETURN
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax,
-            ALLSELECTED('DIM_Row_VIC_Tier'[Row Label])
+            ALLSELECTED('DIM_Row_VIC_Tier')
         )
 ```
 
@@ -599,124 +603,120 @@ _SLS Base LY =
 ── 旧逻辑结束 ── */
 ```
 
-#### 4.1.7 _SLS Total Base Act（净销售额占比分母本期基础值，所选时间范围，移除 customer_tier）
+#### 4.1.7 _SLS Total Base Act（净销售额占比分母本期基础值，Step1+Step2 分步，customer_tier 全量）
 
 ```dax
 _SLS Total Base Act = 
 // ========================================
 // 度量值: _SLS Total Base Act
 // Display Folder: Base Metrics
-// 用途: SLS% 分母（总买家净销售额，移除 customer_tier 筛选）本期基础值
+// 用途: SLS% 分母（总买家净销售额）本期基础值
 // 依赖: a03_e2e_customer_data_m,
-//       Slicer_Time_Frame_Min[TimeFrame_Min] + Slicer_Time_Frame_Max[TimeFrame_Max]（所选时间范围）,
+//       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min/Max]（Step1 end period 当月）,
+//       Slicer_Time_Frame_Min[TimeFrame_Min] + Slicer_Time_Frame_Max[TimeFrame_Max]（Step2 所选时间范围）,
 //       Slicer_Is_Employee_Selection[IsEmployee_Code],
 //       IsMemberFilter[IsMember],
 //       DIM_Row_VIC_Tier
-// 口径来源: 口径文档/VIC Segment.md 指标 7（分母）
-// 筛选上下文:
-//   - data_date ∈ [TimeFrame_Min, TimeFrame_Max]（所选时间范围，2026-09-12 修订：
-//     与分子 Step2 时间范围对齐，原 end period 当月实现弃用，见块注释）
-//   - is_member / is_employee 双重人群筛选
-//   - 移除行上下文对 customer_tier 的筛选（分母=全部 customer_tier，外部 tier 筛选器保留）
-//   - 保留外部切片器影响（platform / shop_info_id / is_member / is_employee）
-//   - 分母为全量口径（口径文档"分母：所选时间范围对应的 sum(net_pay_amt)"），
-//     不涉及 Step1 user_id 框定，直接所选时间范围单步聚合
-// 实现方式: ALLSELECTED('DIM_Row_VIC_Tier'[Row Label]) 移除视觉行上下文的 customer_tier
-//     筛选传递，保留外部切片器/筛选器影响（与 4.1.3 _Customer Total Base Act 一致）
+// 口径来源: 口径文档/VIC Segment.md 指标 7（分母，2026-09-14 修订）
+// Step1+Step2 分步说明（与 4.1.5 _SLS Base Act 完全同结构，仅 customer_tier 扩为全部 T1-T5）:
+//   - Step1（end period 框定全部分层买家 user_id）: data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]，
+//     customer_tier ∈ 全部 T1-T5（ALLSELECTED Row Label 移除行上下文 tier 筛选，
+//     保留外部切片器/视觉筛选影响），is_member / is_employee 双重人群筛选，
+//     CALCULATETABLE(VALUES(user_id)) 框定 user_id 集合
+//   - Step2（所选时间范围聚合）: data_date ∈ [TimeFrame_Min, TimeFrame_Max]，
+//     TREATAS 将 Step1 的 user_id 集合传递回事实表求 SUM(net_pay_amt)，
+//     customer_tier 同样扩为全部 T1-T5（ALLSELECTED Row Label，与 Step1 一致），
+//     platform / shop_info_id 分组维度由模型自动传递保留
+//   - Total = T1+T2+T3+T4+T5 加总口径（各行 _SLS Base Act 之和，tier 月度稳定时严格相等）
 // 聚合粒度: SUM(net_pay_amt)
-// 注: 口径文档第 157 行明确"需要移除 a03_e2e_customer_data_m 中 customer_tier 字段对表的影响，
-//     但同时需要保留外部切片器的影响，我理解使用 ALLSELECTED"，本方案直接采用 ALLSELECTED 实现
-//     （2026-09-12 由 REMOVEFILTERS(DIM_Row_VIC_Tier) 调整为 ALLSELECTED(Row Label)）
 // ========================================
+    // ── Step 2 时间范围（所选时间范围，本期）──
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+    // ── Step 1 时间范围（end period 当月，本期）──
+    VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
+    VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
+    // ── Step 1: end period 当月，全部 customer_tier（T1-T5）框定 user_id 集合 ──
+    VAR __AllTierUsers =
+        CALCULATETABLE(
+            VALUES('a03_e2e_customer_data_m'[user_id]),
+            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin,
+            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax,
+            ALLSELECTED('DIM_Row_VIC_Tier')
+        )
+
+    // ── Step 2: 该 user_id 集合在所选时间范围的 sum(net_pay_amt) ──
     RETURN
         CALCULATE(
             SUM('a03_e2e_customer_data_m'[net_pay_amt]),
+            TREATAS(__AllTierUsers, 'a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax,
-            ALLSELECTED('DIM_Row_VIC_Tier'[Row Label])
+            ALLSELECTED('DIM_Row_VIC_Tier')
         )
-
-/* ── 旧逻辑：end period 当月区间（2026-09-12 弃用，保留备查）──
-   当时口径理解: Step2 时间范围 = end period 当月，分母随分子统一在 end period 当月实现。
-   如需回退: 注释掉上方 TimeFrame 区间实现（含 VAR 定义与 RETURN 块），取消本块注释即可。
-    VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
-    VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
-    VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
-
-    RETURN
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
-            'a03_e2e_customer_data_m'[data_date] <= __PeriodMax,
-            REMOVEFILTERS(DIM_Row_VIC_Tier)
-        )
-── 旧逻辑结束 ── */
 ```
 
-#### 4.1.8 _SLS Total Base LY（净销售额占比分母去年同期基础值，LY 所选时间范围，移除 customer_tier）
+#### 4.1.8 _SLS Total Base LY（净销售额占比分母去年同期基础值，LY Step1+Step2 分步，customer_tier 全量）
 
 ```dax
 _SLS Total Base LY = 
 // ========================================
 // 度量值: _SLS Total Base LY
 // Display Folder: Base Metrics
-// 用途: SLS% 分母（总买家净销售额，移除 customer_tier 筛选）去年同期基础值
+// 用途: SLS% 分母（总买家净销售额）去年同期基础值
 // 依赖: a03_e2e_customer_data_m,
-//       Slicer_Time_Frame_Min[TimeFrame_Min_LY] + Slicer_Time_Frame_Max[TimeFrame_Max_LY]（LY 所选时间范围）,
+//       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY/Max_LY]（Step1 LY end period 当月）,
+//       Slicer_Time_Frame_Min[TimeFrame_Min_LY] + Slicer_Time_Frame_Max[TimeFrame_Max_LY]（Step2 LY 所选时间范围）,
 //       Slicer_Is_Employee_Selection[IsEmployee_Code],
 //       IsMemberFilter[IsMember],
 //       DIM_Row_VIC_Tier
-// 口径来源: 口径文档/VIC Segment.md 指标 7（分母 LY 版本，用于指标 8 YOY 计算，2026-09-12 修订）
-// 筛选上下文:
-//   - data_date ∈ [TimeFrame_Min_LY, TimeFrame_Max_LY]（LY 所选时间范围，与分子 Step2 LY 对齐）
-//   - is_member / is_employee 双重人群筛选
-//   - 移除行上下文对 customer_tier 的筛选（ALLSELECTED Row Label，保留外部切片器影响）
-//   - 分母为全量口径，不涉及 Step1 user_id 框定，直接 LY 所选时间范围单步聚合
-// 时间偏移: 财历映射
+// 口径来源: 口径文档/VIC Segment.md 指标 7（分母 LY 版本，用于指标 8 YOY 计算，2026-09-14 修订）
+// Step1+Step2 分步说明（与 4.1.6 _SLS Base LY 完全同结构，仅 customer_tier 扩为全部 T1-T5，同 4.1.7）:
+//   - Step1（LY end period 框定全部分层买家 user_id）: data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]，
+//     customer_tier ∈ 全部 T1-T5（ALLSELECTED Row Label），is_member / is_employee 双重人群筛选
+//   - Step2（LY 所选时间范围聚合）: data_date ∈ [TimeFrame_Min_LY, TimeFrame_Max_LY]，
+//     TREATAS 传递 Step1 user_id 集合求 SUM(net_pay_amt)，customer_tier 同样扩为全部 T1-T5（ALLSELECTED Row Label）
+//   - Total = 五行加总口径（各行 _SLS Base LY 之和）
+// 时间偏移: 财历映射，直接读取 Slicer_Time_Frame_Min/Max 已预算字段，无需 EDATE
 // ========================================
+    // ── Step 2 时间范围（所选时间范围，LY）──
     VAR __PeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min_LY])
     VAR __PeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max_LY])
+    // ── Step 1 时间范围（end period 当月，LY）──
+    VAR __EndPeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY])
+    VAR __EndPeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
+    // ── Step 1: LY end period 当月，全部 customer_tier（T1-T5）框定 user_id 集合 ──
+    VAR __AllTierUsers =
+        CALCULATETABLE(
+            VALUES('a03_e2e_customer_data_m'[user_id]),
+            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
+            'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin_LY,
+            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax_LY,
+            ALLSELECTED('DIM_Row_VIC_Tier')
+        )
+
+    // ── Step 2: 该 user_id 集合在 LY 所选时间范围的 sum(net_pay_amt) ──
     RETURN
         CALCULATE(
             SUM('a03_e2e_customer_data_m'[net_pay_amt]),
+            TREATAS(__AllTierUsers, 'a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LY,
-            ALLSELECTED('DIM_Row_VIC_Tier'[Row Label])
+            ALLSELECTED('DIM_Row_VIC_Tier')
         )
-
-/* ── 旧逻辑：LY end period 当月区间（2026-09-12 弃用，保留备查）──
-   当时口径理解: Step2 时间范围 = LY end period 当月，分母随分子统一在 LY end period 当月实现。
-   如需回退: 注释掉上方 TimeFrame 区间实现（含 VAR 定义与 RETURN 块），取消本块注释即可。
-    VAR __LYMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY])
-    VAR __LYMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY])
-    VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
-
-    RETURN
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __LYMin,
-            'a03_e2e_customer_data_m'[data_date] <= __LYMax,
-            REMOVEFILTERS(DIM_Row_VIC_Tier)
-        )
-── 旧逻辑结束 ── */
 ```
 
 #### 4.1.9 _Net Pay Qty Base Act（净出库件数本期基础值，Step1+Step2 分步）
@@ -1056,7 +1056,7 @@ Customer% Value =
 // 用途: 指标 3 — 买家人数占比（对外值）
 // 依赖: [_Customer No. Base Act], [_Customer Total Base Act]
 // 口径来源: 口径文档/VIC Segment.md 指标 3
-// 计算公式: 分子 count(distinct user_id) where customer_tier=T1-T5 / 分母 count(distinct user_id) where net_pay_amt>0
+// 计算公式: 分子 count(distinct user_id) where customer_tier=当前行 T1-T5 / 分母 count(distinct user_id) where customer_tier in T1-T5（与分子对称，Total = 五行加总）
 // 边界处理: 分母为 0 或 BLANK 时返回 BLANK（DIVIDE 默认行为）
 // ========================================
     DIVIDE(
@@ -1156,7 +1156,7 @@ SLS% Value =
 // 用途: 指标 7 — 净销售额占比（对外值）
 // 依赖: [_SLS Base Act], [_SLS Total Base Act]
 // 口径来源: 口径文档/VIC Segment.md 指标 7
-// 计算公式: 分子 Step1（end period 框定 user_id）+ Step2（所选时间范围 sum(net_pay_amt)）/ 分母 所选时间范围 sum(net_pay_amt)（移除 customer_tier，与分子 Step2 时间范围对齐）
+// 计算公式: 分子 Step1+Step2（同指标 5）/ 分母 Step1+Step2 与分子同结构分步（仅 customer_tier 扩为全部 T1-T5，Total = 五行加总）
 // 边界处理: 分母为 0 或 BLANK 时返回 BLANK（DIVIDE 默认行为）
 // 注: 比率类指标，分子分母同币种相除自动抵消，不除汇率
 // ========================================
@@ -1661,12 +1661,12 @@ SLS% vs LY Value Cell SVG Icon =
 | ---- | --------------------------- | -------------- | ------------------------------------------------------ |
 | 1    | _Customer No. Base Act      | Base Metrics   | 买家人数本期基础值（私有，供派生调用）                 |
 | 2    | _Customer No. Base LY       | Base Metrics   | 买家人数去年同期基础值（私有，YOY 分母用）             |
-| 3    | _Customer Total Base Act    | Base Metrics   | 买家人数占比分母本期基础值（私有，net_pay_amt>0）      |
-| 4    | _Customer Total Base LY     | Base Metrics   | 买家人数占比分母去年同期基础值（私有）                 |
+| 3    | _Customer Total Base Act    | Base Metrics   | 买家人数占比分母本期基础值（私有，tier 全量，与分子对称） |
+| 4    | _Customer Total Base LY     | Base Metrics   | 买家人数占比分母去年同期基础值（私有，tier 全量，与分子对称） |
 | 5    | _SLS Base Act               | Base Metrics   | 净销售额本期基础值（私有，Step1+Step2 分步，原值不÷1000）|
 | 6    | _SLS Base LY                | Base Metrics   | 净销售额去年同期基础值（私有，Step1+Step2 分步）      |
-| 7    | _SLS Total Base Act         | Base Metrics   | 净销售额占比分母本期基础值（私有，所选时间范围，移除 customer_tier） |
-| 8    | _SLS Total Base LY          | Base Metrics   | 净销售额占比分母去年同期基础值（私有，LY 所选时间范围） |
+| 7    | _SLS Total Base Act         | Base Metrics   | 净销售额占比分母本期基础值（私有，Step1+Step2 分步，tier 全量） |
+| 8    | _SLS Total Base LY          | Base Metrics   | 净销售额占比分母去年同期基础值（私有，LY Step1+Step2 分步，tier 全量） |
 | 9    | _Net Pay Qty Base Act       | Base Metrics   | 净出库件数本期基础值（私有，Step1+Step2 分步）         |
 | 10   | _Net Pay Qty Base LY        | Base Metrics   | 净出库件数去年同期基础值（私有，Step1+Step2 分步，预留扩展） |
 | 11   | _Net Pay Order Cnt Base Act | Base Metrics   | 净出库订单数本期基础值（私有，Step1+Step2 分步）       |
@@ -1734,7 +1734,7 @@ SLS% vs LY Value Cell SVG Icon =
 │  │  ┌──────────────────────┐  ┌──────────────────────┐         │    │
 │  │  │ _Customer Total      │  │ _Customer Total      │         │    │
 │  │  │ Base Act             │  │ Base LY              │         │    │
-│  │  │ net_pay_amt>0, 本期  │  │ net_pay_amt>0, LY    │         │    │
+│  │  │ tier全量对称, 本期    │  │ tier全量对称, LY      │         │    │
 │  │  └──────────┬───────────┘  └──────────┬───────────┘         │    │
 │  │  ┌──────────────────────┐  ┌──────────────────────┐         │    │
 │  │  │ _SLS Base Act        │  │ _SLS Base LY         │         │    │
@@ -1742,8 +1742,8 @@ SLS% vs LY Value Cell SVG Icon =
 │  │  └──────────┬───────────┘  └──────────┬───────────┘         │    │
 │  │  ┌──────────────────────┐  ┌──────────────────────┐         │    │
 │  │  │ _SLS Total Base Act  │  │ _SLS Total Base LY   │         │    │
-│  │  │ ALLSELECTED(RowLbl),│  │ ALLSELECTED(RowLbl),│         │    │
-│  │  │ 所选时间范围, 本期    │  │ LY 所选时间范围      │         │    │
+│  │  │ Step1+2+tier全量,    │  │ Step1+2+tier全量,    │         │    │
+│  │  │ 本期                 │  │ LY                   │         │    │
 │  │  └──────────┬───────────┘  └──────────┬───────────┘         │    │
 │  │  ┌──────────────────────┐  ┌──────────────────────┐         │    │
 │  │  │ _Net Pay Qty        │  │ _Net Pay Qty         │         │    │
@@ -1812,7 +1812,7 @@ SLS% vs LY Value Cell SVG Icon =
    - `platform`、`shop_info_id` 直接拉取事实表字段，模型自动传递筛选
    - 三者均为模型自动传递，DAX 无需显式处理
 4. **指标 0 不需要度量值**：Tier 是行维度本身（`DIM_Row_VIC_Tier[Row Label]` 字段直接拉取，图片展示行标签），不需要 Value/Display 度量值。本方案只对指标 1~12 输出度量值。
-5. **SLS 的 Step 1 + Step 2 分步实现（关键逻辑，2026-09-12 修订）**：口径文档指标 5/7/9/10/11/12 均采用 Step1（dt=end period 框定 user_id 范围）+ Step2（该 user_id 在所选时间范围 sum）的口径。两步时间范围不一致（Step1 = end period 当月，Step2 = 所选时间范围 TimeFrame 区间），**不能合并区间计算**，必须分步：Step1 用 `CALCULATETABLE(VALUES(user_id), ...)` 框定当前行 customer_tier 的 user_id 集合；Step2 用 `TREATAS(__TierUsers, a03_e2e_customer_data_m[user_id])` 将集合传递回事实表，在 TimeFrame 区间聚合。Step2 **不移除任何分组维度筛选**——customer_tier / platform / shop_info_id 行上下文由 DIM_Row_VIC_Tier[Row Label] 与事实表的 1:N 模型关系自动传递保留（与 Step1 一致，分组维度无需显式 DAX 处理；若在 Step2 加 REMOVEFILTERS 会破坏行上下文分组传递，各 Tier 行将算出移除分组后的全量值）；仅占比类分母（_Customer Total Base 4.1.3/4.1.4、_SLS Total Base 4.1.7/4.1.8）才用 `ALLSELECTED('DIM_Row_VIC_Tier'[Row Label])` 移除行上下文 tier 筛选。历史"合并实现"口径见 1.4 节备查块与各 Base 度量值块注释。
+5. **SLS 的 Step 1 + Step 2 分步实现（关键逻辑，2026-09-12 修订）**：口径文档指标 5/7/9/10/11/12 均采用 Step1（dt=end period 框定 user_id 范围）+ Step2（该 user_id 在所选时间范围 sum）的口径。两步时间范围不一致（Step1 = end period 当月，Step2 = 所选时间范围 TimeFrame 区间），**不能合并区间计算**，必须分步：Step1 用 `CALCULATETABLE(VALUES(user_id), ...)` 框定当前行 customer_tier 的 user_id 集合；Step2 用 `TREATAS(__TierUsers, a03_e2e_customer_data_m[user_id])` 将集合传递回事实表，在 TimeFrame 区间聚合。Step2 **不移除任何分组维度筛选**——customer_tier / platform / shop_info_id 行上下文由 DIM_Row_VIC_Tier[Row Label] 与事实表的 1:N 模型关系自动传递保留（与 Step1 一致，分组维度无需显式 DAX 处理；若在 Step2 加 REMOVEFILTERS 会破坏行上下文分组传递，各 Tier 行将算出移除分组后的全量值）；仅占比类分母（_Customer Total Base 4.1.3/4.1.4、_SLS Total Base 4.1.7/4.1.8）才用 `ALLSELECTED('DIM_Row_VIC_Tier')` 移除行上下文 tier 筛选。历史"合并实现"口径见 1.4 节备查块与各 Base 度量值块注释。
 6. **SLS ÷ 1000（关键逻辑）**：口径文档第 125 行明确"报表上看到的数值 = 实际金额 ÷ 1,000"。SLS Value 度量值中 `DIVIDE(DIVIDE(__Base, __FXRate), 1000)`，先÷汇率再÷1000。Display 格式化为 `#,##0`（不再拼接 "k"），严格遵循口径文档数据格式。
 7. **货币符号与汇率（关键逻辑）**：
 
@@ -1823,7 +1823,7 @@ SLS% vs LY Value Cell SVG Icon =
    - Display 度量值中 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接货币符号
    - 参考实现：Member/Customer_Member_Indicator.md
 8. **ACV / AUR 不÷1000**：口径文档 ACV / AUR 数据格式为 `#,##0`（currency），未要求 ÷1000，与 SLS (in K) 不同。ACV / AUR Value 度量值只÷汇率，不÷1000。
-9. **SLS% 分母 ALLSELECTED（关键逻辑）**：口径文档第 157 行明确"分母需要移除 a03_e2e_customer_data_m 中 customer_tier 字段对表的影响，但同时需要保留外部切片器的影响，我理解使用 ALLSELECTED"。本方案采用 `ALLSELECTED('DIM_Row_VIC_Tier'[Row Label])` 实现（2026-09-12 由 REMOVEFILTERS(DIM_Row_VIC_Tier) 调整）：移除视觉行上下文对 customer_tier 的筛选传递（分母=全部 Tier 合计），同时保留外部切片器/筛选器对 tier 的影响（platform / shop_info_id / is_member / is_employee 等外部筛选器同样保留），与 _Customer Total Base（4.1.3/4.1.4）实现方式一致。2026-09-12 修订：分母时间范围与分子 Step2 对齐，为所选时间范围（TimeFrame 区间），分母为全量口径不涉及 Step1 user_id 框定。
+9. **占比类分母 ALLSELECTED + Total 加总口径（关键逻辑，2026-09-14 修订）**：占比类分母（_Customer Total Base 4.1.3/4.1.4、_SLS Total Base 4.1.7/4.1.8）采用 `ALLSELECTED('DIM_Row_VIC_Tier')` 将 customer_tier 扩为全部 T1-T5（移除视觉行上下文的 tier 筛选传递，保留外部切片器/视觉筛选"Tier ≠ 空白"影响），使 Total = T1+T2+T3+T4+T5 加总口径。_Customer Total 与分子完全对称（end period 当月，无 net_pay_amt > 0 附加筛选，2026-09-14 删除原 net_pay_amt > 0 条件）；_SLS Total 与 _SLS 分子同结构 Step1（end period 当月框定全部 tier user_id）+ Step2（TREATAS + 所选时间范围聚合），两步均施加 ALLSELECTED(Row Label)。历史演进：2026-09-12 曾将 _SLS Total 定为"所选时间范围单步聚合 + ALLSELECTED"（全量口径不框定 user_id），2026-09-14 按业务口径调整为与分子同结构分步（旧实现按用户要求删除，不再保留块注释）。
 10. **YOY 派生的"去年"定义（关键逻辑）**：
 
     - Customer No. vs LY / SLS vs LY: 今年 / 去年 - 1（百分比变化，percent_1dp 不含正号）
@@ -1838,7 +1838,7 @@ SLS% vs LY Value Cell SVG Icon =
     - YOY 类指标显式判断去年值为 0/BLANK 时返回 BLANK（避免除零错误）
     - SLS% vs LY 判断今年或去年为 BLANK 时返回 BLANK
 14. **私有基础层度量值命名约定**：内部基础层度量值以 `_` 下划线前缀命名（如 `_Customer No. Base Act`），放 Base Metrics 文件夹，供对外 Value 层调用，避免重复代码。对外暴露的是 12 对 Value/Display 度量值，符合"独立输出每个指标的 Value 和 Display 度量"的要求。
-15. **无 SWITCH 路由**：与参考文件 VIC_KPIs_Table.md 的矩阵 SWITCH 路由范式不同，本方案为表格视觉，每个指标独立度量值，无 Metric_ID 路由，无 REMOVEFILTERS(Dim_ColMetric) 机制（SLS% 分母的 ALLSELECTED('DIM_Row_VIC_Tier'[Row Label]) 是移除行上下文 customer_tier 分组以算全量分母，与 SWITCH 路由无关），无列维度表依赖。度量值结构更简单直接。
+15. **无 SWITCH 路由**：与参考文件 VIC_KPIs_Table.md 的矩阵 SWITCH 路由范式不同，本方案为表格视觉，每个指标独立度量值，无 Metric_ID 路由，无 REMOVEFILTERS(Dim_ColMetric) 机制（SLS% 分母的 ALLSELECTED('DIM_Row_VIC_Tier') 是移除行上下文 customer_tier 分组以算全量分母，与 SWITCH 路由无关），无列维度表依赖。度量值结构更简单直接。
 16. **无 x 轴时间处理**：表格视觉无列维度，不需要处理 x 轴上的当前时间。所有指标共享同一行上下文（customer_tier / platform / shop_info_id 分组），Step1 end period / Step2 所选时间范围两套筛选由 Slicer_Time_Frame_Min/Max 统一提供。
 17. **预留 LY 基础值**：_Net Pay Qty Base LY 和 _Net Pay Order Cnt Base LY 当前 YOY 指标未直接使用（口径文档 UPT / Freq. / AUR 未定义 YOY 派生），但预留以备后续扩展，且已同步 Step1+Step2 分步口径（LY Step1 + LY Step2）。
 18. **与参考文件 LY_Last_Purchase_Time_Table.md 的关系**：本方案为 Customer Dashboard VIC Tab 的 VIC Segment 表格版本，与 LY Last Purchase Time 表格版本共享相同的架构基础（表格视觉 + 每指标独立 Value/Display 度量 + 无 SWITCH 路由 + is_member/is_employee 双重筛选 + end period 时间筛选 + LY 财历映射），差异在于：
@@ -1847,6 +1847,6 @@ SLS% vs LY Value Cell SVG Icon =
     - 指标数量由 7 对扩展为 12 对
     - 新增金额类指标（SLS / ACV / AUR），引入货币符号 + 汇率换算
     - 新增 SLS 的 Step 1 + Step 2 分步口径（Step2 时间 = 所选时间范围，2026-09-12 修订，不能合并区间计算）
-    - 新增 SLS% 分母的 ALLSELECTED('DIM_Row_VIC_Tier'[Row Label]) 机制（移除行上下文 tier 筛选，保留外部切片器影响）
+    - 新增 SLS% 分母的 ALLSELECTED('DIM_Row_VIC_Tier') 机制（移除行上下文 tier 筛选，保留外部切片器影响）
     - 派生指标类型由 VIC Repurchase% / VIC Retention% 简化为 Customer No. vs LY / Customer% vs LY / SLS vs LY / SLS% vs LY
     - 字段筛选由 is_fy_vic / is_fy_retention_vic / last_12m_net_pay_amt 改为无 VIC 标识字段筛选（直接按 customer_tier 分组）

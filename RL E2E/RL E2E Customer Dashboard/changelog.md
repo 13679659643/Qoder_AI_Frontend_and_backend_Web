@@ -294,3 +294,65 @@
   - 每个度量值 VICType 固定，Step 1 直接 CALCULATETABLE 框定，无需主表的 UNION+FILTER 分支（主表因单度量值动态路由 VICType 才需要）
   - X 轴表 Slicer_Time_Frame_VIC_Breakdown.sql 已内置 TimeFrame_Min/Max（L17-18/L45-46），无需改表；口径文档 VIC Breakdown KPI.md 的分步口径说明（子模块五）已覆盖 Trend 场景，无需另行同步
 ---
+
+## [2026-09-14 10:30] 解决方案修改 — VIC_Trend.md VIC Retention% 分母由 Rolling 12 区间调整为"往前推 12 个月单月"（与主表口径对齐）
+
+- **模块**: VIC
+- **任务**: VIC Trend 柱形图 3 个 VIC Retention% 基础度量值（Act/LY/LP）分母口径同步主表 VIC_KPIs_Table.md 2026-09-12 的 Metric_ID=6 分母调整（用户需求）
+- **操作**: 修改
+- **变更内容**:
+  - **VIC Retention% Trend Act Value**: 分母弃用 Rolling 12 区间（原：X 轴 Last_Fiscal_Month EDATE(-11) 起始月 → 区间 [起始月 TimeFrame_Min, Last_Fiscal_Month_Max]）；新逻辑：分母目标月 = X 轴 end period 直接往前推 12 个月（如 "2026-09" → "2025-09"），按 TimeFrame_Value 查目标月 TimeFrame_Min/TimeFrame_Max，分母 = 目标月单月区间内 is_vic=1 的 DISTINCTCOUNT(user_id)；旧 Rolling 12 逻辑以 /* */ 块注释保留，如需回退取消注释即可
+  - **VIC Retention% Trend LY Value**: 分母目标月 = X 轴 Last_Fiscal_Month EDATE(-12) 得 LY 月份字符串，再 EDATE(-12)（等价往前推 24 个月，如 "2026-09" → "2024-09"）；区间起止日均取目标月行 TimeFrame_Min/TimeFrame_Max（不再复用 Last_Fiscal_Month_Max_LY）；旧逻辑块注释保留
+  - **VIC Retention% Trend LP Value**: 分母目标月 = X 轴 Last_Fiscal_Month EDATE(-1) 得 LP 月份字符串，再 EDATE(-12)（等价往前推 13 个月，如 "2026-09" → "2026-08" → "2025-08"）；区间起止日均取目标月行 TimeFrame_Min/TimeFrame_Max（不再复用 Last_Fiscal_Month_Max_LP）；旧逻辑块注释保留
+  - **其余指标逻辑不变**：分子（is_retention_vic=1 X 轴 end period 当月）、VIC No. / T4-5 Upgrade No. 系列、Share 分母、Value/Display 对外度量均未改动（仅同步描述性注释）
+  - **文档同步**：头部 revised、§1 指标表/核心设计原则、§1.3 重写（新口径 + 柱形图适配差异 + 历史口径备查块）、§2.2 日期表结构假设、§3.1 筛选器上下文表（新增分母目标月行）、§3.2 架构图、§4.5-4.7 度量值（标题+头部注释+分母逻辑）、§4.17/4.19/4.21 注释、§7.2 验证 SQL（分母改单月区间 2025-09）、§8 注意事项（item 4 重写 + item 7 措辞）同步更新
+- **关联文件**:
+  - `VIC/2 VIC Trend/VIC_Trend.md`
+- **备注**:
+  - 分母目标月基于 X 轴当前时间点（Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month]）推导而非主表的全局 end period（Slicer_Time_Frame_Max），每个柱子独立计算自己的目标月——Trend 场景与主表的唯一差异
+  - 所需 TimeFrame_Min/TimeFrame_Max 字段已存在于 X 轴日期表（结构与 Slicer_Time_Frame_Max 一致，支持按 TimeFrame_Value 查任意月份起止日），无需改表
+  - 口径文档 VIC KPI.md 的分母定义（2026-09-12 已修订为"往前推 12 个月单月"）已覆盖 Trend 场景，无需另行同步
+  - 如需回退 Rolling 12 口径：删除/注释各基础度量值中"新逻辑"段，取消"旧逻辑"块注释
+---
+
+## [2026-09-14 14:00] 解决方案修改 — VIC_Segment_Table.md 占比类分母口径调整（Total = 五行加总）
+
+- **模块**: VIC
+- **任务**: 按用户口径调整占比类分母：_Customer Total 与分子完全对称（去掉 net_pay_amt>0），_SLS Total 改为与 _SLS 同结构 Step1+Step2 分步，customer_tier 均扩为全部 T1-T5，Total = T1+T2+T3+T4+T5 加总；LY 版本同步；旧逻辑块注释删除
+- **操作**: 修改
+- **变更内容**:
+  - **4.1.3 _Customer Total Base Act**: 删除 net_pay_amt > 0 行级筛选，与分子完全对称（end period 当月 + is_member/is_employee + ALLSELECTED(Row Label) 扩 tier 为全部 T1-T5）；标题与注释同步
+  - **4.1.4 _Customer Total Base LY**: 同 4.1.3 的 LY 版本对称调整
+  - **4.1.7 _SLS Total Base Act**: 由"所选时间范围单步聚合 + ALLSELECTED"重写为与 4.1.5 _SLS Base Act 完全同结构的 Step1（end period 当月 CALCULATETABLE(VALUES(user_id)) + ALLSELECTED(Row Label) 框定全部 tier user_id）+ Step2（TREATAS + TimeFrame 区间 + ALLSELECTED(Row Label) 聚合）；旧逻辑块注释删除（end period 版与 TimeFrame 单步版均不再保留）
+  - **4.1.8 _SLS Total Base LY**: 同 4.1.7 的 LY 版本分步重写（LY Step1 + LY Step2 + ALLSELECTED）；旧逻辑块注释删除
+  - **正文同步**: 头部 revised 行；§1.1 Step1/Step2 适用范围（指标 7 分母纳入 Step1）；§1.4 占比类分母 ALLSELECTED 说明；§3.1 架构图；§3.2 度量值模型设计；§3.3 筛选器上下文表（DIM_Row_VIC_Tier 行补视觉对象筛选"Tier ≠ 空白"记录）；§3.5 指标 3/指标 7 计算公式；4.2.3/4.2.7 计算公式注释；§5 度量值清单第 3/4/7/8 条；§6 血缘图；§7 item 9 重写为"占比类分母 ALLSELECTED + Total 加总口径"
+  - **口径文档同步**: 口径文档/VIC/VIC Segment.md 头部新增 2026-09-14 口径修订行；子模块四集中说明块（占比类分母描述）；指标 3 计算公式/分母；指标 7 计算公式/分母；指标 8 聚合粒度；通用规则汇总 Step1+Step2 行
+- **关联文件**:
+  - VIC/4 VIC Segment/VIC_Segment_Table.md
+  - 口径文档/VIC/VIC Segment.md
+- **备注**:
+  - 调整后 Customer% / SLS% 五行加总 = 100%（分子分母同 tier 范围对称口径）；Total 在 tier 月度稳定时严格等于各行加总
+  - 本次仅删除 4.1.7/4.1.8 的旧逻辑块注释（用户要求删除冗余）；4.1.5/4.1.6/4.1.9~4.1.12 的"合并实现"历史块注释不在本次调整范围，仍保留可回退
+  - 视觉对象筛选"Tier ≠ 空白"补录至 §3.3（上轮审查发现的文档缺失项），ALLSELECTED 保留其影响以确保分母 tier 范围 = T1-T5
+---
+
+## [2026-09-14 15:30] 解决方案修改 — VIC_Breakdown_ms.md Step 2 区间起点修复（TimeFrame_Min 误读 Max 表，调整起始月不生效）
+
+- **模块**: VIC
+- **任务**: 修复 VIC Breakdown 矩阵 Step1+Step2 分步度量值中 Step 2 区间起点误读 Max 表的 bug（用户实证：日期范围 202701~202704，调整 end period 卡片值变化、调整起始月不变；理论上调整起始月也应变化）
+- **操作**: 修改
+- **变更内容**:
+  - **根因**: Slicer_Time_Frame_Max_VIC_Breakdown 为每行一个财历周期（Month/Quarter）的静态表，每行 TimeFrame_Min/Max 是该行周期自身的起止自然日；分步改造时 Step 2 起点误从 Max 表[TimeFrame_Min] 读取，读到的是 end period 所选周期自身的起始日而非用户所选起始月——Step 2 实际区间退化为 end period 当月单月（与起始月切片器完全无关），调整起始月不生效、调 end period 才变化，且看板值实际仍是旧"合并口径"（单月）的结果
+  - **§4.2 Act / §4.3 LY / §4.4 LP Base Value**: Step 2 区间起点改读 Slicer_Time_Frame_Min_VIC_Breakdown（Act: TimeFrame_Min；LY: TimeFrame_Min_LY；LP: TimeFrame_Min_LP），终点 TimeFrame_Max 系列与 Step 1 Last_Fiscal_Month_* 系列仍从 Max 表读取（终点=end period 周期自身结束日=所选范围终点，Step 1 本就正确）；各度量值头部依赖注释与 Step 2 说明同步
+  - **§4.5 Store Base Value**: __PeriodMin 按 Metric_ID 路由的三分支起点（LY/LP/Act）全部改读 Min 表，__PeriodMax 三分支终点保持 Max 表
+  - **演进记录**: 四个 Base Value 旧逻辑块前追加"演进记录（2026-09-14 修复: Step 2 区间起点误读 Max 表）"说明块，含根因、用户实证现象与回退方法（改回 SELECTEDVALUE(Max 表[TimeFrame_Min]) 即可）
+  - **文档同步**: 头部追加 revised 2026-09-14 行；§1 筛选器清单（Min 表由"本方案不使用"改为"起始月切片器，读取 Step 2 区间起点"）；§1.2/§2.2/§3.2/§3.3/§3.4/§5/§6 血缘图（数据源层新增 Min/Max 日期表框）/§7 item 2（重写，含根因与切片器绑定检查提示）+ item 6 同步
+- **关联文件**:
+  - `VIC/5 VIC Breakdown/VIC_Breakdown_ms.md`
+- **备注**:
+  - 口径本身未变（Step 2 = 切片器所选完整时间范围），本次为实现层 bug 修复，口径文档 VIC Breakdown KPI.md 无需同步
+  - "防止日期表互相依赖"约束重新诠释：Min/Max 两表各自独立被切片器筛选、互相无关系（度量值内 SELECTEDVALUE 后拼接区间），不构成日期表互相依赖；与 VIC Segment 模式一致（Step 2 起点读 Slicer_Time_Frame_Min，已验证）
+  - 所需 TimeFrame_Min/TimeFrame_Min_LY/TimeFrame_Min_LP 字段已存在于 Slicer_Time_Frame_Min_VIC_Breakdown.sql（L17-26），无需改表
+  - 用户需在 Power BI 页面确认：起始月切片器绑定 Slicer_Time_Frame_Min_VIC_Breakdown、end period 切片器绑定 Slicer_Time_Frame_Max_VIC_Breakdown（均单选），修复后调整起始月卡片值应正常变化
+  - 如需回退错误版本：将各度量值起点 SELECTEDVALUE 改回 Max 表对应字段（各演进记录块内有说明）
+---

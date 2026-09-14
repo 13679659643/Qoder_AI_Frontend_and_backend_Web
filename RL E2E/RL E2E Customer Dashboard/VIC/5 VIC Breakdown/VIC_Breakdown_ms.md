@@ -3,6 +3,7 @@
 > status: ready
 > created: 2026-08-15
 > revised: 2026-09-12（Step1+Step2 分步口径调整：Step 1 = end period 当月框定 VIC 买家 user_id，Step 2 = 所选时间范围聚合，两步时间范围不同不能合并；全客分母（Store Base Value，vs Store / SLS% 分母）同样分步，与 VIC 侧唯一区别是 Step 1 筛选条件（is_xxx_vic IN {0,1} vs =1）；两套区间均从 Slicer_Time_Frame_Max_VIC_Breakdown 读取，日期表不改动）
+> revised: 2026-09-14（Step 2 区间起点修复：TimeFrame_Min 系列起点改从 Slicer_Time_Frame_Min_VIC_Breakdown 读取（起始月切片器所选周期自身起始日）；Max 表的 TimeFrame_Min 是 end period 周期自身起始日，误作 Step 2 起点会导致调整起始月切片器不生效、Step 2 实际退化为 end period 当月单月区间；终点 TimeFrame_Max 系列与 Step 1 Last_Fiscal_Month_* 系列仍从 Max 表读取，日期表不改动，Min/Max 两表各自独立被切片器筛选、互相无关系）
 > type: 度量值开发 + 矩阵可视化构建
 > 口径来源: 口径文档/VIC Breakdown KPI.md（子模块五 DCom VIC Breakdown，2 个大分组 × 6 个 KPI 分组，共 44 列指标）
 > 参考实现: VIC/VIC KPI/VIC_KPIs_Table.md（断开列维度 + SWITCH 动态路由 + REMOVEFILTERS 范式）
@@ -23,8 +24,8 @@
 - **口径**：一切以口径文档 VIC Breakdown KPI.md 为准
 - **筛选器**：
   - Slicer_Time_Frame_VIC_Breakdown（VIC Breakdown 专用日期表，与其他模块隔离）
-  - Slicer_Time_Frame_Max_VIC_Breakdown（断开维度，读取两套区间字段：`Last_Fiscal_Month_*` 系列 → Step 1 end period 当月；`TimeFrame_*` 系列 → Step 2 所选时间范围；均含 `_LY/_LP` 偏移版本）
-  - Slicer_Time_Frame_Min_VIC_Breakdown（断开维度，本方案不使用——两套区间均从 Max 表读取，防止日期表互相依赖）
+  - Slicer_Time_Frame_Max_VIC_Breakdown（断开维度，end period 切片器；读取 Step 1 区间 `Last_Fiscal_Month_*` 系列（end period 当月）+ Step 2 区间终点 `TimeFrame_Max` 系列；均含 `_LY/_LP` 偏移版本。注意：本表 `TimeFrame_Min` 是所选 end period 周期自身起始日，不是用户所选起始月，不能用作 Step 2 区间起点（2026-09-14 修复））
+  - Slicer_Time_Frame_Min_VIC_Breakdown（断开维度，起始月切片器；读取 Step 2 区间起点 `TimeFrame_Min` 系列（起始月周期自身起始日），含 `_LY/_LP` 偏移版本；2026-09-14 起启用）
   - Slicer_Is_Employee_Selection（断开维度，筛选 `is_employee`）
   - IsMemberFilter（断开维度，筛选 `is_member`）
   - Slicer_Platform_Selection / Slicer_Store_Name（断开维度，行维度直接拉事实表字段实现自动传递）
@@ -34,11 +35,11 @@
 
 为避免与其他 VIC 模块的日期切片器互相干扰，VIC Breakdown 使用专用日期表：
 
-| 原日期表（其他模块）                       | VIC Breakdown 专用日期表                                      |
-| ------------------------------------------ | ------------------------------------------------------------- |
-| Slicer_Time_Frame                          | Slicer_Time_Frame_VIC_Breakdown                               |
-| Slicer_Time_Frame_Max                      | Slicer_Time_Frame_Max_VIC_Breakdown                           |
-| Slicer_Time_Frame_Min                      | Slicer_Time_Frame_Min_VIC_Breakdown                           |
+| 原日期表（其他模块）  | VIC Breakdown 专用日期表            |
+| --------------------- | ----------------------------------- |
+| Slicer_Time_Frame     | Slicer_Time_Frame_VIC_Breakdown     |
+| Slicer_Time_Frame_Max | Slicer_Time_Frame_Max_VIC_Breakdown |
+| Slicer_Time_Frame_Min | Slicer_Time_Frame_Min_VIC_Breakdown |
 
 字段结构完全一致，均内置 `Last_Fiscal_Month` 及 7 个时间字段（`Last_Fiscal_Month_Min/Max/Min_LY/Max_LY/Min_LP/Max_LP`）。
 
@@ -52,15 +53,15 @@
 SLS / SLS% / ACV / UPT / AUR / Freq. 的计算公式均为 Step1 + Step2 两步法，**两步时间范围不同，不能合并区间计算**（分步范式参考用户已验证的"新客"DAX，即 Customer Breakdown Trend 的 TREATAS 模式）：
 
 - **Step 1**（end period 当月框定 VIC 买家）：在 `dt = end period`（即 `[Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]` 当月区间）筛选 `is_new_vic=1`（或 `is_retention_vic=1`），框定 user_id 集合
-- **Step 2**（所选时间范围聚合）：该 user_id 集合在切片器所选完整时间范围（即 `[TimeFrame_Min, TimeFrame_Max]` 区间）对应的 `sum(net_pay_amt)` / `sum(net_pay_qty)` / `sum(net_pay_order_cnt)`；`is_xxx_vic=1` 仅用于 Step 1 框定，Step 2 不再施加；`platform, shop_info_id` 分组维度由模型自动传递保留（Step 2 不移除分组维度）
+- **Step 2**（所选时间范围聚合）：该 user_id 集合在切片器所选完整时间范围（即 `[TimeFrame_Min, TimeFrame_Max]` 区间——起点 = Min 表起始月周期自身起始日、终点 = Max 表 end period 周期自身结束日，2026-09-14 修复）对应的 `sum(net_pay_amt)` / `sum(net_pay_qty)` / `sum(net_pay_order_cnt)`；`is_xxx_vic=1` 仅用于 Step 1 框定，Step 2 不再施加；`platform, shop_info_id` 分组维度由模型自动传递保留（Step 2 不移除分组维度）
 
 > **例外（单步口径）**：ACV / Freq. 分母 `count(distinct user_id)` 口径明确为 "dt = 所选时间范围 end period，筛选 is_xxx_vic=1"，保持 end period 当月单步聚合（即 Step 1 框定的 user_id 数量，COUNTROWS(Step 1 集合)）。
 >
 > **SLS% 分母（全客，同样分步）**：Step 1 end period 当月框定全客 `is_xxx_vic in (0,1)` user_id 集合 + Step 2 所选时间范围（TimeFrame 区间）`sum(net_pay_amt)`，与分子唯一区别是 Step 1 的筛选条件（见 §3.6）。
 >
-> **LY / LP 版本**：Step 1 用 LY/LP end period 当月（`Last_Fiscal_Month_*_LY/LP`），Step 2 用 LY/LP 所选时间范围（`TimeFrame_Min/Max_LY/LP`）。
+> **LY / LP 版本**：Step 1 用 LY/LP end period 当月（`Last_Fiscal_Month_*_LY/LP`，Max 表），Step 2 用 LY/LP 所选时间范围（起点 `TimeFrame_Min_LY/LP`（Min 表）~ 终点 `TimeFrame_Max_LY/LP`（Max 表））。
 
-`Slicer_Time_Frame_Max_VIC_Breakdown` 已内置两套区间全部字段（`Last_Fiscal_Month` 系列 + `TimeFrame` 系列，含 LY/LP 偏移），直接获取用于筛选事实表的时间范围，**无需改动日期表**（两套区间同表读取，防止日期表互相依赖）。
+Step 1 区间（`Last_Fiscal_Month` 系列）与 Step 2 区间终点（`TimeFrame_Max` 系列）从 `Slicer_Time_Frame_Max_VIC_Breakdown` 读取（end period 切片器所选行自带，含 LY/LP 偏移），Step 2 区间起点（`TimeFrame_Min` 系列）从 `Slicer_Time_Frame_Min_VIC_Breakdown` 读取（起始月切片器所选行自带，含 LY/LP 偏移），**无需改动日期表**（Min/Max 两表各自独立被切片器筛选、互相无关系，度量值内拼接区间，不构成日期表互相依赖；Max 表的 `TimeFrame_Min` 是 end period 周期自身起始日而非用户所选起始月——2026-09-14 修复前误用，导致调整起始月切片器不生效）。
 
 > **历史口径说明**：本方案曾将两步合并为 end period 当月单步聚合（当时的理解：Step2 "所选时间范围" = end period 当月）。2026-09-12 经澄清 Step 2 = 切片器所选完整时间范围，已全面改为分步实现，旧逻辑块以注释形式保留在各 Base Value 度量值末尾（可回退）。
 
@@ -121,12 +122,12 @@ SLS / SLS% / ACV / UPT / AUR / Freq. 的计算公式均为 Step1 + Step2 两步�
 
 ### 1.8 关键特殊逻辑八：派生指标分类
 
-| 派生类型                                   | 计算方式                          | 数据格式                                       | 适用指标                                       |
-| ------------------------------------------ | --------------------------------- | ---------------------------------------------- | ---------------------------------------------- |
-| **vs LY**（数量类 SLS / ACV / UPT / AUR / Freq.） | 今年 / 去年 - 1                   | `delta_pct_0dp`（含正号）                    | 所有 KPI 分组的 vs LY（SLS% 除外）             |
-| **vs LP**（数量类）                         | 当期 / 上期 - 1                   | `delta_pct_0dp`（含正号）                    | 所有 KPI 分组的 vs LP（SLS% 除外）             |
-| **vs Store**（ACV / UPT / AUR / Freq.）     | New VIC / 全客 - 1                | `delta_pct_0dp`（含正号）                    | ACV / UPT / AUR / Freq. 的 vs Store            |
-| **SLS% vs LY / vs LP**（比率类）            | 今年 - 去年（差值，×100 转 pts） | `delta_pts`                                   | SLS% 分组的 vs LY / vs LP                      |
+| 派生类型                                                | 计算方式                          | 数据格式                    | 适用指标                            |
+| ------------------------------------------------------- | --------------------------------- | --------------------------- | ----------------------------------- |
+| **vs LY**（数量类 SLS / ACV / UPT / AUR / Freq.） | 今年 / 去年 - 1                   | `delta_pct_0dp`（含正号） | 所有 KPI 分组的 vs LY（SLS% 除外）  |
+| **vs LP**（数量类）                               | 当期 / 上期 - 1                   | `delta_pct_0dp`（含正号） | 所有 KPI 分组的 vs LP（SLS% 除外）  |
+| **vs Store**（ACV / UPT / AUR / Freq.）           | New VIC / 全客 - 1                | `delta_pct_0dp`（含正号） | ACV / UPT / AUR / Freq. 的 vs Store |
+| **SLS% vs LY / vs LP**（比率类）                  | 今年 - 去年（差值，×100 转 pts） | `delta_pts`               | SLS% 分组的 vs LY / vs LP           |
 
 ---
 
@@ -134,26 +135,26 @@ SLS / SLS% / ACV / UPT / AUR / Freq. 的计算公式均为 Step1 + Step2 两步�
 
 ### 2.1 数据底表
 
-| 对象     | 名称                                                                                                                                                                                                                                                              | 出处                       |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| 事实表   | a03_e2e_customer_data_m                                                                                                                                                                                                                                           | VIC Breakdown KPI.md 全局逻辑 |
-| 关键字段 | data_date, platform, shop_info_id, user_id, is_member, is_employee, is_new_vic, is_retention_vic, net_pay_amt, net_pay_qty, net_pay_order_cnt                                                                                                                                 | VIC Breakdown KPI.md 全部指标 |
+| 对象     | 名称                                                                                                                                          | 出处                          |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| 事实表   | a03_e2e_customer_data_m                                                                                                                       | VIC Breakdown KPI.md 全局逻辑 |
+| 关键字段 | data_date, platform, shop_info_id, user_id, is_member, is_employee, is_new_vic, is_retention_vic, net_pay_amt, net_pay_qty, net_pay_order_cnt | VIC Breakdown KPI.md 全部指标 |
 
 > 表为月度聚合表（每用户每月一行），`data_date` 已在 Power Query 中通过 `LAST_DAY(DATE_SUB(STR_TO_DATE(CONCAT(data_month,'01'),'%Y%m%d'), INTERVAL 10 MONTH))` 计算得到月末日期。
 
 ### 2.2 维度表清单
 
-| 维度表                                   | 类型     | 连接方式                                                                                                                                                                                                                                                                                                                                                             |
-| ---------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Slicer_Time_Frame_VIC_Breakdown          | 断开维度 | VIC Breakdown 专用日期表（与其他模块隔离），用于时间范围切片器                                                                                                                                                                                                                                                                                                       |
-| Slicer_Time_Frame_Max_VIC_Breakdown      | 断开维度 | SELECTEDVALUE 读取两套区间字段（已预算，基础聚合直接读）：`Last_Fiscal_Month_Min/Max`（Step 1 end period 当月）+ `TimeFrame_Min/Max`（Step 2 所选时间范围），均含 `_LY/_LP` 偏移版本（`Last_Fiscal_Month_Min_LY/Max_LY/Min_LP/Max_LP`、`TimeFrame_Min_LY/Max_LY/Min_LP/Max_LP`）                                                                 |
-| Slicer_Time_Frame_Min_VIC_Breakdown      | 断开维度 | 本方案不使用（两套区间均从 Max 表读取，防止日期表互相依赖）                                                                                                                                                                                                                                                                                                          |
-| Slicer_Is_Employee_Selection             | 断开维度 | SELECTEDVALUE 读取 `IsEmployee_Code`                                                                                                                                                                                                                                                                                                                               |
-| IsMemberFilter                           | 断开维度 | SELECTEDVALUE 读取 `IsMember`                                                                                                                                                                                                                                                                                                                                      |
-| Slicer_Platform_Selection                | 断开维度 | 行维度直接拉事实表 platform 字段，模型自动传递                                                                                                                                                                                                                                                                                                                       |
-| Slicer_Store_Name                        | 断开维度 | 行维度直接拉事实表 shop_info_id 字段，模型自动传递                                                                                                                                                                                                                                                                                                                   |
-| Slicer_Currency_Selection                | 断开维度 | SELECTEDVALUE 读取 `Currency_ExchangeRate`（默认 1）、`Currency_Symbol`（默认 "¥"）                                                                                                                                                                                                                                                                                 |
-| Dim_ColMetric_New_Retention_VIC          | 断开维度 | SELECTEDVALUE 读取 `Metric_ID` / `VICType` / `KPIGroup` / `ColName` / `ColType` / `Metric_Format` / `Metric_ColorRule` / 颜色字段                                                                                                                                                                                                                                  |
+| 维度表                              | 类型     | 连接方式                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Slicer_Time_Frame_VIC_Breakdown     | 断开维度 | VIC Breakdown 专用日期表（与其他模块隔离），用于时间范围切片器                                                                                                                                                                                                                                                             |
+| Slicer_Time_Frame_Max_VIC_Breakdown | 断开维度 | end period 切片器；SELECTEDVALUE 读取（已预算，基础聚合直接读）：Step 1 区间`Last_Fiscal_Month_Min/Max`（end period 当月）+ Step 2 区间终点 `TimeFrame_Max`，均含 `_LY/_LP` 偏移版本。注意：本表 `TimeFrame_Min` 是所选 end period 周期自身起始日（非用户所选起始月），不能用作 Step 2 区间起点（2026-09-14 修复） |
+| Slicer_Time_Frame_Min_VIC_Breakdown | 断开维度 | 起始月切片器；SELECTEDVALUE 读取 Step 2 区间起点`TimeFrame_Min`（起始月周期自身起始日），含 `_LY/_LP` 偏移版本（`TimeFrame_Min_LY/Min_LP`）；2026-09-14 起启用                                                                                                                                                       |
+| Slicer_Is_Employee_Selection        | 断开维度 | SELECTEDVALUE 读取`IsEmployee_Code`                                                                                                                                                                                                                                                                                      |
+| IsMemberFilter                      | 断开维度 | SELECTEDVALUE 读取`IsMember`                                                                                                                                                                                                                                                                                             |
+| Slicer_Platform_Selection           | 断开维度 | 行维度直接拉事实表 platform 字段，模型自动传递                                                                                                                                                                                                                                                                             |
+| Slicer_Store_Name                   | 断开维度 | 行维度直接拉事实表 shop_info_id 字段，模型自动传递                                                                                                                                                                                                                                                                         |
+| Slicer_Currency_Selection           | 断开维度 | SELECTEDVALUE 读取`Currency_ExchangeRate`（默认 1）、`Currency_Symbol`（默认 "¥"）                                                                                                                                                                                                                                    |
+| Dim_ColMetric_New_Retention_VIC     | 断开维度 | SELECTEDVALUE 读取`Metric_ID` / `VICType` / `KPIGroup` / `ColName` / `ColType` / `Metric_Format` / `Metric_ColorRule` / 颜色字段                                                                                                                                                                             |
 
 > **行维度处理**：`platform` / `shop_info_id` 直接拉取事实表字段实现自动传递，模型自动传递筛选，DAX 无需显式处理。
 
@@ -206,8 +207,8 @@ Dim_ColMetric_New_Retention_VIC（断开维度，三级列头）
                                        ← 金额类（SLS/ACV/AUR）÷ Currency_ExchangeRate
                                        ← SLS%/UPT/Freq. 不做汇率换算
                                        ← ACV/Freq. 分母 = COUNTROWS(Step1 集合)（end period 当月单步口径）
-[VIC Breakdown LY Base Value]          ← 去年同期基础值（Step1: Last_Fiscal_Month_*_LY；Step2: TimeFrame_Min/Max_LY）
-[VIC Breakdown LP Base Value]          ← 上期基础值（Step1: Last_Fiscal_Month_*_LP；Step2: TimeFrame_Min/Max_LP）
+[VIC Breakdown LY Base Value]          ← 去年同期基础值（Step1: Last_Fiscal_Month_*_LY；Step2: TimeFrame_Min_LY(Min 表)~TimeFrame_Max_LY(Max 表)）
+[VIC Breakdown LP Base Value]          ← 上期基础值（Step1: Last_Fiscal_Month_*_LP；Step2: TimeFrame_Min_LP(Min 表)~TimeFrame_Max_LP(Max 表)）
 [VIC Breakdown Store Base Value]       ← 全客基础值（is_xxx_vic in (0,1)，同样 Step1+Step2 分步）：
                                        ←   Step1 end period 当月（按 Metric_ID 路由 Act/LY/LP）框定全客 user_id 集合
                                        ←   Step2 TREATAS + TimeFrame 区间（按 Metric_ID 路由 Act/LY/LP）聚合
@@ -226,78 +227,81 @@ Dim_ColMetric_New_Retention_VIC（断开维度，三级列头）
 
 ### 3.3 筛选器上下文
 
-| 筛选器                                         | 作用方式                                                                                  | DAX 处理                                                                                       |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Slicer_Time_Frame_Max_VIC_Breakdown（Step 1）  | 断开维度，SELECTEDVALUE 读取 `Last_Fiscal_Month_Min/Max`（end period 当月）              | `data_date >= __EndPeriodMin AND data_date <= __EndPeriodMax`（Step 1 框定 user_id 集合）    |
-| Slicer_Time_Frame_Max_VIC_Breakdown（Step 2）  | SELECTEDVALUE 读取 `TimeFrame_Min/Max`（所选时间范围）                                    | `data_date >= __TimeFrameMin AND data_date <= __TimeFrameMax`（Step 2 TREATAS 聚合）         |
-| Slicer_Time_Frame_Max_VIC_Breakdown（Step 1 LY）| SELECTEDVALUE 读取 `Last_Fiscal_Month_Min_LY/Max_LY`                                    | `data_date >= __EndPeriodMin_LY AND data_date <= __EndPeriodMax_LY`（LY Step 1）             |
-| Slicer_Time_Frame_Max_VIC_Breakdown（Step 2 LY）| SELECTEDVALUE 读取 `TimeFrame_Min_LY/Max_LY`                                            | `data_date >= __LYMin AND data_date <= __LYMax`（LY Step 2）                                  |
-| Slicer_Time_Frame_Max_VIC_Breakdown（Step 1 LP）| SELECTEDVALUE 读取 `Last_Fiscal_Month_Min_LP/Max_LP`                                    | `data_date >= __EndPeriodMin_LP AND data_date <= __EndPeriodMax_LP`（LP Step 1）             |
-| Slicer_Time_Frame_Max_VIC_Breakdown（Step 2 LP）| SELECTEDVALUE 读取 `TimeFrame_Min_LP/Max_LP`                                            | `data_date >= __LPMin AND data_date <= __LPMax`（LP Step 2）                                  |
-| Slicer_Is_Employee_Selection                   | 断开维度，SELECTEDVALUE 读取 `IsEmployee_Code`                                          | `a03_e2e_customer_data_m[is_employee] in __IsEmployeeFilter`                                 |
-| IsMemberFilter                                 | 断开维度，SELECTEDVALUE 读取 `IsMember`                                                 | `a03_e2e_customer_data_m[is_member] = __IsMemberFilter`                                     |
-| Slicer_Currency_Selection                      | 断开维度，SELECTEDVALUE 读取 `Currency_ExchangeRate` / `Currency_Symbol`                | 金额类 `DIVIDE(SUM(net_pay_amt), __FXRate)`；Display 拼接 `__CurrencySymbol`                 |
-| 事实表分组字段                                 | 表格行直接拉取，模型自动传递筛选                                                          | DAX 无需显式处理（Step 1/Step 2 均保留自动传递，不移除分组维度）                                 |
+| 筛选器                                               | 作用方式                                                                                      | DAX 处理                                                                                    |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Slicer_Time_Frame_Max_VIC_Breakdown（Step 1）        | 断开维度，SELECTEDVALUE 读取`Last_Fiscal_Month_Min/Max`（end period 当月）                  | `data_date >= __EndPeriodMin AND data_date <= __EndPeriodMax`（Step 1 框定 user_id 集合） |
+| Slicer_Time_Frame_Min_VIC_Breakdown（Step 2 起点）   | 起始月切片器，SELECTEDVALUE 读取`TimeFrame_Min`（起始月周期自身起始日）                     | `data_date >= __TimeFrameMin`（Step 2 TREATAS 聚合区间下界，2026-09-14 修复）             |
+| Slicer_Time_Frame_Max_VIC_Breakdown（Step 2 终点）   | end period 切片器，SELECTEDVALUE 读取`TimeFrame_Max`（end period 周期自身结束日）           | `data_date <= __TimeFrameMax`（Step 2 TREATAS 聚合区间上界）                              |
+| Slicer_Time_Frame_Max_VIC_Breakdown（Step 1 LY）     | SELECTEDVALUE 读取`Last_Fiscal_Month_Min_LY/Max_LY`                                         | `data_date >= __EndPeriodMin_LY AND data_date <= __EndPeriodMax_LY`（LY Step 1）          |
+| Slicer_Time_Frame_Min/Max_VIC_Breakdown（Step 2 LY） | 起点读 Min 表`TimeFrame_Min_LY`（起始月 LY 周期起始日）+ 终点读 Max 表 `TimeFrame_Max_LY` | `data_date >= __LYMin AND data_date <= __LYMax`（LY Step 2）                              |
+| Slicer_Time_Frame_Max_VIC_Breakdown（Step 1 LP）     | SELECTEDVALUE 读取`Last_Fiscal_Month_Min_LP/Max_LP`                                         | `data_date >= __EndPeriodMin_LP AND data_date <= __EndPeriodMax_LP`（LP Step 1）          |
+| Slicer_Time_Frame_Min/Max_VIC_Breakdown（Step 2 LP） | 起点读 Min 表`TimeFrame_Min_LP` + 终点读 Max 表 `TimeFrame_Max_LP`                        | `data_date >= __LPMin AND data_date <= __LPMax`（LP Step 2）                              |
+| Slicer_Is_Employee_Selection                         | 断开维度，SELECTEDVALUE 读取`IsEmployee_Code`                                               | `a03_e2e_customer_data_m[is_employee] in __IsEmployeeFilter`                              |
+| IsMemberFilter                                       | 断开维度，SELECTEDVALUE 读取`IsMember`                                                      | `a03_e2e_customer_data_m[is_member] = __IsMemberFilter`                                   |
+| Slicer_Currency_Selection                            | 断开维度，SELECTEDVALUE 读取`Currency_ExchangeRate` / `Currency_Symbol`                   | 金额类`DIVIDE(SUM(net_pay_amt), __FXRate)`；Display 拼接 `__CurrencySymbol`             |
+| 事实表分组字段                                       | 表格行直接拉取，模型自动传递筛选                                                              | DAX 无需显式处理（Step 1/Step 2 均保留自动传递，不移除分组维度）                            |
 
 ### 3.4 两套时间区间（Step 1 end period / Step 2 TimeFrame）与 LY/LP 偏移（财历映射）
 
-两套区间字段全部从 Slicer_Time_Frame_Max_VIC_Breakdown 读取（日期表不改动，防止日期表互相依赖）：
+Step 1 区间与 Step 2 区间终点从 Slicer_Time_Frame_Max_VIC_Breakdown 读取（end period 切片器所选行自带），Step 2 区间起点从 Slicer_Time_Frame_Min_VIC_Breakdown 读取（起始月切片器所选行自带，2026-09-14 修复）；日期表不改动，Min/Max 两表各自独立被切片器筛选、互相无关系（度量值内拼接区间，不构成日期表互相依赖）：
 
-**Step 1（end period 当月，框定 VIC 买家 user_id）**：
+**Step 1（end period 当月，框定 VIC 买家 user_id；Max 表）**：
+
 - 本期：`Last_Fiscal_Month_Min` ~ `Last_Fiscal_Month_Max`
 - LY：`Last_Fiscal_Month_Min_LY` ~ `Last_Fiscal_Month_Max_LY`
 - LP：`Last_Fiscal_Month_Min_LP` ~ `Last_Fiscal_Month_Max_LP`
 
-**Step 2（所选时间范围，聚合）**：
-- 本期：`TimeFrame_Min` ~ `TimeFrame_Max`
-- LY：`TimeFrame_Min_LY` ~ `TimeFrame_Max_LY`
-- LP：`TimeFrame_Min_LP` ~ `TimeFrame_Max_LP`
+**Step 2（所选时间范围，聚合；起点 Min 表 + 终点 Max 表）**：
 
+- 本期：`TimeFrame_Min`（Min 表，起始月周期自身起始日）~ `TimeFrame_Max`（Max 表，end period 周期自身结束日）
+- LY：`TimeFrame_Min_LY`（Min 表）~ `TimeFrame_Max_LY`（Max 表）
+- LP：`TimeFrame_Min_LP`（Min 表）~ `TimeFrame_Max_LP`（Max 表）
 - 无需 EDATE -12 或 Key 偏移计算（两组字段均已由日期维度表预算）
+- Max 表的 `TimeFrame_Min` 是 end period 周期自身起始日（非用户所选起始月），不能作为 Step 2 区间起点——误用会导致调整起始月切片器不生效、Step 2 退化为 end period 当月单月区间（2026-09-14 修复）
 
 ### 3.5 vs LY / vs LP / vs Store 派生计算分类
 
-| Metric_ID | 指标                 | VICType        | 派生类型   | 计算方式            | Metric_Format  |
-| --------- | -------------------- | -------------- | ---------- | ------------------- | -------------- |
-| 2         | SLS vs LY            | New VIC        | 数量类 vs LY | 今年 / 去年 - 1     | delta_pct_0dp  |
-| 3         | SLS vs LP            | New VIC        | 数量类 vs LP | 当期 / 上期 - 1     | delta_pct_0dp  |
-| 5         | SLS% vs LY           | New VIC        | 比率类 vs LY | 今年 - 去年（差值） | delta_pts      |
-| 6         | SLS% vs LP           | New VIC        | 比率类 vs LP | 当期 - 上期（差值） | delta_pts      |
-| 8         | ACV vs LY            | New VIC        | 数量类 vs LY | 今年 / 去年 - 1     | delta_pct_0dp  |
-| 9         | ACV vs LP            | New VIC        | 数量类 vs LP | 当期 / 上期 - 1     | delta_pct_0dp  |
-| 10        | ACV vs Store         | New VIC        | vs Store   | New VIC / 全客 - 1  | delta_pct_0dp  |
-| 12        | UPT vs LY            | New VIC        | 数量类 vs LY | 今年 / 去年 - 1     | delta_pct_0dp  |
-| 13        | UPT vs LP            | New VIC        | 数量类 vs LP | 当期 / 上期 - 1     | delta_pct_0dp  |
-| 14        | UPT vs Store         | New VIC        | vs Store   | New VIC / 全客 - 1  | delta_pct_0dp  |
-| 16        | AUR vs LY            | New VIC        | 数量类 vs LY | 今年 / 去年 - 1     | delta_pct_0dp  |
-| 17        | AUR vs LP            | New VIC        | 数量类 vs LP | 当期 / 上期 - 1     | delta_pct_0dp  |
-| 18        | AUR vs Store         | New VIC        | vs Store   | New VIC / 全客 - 1  | delta_pct_0dp  |
-| 20        | Freq. vs LY          | New VIC        | 数量类 vs LY | 今年 / 去年 - 1     | delta_pct_0dp  |
-| 21        | Freq. vs LP          | New VIC        | 数量类 vs LP | 当期 / 上期 - 1     | delta_pct_0dp  |
-| 22        | Freq. vs Store       | New VIC        | vs Store   | New VIC / 全客 - 1  | delta_pct_0dp  |
-| 24        | SLS vs LY            | Retention VIC  | 数量类 vs LY | 今年 / 去年 - 1     | delta_pct_0dp  |
-| 25        | SLS vs LP            | Retention VIC  | 数量类 vs LP | 当期 / 上期 - 1     | delta_pct_0dp  |
-| 27        | SLS% vs LY           | Retention VIC  | 比率类 vs LY | 今年 - 去年（差值） | delta_pts      |
-| 28        | SLS% vs LP           | Retention VIC  | 比率类 vs LP | 当期 - 上期（差值） | delta_pts      |
-| 30        | ACV vs LY            | Retention VIC  | 数量类 vs LY | 今年 / 去年 - 1     | delta_pct_0dp  |
-| 31        | ACV vs LP            | Retention VIC  | 数量类 vs LP | 当期 / 上期 - 1     | delta_pct_0dp  |
-| 32        | ACV vs Store         | Retention VIC  | vs Store   | Retention VIC / 全客 - 1 | delta_pct_0dp  |
-| 34        | UPT vs LY            | Retention VIC  | 数量类 vs LY | 今年 / 去年 - 1     | delta_pct_0dp  |
-| 35        | UPT vs LP            | Retention VIC  | 数量类 vs LP | 当期 / 上期 - 1     | delta_pct_0dp  |
-| 36        | UPT vs Store         | Retention VIC  | vs Store   | Retention VIC / 全客 - 1 | delta_pct_0dp  |
-| 38        | AUR vs LY            | Retention VIC  | 数量类 vs LY | 今年 / 去年 - 1     | delta_pct_0dp  |
-| 39        | AUR vs LP            | Retention VIC  | 数量类 vs LP | 当期 / 上期 - 1     | delta_pct_0dp  |
-| 40        | AUR vs Store         | Retention VIC  | vs Store   | Retention VIC / 全客 - 1 | delta_pct_0dp  |
-| 42        | Freq. vs LY          | Retention VIC  | 数量类 vs LY | 今年 / 去年 - 1     | delta_pct_0dp  |
-| 43        | Freq. vs LP          | Retention VIC  | 数量类 vs LP | 当期 / 上期 - 1     | delta_pct_0dp  |
-| 44        | Freq. vs Store       | Retention VIC  | vs Store   | Retention VIC / 全客 - 1 | delta_pct_0dp  |
+| Metric_ID | 指标           | VICType       | 派生类型     | 计算方式                 | Metric_Format |
+| --------- | -------------- | ------------- | ------------ | ------------------------ | ------------- |
+| 2         | SLS vs LY      | New VIC       | 数量类 vs LY | 今年 / 去年 - 1          | delta_pct_0dp |
+| 3         | SLS vs LP      | New VIC       | 数量类 vs LP | 当期 / 上期 - 1          | delta_pct_0dp |
+| 5         | SLS% vs LY     | New VIC       | 比率类 vs LY | 今年 - 去年（差值）      | delta_pts     |
+| 6         | SLS% vs LP     | New VIC       | 比率类 vs LP | 当期 - 上期（差值）      | delta_pts     |
+| 8         | ACV vs LY      | New VIC       | 数量类 vs LY | 今年 / 去年 - 1          | delta_pct_0dp |
+| 9         | ACV vs LP      | New VIC       | 数量类 vs LP | 当期 / 上期 - 1          | delta_pct_0dp |
+| 10        | ACV vs Store   | New VIC       | vs Store     | New VIC / 全客 - 1       | delta_pct_0dp |
+| 12        | UPT vs LY      | New VIC       | 数量类 vs LY | 今年 / 去年 - 1          | delta_pct_0dp |
+| 13        | UPT vs LP      | New VIC       | 数量类 vs LP | 当期 / 上期 - 1          | delta_pct_0dp |
+| 14        | UPT vs Store   | New VIC       | vs Store     | New VIC / 全客 - 1       | delta_pct_0dp |
+| 16        | AUR vs LY      | New VIC       | 数量类 vs LY | 今年 / 去年 - 1          | delta_pct_0dp |
+| 17        | AUR vs LP      | New VIC       | 数量类 vs LP | 当期 / 上期 - 1          | delta_pct_0dp |
+| 18        | AUR vs Store   | New VIC       | vs Store     | New VIC / 全客 - 1       | delta_pct_0dp |
+| 20        | Freq. vs LY    | New VIC       | 数量类 vs LY | 今年 / 去年 - 1          | delta_pct_0dp |
+| 21        | Freq. vs LP    | New VIC       | 数量类 vs LP | 当期 / 上期 - 1          | delta_pct_0dp |
+| 22        | Freq. vs Store | New VIC       | vs Store     | New VIC / 全客 - 1       | delta_pct_0dp |
+| 24        | SLS vs LY      | Retention VIC | 数量类 vs LY | 今年 / 去年 - 1          | delta_pct_0dp |
+| 25        | SLS vs LP      | Retention VIC | 数量类 vs LP | 当期 / 上期 - 1          | delta_pct_0dp |
+| 27        | SLS% vs LY     | Retention VIC | 比率类 vs LY | 今年 - 去年（差值）      | delta_pts     |
+| 28        | SLS% vs LP     | Retention VIC | 比率类 vs LP | 当期 - 上期（差值）      | delta_pts     |
+| 30        | ACV vs LY      | Retention VIC | 数量类 vs LY | 今年 / 去年 - 1          | delta_pct_0dp |
+| 31        | ACV vs LP      | Retention VIC | 数量类 vs LP | 当期 / 上期 - 1          | delta_pct_0dp |
+| 32        | ACV vs Store   | Retention VIC | vs Store     | Retention VIC / 全客 - 1 | delta_pct_0dp |
+| 34        | UPT vs LY      | Retention VIC | 数量类 vs LY | 今年 / 去年 - 1          | delta_pct_0dp |
+| 35        | UPT vs LP      | Retention VIC | 数量类 vs LP | 当期 / 上期 - 1          | delta_pct_0dp |
+| 36        | UPT vs Store   | Retention VIC | vs Store     | Retention VIC / 全客 - 1 | delta_pct_0dp |
+| 38        | AUR vs LY      | Retention VIC | 数量类 vs LY | 今年 / 去年 - 1          | delta_pct_0dp |
+| 39        | AUR vs LP      | Retention VIC | 数量类 vs LP | 当期 / 上期 - 1          | delta_pct_0dp |
+| 40        | AUR vs Store   | Retention VIC | vs Store     | Retention VIC / 全客 - 1 | delta_pct_0dp |
+| 42        | Freq. vs LY    | Retention VIC | 数量类 vs LY | 今年 / 去年 - 1          | delta_pct_0dp |
+| 43        | Freq. vs LP    | Retention VIC | 数量类 vs LP | 当期 / 上期 - 1          | delta_pct_0dp |
+| 44        | Freq. vs Store | Retention VIC | vs Store     | Retention VIC / 全客 - 1 | delta_pct_0dp |
 
 ### 3.6 Share 类指标计算（SLS% 分母为全客 net_pay_amt，同样 Step1+Step2 分步）
 
-| Metric_ID | 指标     | VICType       | 分子筛选                                                | 分母筛选                                                       | Metric_Format |
-| --------- | -------- | ------------- | ------------------------------------------------------- | -------------------------------------------------------------- | ------------- |
-| 4         | SLS%     | New VIC       | Step1 end period 框定（`is_new_vic=1`）+ Step2 TimeFrame 区间 `sum(net_pay_amt)` ÷ FXRate | Step1 end period 框定全客（`is_new_vic in (0,1)`）+ Step2 TimeFrame 区间 `sum(net_pay_amt)` ÷ FXRate | percent_0dp   |
-| 26        | SLS%     | Retention VIC | Step1 end period 框定（`is_retention_vic=1`）+ Step2 TimeFrame 区间 `sum(net_pay_amt)` ÷ FXRate | Step1 end period 框定全客（`is_retention_vic in (0,1)`）+ Step2 TimeFrame 区间 `sum(net_pay_amt)` ÷ FXRate | percent_0dp   |
+| Metric_ID | 指标 | VICType       | 分子筛选                                                                                             | 分母筛选                                                                                                        | Metric_Format |
+| --------- | ---- | ------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------- |
+| 4         | SLS% | New VIC       | Step1 end period 框定（`is_new_vic=1`）+ Step2 TimeFrame 区间 `sum(net_pay_amt)` ÷ FXRate       | Step1 end period 框定全客（`is_new_vic in (0,1)`）+ Step2 TimeFrame 区间 `sum(net_pay_amt)` ÷ FXRate       | percent_0dp   |
+| 26        | SLS% | Retention VIC | Step1 end period 框定（`is_retention_vic=1`）+ Step2 TimeFrame 区间 `sum(net_pay_amt)` ÷ FXRate | Step1 end period 框定全客（`is_retention_vic in (0,1)`）+ Step2 TimeFrame 区间 `sum(net_pay_amt)` ÷ FXRate | percent_0dp   |
 
 > **SLS% 分子分母时间口径（2026-09-12 修订）**：分子 = New/Retention VIC 的 Step1+Step2 分步 SLS（同 §1.2，end period 当月框定 + 所选时间范围聚合）；分母 = 全客 Step1+Step2 分步 SLS（Step 1 end period 当月框定 `is_xxx_vic in (0,1)` 全客 user 集合 + Step 2 所选时间范围 `sum(net_pay_amt)`），与分子唯一区别是 Step 1 的筛选条件。SLS% vs LY / vs LP 的分母对应取 LY/LP 区间全客分步 SLS（Store Base Value 按 Metric_ID 同步路由两套区间）。
 >
@@ -305,14 +309,14 @@ Dim_ColMetric_New_Retention_VIC（断开维度，三级列头）
 
 ### 3.7 格式规范（按 Metric_Format 单字段分发）
 
-| Metric_Format          | 格式串                                                                                     | 示例                    | 适用指标                                              |
-| ---------------------- | ------------------------------------------------------------------------------------------ | ----------------------- | ----------------------------------------------------- |
-| `currency`             | `__CurrencySymbol & FORMAT(__Value, "#,##0")`                                            | ¥1,000 / $1,000         | SLS Act                                               |
-| `currency_decimal_1dp` | `__CurrencySymbol & FORMAT(__Value, "#,##0.0")`                                          | ¥1,000.0 / $1,000.0     | ACV / AUR Act                                         |
-| `decimal_1dp`          | `FORMAT(__Value, "#,##0.0")`                                                              | 1.5                     | UPT / Freq. Act                                       |
-| `percent_0dp`          | `FORMAT(__Value, "#,##0%")`                                                               | 15%                     | SLS% Act                                              |
-| `delta_pct_0dp`        | `IF(__Value>0,"+","") & FORMAT(__Value,"#,##0%")`                                        | +15% / -3%              | 数量类 vs LY / vs LP / vs Store                       |
-| `delta_pts`            | `IF(ROUND(__Value*100,0)>0,"+","") & FORMAT(__Value*100,"+#,##0pts;-#,##0pts;0pts")`    | +120pts / -80pts / 0pts | SLS% vs LY / SLS% vs LP（值×100 转 pts 在 Cell Display 中实现） |
+| Metric_Format            | 格式串                                                                                 | 示例                    | 适用指标                                                         |
+| ------------------------ | -------------------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------- |
+| `currency`             | `__CurrencySymbol & FORMAT(__Value, "#,##0")`                                        | ¥1,000 / $1,000        | SLS Act                                                          |
+| `currency_decimal_1dp` | `__CurrencySymbol & FORMAT(__Value, "#,##0.0")`                                      | ¥1,000.0 / $1,000.0    | ACV / AUR Act                                                    |
+| `decimal_1dp`          | `FORMAT(__Value, "#,##0.0")`                                                         | 1.5                     | UPT / Freq. Act                                                  |
+| `percent_0dp`          | `FORMAT(__Value, "#,##0%")`                                                          | 15%                     | SLS% Act                                                         |
+| `delta_pct_0dp`        | `IF(__Value>0,"+","") & FORMAT(__Value,"#,##0%")`                                    | +15% / -3%              | 数量类 vs LY / vs LP / vs Store                                  |
+| `delta_pts`            | `IF(ROUND(__Value*100,0)>0,"+","") & FORMAT(__Value*100,"+#,##0pts;-#,##0pts;0pts")` | +120pts / -80pts / 0pts | SLS% vs LY / SLS% vs LP（值×100 转 pts 在 Cell Display 中实现） |
 
 ---
 
@@ -322,31 +326,31 @@ Dim_ColMetric_New_Retention_VIC（断开维度，三级列头）
 
 > 维度表已存在于 `Dim_ColMetric_New_Retention_VIC.md`，此处不再重复定义，直接引用。下表明晰 Metric_ID 与口径文档指标的映射关系：
 
-| Metric_ID | VICType        | KPIGroup | ColName           | ColType   | 口径文档对应指标       | Act/LP/LY/Store 字段                                                            | 数据底表                |
-| --------- | -------------- | -------- | ----------------- | --------- | ---------------------- | ------------------------------------------------------------------------------- | ----------------------- |
-| 1         | New VIC        | SLS      | 1-SLS             | Act       | 1. SLS                 | is_new_vic=1, sum(net_pay_amt) ÷ FXRate                                         | a03_e2e_customer_data_m |
-| 2         | New VIC        | SLS      | 2-SLS vs LY       | vs LY     | 1.1 SLS vs LY          | —                                                                               | 派生                    |
-| 3         | New VIC        | SLS      | 3-SLS vs LP       | vs LP     | 1.2 SLS vs LP          | —                                                                               | 派生                    |
-| 4         | New VIC        | SLS%     | 4-SLS%            | Act       | 2. SLS%                | 分子: is_new_vic=1；分母: is_new_vic in (0,1)                                   | a03_e2e_customer_data_m |
-| 5         | New VIC        | SLS%     | 5-SLS% vs LY      | vs LY     | 2.1 SLS% vs LY         | —                                                                               | 派生                    |
-| 6         | New VIC        | SLS%     | 6-SLS% vs LP      | vs LP     | 2.2 SLS% vs LP         | —                                                                               | 派生                    |
-| 7         | New VIC        | ACV      | 7-ACV             | Act       | 3. ACV                 | 分子: sum(net_pay_amt) ÷ FXRate；分母: count(distinct user_id)（is_new_vic=1） | a03_e2e_customer_data_m |
-| 8         | New VIC        | ACV      | 8-ACV vs LY       | vs LY     | 3.1 ACV vs LY          | —                                                                               | 派生                    |
-| 9         | New VIC        | ACV      | 9-ACV vs LP       | vs LP     | 3.2 ACV vs LP          | —                                                                               | 派生                    |
-| 10        | New VIC        | ACV      | 10-ACV vs Store   | vs Store  | 3.3 ACV vs Store       | 分子: is_new_vic=1；分母: is_new_vic in (0,1)                                   | a03_e2e_customer_data_m |
-| 11        | New VIC        | UPT      | 11-UPT            | Act       | 4. UPT                 | 分子: sum(net_pay_qty)；分母: sum(net_pay_order_cnt)（is_new_vic=1）            | a03_e2e_customer_data_m |
-| 12        | New VIC        | UPT      | 12-UPT vs LY      | vs LY     | 4.1 UPT vs LY          | —                                                                               | 派生                    |
-| 13        | New VIC        | UPT      | 13-UPT vs LP      | vs LP     | 4.2 UPT vs LP          | —                                                                               | 派生                    |
-| 14        | New VIC        | UPT      | 14-UPT vs Store   | vs Store  | 4.3 UPT vs Store       | 分子: is_new_vic=1；分母: is_new_vic in (0,1)                                   | a03_e2e_customer_data_m |
-| 15        | New VIC        | AUR      | 15-AUR            | Act       | 5. AUR                 | 分子: sum(net_pay_amt) ÷ FXRate；分母: sum(net_pay_qty)（is_new_vic=1）         | a03_e2e_customer_data_m |
-| 16        | New VIC        | AUR      | 16-AUR vs LY      | vs LY     | 5.1 AUR vs LY          | —                                                                               | 派生                    |
-| 17        | New VIC        | AUR      | 17-AUR vs LP      | vs LP     | 5.2 AUR vs LP          | —                                                                               | 派生                    |
-| 18        | New VIC        | AUR      | 18-AUR vs Store   | vs Store  | 5.3 AUR vs Store       | 分子: is_new_vic=1；分母: is_new_vic in (0,1)                                   | a03_e2e_customer_data_m |
-| 19        | New VIC        | Freq.    | 19-Freq.          | Act       | 6. Freq.               | 分子: sum(net_pay_order_cnt)；分母: count(distinct user_id)（is_new_vic=1）     | a03_e2e_customer_data_m |
-| 20        | New VIC        | Freq.    | 20-Freq. vs LY    | vs LY     | 6.1 Freq. vs LY        | —                                                                               | 派生                    |
-| 21        | New VIC        | Freq.    | 21-Freq. vs LP    | vs LP     | 6.2 Freq. vs LP        | —                                                                               | 派生                    |
-| 22        | New VIC        | Freq.    | 22-Freq. vs Store | vs Store  | 6.3 Freq. vs Store     | 分子: is_new_vic=1；分母: is_new_vic in (0,1)                                   | a03_e2e_customer_data_m |
-| 23-44     | Retention VIC  | (同上)   | (同上)            | (同上)    | (同上，仅 is_retention_vic=1) | (同上，仅 is_retention_vic=1)                                                   | a03_e2e_customer_data_m |
+| Metric_ID | VICType       | KPIGroup | ColName           | ColType  | 口径文档对应指标              | Act/LP/LY/Store 字段                                                            | 数据底表                |
+| --------- | ------------- | -------- | ----------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------- | ----------------------- |
+| 1         | New VIC       | SLS      | 1-SLS             | Act      | 1. SLS                        | is_new_vic=1, sum(net_pay_amt) ÷ FXRate                                        | a03_e2e_customer_data_m |
+| 2         | New VIC       | SLS      | 2-SLS vs LY       | vs LY    | 1.1 SLS vs LY                 | —                                                                              | 派生                    |
+| 3         | New VIC       | SLS      | 3-SLS vs LP       | vs LP    | 1.2 SLS vs LP                 | —                                                                              | 派生                    |
+| 4         | New VIC       | SLS%     | 4-SLS%            | Act      | 2. SLS%                       | 分子: is_new_vic=1；分母: is_new_vic in (0,1)                                   | a03_e2e_customer_data_m |
+| 5         | New VIC       | SLS%     | 5-SLS% vs LY      | vs LY    | 2.1 SLS% vs LY                | —                                                                              | 派生                    |
+| 6         | New VIC       | SLS%     | 6-SLS% vs LP      | vs LP    | 2.2 SLS% vs LP                | —                                                                              | 派生                    |
+| 7         | New VIC       | ACV      | 7-ACV             | Act      | 3. ACV                        | 分子: sum(net_pay_amt) ÷ FXRate；分母: count(distinct user_id)（is_new_vic=1） | a03_e2e_customer_data_m |
+| 8         | New VIC       | ACV      | 8-ACV vs LY       | vs LY    | 3.1 ACV vs LY                 | —                                                                              | 派生                    |
+| 9         | New VIC       | ACV      | 9-ACV vs LP       | vs LP    | 3.2 ACV vs LP                 | —                                                                              | 派生                    |
+| 10        | New VIC       | ACV      | 10-ACV vs Store   | vs Store | 3.3 ACV vs Store              | 分子: is_new_vic=1；分母: is_new_vic in (0,1)                                   | a03_e2e_customer_data_m |
+| 11        | New VIC       | UPT      | 11-UPT            | Act      | 4. UPT                        | 分子: sum(net_pay_qty)；分母: sum(net_pay_order_cnt)（is_new_vic=1）            | a03_e2e_customer_data_m |
+| 12        | New VIC       | UPT      | 12-UPT vs LY      | vs LY    | 4.1 UPT vs LY                 | —                                                                              | 派生                    |
+| 13        | New VIC       | UPT      | 13-UPT vs LP      | vs LP    | 4.2 UPT vs LP                 | —                                                                              | 派生                    |
+| 14        | New VIC       | UPT      | 14-UPT vs Store   | vs Store | 4.3 UPT vs Store              | 分子: is_new_vic=1；分母: is_new_vic in (0,1)                                   | a03_e2e_customer_data_m |
+| 15        | New VIC       | AUR      | 15-AUR            | Act      | 5. AUR                        | 分子: sum(net_pay_amt) ÷ FXRate；分母: sum(net_pay_qty)（is_new_vic=1）        | a03_e2e_customer_data_m |
+| 16        | New VIC       | AUR      | 16-AUR vs LY      | vs LY    | 5.1 AUR vs LY                 | —                                                                              | 派生                    |
+| 17        | New VIC       | AUR      | 17-AUR vs LP      | vs LP    | 5.2 AUR vs LP                 | —                                                                              | 派生                    |
+| 18        | New VIC       | AUR      | 18-AUR vs Store   | vs Store | 5.3 AUR vs Store              | 分子: is_new_vic=1；分母: is_new_vic in (0,1)                                   | a03_e2e_customer_data_m |
+| 19        | New VIC       | Freq.    | 19-Freq.          | Act      | 6. Freq.                      | 分子: sum(net_pay_order_cnt)；分母: count(distinct user_id)（is_new_vic=1）     | a03_e2e_customer_data_m |
+| 20        | New VIC       | Freq.    | 20-Freq. vs LY    | vs LY    | 6.1 Freq. vs LY               | —                                                                              | 派生                    |
+| 21        | New VIC       | Freq.    | 21-Freq. vs LP    | vs LP    | 6.2 Freq. vs LP               | —                                                                              | 派生                    |
+| 22        | New VIC       | Freq.    | 22-Freq. vs Store | vs Store | 6.3 Freq. vs Store            | 分子: is_new_vic=1；分母: is_new_vic in (0,1)                                   | a03_e2e_customer_data_m |
+| 23-44     | Retention VIC | (同上)   | (同上)            | (同上)   | (同上，仅 is_retention_vic=1) | (同上，仅 is_retention_vic=1)                                                   | a03_e2e_customer_data_m |
 
 ### 4.2 VIC Breakdown Act Base Value（本期基础值）
 
@@ -359,7 +363,8 @@ VIC Breakdown Act Base Value =
 // 依赖: 'Dim_ColMetric_New_Retention_VIC'[Metric_ID, VICType],
 //       a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min/Max]（Step 1 end period 当月）,
-//       Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min/Max]（Step 2 所选时间范围）,
+//       Slicer_Time_Frame_Min_VIC_Breakdown[TimeFrame_Min]（Step 2 所选时间范围起点，2026-09-14 修复）,
+//       Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Max]（Step 2 所选时间范围终点）,
 //       Slicer_Is_Employee_Selection[IsEmployee_Code],
 //       IsMemberFilter[IsMember],
 //       Slicer_Currency_Selection[Currency_ExchangeRate, Currency_Symbol]
@@ -371,7 +376,10 @@ VIC Breakdown Act Base Value =
 //   - Step 2（所选时间范围聚合）: data_date ∈ [TimeFrame_Min, TimeFrame_Max]，
 //     TREATAS 将 Step 1 的 user_id 集合传递回事实表聚合；is_xxx_vic=1 仅用于 Step 1 框定，
 //     Step 2 不再施加；platform / shop_info_id 行分组维度由模型自动传递保留（不移除分组维度）
-//   - 两套区间均从 Slicer_Time_Frame_Max_VIC_Breakdown 读取（防止日期表互相依赖）
+//   - Step 2 区间起点从 Slicer_Time_Frame_Min_VIC_Breakdown 读取（起始月切片器所选周期自身起始日）、
+//     终点从 Slicer_Time_Frame_Max_VIC_Breakdown 读取（end period 周期自身结束日）——
+//     Max 表的 TimeFrame_Min 是 end period 周期自身起始日（非用户所选起始月），误作 Step 2 起点会导致
+//     调整起始月切片器不生效、Step 2 退化为 end period 当月单月区间（2026-09-14 修复，详见旧逻辑块演进记录）
 //   - 例外（单步口径）: ACV / Freq. 分母 count(distinct user_id) = "dt = 所选时间范围 end period，
 //     筛选 is_xxx_vic=1"，即 Step 1 框定的 user_id 数量，直接 COUNTROWS(__VICUsers)
 // 筛选上下文:
@@ -393,8 +401,10 @@ VIC Breakdown Act Base Value =
     // ── Step 1 时间范围（end period 当月，本期）──
     VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min])
     VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max])
-    // ── Step 2 时间范围（所选时间范围，本期；与 Step 1 同表读取，防止日期表互相依赖）──
-    VAR __TimeFrameMin = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min])
+    // ── Step 2 时间范围（所选时间范围，本期；起点 Min 表 + 终点 Max 表，2026-09-14 修复）──
+    // 起点必须读 Min 表（起始月切片器所选周期自身起始日）；Max 表的 TimeFrame_Min 是 end period
+    // 周期自身起始日，误用会导致调整起始月切片器不生效（Step 2 退化为 end period 当月单月区间）
+    VAR __TimeFrameMin = SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Breakdown[TimeFrame_Min])
     VAR __TimeFrameMax = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Max])
     // ── 人群筛选 ──
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
@@ -507,7 +517,14 @@ VIC Breakdown Act Base Value =
             BLANK()
         )
 
-/* ── 旧逻辑：Step1+Step2 合并为 end period 当月单步聚合（2026-09-12 弃用，保留备查）──
+/* ── 演进记录（2026-09-14 修复: Step 2 区间起点误读 Max 表）──
+   2026-09-12 分步改造时，Step 2 区间起点误从 Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min]
+   读取——该字段是 Max 表所选行（end period 周期）自身的起始日，并非用户所选起始月，导致 Step 2 实际
+   区间退化为 end period 当月单月（用户实证: 调整 end period 卡片值变化、调整起始月不变）。修复: 起点
+   改读 Slicer_Time_Frame_Min_VIC_Breakdown[TimeFrame_Min]，终点与 Step 1 仍从 Max 表读取。
+   如需回退错误版本: 将 __TimeFrameMin 改回 SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min])。
+
+── 旧逻辑：Step1+Step2 合并为 end period 当月单步聚合（2026-09-12 弃用，保留备查）──
    当时口径理解: Step2 "所选时间范围" = end period 当月（与 Step 1 一致），因 platform / shop_info_id
    分组由模型自动传递，直接在 end period 当月区间（__PeriodMin/__PeriodMax = Last_Fiscal_Month_Min/Max）
    内应用 is_xxx_vic=1 + is_member + is_employee 筛选做单步聚合（IF 双 CALCULATE 分支）：
@@ -532,7 +549,8 @@ VIC Breakdown LY Base Value =
 // 用途: 根据 Metric_ID 路由到去年同期（LY）基础值
 // 依赖: 'Dim_ColMetric_New_Retention_VIC'[Metric_ID, VICType],
 //       Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min_LY/Max_LY]（Step 1 LY end period 当月）,
-//       Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min_LY/Max_LY]（Step 2 LY 所选时间范围）,
+//       Slicer_Time_Frame_Min_VIC_Breakdown[TimeFrame_Min_LY]（Step 2 LY 所选时间范围起点，2026-09-14 修复）,
+//       Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Max_LY]（Step 2 LY 所选时间范围终点）,
 //       a03_e2e_customer_data_m,
 //       Slicer_Currency_Selection[Currency_ExchangeRate]
 // 口径来源: 口径文档/VIC Breakdown KPI.md 子模块五（Step1+Step2 分步口径，LY 版本，2026-09-12 修订）
@@ -540,7 +558,8 @@ VIC Breakdown LY Base Value =
 // Step1+Step2 分步说明（与 Act Base Value 对称，两步时间范围不同，不能合并）:
 //   - Step 1（LY end period 当月框定 VIC 买家）: data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]，
 //     按 VICType 应用 is_new_vic=1 / is_retention_vic=1，UNION+FILTER 框定 user_id 集合
-//   - Step 2（LY 所选时间范围聚合）: data_date ∈ [TimeFrame_Min_LY, TimeFrame_Max_LY]，
+//   - Step 2（LY 所选时间范围聚合）: data_date ∈ [TimeFrame_Min_LY, TimeFrame_Max_LY]
+//     （起点 Min 表 / 终点 Max 表，2026-09-14 修复），
 //     TREATAS 传递 Step 1 集合聚合；is_xxx_vic=1 不再施加；分组维度自动传递保留（不移除）
 //   - __UserCount_LY = COUNTROWS(Step 1 集合)（LY end period 当月单步口径，ACV/Freq. LY 分母）
 // 说明:
@@ -552,8 +571,8 @@ VIC Breakdown LY Base Value =
     // ── Step 1 时间范围（LY end period 当月；Max 表已预算直接读取）──
     VAR __EndPeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min_LY])
     VAR __EndPeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max_LY])
-    // ── Step 2 时间范围（LY 所选时间范围；与 Step 1 同表读取，防止日期表互相依赖）──
-    VAR __LYMin = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min_LY])
+    // ── Step 2 时间范围（LY 所选时间范围；起点 Min 表 + 终点 Max 表，2026-09-14 修复）──
+    VAR __LYMin = SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Breakdown[TimeFrame_Min_LY])
     VAR __LYMax = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Max_LY])
     // ── 人群筛选 ──
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
@@ -662,7 +681,11 @@ VIC Breakdown LY Base Value =
             BLANK()
         )
 
-/* ── 旧逻辑：Step1+Step2 合并为 LY end period 当月单步聚合（2026-09-12 弃用，保留备查）──
+/* ── 演进记录（2026-09-14 修复: Step 2 区间起点误读 Max 表，详见 Act Base Value 同名块）──
+   修复前 __LYMin 误读 Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min_LY]（LY end period 周期自身
+   起始日），Step 2 实际区间退化为 LY end period 当月单月；修复后起点改读 Min 表 TimeFrame_Min_LY。
+
+── 旧逻辑：Step1+Step2 合并为 LY end period 当月单步聚合（2026-09-12 弃用，保留备查）──
    当时口径理解: Step2 "所选时间范围" = LY end period 当月（与 Step 1 一致），直接在 LY 当月区间
    （__LYMin/__LYMax = Last_Fiscal_Month_Min_LY/Max_LY）内应用 is_xxx_vic=1 + is_member + is_employee
    筛选做单步聚合（IF 双 CALCULATE 分支，结构同 Act 旧逻辑，仅区间为 _LY 版本）。
@@ -681,7 +704,8 @@ VIC Breakdown LP Base Value =
 // 用途: 根据 Metric_ID 路由到上期（LP）基础值
 // 依赖: 'Dim_ColMetric_New_Retention_VIC'[Metric_ID, VICType],
 //       Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min_LP/Max_LP]（Step 1 LP end period 当月）,
-//       Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min_LP/Max_LP]（Step 2 LP 所选时间范围）,
+//       Slicer_Time_Frame_Min_VIC_Breakdown[TimeFrame_Min_LP]（Step 2 LP 所选时间范围起点，2026-09-14 修复）,
+//       Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Max_LP]（Step 2 LP 所选时间范围终点）,
 //       a03_e2e_customer_data_m,
 //       Slicer_Currency_Selection[Currency_ExchangeRate]
 // 口径来源: 口径文档/VIC Breakdown KPI.md 子模块五（Step1+Step2 分步口径，LP 版本，2026-09-12 修订）
@@ -689,7 +713,8 @@ VIC Breakdown LP Base Value =
 // Step1+Step2 分步说明（与 Act Base Value 对称，两步时间范围不同，不能合并）:
 //   - Step 1（LP end period 当月框定 VIC 买家）: data_date ∈ [Last_Fiscal_Month_Min_LP, Last_Fiscal_Month_Max_LP]，
 //     按 VICType 应用 is_new_vic=1 / is_retention_vic=1，UNION+FILTER 框定 user_id 集合
-//   - Step 2（LP 所选时间范围聚合）: data_date ∈ [TimeFrame_Min_LP, TimeFrame_Max_LP]，
+//   - Step 2（LP 所选时间范围聚合）: data_date ∈ [TimeFrame_Min_LP, TimeFrame_Max_LP]
+//     （起点 Min 表 / 终点 Max 表，2026-09-14 修复），
 //     TREATAS 传递 Step 1 集合聚合；is_xxx_vic=1 不再施加；分组维度自动传递保留（不移除）
 //   - __UserCount_LP = COUNTROWS(Step 1 集合)（LP end period 当月单步口径，ACV/Freq. LP 分母）
 // 说明:
@@ -701,8 +726,8 @@ VIC Breakdown LP Base Value =
     // ── Step 1 时间范围（LP end period 当月；Max 表已预算直接读取）──
     VAR __EndPeriodMin_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min_LP])
     VAR __EndPeriodMax_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max_LP])
-    // ── Step 2 时间范围（LP 所选时间范围；与 Step 1 同表读取，防止日期表互相依赖）──
-    VAR __LPMin = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min_LP])
+    // ── Step 2 时间范围（LP 所选时间范围；起点 Min 表 + 终点 Max 表，2026-09-14 修复）──
+    VAR __LPMin = SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Breakdown[TimeFrame_Min_LP])
     VAR __LPMax = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Max_LP])
     // ── 人群筛选 ──
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
@@ -811,7 +836,11 @@ VIC Breakdown LP Base Value =
             BLANK()
         )
 
-/* ── 旧逻辑：Step1+Step2 合并为 LP end period 当月单步聚合（2026-09-12 弃用，保留备查）──
+/* ── 演进记录（2026-09-14 修复: Step 2 区间起点误读 Max 表，详见 Act Base Value 同名块）──
+   修复前 __LPMin 误读 Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min_LP]（LP end period 周期自身
+   起始日），Step 2 实际区间退化为 LP end period 当月单月；修复后起点改读 Min 表 TimeFrame_Min_LP。
+
+── 旧逻辑：Step1+Step2 合并为 LP end period 当月单步聚合（2026-09-12 弃用，保留备查）──
    当时口径理解: Step2 "所选时间范围" = LP end period 当月（与 Step 1 一致），直接在 LP 当月区间
    （__LPMin/__LPMax = Last_Fiscal_Month_Min_LP/Max_LP）内应用 is_xxx_vic=1 + is_member + is_employee
    筛选做单步聚合（IF 双 CALCULATE 分支，结构同 Act 旧逻辑，仅区间为 _LP 版本）。
@@ -832,9 +861,12 @@ VIC Breakdown Store Base Value =
 //       Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Min/Max,
 //                                           Last_Fiscal_Month_Min_LY/Max_LY,
 //                                           Last_Fiscal_Month_Min_LP/Max_LP]（Step 1 end period 当月区间）,
-//       Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min/Max,
-//                                           TimeFrame_Min_LY/Max_LY,
-//                                           TimeFrame_Min_LP/Max_LP]（Step 2 所选时间范围区间）,
+//       Slicer_Time_Frame_Min_VIC_Breakdown[TimeFrame_Min,
+//                                           TimeFrame_Min_LY,
+//                                           TimeFrame_Min_LP]（Step 2 所选时间范围起点，2026-09-14 修复）,
+//       Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Max,
+//                                           TimeFrame_Max_LY,
+//                                           TimeFrame_Max_LP]（Step 2 所选时间范围终点）,
 //       a03_e2e_customer_data_m,
 //       Slicer_Currency_Selection[Currency_ExchangeRate]
 // 口径来源: 口径文档/VIC Breakdown KPI.md 子模块五（Step1+Step2 分步口径，全客分母同样分步，2026-09-12 修订）
@@ -844,7 +876,8 @@ VIC Breakdown Store Base Value =
 // Step1+Step2 分步说明（全客与 VIC 侧对称，唯一区别是 Step 1 的筛选条件，两步时间范围不同不能合并）:
 //   - Step 1（end period 当月框定全客 user 集合）: data_date ∈ 路由后 end period 当月区间，
 //     按 VICType 应用 is_xxx_vic IN {0, 1}（全客），UNION+FILTER 框定 user_id 集合
-//   - Step 2（所选时间范围聚合）: data_date ∈ 路由后 TimeFrame 区间，TREATAS 传递 Step 1 集合聚合；
+//   - Step 2（所选时间范围聚合）: data_date ∈ 路由后 TimeFrame 区间（起点 Min 表 / 终点 Max 表，
+//     2026-09-14 修复），TREATAS 传递 Step 1 集合聚合；
 //     is_xxx_vic IN {0,1} 不再施加；分组维度自动传递保留（不移除）
 //   - __UserCount_Store = COUNTROWS(Step 1 集合)（end period 当月单步口径，ACV/Freq. vs Store 分母）
 // 说明:
@@ -901,18 +934,20 @@ VIC Breakdown Store Base Value =
                 SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[Last_Fiscal_Month_Max])  // Act / vs Store
             )
         )
-    // ── Step 2 时间范围（所选时间范围聚合，按 Metric_ID 推导）──
+    // ── Step 2 时间范围（所选时间范围聚合，按 Metric_ID 推导；起点 Min 表 + 终点 Max 表，2026-09-14 修复）──
     //   - Metric_ID 5/27（SLS% vs LY 分母）→ LY TimeFrame 区间
     //   - Metric_ID 6/28（SLS% vs LP 分母）→ LP TimeFrame 区间
     //   - 其他（4/26 SLS% Act 分母、10/14/18/22/32/36/40/44 vs Store 分母）→ Act TimeFrame 区间
+    //   起点（TimeFrame_Min 系列）从 Min 表读取（起始月切片器所选周期自身起始日）；
+    //   终点（TimeFrame_Max 系列）从 Max 表读取（end period 周期自身结束日）
     VAR __PeriodMin =
         IF(
             __MetricID IN {5, 27},
-            SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min_LY]),
+            SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Breakdown[TimeFrame_Min_LY]),
             IF(
                 __MetricID IN {6, 28},
-                SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min_LP]),
-                SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Breakdown[TimeFrame_Min])  // Act / vs Store
+                SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Breakdown[TimeFrame_Min_LP]),
+                SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Breakdown[TimeFrame_Min])  // Act / vs Store
             )
         )
     VAR __PeriodMax =
@@ -1035,104 +1070,6 @@ VIC Breakdown Store Base Value =
             BLANK()
         )
 
-/* ── 旧逻辑：全客分母单步聚合（2026-09-12 弃用，保留备查）──
-   演进一（最初版）: 聚合类与 user_id 计数统一按 Metric_ID 路由 Last_Fiscal_Month 区间
-   （全客与分子同用 end period 当月区间，__UserCount_Store 与 __SLS_Store 同用 __PeriodMin/Max）。
-   演进二（单步 TimeFrame 版）: 聚合类（SLS/qty/order_cnt）按 Metric_ID 路由 TimeFrame 区间直接聚合
-   （is_xxx_vic IN {0,1} 施加于聚合本身，无 Step 1 框定）；__UserCount_Store 固定本期 end period 当月
-   DISTINCTCOUNT。当时理解: 全客为全量口径无 Step 1 框定，时间口径按"与分子对齐"原则处理。
-   2026-09-12 修订: 全客分母同样需要 Step1+Step2 分步——Step 1 在 end period 当月框定
-   is_xxx_vic IN {0,1} 全客 user 集合（与 VIC 侧唯一区别是筛选条件），Step 2 在所选时间范围聚合；
-   单步 TimeFrame 版的人群包含"TimeFrame 内活跃但 end period 当月不活跃"的人，与分子人群基准不一致。
-   如需回退到演进二: 注释掉上方 Step1/Step2 分步实现（含 __AllUsers 与 TREATAS 块），
-   将 __EndPeriodMin/__EndPeriodMax 改回固定本期（SELECTEDVALUE(...[Last_Fiscal_Month_Min/Max])），
-   并恢复下方实现:
-
-    // ── 演进二实现（单步 TimeFrame 版）──
-    VAR __SLS_Store =
-        DIVIDE(
-            IF(
-                __IsNewVIC,
-                CALCULATE(
-                    SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-                    'a03_e2e_customer_data_m'[is_new_vic] IN {0, 1},
-                    'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                    'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
-                    'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
-                ),
-                CALCULATE(
-                    SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-                    'a03_e2e_customer_data_m'[is_retention_vic] IN {0, 1},
-                    'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                    'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
-                    'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
-                )
-            ),
-            __FXRate
-        )
-    VAR __UserCount_Store =
-        IF(
-            __IsNewVIC,
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_new_vic] IN {0, 1},
-                'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin,
-                'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax
-            ),
-            CALCULATE(
-                DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_retention_vic] IN {0, 1},
-                'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin,
-                'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax
-            )
-        )
-    VAR __NetPayQty_Store =
-        IF(
-            __IsNewVIC,
-            CALCULATE(
-                SUM('a03_e2e_customer_data_m'[net_pay_qty]),
-                'a03_e2e_customer_data_m'[is_new_vic] IN {0, 1},
-                'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
-                'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
-            ),
-            CALCULATE(
-                SUM('a03_e2e_customer_data_m'[net_pay_qty]),
-                'a03_e2e_customer_data_m'[is_retention_vic] IN {0, 1},
-                'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
-                'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
-            )
-        )
-    VAR __NetPayOrderCnt_Store =
-        IF(
-            __IsNewVIC,
-            CALCULATE(
-                SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
-                'a03_e2e_customer_data_m'[is_new_vic] IN {0, 1},
-                'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
-                'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
-            ),
-            CALCULATE(
-                SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
-                'a03_e2e_customer_data_m'[is_retention_vic] IN {0, 1},
-                'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
-                'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
-            )
-        )
-── 旧逻辑结束 ── */
 ```
 
 ### 4.6 VIC Breakdown Base Value（总路由）
@@ -1647,17 +1584,17 @@ VIC Breakdown Cell Background Color =
 
 ## 5. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称                            | Display Folder | 用途                                                                                                                   |
-| ---- | ------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| 1    | VIC Breakdown Act Base Value          | Base Metrics   | 本期基础值（Step1 end period 当月 UNION+FILTER 框定 is_xxx_vic=1 user_id + Step2 TREATAS + TimeFrame 区间聚合；ACV/Freq. 分母 = COUNTROWS(Step1 集合)） |
-| 2    | VIC Breakdown LY Base Value           | Base Metrics   | 去年同期基础值（Step1: Last_Fiscal_Month_*_LY；Step2: TimeFrame_Min/Max_LY，分步同 Act）                              |
-| 3    | VIC Breakdown LP Base Value           | Base Metrics   | 上期基础值（Step1: Last_Fiscal_Month_*_LP；Step2: TimeFrame_Min/Max_LP，分步同 Act）                                  |
-| 4    | VIC Breakdown Store Base Value        | Base Metrics   | 全客基础值（is_xxx_vic in (0,1)，同样 Step1+Step2 分步：Step1 end period 当月框定全客集合 + Step2 TimeFrame 区间 TREATAS 聚合，两套区间按 Metric_ID 同步路由）；用于 vs Store 分母和 SLS% 分母 |
-| 5    | VIC Breakdown Base Value              | Base Metrics   | 总路由（含 vs LY / vs LP / vs Store / SLS% 派生 + REMOVEFILTERS）                                                      |
-| 6    | VIC Breakdown Cell Value              | Cell Values    | 对外值 = Base Value                                                                                                    |
-| 7    | VIC Breakdown Cell Display            | Formatting     | 格式化显示文本（按 Metric_Format 单字段分发，货币符号由 Slicer_Currency_Selection 决定）                              |
-| 8    | VIC Breakdown Cell Font Color         | Formatting     | 字体颜色（按 Metric_ColorRule 分发：fixed_black / pos_neg_zero）                                                       |
-| 9    | VIC Breakdown Cell Background Color   | Formatting     | 背景色（VICType / KPIGroup / ColName 三级层级区分）                                                                    |
+| 序号 | 度量值名称                          | Display Folder | 用途                                                                                                                                                                                                                     |
+| ---- | ----------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1    | VIC Breakdown Act Base Value        | Base Metrics   | 本期基础值（Step1 end period 当月 UNION+FILTER 框定 is_xxx_vic=1 user_id + Step2 TREATAS + TimeFrame 区间（起点 Min 表/终点 Max 表）聚合；ACV/Freq. 分母 = COUNTROWS(Step1 集合)）                                       |
+| 2    | VIC Breakdown LY Base Value         | Base Metrics   | 去年同期基础值（Step1: Last_Fiscal_Month_*_LY；Step2: TimeFrame_Min_LY(Min 表)~TimeFrame_Max_LY(Max 表)，分步同 Act）                                                                                                    |
+| 3    | VIC Breakdown LP Base Value         | Base Metrics   | 上期基础值（Step1: Last_Fiscal_Month_*_LP；Step2: TimeFrame_Min_LP(Min 表)~TimeFrame_Max_LP(Max 表)，分步同 Act）                                                                                                        |
+| 4    | VIC Breakdown Store Base Value      | Base Metrics   | 全客基础值（is_xxx_vic in (0,1)，同样 Step1+Step2 分步：Step1 end period 当月框定全客集合 + Step2 TimeFrame 区间（起点 Min 表/终点 Max 表）TREATAS 聚合，两套区间按 Metric_ID 同步路由）；用于 vs Store 分母和 SLS% 分母 |
+| 5    | VIC Breakdown Base Value            | Base Metrics   | 总路由（含 vs LY / vs LP / vs Store / SLS% 派生 + REMOVEFILTERS）                                                                                                                                                        |
+| 6    | VIC Breakdown Cell Value            | Cell Values    | 对外值 = Base Value                                                                                                                                                                                                      |
+| 7    | VIC Breakdown Cell Display          | Formatting     | 格式化显示文本（按 Metric_Format 单字段分发，货币符号由 Slicer_Currency_Selection 决定）                                                                                                                                 |
+| 8    | VIC Breakdown Cell Font Color       | Formatting     | 字体颜色（按 Metric_ColorRule 分发：fixed_black / pos_neg_zero）                                                                                                                                                         |
+| 9    | VIC Breakdown Cell Background Color | Formatting     | 背景色（VICType / KPIGroup / ColName 三级层级区分）                                                                                                                                                                      |
 
 ---
 
@@ -1670,6 +1607,12 @@ VIC Breakdown Cell Background Color =
 │  字段: data_date, platform, shop_info_id, user_id, is_member,       │
 │        is_employee, is_new_vic, is_retention_vic,                   │
 │        net_pay_amt, net_pay_qty, net_pay_order_cnt                  │
+│  ─────────────────────────────────────────────────────────────────  │
+│  Slicer_Time_Frame_Max_VIC_Breakdown（断开，end period 切片器）      │
+│    → Step1: Last_Fiscal_Month_*（含 _LY/_LP）                        │
+│    → Step2 终点: TimeFrame_Max_*（含 _LY/_LP）                       │
+│  Slicer_Time_Frame_Min_VIC_Breakdown（断开，起始月切片器）           │
+│    → Step2 起点: TimeFrame_Min_*（含 _LY/_LP，2026-09-14 修复启用） │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
                                │ 模型自动传递（行维度 = 事实表字段直接拉取）
@@ -1751,53 +1694,47 @@ VIC Breakdown Cell Background Color =
 ## 7. 注意事项
 
 1. **VIC Breakdown 专用日期表（关键逻辑）**：VIC Breakdown 使用专用日期表 `Slicer_Time_Frame_VIC_Breakdown` / `Slicer_Time_Frame_Max_VIC_Breakdown` / `Slicer_Time_Frame_Min_VIC_Breakdown`，与其他 VIC 模块的日期表隔离，避免切片器互相干扰。字段结构与原日期表完全一致，均内置 `Last_Fiscal_Month` 及 7 个时间字段。
-
-2. **两套时间区间（关键逻辑，2026-09-12 修订）**：Step 1（end period 当月框定 VIC 买家）使用 `Last_Fiscal_Month_Min` ~ `Last_Fiscal_Month_Max`；Step 2（所选时间范围聚合）使用 `TimeFrame_Min` ~ `TimeFrame_Max`；LY/LP 版本对应使用 `_LY/_LP` 偏移字段（`Last_Fiscal_Month_*_LY/LP`、`TimeFrame_Min/Max_LY/LP`）。两套区间均从 Slicer_Time_Frame_Max_VIC_Breakdown 读取（日期表不改动，防止日期表互相依赖；Slicer_Time_Frame_Min_VIC_Breakdown 本方案不使用），且两步时间范围不同，不能合并区间计算。这些字段已由日期维度表通过自关联计算得到，无需在 DAX 中重复实现。
-
+2. **两套时间区间（关键逻辑，2026-09-12 修订；2026-09-14 修复 Step 2 起点）**：Step 1（end period 当月框定 VIC 买家）使用 `Last_Fiscal_Month_Min` ~ `Last_Fiscal_Month_Max`（Max 表）；Step 2（所选时间范围聚合）使用 `TimeFrame_Min`（Min 表，起始月周期自身起始日）~ `TimeFrame_Max`（Max 表，end period 周期自身结束日）；LY/LP 版本对应使用 `_LY/_LP` 偏移字段（`Last_Fiscal_Month_*_LY/LP`（Max 表）、`TimeFrame_Min_LY/LP`（Min 表）、`TimeFrame_Max_LY/LP`（Max 表））。两步时间范围不同，不能合并区间计算。**Max 表的 `TimeFrame_Min` 是 end period 周期自身起始日（非用户所选起始月）**——2026-09-14 前误将其作为 Step 2 区间起点，导致调整起始月切片器不生效、Step 2 实际退化为 end period 当月单月区间（用户实证: 调 end period 卡片值变化、调起始月不变）；修复后起点改读 Min 表，Min/Max 两表各自独立被切片器筛选、互相无关系（度量值内拼接区间，不构成日期表互相依赖）。这些字段已由日期维度表通过自关联计算得到，无需在 DAX 中重复实现。页面需确认起始月切片器绑定 `Slicer_Time_Frame_Min_VIC_Breakdown`、end period 切片器绑定 `Slicer_Time_Frame_Max_VIC_Breakdown`（均单选）。
 3. **is_member / is_employee 双重筛选（关键逻辑）**：所有指标均应用 `is_member = SELECTEDVALUE(IsMemberFilter[IsMember], 0)` 和 `is_employee = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])` 筛选。默认值：is_member=0（TTL VIC），is_employee=1（Yes）。
-
 4. **New VIC / Retention VIC 双大分组（关键逻辑）**：两个大分组指标完全对称，唯一区别是筛选字段：
+
    - New VIC（Metric_ID 1-22）：Step1 筛选 `is_new_vic = 1`
    - Retention VIC（Metric_ID 23-44）：Step1 筛选 `is_retention_vic = 1`
    - 实现方式（Step 1 集合框定）：在度量值中通过 `SELECTEDVALUE('Dim_ColMetric_New_Retention_VIC'[VICType])` 判断 VICType 得到 `__IsNewVIC` 常量，再用 `UNION(FILTER(CALCULATETABLE(VALUES(user_id), is_new_vic=1, ...), __IsNewVIC), FILTER(CALCULATETABLE(VALUES(user_id), is_retention_vic=1, ...), NOT __IsNewVIC))` 按常量分支框定目标集合——避免 IF 返回表被降级为标量（分步范式参考用户已验证的"新客"DAX，即 Customer Breakdown Trend 的 TREATAS 模式）。Step 2 用 `TREATAS(__VICUsers, 'a03_e2e_customer_data_m'[user_id])` 传递集合聚合，`is_xxx_vic=1` 不再施加。
-
 5. **货币转换（关键逻辑）**：
+
    - 金额类（SLS / ACV / AUR 分子）÷ `Slicer_Currency_Selection[Currency_ExchangeRate]`（默认 1=RMB，7=USD）
    - 比率类不除（分子分母同币种抵消）
    - SLS% 占比不除（分子分母同除 FXRate 等价于不除）
    - Display 度量值中 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接货币符号（默认 "¥"）
-
 6. **vs Store 全客对比（关键逻辑，2026-09-12 修订：分母同样分步）**：
+
    - 分子：New VIC 或 Retention VIC 的 Act 值（`is_xxx_vic=1`，Step1+Step2 分步）
-   - 分母：全客值（`is_xxx_vic in (0, 1)`，同样 Step1+Step2 分步）——Step 1 在 end period 当月（按 Metric_ID 路由 Act/LY/LP）框定全客 user_id 集合（UNION+FILTER，is_xxx_vic IN {0,1}），Step 2 在所选时间范围（按 Metric_ID 路由 TimeFrame 区间）TREATAS 聚合；__UserCount_Store = COUNTROWS(Step 1 集合)。全客与 VIC 侧唯一区别是 Step 1 的筛选条件——单步 TimeFrame 聚合的人群包含"TimeFrame 内活跃但 end period 当月不活跃"的人，与分子人群基准不一致，故分母分步
+   - 分母：全客值（`is_xxx_vic in (0, 1)`，同样 Step1+Step2 分步）——Step 1 在 end period 当月（按 Metric_ID 路由 Act/LY/LP）框定全客 user_id 集合（UNION+FILTER，is_xxx_vic IN {0,1}），Step 2 在所选时间范围（按 Metric_ID 路由 TimeFrame 区间，起点 Min 表/终点 Max 表）TREATAS 聚合；__UserCount_Store = COUNTROWS(Step 1 集合)。全客与 VIC 侧唯一区别是 Step 1 的筛选条件——单步 TimeFrame 聚合的人群包含"TimeFrame 内活跃但 end period 当月不活跃"的人，与分子人群基准不一致，故分母分步
    - 计算方式：`分子 / 分母 - 1`
    - vs Store 仅 ACV / UPT / AUR / Freq. 四个 KPI 分组有（SLS / SLS% 无 vs Store）
    - 实现方式：Step 1 集合框定用 `UNION(FILTER(CALCULATETABLE(VALUES(user_id), is_xxx_vic IN {0,1}, ...), __IsNewVIC), FILTER(..., NOT __IsNewVIC))`（IF 返回表会降级为标量）；Step 2 用 `TREATAS(__AllUsers, 'a03_e2e_customer_data_m'[user_id])` 传递集合聚合，`is_xxx_vic IN {0,1}` 不再施加。
-
 7. **REMOVEFILTERS 机制**：派生指标（vs LY / vs LP / vs Store / SLS% / SLS% vs LY / SLS% vs LP）的取值必须先 `REMOVEFILTERS('Dim_ColMetric_New_Retention_VIC')` 再应用目标 Metric_ID，否则矩阵行标题保留的筛选器会导致冲突返回 BLANK。这与 VIC_KPIs_Table.md 的总路由范式完全一致。
-
 8. **SLS% 计算的特殊处理**：SLS% 的分母为全客分步 SLS（Step1 end period 当月框定 `is_xxx_vic in (0,1)` 全客集合 + Step2 TimeFrame 区间 `sum(net_pay_amt)`），通过 `[VIC Breakdown Store Base Value]` 获取；分子为 Step1+Step2 分步 SLS（is_xxx_vic=1，见 §1.2）。SLS% vs LY / vs LP 的分母需要对应时间区间的全客分步 SLS（Store Base Value 内部两套区间按 Metric_ID 同步路由）：
+
    - **分母 Act 部分**：用 SLS% Act 的 Metric_ID（4/26）调用 Store Base Value → Store Base Value 内部 4/26 ∉ {5,27,6,28} → 本期 end period 当月 + Act TimeFrame 区间
    - **分母 LY 部分**：用当前 Metric_ID（5/27）调用 Store Base Value → Store Base Value 内部 5/27 ∈ {5,27} → LY end period 当月 + LY TimeFrame 区间
    - **分母 LP 部分**：用当前 Metric_ID（6/28）调用 Store Base Value → Store Base Value 内部 6/28 ∈ {6,28} → LP end period 当月 + LP TimeFrame 区间
    - **关键修正**：不能用 `[Metric_ID]=4, [ColType]="vs LP"` 这种冲突筛选（维度表中 Metric_ID=4 的 ColType 恒为 "Act"，不存在同时满足两个条件的行，SELECTEDVALUE 返回 BLANK）。Store Base Value 内部直接按 Metric_ID 推导两套时间区间，不读 ColType。
-
 9. **Metric_ID 编码规则**：
+
    - New VIC 分组：1-22（SLS 1-3 / SLS% 4-6 / ACV 7-10 / UPT 11-14 / AUR 15-18 / Freq. 19-22）
    - Retention VIC 分组：23-44（SLS 23-25 / SLS% 26-28 / ACV 29-32 / UPT 33-36 / AUR 37-40 / Freq. 41-44）
    - 每大分组 22 列，共 44 列指标
-
 10. **颜色规则二值标识**：通过 `Metric_ColorRule` 字段二值（`fixed_black` / `pos_neg_zero`）统一调度字体颜色：
+
     - `fixed_black` → 所有 Act 列（SLS / SLS% / ACV / UPT / AUR / Freq. 的 Act）
     - `pos_neg_zero` → 所有 vs LY / vs LP / vs Store 派生指标
-
 11. **行维度处理**：无行维度表，直接拉取事实表字段（`platform` / `shop_info_id`），天然形成筛选与分组，DAX 度量值无需显式处理。模型自动传递筛选，支持 platform 粒度行展开看 shop_info_id 粒度明细数据。**Step 2 不移除任何分组维度筛选**——若在 Step 2 的 CALCULATE 中加 REMOVEFILTERS(platform / shop_info_id) 会破坏行上下文分组传递，把行内值算成全量值；SLS% / vs Store 全客分母保留行分组为"行内占比"口径，也无需 ALLSELECTED（与 VIC Segment 的断开维度表 DIM_Row_VIC_Tier 场景不同）。
-
 12. **Step1/Step2 两步法（分步实现，2026-09-12 修订）**：口径文档中 SLS / SLS% / ACV / UPT / AUR / Freq. 的计算公式为 Step1 + Step2 两步法，**两步时间范围不同，不能合并区间计算**：Step 1 = end period 当月（`Last_Fiscal_Month` 区间）框定 `is_xxx_vic=1` 的 user_id 集合（UNION+FILTER）；Step 2 = 所选时间范围（`TimeFrame` 区间）对该集合做 sum 聚合（TREATAS 传递，`is_xxx_vic=1` 不再施加）。例外：ACV / Freq. 分母 `count(distinct user_id)` 为 end period 当月单步口径（COUNTROWS(Step 1 集合)）。**全客分母（Store Base Value，vs Store / SLS% 分母）同样分步**，Step 1 筛选条件为 `is_xxx_vic IN {0,1}`，其余与 VIC 侧一致（两套区间按 Metric_ID 路由 Act/LY/LP）。各 Base Value 度量值末尾保留旧逻辑（单步版本）注释块，如需回退按块内说明恢复即可。
-
 13. **单一 Metric_Format 字段**：列指标维度表仅保留单个 `Metric_Format` 字段（不再区分 Act/LY/VsLY），因为每个指标对应一个格式。行格式严格遵循口径文档数据类型定义。
-
 14. **与 VIC_KPIs_Table.md 的关系**：本方案为 Customer Dashboard VIC Tab 的 DCom VIC Breakdown 矩阵 SWITCH 路由版本，与 VIC KPIs 版本共享相同的架构范式（断开列维度 + SWITCH 动态路由 + REMOVEFILTERS 修复上下文），差异在于：
+
     - 列层级由二级（KPIGroup > ColName）改为三级（VICType > KPIGroup > ColName）
     - 列指标维度表替换为 Dim_ColMetric_New_Retention_VIC（44 行 vs 28 行）
     - 日期表替换为 VIC Breakdown 专用日期表（Slicer_Time_Frame_VIC_Breakdown）

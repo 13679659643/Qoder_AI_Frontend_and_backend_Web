@@ -533,7 +533,7 @@ LY Fulfillment% Display =
 #### 4.18 Rejected Order by Store Value
 
 ```dax
-Rejected Order by Store Value =
+Rejected Order by Store Value = 
 // ========================================
 // 度量值: Rejected Order by Store Value
 // Display Folder: PB Location
@@ -552,52 +552,94 @@ Rejected Order by Store Value =
 // 数据类型: integer → 千分位整数
 // 格式: #,##0
 // ========================================
-    VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
-    VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
-    VAR __CalcTypeID = SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
-    // Step 1 + Step 2: 时间范围筛选 + Calc_Type 条件筛选
-    VAR __FilteredTable =
+VAR __Region =
+    SELECTEDVALUE(
+        't01_o2o_fulfillment_order_detail_d'[store_region]
+    )
+VAR __TimeMin =
+    SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+VAR __TimeMax =
+    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+VAR __CalcTypeID =
+    SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
+
+VAR __FilteredTable =
+    CALCULATETABLE(
         FILTER(
             't01_o2o_fulfillment_order_detail_d',
             't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin
-            && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
-            && SWITCH(
-                __CalcTypeID,
-                "1", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
-                "2", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
-                    && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
-                TRUE()
+                && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+                && SWITCH(
+                    TRUE(),
+                    __CalcTypeID = "1",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
+                    __CalcTypeID = "2",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
+                            && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
+                    FALSE()
+                )
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[store_region]
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[failure_remark]
+        )
+    )
+
+VAR __OrderMaxPush =
+    GROUPBY(
+        __FilteredTable,
+        't01_o2o_fulfillment_order_detail_d'[order_code],
+        't01_o2o_fulfillment_order_detail_d'[ext_code2],
+        "__MaxPush",
+            MAXX(
+                CURRENTGROUP(),
+                't01_o2o_fulfillment_order_detail_d'[push_time]
             )
-        )
-    // Step 3: 按 order_code + ext_code2 分组取 push_time 最新一条
-    VAR __LatestTable =
-        SELECTCOLUMNS(
-            FILTER(
-                SUMMARIZE(
-                    __FilteredTable,
-                    't01_o2o_fulfillment_order_detail_d'[order_code],
-                    't01_o2o_fulfillment_order_detail_d'[ext_code2],
-                    't01_o2o_fulfillment_order_detail_d'[push_time],
-                    't01_o2o_fulfillment_order_detail_d'[failure_remark],
-                    "_MaxPush", CALCULATE(MAX('t01_o2o_fulfillment_order_detail_d'[push_time]))
-                ),
-                't01_o2o_fulfillment_order_detail_d'[push_time] = [_MaxPush]
-            ),
-            "order_code", 't01_o2o_fulfillment_order_detail_d'[order_code],
-            "failure_remark", 't01_o2o_fulfillment_order_detail_d'[failure_remark]
-        )
-    // 按 failure_remark 筛选，SUMMARIZE 去重到 order_code 维度计数
-    VAR __Result =
-        COUNTROWS(
-            SUMMARIZE(
+    )
+
+VAR __LatestTable =
+    FILTER(
+        __FilteredTable,
+        VAR __Order = [order_code]
+        VAR __Ext = [ext_code2]
+        VAR __Push = [push_time]
+        RETURN
+            COUNTROWS(
                 FILTER(
-                    __LatestTable,
-                    [failure_remark] IN { "门店拒绝接单", "门店接单后取消配货" }
-                ),
-                [order_code]
+                    __OrderMaxPush,
+                    [order_code] = __Order
+                        && [ext_code2] = __Ext
+                        && [__MaxPush] = __Push
+                )
+            ) > 0
+    )
+
+VAR __QualifiedTable =
+    FILTER(
+        __LatestTable,
+        [store_region] = __Region
+            && [failure_remark]
+                IN { "门店拒绝接单", "门店接单后取消配货" }
+            && NOT ISBLANK([order_code])
+    )
+
+RETURN
+    IF(
+        ISBLANK(__Region)
+            || ISBLANK(__TimeMin)
+            || ISBLANK(__TimeMax),
+        BLANK(),
+        COUNTROWS(
+            DISTINCT(
+                SELECTCOLUMNS(
+                    __QualifiedTable,
+                    "__OrderCode", [order_code]
+                )
             )
         )
-    RETURN __Result
+    )
 ```
 
 ### 4.19 Rejected Order by Store Display
@@ -619,7 +661,7 @@ Rejected Order by Store Display =
 ### 4.20 Cancelled Order by Overdue Value
 
 ```dax
-Cancelled Order by Overdue Value =
+Cancelled Order by Overdue Value = 
 // ========================================
 // 度量值: Cancelled Order by Overdue Value
 // Display Folder: PB Location
@@ -631,49 +673,96 @@ Cancelled Order by Overdue Value =
 //   - failure_remark IN ("待接单超时", "门店接单后超时未处理", "接单超时")
 // 数据类型: integer → 千分位整数
 // ========================================
-    VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
-    VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
-    VAR __CalcTypeID = SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
-    VAR __FilteredTable =
+VAR __Region =
+    SELECTEDVALUE(
+        't01_o2o_fulfillment_order_detail_d'[store_region]
+    )
+VAR __TimeMin =
+    SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+VAR __TimeMax =
+    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+VAR __CalcTypeID =
+    SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
+
+VAR __FilteredTable =
+    CALCULATETABLE(
         FILTER(
             't01_o2o_fulfillment_order_detail_d',
             't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin
-            && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
-            && SWITCH(
-                __CalcTypeID,
-                "1", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
-                "2", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
-                    && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
-                TRUE()
+                && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+                && SWITCH(
+                    TRUE(),
+                    __CalcTypeID = "1",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
+                    __CalcTypeID = "2",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
+                            && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
+                    FALSE()
+                )
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[store_region]
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[failure_remark]
+        )
+    )
+
+VAR __OrderMaxPush =
+    GROUPBY(
+        __FilteredTable,
+        't01_o2o_fulfillment_order_detail_d'[order_code],
+        't01_o2o_fulfillment_order_detail_d'[ext_code2],
+        "__MaxPush",
+            MAXX(
+                CURRENTGROUP(),
+                't01_o2o_fulfillment_order_detail_d'[push_time]
             )
-        )
-    VAR __LatestTable =
-        SELECTCOLUMNS(
-            FILTER(
-                SUMMARIZE(
-                    __FilteredTable,
-                    't01_o2o_fulfillment_order_detail_d'[order_code],
-                    't01_o2o_fulfillment_order_detail_d'[ext_code2],
-                    't01_o2o_fulfillment_order_detail_d'[push_time],
-                    't01_o2o_fulfillment_order_detail_d'[failure_remark],
-                    "_MaxPush", CALCULATE(MAX('t01_o2o_fulfillment_order_detail_d'[push_time]))
-                ),
-                't01_o2o_fulfillment_order_detail_d'[push_time] = [_MaxPush]
-            ),
-            "order_code", 't01_o2o_fulfillment_order_detail_d'[order_code],
-            "failure_remark", 't01_o2o_fulfillment_order_detail_d'[failure_remark]
-        )
-    VAR __Result =
-        COUNTROWS(
-            SUMMARIZE(
+    )
+
+VAR __LatestTable =
+    FILTER(
+        __FilteredTable,
+        VAR __Order = [order_code]
+        VAR __Ext = [ext_code2]
+        VAR __Push = [push_time]
+        RETURN
+            COUNTROWS(
                 FILTER(
-                    __LatestTable,
-                    [failure_remark] IN { "待接单超时", "门店接单后超时未处理", "接单超时" }
-                ),
-                [order_code]
+                    __OrderMaxPush,
+                    [order_code] = __Order
+                        && [ext_code2] = __Ext
+                        && [__MaxPush] = __Push
+                )
+            ) > 0
+    )
+
+VAR __QualifiedTable =
+    FILTER(
+        __LatestTable,
+        [store_region] = __Region
+            && 
+                [failure_remark] IN {
+                        "待接单超时", "门店接单后超时未处理", "接单超时"
+                    }
+            && NOT ISBLANK([order_code])
+    )
+
+RETURN
+    IF(
+        ISBLANK(__Region)
+            || ISBLANK(__TimeMin)
+            || ISBLANK(__TimeMax),
+        BLANK(),
+        COUNTROWS(
+            DISTINCT(
+                SELECTCOLUMNS(
+                    __QualifiedTable,
+                    "__OrderCode", [order_code]
+                )
             )
         )
-    RETURN __Result
+    )
 ```
 
 ### 4.21 Cancelled Order by Overdue Display
@@ -695,7 +784,7 @@ Cancelled Order by Overdue Display =
 ### 4.22 Cancelled Order by Customer Value
 
 ```dax
-Cancelled Order by Customer Value =
+Cancelled Order by Customer Value = 
 // ========================================
 // 度量值: Cancelled Order by Customer Value
 // Display Folder: PB Location
@@ -707,49 +796,94 @@ Cancelled Order by Customer Value =
 //   - failure_remark IN ("顾客取消订单", "消费者取消")
 // 数据类型: integer → 千分位整数
 // ========================================
-    VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
-    VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
-    VAR __CalcTypeID = SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
-    VAR __FilteredTable =
+VAR __Region =
+    SELECTEDVALUE(
+        't01_o2o_fulfillment_order_detail_d'[store_region]
+    )
+VAR __TimeMin =
+    SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+VAR __TimeMax =
+    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+VAR __CalcTypeID =
+    SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
+
+VAR __FilteredTable =
+    CALCULATETABLE(
         FILTER(
             't01_o2o_fulfillment_order_detail_d',
             't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin
-            && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
-            && SWITCH(
-                __CalcTypeID,
-                "1", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
-                "2", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
-                    && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
-                TRUE()
+                && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+                && SWITCH(
+                    TRUE(),
+                    __CalcTypeID = "1",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
+                    __CalcTypeID = "2",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
+                            && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
+                    FALSE()
+                )
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[store_region]
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[failure_remark]
+        )
+    )
+
+VAR __OrderMaxPush =
+    GROUPBY(
+        __FilteredTable,
+        't01_o2o_fulfillment_order_detail_d'[order_code],
+        't01_o2o_fulfillment_order_detail_d'[ext_code2],
+        "__MaxPush",
+            MAXX(
+                CURRENTGROUP(),
+                't01_o2o_fulfillment_order_detail_d'[push_time]
             )
-        )
-    VAR __LatestTable =
-        SELECTCOLUMNS(
-            FILTER(
-                SUMMARIZE(
-                    __FilteredTable,
-                    't01_o2o_fulfillment_order_detail_d'[order_code],
-                    't01_o2o_fulfillment_order_detail_d'[ext_code2],
-                    't01_o2o_fulfillment_order_detail_d'[push_time],
-                    't01_o2o_fulfillment_order_detail_d'[failure_remark],
-                    "_MaxPush", CALCULATE(MAX('t01_o2o_fulfillment_order_detail_d'[push_time]))
-                ),
-                't01_o2o_fulfillment_order_detail_d'[push_time] = [_MaxPush]
-            ),
-            "order_code", 't01_o2o_fulfillment_order_detail_d'[order_code],
-            "failure_remark", 't01_o2o_fulfillment_order_detail_d'[failure_remark]
-        )
-    VAR __Result =
-        COUNTROWS(
-            SUMMARIZE(
+    )
+
+VAR __LatestTable =
+    FILTER(
+        __FilteredTable,
+        VAR __Order = [order_code]
+        VAR __Ext = [ext_code2]
+        VAR __Push = [push_time]
+        RETURN
+            COUNTROWS(
                 FILTER(
-                    __LatestTable,
-                    [failure_remark] IN { "顾客取消订单", "消费者取消" }
-                ),
-                [order_code]
+                    __OrderMaxPush,
+                    [order_code] = __Order
+                        && [ext_code2] = __Ext
+                        && [__MaxPush] = __Push
+                )
+            ) > 0
+    )
+
+VAR __QualifiedTable =
+    FILTER(
+        __LatestTable,
+        [store_region] = __Region
+            && [failure_remark]
+                IN { "顾客取消订单", "消费者取消" }
+            && NOT ISBLANK([order_code])
+    )
+
+RETURN
+    IF(
+        ISBLANK(__Region)
+            || ISBLANK(__TimeMin)
+            || ISBLANK(__TimeMax),
+        BLANK(),
+        COUNTROWS(
+            DISTINCT(
+                SELECTCOLUMNS(
+                    __QualifiedTable,
+                    "__OrderCode", [order_code]
+                )
             )
         )
-    RETURN __Result
+    )
 ```
 
 ### 4.23 Cancelled Order by Customer Display
@@ -771,7 +905,7 @@ Cancelled Order by Customer Display =
 ### 4.24 Cancelled Order by Other Value
 
 ```dax
-Cancelled Order by Other Value =
+Cancelled Order by Other Value = 
 // ========================================
 // 度量值: Cancelled Order by Other Value
 // Display Folder: PB Location
@@ -785,53 +919,98 @@ Cancelled Order by Other Value =
 //   - 即排除以上三类后，failure_remark 不为空的所有其他原因
 // 数据类型: integer → 千分位整数
 // ========================================
-    VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
-    VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
-    VAR __CalcTypeID = SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
-    VAR __FilteredTable =
+VAR __Region =
+    SELECTEDVALUE(
+        't01_o2o_fulfillment_order_detail_d'[store_region]
+    )
+VAR __TimeMin =
+    SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+VAR __TimeMax =
+    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+VAR __CalcTypeID =
+    SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
+
+VAR __FilteredTable =
+    CALCULATETABLE(
         FILTER(
             't01_o2o_fulfillment_order_detail_d',
             't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin
-            && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
-            && SWITCH(
-                __CalcTypeID,
-                "1", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
-                "2", 't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
-                    && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
-                TRUE()
+                && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+                && SWITCH(
+                    TRUE(),
+                    __CalcTypeID = "1",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
+                    __CalcTypeID = "2",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
+                            && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
+                    FALSE()
+                )
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[store_region]
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[failure_remark]
+        )
+    )
+
+VAR __OrderMaxPush =
+    GROUPBY(
+        __FilteredTable,
+        't01_o2o_fulfillment_order_detail_d'[order_code],
+        't01_o2o_fulfillment_order_detail_d'[ext_code2],
+        "__MaxPush",
+            MAXX(
+                CURRENTGROUP(),
+                't01_o2o_fulfillment_order_detail_d'[push_time]
             )
-        )
-    VAR __LatestTable =
-        SELECTCOLUMNS(
-            FILTER(
-                SUMMARIZE(
-                    __FilteredTable,
-                    't01_o2o_fulfillment_order_detail_d'[order_code],
-                    't01_o2o_fulfillment_order_detail_d'[ext_code2],
-                    't01_o2o_fulfillment_order_detail_d'[push_time],
-                    't01_o2o_fulfillment_order_detail_d'[failure_remark],
-                    "_MaxPush", CALCULATE(MAX('t01_o2o_fulfillment_order_detail_d'[push_time]))
-                ),
-                't01_o2o_fulfillment_order_detail_d'[push_time] = [_MaxPush]
-            ),
-            "order_code", 't01_o2o_fulfillment_order_detail_d'[order_code],
-            "failure_remark", 't01_o2o_fulfillment_order_detail_d'[failure_remark]
-        )
-    VAR __Result =
-        COUNTROWS(
-            SUMMARIZE(
+    )
+
+VAR __LatestTable =
+    FILTER(
+        __FilteredTable,
+        VAR __Order = [order_code]
+        VAR __Ext = [ext_code2]
+        VAR __Push = [push_time]
+        RETURN
+            COUNTROWS(
                 FILTER(
-                    __LatestTable,
-                    NOT [failure_remark] IN {
+                    __OrderMaxPush,
+                    [order_code] = __Order
+                        && [ext_code2] = __Ext
+                        && [__MaxPush] = __Push
+                )
+            ) > 0
+    )
+
+VAR __QualifiedTable =
+    FILTER(
+        __LatestTable,
+        [store_region] = __Region
+            && 
+                NOT [failure_remark] IN {
                         "门店拒绝接单", "门店接单后取消配货",
                         "待接单超时", "门店接单后超时未处理", "接单超时",
                         "顾客取消订单", "消费者取消"
                     }
-                ),
-                [order_code]
+            && NOT ISBLANK([order_code])
+    )
+
+RETURN
+    IF(
+        ISBLANK(__Region)
+            || ISBLANK(__TimeMin)
+            || ISBLANK(__TimeMax),
+        BLANK(),
+        COUNTROWS(
+            DISTINCT(
+                SELECTCOLUMNS(
+                    __QualifiedTable,
+                    "__OrderCode", [order_code]
+                )
             )
         )
-    RETURN __Result
+    )
 ```
 
 ### 4.25 Cancelled Order by Other Display
