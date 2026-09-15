@@ -356,3 +356,43 @@
   - 用户需在 Power BI 页面确认：起始月切片器绑定 Slicer_Time_Frame_Min_VIC_Breakdown、end period 切片器绑定 Slicer_Time_Frame_Max_VIC_Breakdown（均单选），修复后调整起始月卡片值应正常变化
   - 如需回退错误版本：将各度量值起点 SELECTEDVALUE 改回 Max 表对应字段（各演进记录块内有说明）
 ---
+
+## [2026-09-15] 口径文档修改 — VIC Breakdown KPI.md 四个 vs Store 指标全客分母口径修订（依据 VIC vs Store.sql）
+
+- **模块**: VIC
+- **任务**: 依据数据方 SQL（`口径文档/VIC/VIC vs Store.sql`）修订子模块五 ACV vs Store / UPT vs Store / AUR vs Store / Freq. vs Store 四个指标的全客分母口径表述，供后续 Power BI DAX 编写使用
+- **操作**: 修改
+- **变更内容**:
+  - **核心口径变更（全客分母）**: 由"Step 1 + Step 2 分步（Step 1 在 end period 当月筛选 is_xxx_vic in (0,1) 框定全客集合，Step 2 所选时间范围聚合）"改为**单步**——直接在所选时间范围（TimeFrame 区间）筛选 `net_pay_amt > 0`（含 is_member/is_employee 筛选）做 sum / count(distinct user_id) 聚合，不框定 user_id 集合、不施加任何 is_xxx_vic 筛选；New VIC 与 Retention VIC 共用同一全客分母（与 is_xxx_vic 无关）
+  - **VIC 侧分子维持分步不变**: Step 1 在 end period 当月筛选 is_xxx_vic = 1 框定 user_id 集合，Step 2 在所选时间范围对该集合聚合（is_xxx_vic = 1 不再施加）；ACV / Freq. 分子的 count(distinct user_id) 为 Step 2 区间对 Step 1 集合计数，数值等价于本体指标 end period 当月单步分母（DAX 可直接复用 ACV / Freq. 度量值）
+  - **文档同步 7 处**: 头部新增 2026-09-15 口径修订行；子模块五"全客分母口径"说明拆分为"SLS% 全客分母口径（分步）"与"vs Store 全客分母口径（单步）"两条；ACV/UPT/AUR/Freq. vs Store 四个指标的计算公式/分子/分母/筛选条件行重写；通用规则汇总 Step1+Step2 分步口径行拆分同步
+  - **SLS% 分母口径不变**: 维持 2026-09-12 分步口径（VIC vs Store.sql 未覆盖 SLS%，是否对齐单步口径待用户确认）
+- **关联文件**:
+  - `口径文档/VIC/VIC Breakdown KPI.md`
+  - 口径依据: `口径文档/VIC/VIC vs Store.sql`
+- **备注**:
+  - 分子分母人群口径不再对称（分子 = Step 1 框定集合，分母 = 区间内 net_pay_amt > 0 全部买家），为 SQL 原文口径
+  - 解决方案文档 `VIC/5 VIC Breakdown/VIC_Breakdown_ms.md` §4.5 Store Base Value 当前仍为分步 + is_xxx_vic IN {0,1} 实现，与本次修订口径不一致，后续 DAX 编写/调整时需按新口径改写（旧逻辑按规范以块注释保留可回退）——已于同日落实（见下一条目）
+---
+
+## [2026-09-15] 解决方案修改 — VIC_Breakdown_ms.md Store Base Value vs Store 分母单步化 + Cell Display 新增 currency_M_K_Int_0db 格式
+
+- **模块**: VIC
+- **任务**: 依据 2026-09-15 修订后的 vs Store 口径（VIC vs Store.sql），将 VIC Breakdown Store Base Value 的 vs Store 全客分母由分步改为单步（SLS% 分母维持分步）；Cell Display 新增 currency_M_K_Int_0db 货币自适应缩写格式；验证总路由 vs Store 比值自然匹配新口径
+- **操作**: 修改
+- **变更内容**:
+  - **§4.5 Store Base Value 双口径化**:
+    - vs Store 分母（Metric_ID 10/14/18/22/32/36/40/44）改为单步——新增 `__TimeFrameMin/__TimeFrameMax`（本期区间，起点 Min 表 + 终点 Max 表）与 `__TTL_SLS/__TTL_UserCount/__TTL_NetPayQty/__TTL_NetPayOrderCnt` 4 个单步聚合变量（TimeFrame 区间 + net_pay_amt > 0 + is_member/is_employee，无 is_xxx_vic 筛选、不框定 user_id 集合，New/Retention VIC 共用同一全客分母）；RETURN SWITCH 的 8 个 vs Store 分支改用 __TTL_* 组合（10/32→SLS/UserCount、14/36→Qty/OrderCnt、18/40→SLS/Qty、22/44→OrderCnt/UserCount）
+    - SLS% 分母（Metric_ID 4/5/6/26/27/28）维持 2026-09-12 分步不变（__AllUsers 框定 is_xxx_vic IN {0,1} + __SLS_Store TREATAS 区间按 Metric_ID 路由），相关变量与注释全部标注"仅 SLS% 分母使用"
+    - 旧分步实现（__UserCount_Store/__NetPayQty_Store/__NetPayOrderCnt_Store）以"演进记录（2026-09-15 修订）"块注释保留，含回退说明
+  - **vs Store 比值验证结论（总路由 §4.6 无需改动）**: `__VsStoreResult = DIVIDE(__StoreNumeratorAct, __StoreDenominator) - 1` 结构不变即自然匹配新口径——分子 = Act Base Value（Step1+Step2 分步）；分母 = Store Base Value 单步（__TTL_*）；ACV/Freq. 分子复用 Act Base Value 的 COUNTROWS(Step 1 集合)，数值等价口径文档 vs Store 分子的 Step 2 区间 count(distinct user_id)（end period 当月 ⊆ 所选范围，集合用户在区间内必有记录）；ACV/AUR vs Store 汇率分子分母同除 __FXRate 抵消；BLANK/0 分母保护依然有效
+  - **§4.8 Cell Display 新增格式**: currency_M_K_Int_0db——值 < 1,000 → 货币符号+千分位整数（¥999）；1,000 ≤ 值 < 1M → 货币符号+K 单位 1 位小数（¥1.5K）；值 ≥ 1M → 货币符号+M 单位 1 位小数（¥1.5M）；嵌套 IF + FORMAT 实现，插入货币格式区（currency_k 之后）
+  - **文档同步**: 头部 revised 2026-09-15 行；§1.6 重写（vs Store 全客对比——全客分母单步）；§3.2 架构图 Store Base Value 框；§3.7 格式表新增 currency_M_K_Int_0db 行；§4.6 总路由 vs Store 注释块与分母注释；§5 度量值清单第 4 行；§6 血缘图 Store Base Value 框（双口径）；§7 item 6 重写 + item 12 更新
+- **关联文件**:
+  - `VIC/5 VIC Breakdown/VIC_Breakdown_ms.md`
+  - 口径依据: `口径文档/VIC/VIC vs Store.sql`、`口径文档/VIC/VIC Breakdown KPI.md`（2026-09-15 修订版）
+- **备注**:
+  - 落实上一条目（口径文档修订）备注中"解决方案 §4.5 需按新口径改写"事项
+  - SLS% 分母维持分步（VIC vs Store.sql 未覆盖 SLS%），如数据方后续确认 SLS% 也需单步，仅需将 SWITCH 中 4/5/6/26/27/28 分支的 __SLS_Store 引用改为单步实现（演进记录块有说明）
+  - currency_M_K_Int_0db 当前无指标使用（预留格式），如需启用在 Dim_ColMetric_New_Retention_VIC 的 Metric_Format 字段配置即可
+---
