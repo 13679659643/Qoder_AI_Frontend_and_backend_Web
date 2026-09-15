@@ -321,3 +321,29 @@ D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer
 
 和上述逻辑一致，继续调整新客数、新客净销售额的最新逻辑：New / Existing根据最新的逻辑来；All逻辑是正确的不用管。
 D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Class x Label Drilldown\Class x Label Drilldown.md
+
+
+# Customer测试第十二轮提示词：
+a03_e2e_customer_order_correlation_data_m
+行：category_summary
+列：co_category_summary
+度量：
+DIVIDE(
+                SUM('a03_e2e_customer_order_correlation_data_m'[co_net_pay_order_cnt]),
+                SUM('a03_e2e_customer_order_correlation_data_m'[net_pay_order_cnt]),BLANK()
+            )
+
+此视觉对象上的筛选器：
+category_summary、co_category_summary不为空、：a03_e2e_customer_order_correlation_data_m[user_name] 等于 class
+筛选器单选：
+Slicer_Co_Purchase_Type_Selection[CoPurchase_Type_Code]：a03_e2e_customer_order_correlation_data_m[correlation_type]-->1:N
+Month筛选器字段来自于事实表本身：a03_e2e_customer_order_correlation_data_m[data_month_name]
+Slicer_Tracking_Period_Selection[Period_Value]：a03_e2e_customer_order_correlation_data_m[correlation_period]-->1:N
+Slicer_Store_Name[Store_ID]：a03_e2e_customer_order_correlation_data_m[shop_name_en]-->1:N
+Slicer_Platform_Selection[Platform_ID]：a03_e2e_customer_order_correlation_data_m[platform]-->1:N
+
+筛选器多选：
+Slicer_Customer_Type_Selection[Customer_Type_Code]：a03_e2e_customer_order_correlation_data_m[customer_type]-->1:N
+
+
+

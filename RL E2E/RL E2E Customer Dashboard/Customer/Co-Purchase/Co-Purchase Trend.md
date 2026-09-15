@@ -21,34 +21,34 @@ Co-Purchase Trend 是 Customer Tab 的连带购买与商品路径模块，共 **
 
 ### 1.2 全局规则
 
-| 项目 | 说明 |
-| --- | --- |
-| **无需 DAX 显式处理时间/周期/类型筛选** | `data_month`、`correlation_period`、`correlation_type`、`dt`、`period` 由模型关系或表字段自动传递，DAX 不显式处理 |
-| **Class/Label 按钮决定图表** | 指标 1 用于 Class 图表，指标 2 用于 Label 图表；度量内部通过 `Slicer_Co_Purchase_Type_Selection` 切换 Same-Order / Cross-Order 公式 |
-| **行维度直接拉取事实表字段** | `co_brand` / `co_category_summary` / `brand` / `category_summary` 从事实表直接拉取，自动分组与筛选 |
-| **Cross-Order 分母移除图表维度** | Class 图表分母用 `ALLSELECTED(co_category_summary)`，Label 图表分母用 `ALLSELECTED(co_brand)`，保留外部切片器筛选 |
-| **货币转换** | 本模块均为百分比/整数指标，不涉及汇率换算 |
+| 项目                                          | 说明                                                                                                                                 |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **无需 DAX 显式处理时间/周期/类型筛选** | `data_month`、`correlation_period`、`correlation_type`、`dt`、`period` 由模型关系或表字段自动传递，DAX 不显式处理          |
+| **Class/Label 按钮决定图表**            | 指标 1 用于 Class 图表，指标 2 用于 Label 图表；度量内部通过`Slicer_Co_Purchase_Type_Selection` 切换 Same-Order / Cross-Order 公式 |
+| **行维度直接拉取事实表字段**            | `co_brand` / `co_category_summary` / `brand` / `category_summary` 从事实表直接拉取，自动分组与筛选                           |
+| **Cross-Order 分母移除图表维度**        | Class 图表分母用`ALLSELECTED(co_category_summary)`，Label 图表分母用 `ALLSELECTED(co_brand)`，保留外部切片器筛选                 |
+| **货币转换**                            | 本模块均为百分比/整数指标，不涉及汇率换算                                                                                            |
 
 ### 1.3 5 个指标清单
 
-| # | 指标名称 | 子模块 | 适用图表 | 分组维度 | 类型 | 数据格式 |
-| - | -------- | ------ | -------- | -------- | ---- | -------- |
-| 1 | Co-Purchase Cross-Sell-Class | Co-Purchase Matrix | Class 图表 | co_category_summary | percent_0dp | #,##0% |
-| 2 | Co-Purchase Cross-Sell-Label | Co-Purchase Matrix | Label 图表 | co_brand | percent_0dp | #,##0% |
-| 3 | Product Path 1st Class | Product Path | 通用 | brand, category_summary | integer | #,##0 |
-| 4 | Product Path 2st Class | Product Path | 通用 | brand, category_summary | integer | #,##0 |
-| 5 | Product Path 3st Class | Product Path | 通用 | brand, category_summary | integer | #,##0 |
+| # | 指标名称                     | 子模块             | 适用图表   | 分组维度                | 类型        | 数据格式 |
+| - | ---------------------------- | ------------------ | ---------- | ----------------------- | ----------- | -------- |
+| 1 | Co-Purchase Cross-Sell-Class | Co-Purchase Matrix | Class 图表 | co_category_summary     | percent_0dp | #,##0%   |
+| 2 | Co-Purchase Cross-Sell-Label | Co-Purchase Matrix | Label 图表 | co_brand                | percent_0dp | #,##0%   |
+| 3 | Product Path 1st Class       | Product Path       | 通用       | brand, category_summary | integer     | #,##0    |
+| 4 | Product Path 2st Class       | Product Path       | 通用       | brand, category_summary | integer     | #,##0    |
+| 5 | Product Path 3st Class       | Product Path       | 通用       | brand, category_summary | integer     | #,##0    |
 
 ### 1.4 指标 1/2 分支口径（按 Slicer_Co_Purchase_Type_Selection 切换）
 
 **Slicer_Co_Purchase_Type_Selection[CoPurchase_Type_Label]** 取值：`"Same-Order Cross-Sell"` / `"Cross-Order Cross-Sell"`
 
-| 指标 | 按钮上下文 | 切片器取值 | 输出公式 |
-| ---- | ---------- | ---------- | -------- |
-| 1 Co-Purchase Cross-Sell-Class | Class 图表 | "Same-Order Cross-Sell" | `sum(co_net_pay_order_cnt) / sum(net_pay_order_cnt)`（直接聚合） |
+| 指标                           | 按钮上下文 | 切片器取值               | 输出公式                                                                               |
+| ------------------------------ | ---------- | ------------------------ | -------------------------------------------------------------------------------------- |
+| 1 Co-Purchase Cross-Sell-Class | Class 图表 | "Same-Order Cross-Sell"  | `sum(co_net_pay_order_cnt) / sum(net_pay_order_cnt)`（直接聚合）                     |
 | 1 Co-Purchase Cross-Sell-Class | Class 图表 | "Cross-Order Cross-Sell" | `count(distinct user_id) / count(distinct user_id) ALLSELECTED(co_category_summary)` |
-| 2 Co-Purchase Cross-Sell-Label | Label 图表 | "Same-Order Cross-Sell" | `sum(co_net_pay_order_cnt) / sum(net_pay_order_cnt)`（直接聚合） |
-| 2 Co-Purchase Cross-Sell-Label | Label 图表 | "Cross-Order Cross-Sell" | `count(distinct user_id) / count(distinct user_id) ALLSELECTED(co_brand)` |
+| 2 Co-Purchase Cross-Sell-Label | Label 图表 | "Same-Order Cross-Sell"  | `sum(co_net_pay_order_cnt) / sum(net_pay_order_cnt)`（直接聚合）                     |
+| 2 Co-Purchase Cross-Sell-Label | Label 图表 | "Cross-Order Cross-Sell" | `count(distinct user_id) / count(distinct user_id) ALLSELECTED(co_brand)`            |
 
 ### 1.5 指标 3/4/5 口径
 
@@ -62,15 +62,15 @@ Co-Purchase Trend 是 Customer Tab 的连带购买与商品路径模块，共 **
 
 ### 2.1 数据底表
 
-| 表名 | 日期字段 | 用途 | 关键字段 |
-| --- | --- | --- | --- |
-| `a03_e2e_customer_order_correlation_data_m` | `data_month` | 连带率聚合 | `co_net_pay_order_cnt`, `net_pay_order_cnt`, `user_id`, `co_brand`, `co_category_summary`, `brand`, `category_summary` |
-| `a03_e2e_customer_time_ordered_data_m` | `dt` | 商品路径聚合 | `user_id`, `payment_time_seq`, `brand`, `category_summary` |
+| 表名                                          | 日期字段       | 用途         | 关键字段                                                                                                                             |
+| --------------------------------------------- | -------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `a03_e2e_customer_order_correlation_data_m` | `data_month` | 连带率聚合   | `co_net_pay_order_cnt`, `net_pay_order_cnt`, `user_id`, `co_brand`, `co_category_summary`, `brand`, `category_summary` |
+| `a03_e2e_customer_time_ordered_data_m`      | `dt`         | 商品路径聚合 | `user_id`, `payment_time_seq`, `brand`, `category_summary`                                                                   |
 
 ### 2.2 切片器表
 
-| 表名 | 关键列 | 取值 | 用途 |
-| --- | --- | --- | --- |
+| 表名                                  | 关键列                    | 取值                                                       | 用途                    |
+| ------------------------------------- | ------------------------- | ---------------------------------------------------------- | ----------------------- |
 | `Slicer_Co_Purchase_Type_Selection` | `CoPurchase_Type_Label` | `"Same-Order Cross-Sell"` / `"Cross-Order Cross-Sell"` | 切换同单/跨单连带率公式 |
 
 ### 2.3 关键说明
@@ -94,10 +94,10 @@ Display 度量（5 个） ←  按数据格式格式化
 
 ### 3.2 数据格式规范
 
-| 数据格式 | 格式串 | 示例 | 适用指标 |
-| --- | --- | --- | --- |
-| `percent_0dp` | `FORMAT(__Value, "#,##0%")` | 30% | 指标 1/2 |
-| `integer` | `FORMAT(__Value, "#,##0")` | 1,234 | 指标 3/4/5 |
+| 数据格式        | 格式串                        | 示例  | 适用指标   |
+| --------------- | ----------------------------- | ----- | ---------- |
+| `percent_0dp` | `FORMAT(__Value, "#,##0%")` | 30%   | 指标 1/2   |
+| `integer`     | `FORMAT(__Value, "#,##0")`  | 1,234 | 指标 3/4/5 |
 
 ### 3.3 指标 1/2 分支切换模式
 
@@ -133,26 +133,27 @@ Co-Purchase Cross-Sell-Class Value =
 // 行维度: co_category_summary 直接拉取，自动分组
 // 数据格式: percent_0dp（Display 层处理）
 // ========================================
-VAR __CoPurchaseType = SELECTEDVALUE(Slicer_Co_Purchase_Type_Selection[CoPurchase_Type_Label])
-
-RETURN
-    SWITCH(
-        __CoPurchaseType,
-        // ── Same-Order 分支: 同单连带率，直接聚合 ──
-        "Same-Order Cross-Sell",
-            DIVIDE(
-                SUM('a03_e2e_customer_order_correlation_data_m'[co_net_pay_order_cnt]),
-                SUM('a03_e2e_customer_order_correlation_data_m'[net_pay_order_cnt]),BLANK()
-            ),
-        // ── Cross-Order 分支: 跨单连带率，分母移除图表 co_category_summary 维度 ──
-        "Cross-Order Cross-Sell",
-            DIVIDE(
-                SUM('a03_e2e_customer_order_correlation_data_m'[co_net_pay_order_cnt]),
-                SUM('a03_e2e_customer_order_correlation_data_m'[net_pay_order_cnt]),BLANK()
-            ),
-        BLANK()
+// 获取当前上下文的行和列值
+VAR __CurrentCategory_Summary = SELECTEDVALUE(Dim_Category_Summary[category_summary])
+VAR __CurrentCo_Category_Summary = SELECTEDVALUE(Dim_Co_Category_Summary[co_category_summary])
+VAR __co_net_pay_order_cnt = 
+    CALCULATE(
+        SUM('a03_e2e_customer_order_correlation_data_m'[co_net_pay_order_cnt]),
+        a03_e2e_customer_order_correlation_data_m[category_summary] = __CurrentCategory_Summary,
+        a03_e2e_customer_order_correlation_data_m[co_category_summary] = __CurrentCo_Category_Summary
+    )
+VAR __net_pay_order_cnt = 
+    CALCULATE(
+        SUM('a03_e2e_customer_order_correlation_data_m'[net_pay_order_cnt]),
+        a03_e2e_customer_order_correlation_data_m[category_summary] = __CurrentCategory_Summary,
+        a03_e2e_customer_order_correlation_data_m[co_category_summary] = __CurrentCo_Category_Summary
     )
 
+RETURN
+    DIVIDE(
+                __co_net_pay_order_cnt,
+                __net_pay_order_cnt
+            )
 ```
 
 #### 4.1.2 Co-Purchase Cross-Sell-Class Display
@@ -172,6 +173,77 @@ RETURN
     )
 ```
 
+#### 4.1.3 Is_Matrix_Row_Visible_Category
+
+```dax
+Is_Matrix_Row_Visible_Category = 
+// ========================================
+// 用途：严格按度量值结果判断，当前 Category_Summary (行) 是否至少有一个 Co_Category_Summary (列) 有真实数据
+// 返回值：1 (显示该行), 0 (隐藏该行)
+// ========================================
+
+VAR __CurrentCategory = SELECTEDVALUE(Dim_Category_Summary[category_summary])
+
+// 获取当前筛选上下文下，所有可见的 Co_Category_Summary 列表
+VAR __AllVisibleCoCategories = ALLSELECTED(Dim_Co_Category_Summary[co_category_summary])
+
+// 迭代检查：遍历这一行所有的 Co_Category_Summary
+VAR __HasValidDataInRow = 
+    MAXX(
+        __AllVisibleCoCategories,
+        VAR __CurrentCoCategory = Dim_Co_Category_Summary[co_category_summary]
+  
+        // 严格复刻单元格计算逻辑
+        VAR __CellResult = 
+            CALCULATE(
+                [Co-Purchase Cross-Sell-Class Value], 
+                'a03_e2e_customer_order_correlation_data_m'[category_summary] = __CurrentCategory,
+                'a03_e2e_customer_order_correlation_data_m'[co_category_summary] = __CurrentCoCategory
+            )
+      
+        RETURN
+            IF(NOT ISBLANK(__CellResult), 1, 0)
+    )
+
+RETURN
+    IF(__HasValidDataInRow = 1, 1, 0)
+```
+
+#### 4.1.4 Is_Matrix_Col_Visible_CoCategory
+
+```dax
+Is_Matrix_Col_Visible_CoCategory = 
+// ========================================
+// 用途：严格按度量值结果判断，当前 Co_Category_Summary (列) 是否至少有一个 Category_Summary (行) 有真实数据
+// 返回值：1 (显示该列), 0 (隐藏该列)
+// ========================================
+
+VAR __CurrentCoCategory = SELECTEDVALUE(Dim_Co_Category_Summary[co_category_summary])
+
+// 获取当前筛选上下文下，所有可见的 Category_Summary 列表
+VAR __AllVisibleCategories = ALLSELECTED(Dim_Category_Summary[category_summary])
+
+// 迭代检查：遍历这一列所有的 Category_Summary
+VAR __HasValidDataInCol = 
+    MAXX(
+        __AllVisibleCategories,
+        VAR __CurrentCategory = Dim_Category_Summary[category_summary]
+  
+        VAR __CellResult = 
+            CALCULATE(
+                [Co-Purchase Cross-Sell-Class Value], 
+                'a03_e2e_customer_order_correlation_data_m'[category_summary] = __CurrentCategory,
+                'a03_e2e_customer_order_correlation_data_m'[co_category_summary] = __CurrentCoCategory
+            )
+      
+        RETURN
+            IF(NOT ISBLANK(__CellResult), 1, 0)
+    )
+
+RETURN
+    IF(__HasValidDataInCol = 1, 1, 0)
+```
+
 ### 4.2 Co-Purchase Cross-Sell-Label（指标 2 — Label 图表）
 
 #### 4.2.1 Co-Purchase Cross-Sell-Label Value
@@ -188,26 +260,27 @@ Co-Purchase Cross-Sell-Label Value =
 // 行维度: co_brand 直接拉取，自动分组
 // 数据格式: percent_0dp（Display 层处理）
 // ========================================
-VAR __CoPurchaseType = SELECTEDVALUE(Slicer_Co_Purchase_Type_Selection[CoPurchase_Type_Label])
-
-RETURN
-    SWITCH(
-        __CoPurchaseType,
-        // ── Same-Order 分支: 同单连带率，直接聚合 ──
-        "Same-Order Cross-Sell",
-            DIVIDE(
-                SUM('a03_e2e_customer_order_correlation_data_m'[co_net_pay_order_cnt]),
-                SUM('a03_e2e_customer_order_correlation_data_m'[net_pay_order_cnt])
-            ),
-        // ── Cross-Order 分支: 跨单连带率，分母移除图表 co_brand 维度 ──
-        "Cross-Order Cross-Sell",
-            DIVIDE(
-                SUM('a03_e2e_customer_order_correlation_data_m'[co_net_pay_order_cnt]),
-                SUM('a03_e2e_customer_order_correlation_data_m'[net_pay_order_cnt])
-            ),
-        BLANK()
+// 获取当前上下文的行和列值
+VAR __CurrentBrand = SELECTEDVALUE(Dim_Brand[brand])
+VAR __CurrentCoBrand = SELECTEDVALUE(Dim_Co_Brand[co_brand])
+VAR __co_net_pay_order_cnt = 
+    CALCULATE(
+        SUM('a03_e2e_customer_order_correlation_data_m'[co_net_pay_order_cnt]),
+        a03_e2e_customer_order_correlation_data_m[brand] = __CurrentBrand,
+        a03_e2e_customer_order_correlation_data_m[co_brand] = __CurrentCoBrand
+    )
+VAR __net_pay_order_cnt = 
+    CALCULATE(
+        SUM('a03_e2e_customer_order_correlation_data_m'[net_pay_order_cnt]),
+        a03_e2e_customer_order_correlation_data_m[brand] = __CurrentBrand,
+        a03_e2e_customer_order_correlation_data_m[co_brand] = __CurrentCoBrand
     )
 
+RETURN
+    DIVIDE(
+                __co_net_pay_order_cnt,
+                __net_pay_order_cnt
+            )
 ```
 
 #### 4.2.2 Co-Purchase Cross-Sell-Label Display
@@ -225,6 +298,77 @@ RETURN
         "-",
         FORMAT(__Value, "#,##0%")
     )
+```
+
+#### 4.2.3 Is_Matrix_Row_Visible_Brand
+
+```dax
+Is_Matrix_Row_Visible_Brand = 
+// ========================================
+// 用途：严格按度量值结果判断，当前 Brand (行) 是否至少有一个 Co_Brand (列) 有真实数据
+// 返回值：1 (显示该行), 0 (隐藏该行)
+// ========================================
+
+VAR __CurrentBrand = SELECTEDVALUE(Dim_Brand[brand])
+
+// 获取当前筛选上下文下，所有可见的 Co_Brand 列表
+VAR __AllVisibleCoBrands = ALLSELECTED(Dim_Co_Brand[co_brand])
+
+// 迭代检查：遍历这一行所有的 Co_Brand
+VAR __HasValidDataInRow = 
+    MAXX(
+        __AllVisibleCoBrands,
+        VAR __CurrentCoBrand = Dim_Co_Brand[co_brand]
+        
+        // 严格复刻单元格计算逻辑，直接调用核心度量值
+        VAR __CellResult = 
+            CALCULATE(
+                [Co-Purchase Cross-Sell-Label Value], 
+                a03_e2e_customer_order_correlation_data_m[brand] = __CurrentBrand,
+                a03_e2e_customer_order_correlation_data_m[co_brand] = __CurrentCoBrand
+            )
+            
+        RETURN
+            IF(NOT ISBLANK(__CellResult), 1, 0)
+    )
+
+RETURN
+    IF(__HasValidDataInRow = 1, 1, 0)
+```
+
+#### 4.2.4 Is_Matrix_Col_Visible_CoBrand
+
+```dax
+Is_Matrix_Col_Visible_CoBrand = 
+// ========================================
+// 用途：严格按度量值结果判断，当前 Co_Brand (列) 是否至少有一个 Brand (行) 有真实数据
+// 返回值：1 (显示该列), 0 (隐藏该列)
+// ========================================
+
+VAR __CurrentCoBrand = SELECTEDVALUE(Dim_Co_Brand[co_brand])
+
+// 获取当前筛选上下文下，所有可见的 Brand 列表
+VAR __AllVisibleBrands = ALLSELECTED(Dim_Brand[brand])
+
+// 迭代检查：遍历这一列所有的 Brand
+VAR __HasValidDataInCol = 
+    MAXX(
+        __AllVisibleBrands,
+        VAR __CurrentBrand = Dim_Brand[brand]
+      
+        VAR __CellResult = 
+            CALCULATE(
+                [Co-Purchase Cross-Sell-Label Value], 
+                a03_e2e_customer_order_correlation_data_m[brand] = __CurrentBrand,
+                a03_e2e_customer_order_correlation_data_m[co_brand] = __CurrentCoBrand
+            )
+          
+        RETURN
+            IF(NOT ISBLANK(__CellResult), 1, 0)
+    )
+
+RETURN
+    IF(__HasValidDataInCol = 1, 1, 0)
 ```
 
 ### 4.3 Product Path 1st Class（指标 3）
@@ -345,40 +489,33 @@ RETURN
 
 ## 5. 度量值清单
 
-| # | 度量值名称 | 类型 | 数据格式 | 用途 |
-| --- | --- | --- | --- | --- |
-| 1 | Co-Purchase Cross-Sell-Class Value | Value | percent_0dp | Class 图表连带率（SWITCH 切换 Same/Cross-Order） |
-| 2 | Co-Purchase Cross-Sell-Class Display | Display | #,##0% | 百分比整数不含正号 |
-| 3 | Co-Purchase Cross-Sell-Label Value | Value | percent_0dp | Label 图表连带率（SWITCH 切换 Same/Cross-Order） |
-| 4 | Co-Purchase Cross-Sell-Label Display | Display | #,##0% | 百分比整数不含正号 |
-| 5 | Product Path 1st Class Value | Value | integer | 第 1 次购买买家人数 |
-| 6 | Product Path 1st Class Display | Display | #,##0 | 整数千分位 |
-| 7 | Product Path 2st Class Value | Value | integer | 第 2 次购买买家人数 |
-| 8 | Product Path 2st Class Display | Display | #,##0 | 整数千分位 |
-| 9 | Product Path 3st Class Value | Value | integer | 第 3 次购买买家人数 |
-| 10 | Product Path 3st Class Display | Display | #,##0 | 整数千分位 |
+| #  | 度量值名称                           | 类型    | 数据格式    | 用途                                             |
+| -- | ------------------------------------ | ------- | ----------- | ------------------------------------------------ |
+| 1  | Co-Purchase Cross-Sell-Class Value   | Value   | percent_0dp | Class 图表连带率（SWITCH 切换 Same/Cross-Order） |
+| 2  | Co-Purchase Cross-Sell-Class Display | Display | #,##0%      | 百分比整数不含正号                               |
+| 3  | Co-Purchase Cross-Sell-Label Value   | Value   | percent_0dp | Label 图表连带率（SWITCH 切换 Same/Cross-Order） |
+| 4  | Co-Purchase Cross-Sell-Label Display | Display | #,##0%      | 百分比整数不含正号                               |
+| 5  | Product Path 1st Class Value         | Value   | integer     | 第 1 次购买买家人数                              |
+| 6  | Product Path 1st Class Display       | Display | #,##0       | 整数千分位                                       |
+| 7  | Product Path 2st Class Value         | Value   | integer     | 第 2 次购买买家人数                              |
+| 8  | Product Path 2st Class Display       | Display | #,##0       | 整数千分位                                       |
+| 9  | Product Path 3st Class Value         | Value   | integer     | 第 3 次购买买家人数                              |
+| 10 | Product Path 3st Class Display       | Display | #,##0       | 整数千分位                                       |
 
 ---
 
 ## 6. 注意事项
 
 1. **指标 1/2 合并逻辑**：原 3 个指标（Same-Order / Cross-Order-Class / Cross-Order-Label）合并为 2 个，分别对应 Class 图表和 Label 图表。度量内部通过 `SELECTEDVALUE(Slicer_Co_Purchase_Type_Selection[CoPurchase_Type_Label])` 切换 Same-Order（直接聚合）与 Cross-Order（分母 ALLSELECTED 移除图表维度）公式。
-
 2. **Class/Label 按钮决定图表**：指标 1 放在 Class 图表（行维度 `co_category_summary`），指标 2 放在 Label 图表（行维度 `co_brand`）。按钮切换显示对应图表，度量内部不需要判断 Class/Label，只需判断 `Slicer_Co_Purchase_Type_Selection`。
-
 3. **无需 DAX 显式处理时间/周期/类型筛选**：`data_month`、`correlation_period`、`correlation_type`、`dt`、`period` 由模型关系或表字段自动传递，DAX 不显式处理。此为 Co-Purchase 模块与其他模块（如 Class x Label Drilldown 显式处理 `dt` 区间）的关键差异。
-
 4. **行维度直接拉取事实表字段**：`co_brand` / `co_category_summary` / `brand` / `category_summary` 从事实表直接拉取，表关系自动传递分组与筛选，DAX 无需显式处理。
-
 5. **Cross-Order 分母移除图表维度（指标 1/2 的 Cross-Order 分支）**：
+
    - 指标 1（Class）：分母用 `ALLSELECTED('a03_e2e_customer_order_correlation_data_m'[co_category_summary])` 移除图表 `co_category_summary` 维度，保留外部切片器筛选
    - 指标 2（Label）：分母用 `ALLSELECTED('a03_e2e_customer_order_correlation_data_m'[co_brand])` 移除图表 `co_brand` 维度，保留外部切片器筛选
    - `ALLSELECTED` 仅移除图表行维度的筛选，保留外部切片器对该字段的筛选
-
 6. **payment_time_seq 为核心业务定义（指标 3/4/5）**：`payment_time_seq = 1/2/3` 是区分第 1/2/3 次购买的核心业务定义，需在 DAX 中显式筛选；`dt`/`period` 时间筛选由模型关系自动传递。
-
 7. **SWITCH 短路求值**：指标 1/2 使用 `SWITCH` 内联表达式，DAX 仅计算匹配分支的公式，非匹配分支不求值，避免 Same-Order 与 Cross-Order 公式互相干扰。
-
 8. **BLANK 处理**：所有 Display 度量在 Value 为 BLANK 时显示 `"-"`，避免空白单元格影响可读性。
-
 9. **本模块不涉及汇率换算**：5 个指标均为百分比或整数类型，无量纲金额，无需 `Currency_ExchangeRate` 换算。
