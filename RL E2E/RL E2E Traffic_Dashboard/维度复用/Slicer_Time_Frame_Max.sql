@@ -17,7 +17,7 @@ let
     `ly_timeframe_max` AS `TimeFrame_Max_LY` -- 去年同期结束自然日
 FROM 
 	    indep_rl_dim.dim_t00_bi_fiscal_calendar t1
-WHERE (t1.`TimeFrame_ID` = 'Day' AND t1.`timeframe_value` >='2025-01-01') 
+WHERE (t1.`TimeFrame_ID` = 'Day' AND t1.`timeframe_value` >='2025-01-01' AND t1.`timeframe_value` < CURDATE()) 
 OR (t1.`TimeFrame_ID` = 'Week' AND t1.`TimeFrame_Key` >=202540)
 OR (t1.`TimeFrame_ID` = 'Month' AND t1.`TimeFrame_Key` >=202510)
 OR (t1.`TimeFrame_ID` = 'Quarter' AND t1.`TimeFrame_Key` >=202504)

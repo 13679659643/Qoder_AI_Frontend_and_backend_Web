@@ -76,7 +76,7 @@ FROM (
 LEFT JOIN indep_rl_dim.dim_t00_bi_fiscal_calendar t2
     ON  t2.`timeframe_label` = '月'
     AND t2.`timeframe_value` = t1.`First_Fiscal_Month`
-WHERE (t1.`TimeFrame_ID` = 'Day' AND t1.`timeframe_value` >='2025-01-01') 
+WHERE (t1.`TimeFrame_ID` = 'Day' AND t1.`timeframe_value` >='2025-01-01' AND t1.`timeframe_value` < CURDATE()) 
 OR (t1.`TimeFrame_ID` = 'Week' AND t1.`TimeFrame_Key` >=202540)
 OR (t1.`TimeFrame_ID` = 'Month' AND t1.`TimeFrame_Key` >=202510)
 OR (t1.`TimeFrame_ID` = 'Quarter' AND t1.`TimeFrame_Key` >=202504)

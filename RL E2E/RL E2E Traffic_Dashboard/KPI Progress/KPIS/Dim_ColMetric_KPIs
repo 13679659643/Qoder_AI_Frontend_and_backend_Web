@@ -19,6 +19,7 @@ Dim_ColMetric_KPIs =
 // 汇率转换标记：
 //   Metric_IsCurrencyAmount = TRUE  → 金额类指标（currency / currency_decimal_1dp），切换币种时乘以汇率
 //   Metric_IsCurrencyAmount = FALSE → 比率/计数/基点类指标，不受汇率影响
+// 14, "Cost Per New Acquisition vs LP", ,新客成本越低越好。所以颜色和其他指标相反，绿色表示健康。
 // ========================================
 DATATABLE(
     "Metric_ID",              INTEGER,    // 主键 1~24
@@ -45,7 +46,7 @@ DATATABLE(
         { 8,  "Media Contribution to New Customer Acquisition% vs LY",     80,  "delta_bp",             FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
         { 9,  "Media Contribution to New Customer Acquisition% TRA ACH%",  90,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
         { 10, "Media Cost Per New Acquisition",                           100,  "currency_decimal_1dp", TRUE,     "#1A9018", "#D64550", "#E1C233", "#252423" },
-        { 11, "Media Cost Per New Acquisition vs LY",                    110,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
+        { 11, "Media Cost Per New Acquisition vs LY",                    110,  "percent_1dp",          FALSE,    "#D64550", "#1A9018", "#E1C233", "#252423" },
         { 12, "Media Cost Per New Acquisition TRA ACH%",                 120,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
         { 13, "± Acceleration cost MOB% vs. store SLS MOB%",             130,  "percent_1dp",          FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },
         { 14, "± Acceleration cost MOB% vs. store SLS MOB% vs LY",      140,  "delta_bp",             FALSE,    "#1A9018", "#D64550", "#E1C233", "#252423" },

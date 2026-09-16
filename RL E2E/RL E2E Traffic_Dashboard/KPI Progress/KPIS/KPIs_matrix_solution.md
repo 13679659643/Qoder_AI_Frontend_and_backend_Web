@@ -1639,16 +1639,21 @@ KPIs Cell Font Color =
 // ========================================
     VAR __Value = [KPIs Cell Value]
     VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_KPIs'[Metric_ID])
+    // ── 颜色取值（来自列维度表）──
+    VAR __ColorPositive = SELECTEDVALUE('Dim_ColMetric_KPIs'[Metric_ColorPositive], "#1A9018")
+    VAR __ColorNegative = SELECTEDVALUE('Dim_ColMetric_KPIs'[Metric_ColorNegative], "#D64550")
+    VAR __ColorZero = SELECTEDVALUE('Dim_ColMetric_KPIs'[Metric_ColorZero], "#E1C233")
+    VAR __ColorDefault = SELECTEDVALUE('Dim_ColMetric_KPIs'[Metric_ColorDefault], "#252423")
     VAR __EnableColor = __MetricID IN {4, 6, 8, 11, 14, 17, 20, 23}
     RETURN
         SWITCH(
             TRUE(),
             NOT __EnableColor,                 "#252423",   // 其余指标：近黑
             ISBLANK(__Value),                  "#252423",   // 空值：近黑
-            __Value > 0,                       "#1A9018",   // 正值：绿
-            __Value < 0,                       "#D64550",   // 负值：红
-            __Value = 0,                       "#E1C233",   // 零值：黄
-            "#252423"                                       // 兜底：近黑
+            __Value > 0,                       __ColorPositive,   // 正值：绿
+            __Value < 0,                       __ColorNegative,   // 负值：红
+            __Value = 0,                       __ColorZero,   // 零值：黄
+            __ColorDefault                                       // 兜底：近黑
         )
 ```
 

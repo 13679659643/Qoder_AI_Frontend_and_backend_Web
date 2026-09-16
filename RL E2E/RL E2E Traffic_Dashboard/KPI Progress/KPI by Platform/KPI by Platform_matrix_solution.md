@@ -30,29 +30,29 @@
 
 ### 2.1 数据底表
 
-| 对象     | 名称                                                                                                                                                     | 出处                                      |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| 事实表   | a05_e2e_paid_media_summary_d                                                                                                                             | 汇总指标（#31/#32/#34/#35）              |
-| 事实表   | a05_e2e_paid_media_product_data_d                                                                                                                        | 第二品类（#33，framework/mix_msg 筛选）   |
-| 事实表   | a03_e2e_customer_data_m                                                                                                                                  | 全店新客（#34 分母，EXCEPT 差集 COUNTROWS）|
-| 关键字段 | data_date, platform, store_name, trans_cycle, customer_type, page_type, framework, mix_msg, cost_amt, net_sales_amt, media_member_cnt, media_cost_amt, user_id, net_pay_amt, is_member, lp_12m_net_pay_amt | 口径文档 KPI Progress.md 子模块五         |
+| 对象     | 名称                                                                                                                                                                                                       | 出处                                        |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| 事实表   | a05_e2e_paid_media_summary_d                                                                                                                                                                               | 汇总指标（#31/#32/#34/#35）                 |
+| 事实表   | a05_e2e_paid_media_product_data_d                                                                                                                                                                          | 第二品类（#33，framework/mix_msg 筛选）     |
+| 事实表   | a03_e2e_customer_data_m                                                                                                                                                                                    | 全店新客（#34 分母，EXCEPT 差集 COUNTROWS） |
+| 关键字段 | data_date, platform, store_name, trans_cycle, customer_type, page_type, framework, mix_msg, cost_amt, net_sales_amt, media_member_cnt, media_cost_amt, user_id, net_pay_amt, is_member, lp_12m_net_pay_amt | 口径文档 KPI Progress.md 子模块五           |
 
 ### 2.2 维度表清单
 
-| 维度表                        | 类型     | 连接方式                                                  | 出处                                       |
-| ----------------------------- | -------- | --------------------------------------------------------- | ------------------------------------------ |
-| Slicer_Time_Frame             | 断开维度 | SELECTEDVALUE 读取 TimeFrame_ID                          | 维度复用/Slicer_Time_Frame                 |
-| Slicer_Time_Frame_Min         | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Min / TimeFrame_Min_LY / First_Fiscal_Month_Min / First_Fiscal_Month_Max / First_Fiscal_Month_Min_LY / First_Fiscal_Month_Max_LY | 维度复用/Slicer_Time_Frame_Min |
-| Slicer_Time_Frame_Max         | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Max / TimeFrame_Max_LY       | 维度复用/Slicer_Time_Frame_Max             |
-| Slicer_Platform_Selection     | 1:N 关系 | Platform_ID → 事实表[platform]                           | 维度复用/Slicer_Platform_Selection         |
-| Slicer_Store_Name             | 1:N 关系 | Store_ID → 事实表[store_name]                            | 维度复用/Slicer_Store_Name                 |
-| Slicer_Currency_Selection     | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol | 维度复用/Slicer_Currency_Selection         |
-| trans_cycle 筛选器            | 1:N 关系 | → 事实表[trans_cycle]（模型自动筛选）                    | 用户需求                                   |
-| Dim_ColMetric_KPI by Platform | 断开维度 | SELECTEDVALUE 读取 Metric_ID, Metric_Format, IsCurrencyAmount | KPI Progress/Dim_ColMetric_KPI by Platform |
+| 维度表                        | 类型     | 连接方式                                                                                                                                                      | 出处                                       |
+| ----------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Slicer_Time_Frame             | 断开维度 | SELECTEDVALUE 读取 TimeFrame_ID                                                                                                                               | 维度复用/Slicer_Time_Frame                 |
+| Slicer_Time_Frame_Min         | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Min / TimeFrame_Min_LY / First_Fiscal_Month_Min / First_Fiscal_Month_Max / First_Fiscal_Month_Min_LY / First_Fiscal_Month_Max_LY | 维度复用/Slicer_Time_Frame_Min             |
+| Slicer_Time_Frame_Max         | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Max / TimeFrame_Max_LY                                                                                                           | 维度复用/Slicer_Time_Frame_Max             |
+| Slicer_Platform_Selection     | 1:N 关系 | Platform_ID → 事实表[platform]                                                                                                                               | 维度复用/Slicer_Platform_Selection         |
+| Slicer_Store_Name             | 1:N 关系 | Store_ID → 事实表[store_name]                                                                                                                                | 维度复用/Slicer_Store_Name                 |
+| Slicer_Currency_Selection     | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol                                                                                                     | 维度复用/Slicer_Currency_Selection         |
+| trans_cycle 筛选器            | 1:N 关系 | → 事实表[trans_cycle]（模型自动筛选）                                                                                                                        | 用户需求                                   |
+| Dim_ColMetric_KPI by Platform | 断开维度 | SELECTEDVALUE 读取 Metric_ID, Metric_Format, IsCurrencyAmount                                                                                                 | KPI Progress/Dim_ColMetric_KPI by Platform |
 
 ### 2.3 指标维度表（Dim_ColMetric_KPI by Platform）15 个指标
 
-Dim_ColMetric_KPI by Platform = 
+Dim_ColMetric_KPI by Platform =
 // ========================================
 // 表: Dim_ColMetric_KPI by Platform
 // 类型: 断开维度
@@ -156,19 +156,20 @@ Dim_ColMetric_KPI by Platform（断开维度，列头）    Slicer_Store_Name（
 
 ### 3.3 筛选器上下文
 
-| 筛选器                    | 作用方式                                   | DAX 处理                            |
-| ------------------------- | ------------------------------------------ | ----------------------------------- |
-| Slicer_Time_Frame         | 断开维度，SELECTEDVALUE 读取 TimeFrame_ID  | 判断时间粒度（Day/Week 时部分指标留空） |
+| 筛选器                    | 作用方式                                                                                                                                                                | DAX 处理                                                                                                                                                                                                           |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Slicer_Time_Frame         | 断开维度，SELECTEDVALUE 读取 TimeFrame_ID                                                                                                                               | 判断时间粒度（Day/Week 时部分指标留空）                                                                                                                                                                            |
 | Slicer_Time_Frame_Min     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Min / TimeFrame_Min_LY / First_Fiscal_Month_Min / First_Fiscal_Month_Max / First_Fiscal_Month_Min_LY / First_Fiscal_Month_Max_LY | `data_date >= __TimeMin`（本期）；`TimeFrame_Min_LY` 用于 vs LP；`First_Fiscal_Month_Min/Max` 用于新客 Step2 start_period（本期）；`First_Fiscal_Month_Min_LY/Max_LY` 用于新客 Step2 start_period（vs LP） |
-| Slicer_Time_Frame_Max     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max / TimeFrame_Max_LY | `data_date <= __TimeMax`（本期）；`TimeFrame_Max_LY` 用于 vs LP |
-| Slicer_Platform_Selection | 1:N 关系，模型自动筛选                     | 无需显式处理                        |
-| Slicer_Store_Name         | 1:N 关系，模型自动筛选                     | 无需显式处理                        |
-| trans_cycle               | 1:N 关系，模型自动筛选                     | 无需显式处理                        |
-| Slicer_Currency_Selection | 断开维度，SELECTEDVALUE 读取汇率和符号     | **仅在 Cell Value 层换算**：金额类指标 `DIVIDE([Base Value], Currency_ExchangeRate)`（除法），非金额类不受汇率影响 |
+| Slicer_Time_Frame_Max     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max / TimeFrame_Max_LY                                                                                                           | `data_date <= __TimeMax`（本期）；`TimeFrame_Max_LY` 用于 vs LP                                                                                                                                                |
+| Slicer_Platform_Selection | 1:N 关系，模型自动筛选                                                                                                                                                  | 无需显式处理                                                                                                                                                                                                       |
+| Slicer_Store_Name         | 1:N 关系，模型自动筛选                                                                                                                                                  | 无需显式处理                                                                                                                                                                                                       |
+| trans_cycle               | 1:N 关系，模型自动筛选                                                                                                                                                  | 无需显式处理                                                                                                                                                                                                       |
+| Slicer_Currency_Selection | 断开维度，SELECTEDVALUE 读取汇率和符号                                                                                                                                  | **仅在 Cell Value 层换算**：金额类指标 `DIVIDE([Base Value], Currency_ExchangeRate)`（除法），非金额类不受汇率影响                                                                                         |
 
 ### 3.4 vs LP 时间偏移规则（财历映射）
 
 直接读取日期表内置 LY 字段：
+
 - 全局 LY 起始日：`Slicer_Time_Frame_Min[TimeFrame_Min_LY]`
 - 全局 LY 结束日：`Slicer_Time_Frame_Max[TimeFrame_Max_LY]`
 - 新客 LY 第一财月起止日：`Slicer_Time_Frame_Min[First_Fiscal_Month_Min_LY]` / `Slicer_Time_Frame_Min[First_Fiscal_Month_Max_LY]`
@@ -177,6 +178,7 @@ Dim_ColMetric_KPI by Platform（断开维度，列头）    Slicer_Store_Name（
 ### 3.5 汇率换算规则
 
 换算时机：在 Cell Value 层 `DIVIDE([Base Value], Currency_ExchangeRate)`（除法，非乘法）
+
 - 金额类指标（`IsCurrencyAmount = TRUE`）：#32 Media Cost（Metric_ID=4/5）、#35 Cost Per New Acq（Metric_ID=13/14）需 ÷ 汇率
 - 比率/增减百分比类指标（`IsCurrencyAmount = FALSE`）：不涉及汇率换算
 - YOY% 为比率，不涉及汇率换算（分子分母本币值抵消）
@@ -184,6 +186,7 @@ Dim_ColMetric_KPI by Platform（断开维度，列头）    Slicer_Store_Name（
 ### 3.6 全店新客判定规则（EXCEPT 差集，不能合并区间）
 
 新客 Step1+Step2 不能合并区间计算（参考：维度复用/新客 No. 模板详解.md），Step1 和 Step2 使用不同的时间范围，需通过 EXCEPT 差集实现：
+
 - Step1（本期有消费的新客候选）：`data_date ∈ [__TimeMin, __TimeMax]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(net_pay_amt) > 0`
 - Step2（第一财月的老客排除集）：`data_date ∈ [__FirstFiscalMonthMin, __FirstFiscalMonthMax]`，`is_member = 0`，按 `user_id + shop_info_id` 聚合后筛选 `SUM(lp_12m_net_pay_amt) > 0`
 - **结果** = `COUNTROWS(EXCEPT(Step1, Step2))`，即 Step1 全集减去 Step2 老客
@@ -194,6 +197,7 @@ Dim_ColMetric_KPI by Platform（断开维度，列头）    Slicer_Store_Name（
 ### 3.7 媒体新客字段聚合规则（MAX+SUM）
 
 `media_member_cnt` / `media_cost_amt` 先按 `platform`、`shop_id`、`data_month_name`（包含 `data_year` + `data_month` 属性）取 `MAX`，再对所选财月 `SUM`：
+
 - 仅支持完整财月、财季、财年，`Day`/`Week` 时不考虑，为空
 - DAX 实现：`SUMX(SUMMARIZE(..., "__Value", MAX([字段])), [__Value])`
 - 列引用写法：`[__Value]`，不是字符串 `"__Value"`
@@ -830,14 +834,14 @@ KPI by Platform Cell Display =
                 "integer_pts",
                     FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts"),            // 120pts / -80pts / 0pts
 
-    // 5.3 __Value 为小数，需 ×10000 转换为 bp（整数）
+    // 5.3 __Value 为小数，需 ×10000 转换为 bp（整数）,含正号，含负号
                 "delta_bp",
                     IF(__Value > 0, "+", "") & FORMAT(__Value * 10000, "#,##0") & "bp",
                                                                                  // +120bp / -80bp
 
-    // 5.4 __Value 本身已是基点值，保留 1 位小数
+    // 5.4 __Value 为小数，需 ×10000 转换为 bp,保留 1 位小数,含正号，含负号
                 "delta_bp_1dp",
-                    IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0.0") & "bp",// +120.5bp / -80.0bp
+                    IF(__Value > 0, "+", "") & FORMAT(__Value * 10000, "#,##0.0") & "bp",// +120.5bp / -80.0bp
 
     // 5.5 __Value 为小数，需 ×10000 转换为 bp（整数），不含正号，含负号
                 "integer_bp",
@@ -929,38 +933,38 @@ KPI by Platform Cell SVG Icon =
 
 ## 5. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称                            | Display Folder | 用途                                 |
-| ---- | ------------------------------------- | -------------- | ------------------------------------ |
+| 序号 | 度量值名称                            | Display Folder | 用途                                            |
+| ---- | ------------------------------------- | -------------- | ----------------------------------------------- |
 | 1    | KPI by Platform Current Base Value    | Base Metrics   | 本期基础值（Metric_ID 1/4/7/10/13，不换算汇率） |
 | 2    | KPI by Platform vsLP Base Value       | Base Metrics   | 同期基础值（Metric_ID 2/5/8/11/14，不换算汇率） |
-| 3    | KPI by Platform Base Value            | Base Metrics   | 总路由（含 YOY% 计算，Day/Week 留空） |
-| 4    | KPI by Platform Cell Value            | Cell Values    | 对外值 = Base Value ÷ 汇率（金额类） |
-| 5    | KPI by Platform Cell Display          | Formatting     | 格式化显示文本（全拓展类型）          |
-| 6    | KPI by Platform Cell Font Color       | Formatting     | 字体颜色                             |
-| 7    | KPI by Platform Cell Background Color | Formatting     | 背景色                               |
-| 8    | KPI by Platform Cell SVG Icon         | Formatting     | SVG 图标（仅 YOY%）                  |
+| 3    | KPI by Platform Base Value            | Base Metrics   | 总路由（含 YOY% 计算，Day/Week 留空）           |
+| 4    | KPI by Platform Cell Value            | Cell Values    | 对外值 = Base Value ÷ 汇率（金额类）           |
+| 5    | KPI by Platform Cell Display          | Formatting     | 格式化显示文本（全拓展类型）                    |
+| 6    | KPI by Platform Cell Font Color       | Formatting     | 字体颜色                                        |
+| 7    | KPI by Platform Cell Background Color | Formatting     | 背景色                                          |
+| 8    | KPI by Platform Cell SVG Icon         | Formatting     | SVG 图标（仅 YOY%）                             |
 
 ---
 
 ## 6. 指标口径来源对照
 
-| Metric_ID | Metric_Name                                 | 口径文档出处 | 计算公式                                | 统计字段                                        | 数据底表                          | customer_type | 涉及汇率 |
-| --------- | ------------------------------------------- | ------------ | --------------------------------------- | ----------------------------------------------- | ------------------------------------- | ------------- | -------- |
-| 1         | Media Cost Rate                             | 子模块五 §31  | Cost / SLS × 1.13 / 1.06               | cost_amt / net_sales_amt                        | a05_e2e_paid_media_summary_d          | ALL           | 否       |
-| 2         | Media Cost Rate vs LP                       | 子模块五 §31  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 否       |
-| 3         | YOY%                                        | 子模块五 §31  | Current - vsLP（差值）                 | -                                               | -                                     | -             | 否       |
-| 4         | Media Cost                                  | 子模块五 §32  | SUM(cost_amt)                           | cost_amt                                        | a05_e2e_paid_media_summary_d          | ALL           | 是       |
-| 5         | Media Cost vs LP                            | 子模块五 §32  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 是       |
-| 6         | YOY %                                       | 子模块五 §32  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
-| 7         | ± Accel Cost MOB% vs. Store SLS MOB%       | 子模块五 §33  | Accel Cost MOB% - Store SLS MOB%        | cost_amt / net_sales_amt                        | a05_e2e_paid_media_product_data_d     | ALL           | 否       |
-| 8         | ± Accel Cost MOB% vs. Store SLS MOB% vs LP | 子模块五 §33  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 否       |
-| 9         | YOY  %                                      | 子模块五 §33  | Current - vsLP（差值）                  | -                                               | -                                     | -             | 否       |
-| 10        | Media Contribution to New Cust%            | 子模块五 §34  | 媒体新客数 / 全店新客数                 | MAX+SUM(media_member_cnt) / COUNTROWS(EXCEPT) | summary_d + customer_data_m           | ALL           | 否       |
-| 11        | Media Contribution to New Cust% vs LP      | 子模块五 §34  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 否       |
-| 12        | YOY   %                                     | 子模块五 §34  | Current - vsLP（差值）                  | -                                               | -                                     | -             | 否       |
-| 13        | Cost Per New Acquisition                    | 子模块五 §35  | 新客花费 / 媒体新客数                   | MAX+SUM(media_cost_amt) / MAX+SUM(media_member_cnt) | a05_e2e_paid_media_summary_d          | ALL           | 是       |
-| 14        | Cost Per New Acquisition vs LP             | 子模块五 §35  | 同上，vs LY                             | 同上                                            | 同上                                  | ALL           | 是       |
-| 15        | YOY    %                                    | 子模块五 §35  | (Current - vsLP) / vsLP                 | -                                               | -                                     | -             | 否       |
+| Metric_ID | Metric_Name                                 | 口径文档出处  | 计算公式                         | 统计字段                                            | 数据底表                          | customer_type | 涉及汇率 |
+| --------- | ------------------------------------------- | ------------- | -------------------------------- | --------------------------------------------------- | --------------------------------- | ------------- | -------- |
+| 1         | Media Cost Rate                             | 子模块五 §31 | Cost / SLS × 1.13 / 1.06        | cost_amt / net_sales_amt                            | a05_e2e_paid_media_summary_d      | ALL           | 否       |
+| 2         | Media Cost Rate vs LP                       | 子模块五 §31 | 同上，vs LY                      | 同上                                                | 同上                              | ALL           | 否       |
+| 3         | YOY%                                        | 子模块五 §31 | Current - vsLP（差值）           | -                                                   | -                                 | -             | 否       |
+| 4         | Media Cost                                  | 子模块五 §32 | SUM(cost_amt)                    | cost_amt                                            | a05_e2e_paid_media_summary_d      | ALL           | 是       |
+| 5         | Media Cost vs LP                            | 子模块五 §32 | 同上，vs LY                      | 同上                                                | 同上                              | ALL           | 是       |
+| 6         | YOY %                                       | 子模块五 §32 | (Current - vsLP) / vsLP          | -                                                   | -                                 | -             | 否       |
+| 7         | ± Accel Cost MOB% vs. Store SLS MOB%       | 子模块五 §33 | Accel Cost MOB% - Store SLS MOB% | cost_amt / net_sales_amt                            | a05_e2e_paid_media_product_data_d | ALL           | 否       |
+| 8         | ± Accel Cost MOB% vs. Store SLS MOB% vs LP | 子模块五 §33 | 同上，vs LY                      | 同上                                                | 同上                              | ALL           | 否       |
+| 9         | YOY  %                                      | 子模块五 §33 | Current - vsLP（差值）           | -                                                   | -                                 | -             | 否       |
+| 10        | Media Contribution to New Cust%             | 子模块五 §34 | 媒体新客数 / 全店新客数          | MAX+SUM(media_member_cnt) / COUNTROWS(EXCEPT)       | summary_d + customer_data_m       | ALL           | 否       |
+| 11        | Media Contribution to New Cust% vs LP       | 子模块五 §34 | 同上，vs LY                      | 同上                                                | 同上                              | ALL           | 否       |
+| 12        | YOY   %                                     | 子模块五 §34 | Current - vsLP（差值）           | -                                                   | -                                 | -             | 否       |
+| 13        | Cost Per New Acquisition                    | 子模块五 §35 | 新客花费 / 媒体新客数            | MAX+SUM(media_cost_amt) / MAX+SUM(media_member_cnt) | a05_e2e_paid_media_summary_d      | ALL           | 是       |
+| 14        | Cost Per New Acquisition vs LP              | 子模块五 §35 | 同上，vs LY                      | 同上                                                | 同上                              | ALL           | 是       |
+| 15        | YOY    %                                    | 子模块五 §35 | (Current - vsLP) / vsLP          | -                                                   | -                                 | -             | 否       |
 
 ---
 
@@ -1114,15 +1118,15 @@ KPI by Platform Cell SVG Icon =
 
 ### 9.1 矩阵形状验证
 
-| 验证项     | 方法                                                                                         |
-| ---------- | -------------------------------------------------------------------------------------------- |
-| 矩阵形状   | 确认 6 行（5 个 Store + 1 个总计）× 15 列（15 个 Metric）= 90 个单元格                      |
+| 验证项     | 方法                                                                                                            |
+| ---------- | --------------------------------------------------------------------------------------------------------------- |
+| 矩阵形状   | 确认 6 行（5 个 Store + 1 个总计）× 15 列（15 个 Metric）= 90 个单元格                                         |
 | 排序       | 行按 Store_Sort 排序；列按 Metric_Sort 排序（10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150） |
-| YOY% 行名  | 确认 5 个 YOY% 行名后缀空格数不同（YOY% / YOY % / YOY  % / YOY   % / YOY    %）              |
-| 总计行颜色 | 总计行字体黑色 #252423，背景中米色 #E6D9C7                                                   |
-| 其他行颜色 | 其他行字体深灰 #5F6165，背景白色 #FFFFFF                                                     |
-| SVG 图标   | 仅 YOY% 行显示圆形图标（正值绿、负值红、零值黄）                                             |
-| Day/Week   | #34/#35 系列（Metric_ID 10~15）在 Day/Week 时为空                                           |
+| YOY% 行名  | 确认 5 个 YOY% 行名后缀空格数不同（YOY% / YOY % / YOY  % / YOY   % / YOY    %）                                 |
+| 总计行颜色 | 总计行字体黑色#252423，背景中米色 #E6D9C7                                                                       |
+| 其他行颜色 | 其他行字体深灰#5F6165，背景白色 #FFFFFF                                                                         |
+| SVG 图标   | 仅 YOY% 行显示圆形图标（正值绿、负值红、零值黄）                                                                |
+| Day/Week   | #34/#35 系列（Metric_ID 10~15）在 Day/Week 时为空                                                               |
 
 ### 9.2 数据验证 SQL
 
@@ -1222,23 +1226,24 @@ GROUP BY platform, shop_id, data_month_name;
 
 ### 10.1 底表与筛选规则
 
-| 指标类型 | 底表 | 筛选条件 |
-| -------- | ---- | -------- |
-| 汇总指标（#31/#32） | a05_e2e_paid_media_summary_d | customer_type='ALL' AND page_type="1" |
-| 第二品类（#33） | a05_e2e_paid_media_product_data_d | Cost 类：mix_msg is NULL；SLS 类：不限 mix_msg；分子 framework='Acceleration' |
-| 媒体新客（#34/#35） | a05_e2e_paid_media_summary_d | customer_type='ALL' AND page_type="1"，MAX+SUM 聚合 |
-| 全店新客（#34 分母） | a03_e2e_customer_data_m | EXCEPT 差集（不能合并区间）：Step1 `data_date ∈ [TimeFrame_Min, TimeFrame_Max]` AND `is_member=0` AND `SUM(net_pay_amt)>0`；Step2 `data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]` AND `is_member=0` AND `SUM(lp_12m_net_pay_amt)>0`；结果 = `COUNTROWS(EXCEPT(Step1, Step2))` |
+| 指标类型             | 底表                              | 筛选条件                                                                                                                                                                                                                                                                                                    |
+| -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 汇总指标（#31/#32）  | a05_e2e_paid_media_summary_d      | customer_type='ALL' AND page_type="1"                                                                                                                                                                                                                                                                       |
+| 第二品类（#33）      | a05_e2e_paid_media_product_data_d | Cost 类：mix_msg is NULL；SLS 类：不限 mix_msg；分子 framework='Acceleration'                                                                                                                                                                                                                               |
+| 媒体新客（#34/#35）  | a05_e2e_paid_media_summary_d      | customer_type='ALL' AND page_type="1"，MAX+SUM 聚合                                                                                                                                                                                                                                                         |
+| 全店新客（#34 分母） | a03_e2e_customer_data_m           | EXCEPT 差集（不能合并区间）：Step1`data_date ∈ [TimeFrame_Min, TimeFrame_Max]` AND `is_member=0` AND `SUM(net_pay_amt)>0`；Step2 `data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]` AND `is_member=0` AND `SUM(lp_12m_net_pay_amt)>0`；结果 = `COUNTROWS(EXCEPT(Step1, Step2))` |
 
 ### 10.2 汇率换算规则
 
-| 指标类型 | 换算方式 | 判断依据 | 涉及 Metric_ID |
-| -------- | -------- | -------- | --------------- |
-| 金额类 | `DIVIDE([Base Value], Currency_ExchangeRate)`（除法，非乘法） | `IsCurrencyAmount = TRUE` | 4, 5, 13, 14 |
-| 比率/增减百分比类 | 不换算，直接返回 [Base Value] | `IsCurrencyAmount = FALSE` | 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 15 |
+| 指标类型          | 换算方式                                                        | 判断依据                     | 涉及 Metric_ID                      |
+| ----------------- | --------------------------------------------------------------- | ---------------------------- | ----------------------------------- |
+| 金额类            | `DIVIDE([Base Value], Currency_ExchangeRate)`（除法，非乘法） | `IsCurrencyAmount = TRUE`  | 4, 5, 13, 14                        |
+| 比率/增减百分比类 | 不换算，直接返回 [Base Value]                                   | `IsCurrencyAmount = FALSE` | 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 15 |
 
 ### 10.3 vs LP 时间偏移规则（财历映射）
 
 直接读取日期表内置 LY 字段：
+
 - 全局 LY 起始日：`Slicer_Time_Frame_Min[TimeFrame_Min_LY]`
 - 全局 LY 结束日：`Slicer_Time_Frame_Max[TimeFrame_Max_LY]`
 - 新客 LY 第一财月：`Slicer_Time_Frame_Min[First_Fiscal_Month_Min_LY]` / `First_Fiscal_Month_Max_LY`
@@ -1274,6 +1279,7 @@ GROUP BY platform, shop_id, data_month_name;
 ### 10.7 Cell Display 全拓展类型
 
 支持 17 种格式类型，便于后续拓展：
+
 - 整数与小数：`integer`、`decimal_1dp`、`decimal_2dp`
 - 货币：`currency`、`currency_decimal_1dp`、`currency_k`、`currency_M_K_Int_0db`
 - 百分比：`percent_0dp`、`percent_1dp`、`percent_2dp`
@@ -1282,10 +1288,10 @@ GROUP BY platform, shop_id, data_month_name;
 
 ### 10.8 性能考量
 
-| 考量项         | 评估                                                                                        |
-| -------------- | ------------------------------------------------------------------------------------------- |
-| 矩阵规模       | 6 行 × 15 列 = 90 个单元格，规模适中                                                       |
-| CALCULATE 调用 | 每个单元格最多触发 5 次基础聚合（Current/vsLP 各 5 个），总计约 450 次                      |
-| 时间筛选       | 使用布尔筛选器 `data_date >= __TimeMin`，等价于 `FILTER(ALL(data_date), ...)`，性能良好 |
-| 变量复用       | Current 和 vsLP 的基础聚合在各自度量值内定义为变量，避免重复计算                            |
-| 优化建议       | 如性能不佳，可将基础聚合提取为独立度量值，利用 Power BI 缓存                                 |
+| 考量项         | 评估                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| 矩阵规模       | 6 行 × 15 列 = 90 个单元格，规模适中                                                      |
+| CALCULATE 调用 | 每个单元格最多触发 5 次基础聚合（Current/vsLP 各 5 个），总计约 450 次                     |
+| 时间筛选       | 使用布尔筛选器`data_date >= __TimeMin`，等价于 `FILTER(ALL(data_date), ...)`，性能良好 |
+| 变量复用       | Current 和 vsLP 的基础聚合在各自度量值内定义为变量，避免重复计算                           |
+| 优化建议       | 如性能不佳，可将基础聚合提取为独立度量值，利用 Power BI 缓存                               |

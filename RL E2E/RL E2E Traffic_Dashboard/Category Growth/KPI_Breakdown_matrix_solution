@@ -286,7 +286,7 @@ KPI Breakdown Base Value =
     VAR __CostVsSLS =
         IF(__IsTotalRow || __IsTotalTTL,
             0,                                              // Total 行 = 0pt
-            (__CostMOB_Pct - __NetSales_Pct) * 100          // 明细行：差值 × 100
+            (__CostMOB_Pct - __NetSales_Pct)           // 明细行：差值 × 10000，在Cell Display中统一处理。
         )
 
     // ── SLS%（退后销售额占比）──
@@ -400,6 +400,9 @@ KPI Breakdown Cell Display =
 //                  格式：#,##0.0%;-#,##0.0%;0.0%
 //   decimal_1dp  → 数值1位小数 → ROI / New Customer Cost% 系列
 //                  格式：#,##0.0
+//   delta_bp              → 增减基点整数（小数×10000 转 bp）：+120bp / -80bp
+//   delta_bp_1dp          → 增减基点一位小数（值本身已是基点）：+120.5bp / -80.0bp
+//   integer_bp            → 基点整数（小数×10000 转 bp，不含正号）：120bp / -80bp / 0bp
 // 依赖: [KPI Breakdown Cell Value], Dim_ColMetric_KpiBreakdown[MetricFormat]
 // ========================================
 
@@ -418,6 +421,15 @@ KPI Breakdown Cell Display =
                     "percent_1dp",  FORMAT(__Value, "#,##0.0%;-#,##0.0%;0.0%"),
                     // ─── 数值（ROI / New Customer Cost%）──
                     "decimal_1dp",  FORMAT(__Value, "#,##0.0"),
+                    // __Value 为小数，需 ×10000 转换为 bp（整数），含正号，含负号
+                    "delta_bp",
+                    IF(__Value > 0, "+", "") & FORMAT(__Value * 10000, "#,##0") & "bp", // // +120bp / -80bp
+                    // __Value 为小数，需 ×10000 转换为 bp（一位小数）
+                    "delta_bp_1dp",
+                    IF(__Value > 0, "+", "") & FORMAT(__Value * 10000, "#,##0.0") & "bp",// +120.5bp / -80.0bp
+                    // __Value 为小数，需 ×10000 转换为 bp（整数），不含正号，含负号
+                    "integer_bp",
+                    FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp"),              // 120bp / -80bp / 0bp
                     // ─── 默认 ───
                     FORMAT(__Value, "#,##0.0")
                 )
@@ -487,10 +499,10 @@ KPI Breakdown Cell SVG Icon =
 // ========================================
 
     VAR __Value  = [KPI Breakdown Cell Value]
-    VAR __Format = SELECTEDVALUE(Dim_ColMetric_KpiBreakdown[MetricFormat])
+    VAR __ColMetric_ID = SELECTEDVALUE(Dim_ColMetric_KpiBreakdown[ColMetric_ID])
 
     // ── 仅 decimal_pt_1 格式（Cost% vs SLS%）显示图标 ──
-    VAR __NeedsIcon = (__Format = "decimal_pt_1")
+    VAR __NeedsIcon = (__ColMetric_ID in {1, 15, 29, 43})
 
     // ── SVG 图标定义 ──
     VAR __GreenSVG =

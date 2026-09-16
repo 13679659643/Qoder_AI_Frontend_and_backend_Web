@@ -24,6 +24,7 @@ Dim_ColMetric_KPI by Platform =
 // 汇率转换标记：
 //   IsCurrencyAmount = TRUE  → 金额类指标，切换币种时乘以汇率
 //   IsCurrencyAmount = FALSE → 比率/计数类指标，不受汇率影响
+// 14, "Cost Per New Acquisition vs LP", ,新客成本越低越好。所以颜色和其他指标相反，绿色表示健康。
 // ========================================
 DATATABLE(
     "Metric_ID",              INTEGER,    // 主键 1~15
@@ -51,6 +52,6 @@ DATATABLE(
         { 12, "YOY   %",                                                   120,  "integer_bp",        FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 13, "Cost Per New Acquisition",                                  130,  "currency_decimal_1dp", TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
         { 14, "Cost Per New Acquisition vs LP",                            140,  "currency_decimal_1dp", TRUE,     "#1A9018", "#D64550", "#E1C233", "#5f6165" },
-        { 15, "YOY    %",                                                  150,  "percent_1dp",        FALSE,    "#1A9018", "#D64550", "#E1C233", "#5f6165" }
+        { 15, "YOY    %",                                                  150,  "percent_1dp",        FALSE,    "#D64550", "#1A9018", "#E1C233", "#5f6165" }
     }
 )

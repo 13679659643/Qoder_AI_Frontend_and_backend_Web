@@ -30,11 +30,11 @@
 
 本模块使用独立筛选器 Slicer_Month_Period 系列，与全局 Slicer_Time_Frame 结构完全一致，仅表名不同，避免交叉筛选：
 
-| 筛选器 | 对应全局筛选器 | 作用 |
-| ------ | -------------- | ---- |
-| Slicer_Month_Period | Slicer_Time_Frame | 读取 TimeFrame_ID（时间粒度，判断 Day/Week） |
-| Slicer_Month_Period_Min | Slicer_Time_Frame_Min | 读取 TimeFrame_Min（全局起止日） |
-| Slicer_Month_Period_Max | Slicer_Time_Frame_Max | 读取 TimeFrame_Max（全局结束日） |
+| 筛选器                  | 对应全局筛选器        | 作用                                         |
+| ----------------------- | --------------------- | -------------------------------------------- |
+| Slicer_Month_Period     | Slicer_Time_Frame     | 读取 TimeFrame_ID（时间粒度，判断 Day/Week） |
+| Slicer_Month_Period_Min | Slicer_Time_Frame_Min | 读取 TimeFrame_Min（全局起止日）             |
+| Slicer_Month_Period_Max | Slicer_Time_Frame_Max | 读取 TimeFrame_Max（全局结束日）             |
 
 ### 2.2 时间上下文变量（所有指标公用）
 
@@ -54,17 +54,21 @@ VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
 
 ### 2.3 数据底表说明
 
-| 底表 | 用途 | 涉及指标 |
-| ---- | ---- | -------- |
-| a03_e2e_customer_data_m | 全店新客（EXCEPT 差集）/ 全部买家（DISTINCTCOUNT user_id） | #25 分子、#26 分子分母、#27 分母 |
-| a05_e2e_paid_media_summary_d | 媒体新客数（media_member_cnt，MAX+SUM 聚合） | #27 分子 |
-| a05_e2e_paid_media_product_data_d | 第二品类 SLS / Cost（framework 筛选） | #28、#29、#30 |
+| 底表                              | 用途                                                       | 涉及指标                         |
+| --------------------------------- | ---------------------------------------------------------- | -------------------------------- |
+| a03_e2e_customer_data_m           | 全店新客（EXCEPT 差集）/ 全部买家（DISTINCTCOUNT user_id） | #25 分子、#26 分子分母、#27 分母 |
+| a05_e2e_paid_media_summary_d      | 媒体新客数（media_member_cnt，MAX+SUM 聚合）               | #27 分子                         |
+| a05_e2e_paid_media_product_data_d | 第二品类 SLS / Cost（framework 筛选）                      | #28、#29、#30                    |
 
 ---
 
 ## 3. 度量值实现
 
 ### 3.1 New Customer No.（#25）
+
+> 2026-09-16 调整：经确认，§3.1 全店新客、§3.2 分子、§3.3 分母统一采用第二段 SQL 的“当前柱单月行级直接筛选”口径。先筛选 `is_member = 0`、`net_pay_amt > 0`、`lp_12m_net_pay_amt = 0`，再按 `user_id` 去重；平台、店铺筛选仍由模型关系传递，不硬编码月份或平台。
+> 此实现仅用于每个柱子对应单个月份的场景，不用于跨月累计。单月并不保证与原聚合/用户级差集无条件等价；本次明确以直接筛选口径为准。DAX 对零值使用严格比较 `== 0`，不把 BLANK 当作 SQL 的 0。
+> 本次只修改 §3.1～§3.3；其他章节保留原文，其中全店新客的历史 EXCEPT 描述以本节新实现为准。旧代码以块注释保留，不参与执行。
 
 ```dax
 New Customer No. Value = 
@@ -73,13 +77,13 @@ New Customer No. Value =
 // Display Folder: KPI Trend
 // 用途: 新客数量趋势值（柱形图/趋势图 Y 轴）
 // 口径来源: KPI Progress.md 子模块三 §25
-// 计算公式: COUNTROWS(EXCEPT(Step1, Step2))（全店新客，EXCEPT 差集模式）
+// 计算公式: CALCULATE(DISTINCTCOUNT(user_id), 当前柱单月行级筛选)
 // 数据底表: a03_e2e_customer_data_m
-// Step1+Step2 不能合并区间计算（参考：维度复用/新客 No. 模板详解.md）：
-//   Step1（本期有消费的新客候选）：data_date ∈ [__CurrentMonthMin, __CurrentMonthMax]，is_member = 0，SUM(net_pay_amt) > 0
-//   Step2（第一财月的老客排除集）：data_date ∈ [__FirstFiscalMonthMin, __FirstFiscalMonthMax]，is_member = 0，SUM(lp_12m_net_pay_amt) > 0
-//   结果 = COUNTROWS(EXCEPT(Step1, Step2))
-// 聚合粒度: 按 user_id + shop_info_id 聚合（platform/shop_info_id 由模型 1:N 关系自动筛选）
+// 单月筛选: data_date ∈ [__CurrentMonthMin, __CurrentMonthMax]
+//   is_member == 0，net_pay_amt > 0，lp_12m_net_pay_amt == 0
+// 与原方案差异: 采用用户确认的第二段 SQL，不再构建 Step1/Step2 集合或执行 EXCEPT
+// 时间锚点: 历史金额判定跟随当前柱月份，不再读取起始切片器的第一财月
+// 计数粒度: 筛选后按 user_id 去重（platform/shop_info_id 由模型 1:N 关系自动筛选）
 // 数据类型: integer_M_K_Int_0db（整数，不涉及汇率换算）
 // 注意: Day/Week 时指标无意义，在最终结果层统一留空，不细分到分子分母
 // ========================================
@@ -89,12 +93,16 @@ New Customer No. Value =
     // ── X 轴当前遍历月份 ──
     VAR __CurrentMonthMin = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Min])
     VAR __CurrentMonthMax = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Max])
-    // ── 第一财月时间范围（用于 Step2 老客排除集）──
-    VAR __FirstFiscalMonthMin = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Min])
-    VAR __FirstFiscalMonthMax = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Max])
     // ── 时间粒度判断（Day/Week 时指标无意义，统一留空）──
     VAR __TimeFrameID = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_ID])
     VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
+
+    /*
+    旧逻辑：全店新客 EXCEPT 差集模式（2026-09-16 弃用，保留备查）
+    如需回退：取消本块注释，并注释下方单月直接筛选的 __TotalNewCustCnt 定义。
+    注意：回退后 Step2 恢复使用起始切片器的第一财月，不跟随当前柱月份。
+    VAR __FirstFiscalMonthMin = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Min])
+    VAR __FirstFiscalMonthMax = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Max])
 
     // ═══════════════════════════════════════
     // 全店新客数：a03_e2e_customer_data_m（EXCEPT 差集模式）
@@ -140,7 +148,25 @@ New Customer No. Value =
             "user_id", [user_id],
             "shop_info_id", [shop_info_id]
         )
-    VAR __TotalNewCustCnt = COUNTROWS(EXCEPT(__NewCust_Step1, __OldCust_Step2))
+
+    VAR __TotalNewCustCnt =
+        COUNTROWS(
+        EXCEPT (
+        SUMMARIZE ( __NewCust_Step1, [user_id] ), -- 去重到用户级
+        SUMMARIZE ( __OldCust_Step2, [user_id] )
+    ))
+    */
+
+    // ── 全店新客：当前柱单月直接筛选，再按 user_id 去重 ──
+    VAR __TotalNewCustCnt =
+        CALCULATE(
+            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
+            'a03_e2e_customer_data_m'[data_date] >= __CurrentMonthMin,
+            'a03_e2e_customer_data_m'[data_date] <= __CurrentMonthMax,
+            'a03_e2e_customer_data_m'[is_member] == 0,
+            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
+            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] == 0
+        )
 
     RETURN
         IF(
@@ -190,8 +216,9 @@ New Customer% Value =
 // 口径来源: KPI Progress.md 子模块三 §26
 // 计算公式: New Customer No / TTL Buyers
 // 数据底表: a03_e2e_customer_data_m
-// 分子: COUNTROWS(EXCEPT(Step1, Step2))（全店新客，EXCEPT 差集模式，同 #25）
-// 分母: COUNTROWS(Step1)（全部买家，net_pay_amt > 0 AND is_member = 0）
+// 分子: 当前柱单月筛选 is_member == 0、net_pay_amt > 0、lp_12m_net_pay_amt == 0 后 DISTINCTCOUNT(user_id)（同 #25）
+// 与原方案差异: 分子采用行级直接筛选，不再执行聚合/EXCEPT；分母及比率计算保持不变
+// 分母: DISTINCTCOUNT(user_id)（全部买家，net_pay_amt > 0 AND is_member = 0，沿用原实现）
 // 数据类型: percent_0dp（比率，不涉及汇率换算）
 // 注意: Day/Week 时指标无意义，在最终结果层统一留空，不细分到分子分母
 // ========================================
@@ -201,12 +228,16 @@ New Customer% Value =
     // ── X 轴当前遍历月份 ──
     VAR __CurrentMonthMin = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Min])
     VAR __CurrentMonthMax = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Max])
-    // ── 第一财月时间范围（用于 Step2 老客排除集）──
-    VAR __FirstFiscalMonthMin = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Min])
-    VAR __FirstFiscalMonthMax = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Max])
     // ── 时间粒度判断（Day/Week 时指标无意义，统一留空）──
     VAR __TimeFrameID = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_ID])
     VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
+
+    /*
+    旧逻辑：新客占比分子 EXCEPT 差集模式（2026-09-16 弃用，保留备查）
+    如需回退：取消本块注释，并注释下方单月直接筛选的 __NewCustCnt 定义。
+    注意：回退后 Step2 恢复使用起始切片器的第一财月，不跟随当前柱月份。
+    VAR __FirstFiscalMonthMin = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Min])
+    VAR __FirstFiscalMonthMax = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Max])
 
     // ── 分子：全店新客（EXCEPT 差集模式，同 #25）──
     VAR __NewCust_Step1 =
@@ -245,7 +276,25 @@ New Customer% Value =
             "user_id", [user_id],
             "shop_info_id", [shop_info_id]
         )
-    VAR __NewCustCnt = COUNTROWS(EXCEPT(__NewCust_Step1, __OldCust_Step2))
+
+    VAR __NewCustCnt =
+        COUNTROWS(
+        EXCEPT (
+        SUMMARIZE ( __NewCust_Step1, [user_id] ), -- 去重到用户级
+        SUMMARIZE ( __OldCust_Step2, [user_id] )
+    ))
+    */
+
+    // ── 分子：全店新客（当前柱单月直接筛选，同 #25）──
+    VAR __NewCustCnt =
+        CALCULATE(
+            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
+            'a03_e2e_customer_data_m'[data_date] >= __CurrentMonthMin,
+            'a03_e2e_customer_data_m'[data_date] <= __CurrentMonthMax,
+            'a03_e2e_customer_data_m'[is_member] == 0,
+            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
+            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] == 0
+        )
     // ── 分母：全部买家（按 user_id 去重，net_pay_amt > 0 AND is_member = 0）──
     VAR __TTLBuyers =
         CALCULATE(
@@ -293,10 +342,11 @@ Media Contribution to New Customer Acquisition% Value =
 // 口径来源: KPI Progress.md 子模块三 §27
 // 计算公式: 媒体新客数 / 全店新客数
 // 分子底表: a05_e2e_paid_media_summary_d（media_member_cnt）
-// 分母底表: a03_e2e_customer_data_m（COUNTROWS(EXCEPT)）
+// 分母底表: a03_e2e_customer_data_m（单月直接筛选后 DISTINCTCOUNT(user_id)）
 // 分子筛选: customer_type='ALL' AND page_type="1"
 //   Month/Quarter/Year: 先按 platform, shop_id, data_month_name 取 MAX(media_member_cnt)，再 SUM
-// 分母筛选: EXCEPT 差集模式（同 #25）
+// 分母筛选: 当前柱单月，is_member == 0、net_pay_amt > 0、lp_12m_net_pay_amt == 0（同 #25）
+// 与原方案差异: 分母采用行级直接筛选，不再执行聚合/EXCEPT；媒体新客分子保持不变
 // 数据类型: percent_0dp（比率，不涉及汇率换算）
 // 注意: SUMX+SUMMARIZE 中列引用用 [__Value]，不是 "__Value"
 // 注意: Day/Week 时指标无意义，在最终结果层统一留空，不细分到分子分母
@@ -307,9 +357,6 @@ Media Contribution to New Customer Acquisition% Value =
     // ── X 轴当前遍历月份 ──
     VAR __CurrentMonthMin = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Min])
     VAR __CurrentMonthMax = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_Max])
-    // ── 第一财月时间范围（用于 Step2 老客排除集）──
-    VAR __FirstFiscalMonthMin = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Min])
-    VAR __FirstFiscalMonthMax = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Max])
     // ── 时间粒度判断（Day/Week 时指标无意义，统一留空）──
     VAR __TimeFrameID = SELECTEDVALUE(Slicer_Month_Period[TimeFrame_ID])
     VAR __IsDayOrWeek = __TimeFrameID IN {"Day", "Week"}
@@ -335,6 +382,13 @@ Media Contribution to New Customer Acquisition% Value =
             'a05_e2e_paid_media_summary_d'[data_date] >= __CurrentMonthMin,
             'a05_e2e_paid_media_summary_d'[data_date] <= __CurrentMonthMax
         )
+
+    /*
+    旧逻辑：媒体新客贡献率分母 EXCEPT 差集模式（2026-09-16 弃用，保留备查）
+    如需回退：取消本块注释，并注释下方单月直接筛选的 __TotalNewCust 定义。
+    注意：回退后 Step2 恢复使用起始切片器的第一财月，不跟随当前柱月份。
+    VAR __FirstFiscalMonthMin = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Min])
+    VAR __FirstFiscalMonthMax = SELECTEDVALUE(Slicer_Month_Period_Min[First_Fiscal_Month_Max])
 
     // ── 分母：全店新客（EXCEPT 差集模式，同 #25）──
     VAR __NewCust_Step1 =
@@ -373,7 +427,25 @@ Media Contribution to New Customer Acquisition% Value =
             "user_id", [user_id],
             "shop_info_id", [shop_info_id]
         )
-    VAR __TotalNewCust = COUNTROWS(EXCEPT(__NewCust_Step1, __OldCust_Step2))
+
+    VAR __TotalNewCust =
+        COUNTROWS(
+        EXCEPT (
+        SUMMARIZE ( __NewCust_Step1, [user_id] ), -- 去重到用户级
+        SUMMARIZE ( __OldCust_Step2, [user_id] )
+    ))
+    */
+
+    // ── 分母：全店新客（当前柱单月直接筛选，同 #25）──
+    VAR __TotalNewCust =
+        CALCULATE(
+            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
+            'a03_e2e_customer_data_m'[data_date] >= __CurrentMonthMin,
+            'a03_e2e_customer_data_m'[data_date] <= __CurrentMonthMax,
+            'a03_e2e_customer_data_m'[is_member] == 0,
+            'a03_e2e_customer_data_m'[net_pay_amt] > 0,
+            'a03_e2e_customer_data_m'[lp_12m_net_pay_amt] == 0
+        )
     RETURN
         IF(
             __IsDayOrWeek,
@@ -602,33 +674,33 @@ Acceleration Cost MOB% Display =
 
 ## 4. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称                                                | Display Folder | 用途                              | 数据类型            | 涉及汇率 |
-| ---- | --------------------------------------------------------- | -------------- | --------------------------------- | ------------------- | -------- |
-| 1    | New Customer No. Value                                    | KPI Trend      | 新客数量值（#25）                 | integer_M_K_Int_0db | 否       |
-| 2    | New Customer No. Display                                  | KPI Trend      | 新客数量格式化显示                | integer_M_K_Int_0db | 否       |
-| 3    | New Customer% Value                                       | KPI Trend      | 新客占比值（#26）                 | percent_0dp         | 否       |
-| 4    | New Customer% Display                                     | KPI Trend      | 新客占比格式化显示                | percent_0dp         | 否       |
-| 5    | Media Contribution to New Customer Acquisition% Value     | KPI Trend      | 媒体新客贡献率值（#27）           | percent_0dp         | 否       |
-| 6    | Media Contribution to New Customer Acquisition% Display   | KPI Trend      | 媒体新客贡献率格式化显示          | percent_0dp         | 否       |
-| 7    | Acceleration SLS Value                                    | KPI Trend      | 第二品类退后销售额值（#28）       | currency_M_K_Int_0db | 是       |
-| 8    | Acceleration SLS Display                                  | KPI Trend      | 第二品类退后销售额格式化显示      | currency_M_K_Int_0db | 是       |
-| 9    | Acceleration SLS MOB% Value                               | KPI Trend      | 第二品类退后销售额 MOB% 值（#29） | percent_0dp         | 否       |
-| 10   | Acceleration SLS MOB% Display                             | KPI Trend      | 第二品类退后销售额 MOB% 格式化显示 | percent_0dp         | 否       |
-| 11   | Acceleration Cost MOB% Value                              | KPI Trend      | 第二品类花费 MOB% 值（#30）       | percent_0dp         | 否       |
-| 12   | Acceleration Cost MOB% Display                            | KPI Trend      | 第二品类花费 MOB% 格式化显示      | percent_0dp         | 否       |
+| 序号 | 度量值名称                                              | Display Folder | 用途                               | 数据类型             | 涉及汇率 |
+| ---- | ------------------------------------------------------- | -------------- | ---------------------------------- | -------------------- | -------- |
+| 1    | New Customer No. Value                                  | KPI Trend      | 新客数量值（#25）                  | integer_M_K_Int_0db  | 否       |
+| 2    | New Customer No. Display                                | KPI Trend      | 新客数量格式化显示                 | integer_M_K_Int_0db  | 否       |
+| 3    | New Customer% Value                                     | KPI Trend      | 新客占比值（#26）                  | percent_0dp          | 否       |
+| 4    | New Customer% Display                                   | KPI Trend      | 新客占比格式化显示                 | percent_0dp          | 否       |
+| 5    | Media Contribution to New Customer Acquisition% Value   | KPI Trend      | 媒体新客贡献率值（#27）            | percent_0dp          | 否       |
+| 6    | Media Contribution to New Customer Acquisition% Display | KPI Trend      | 媒体新客贡献率格式化显示           | percent_0dp          | 否       |
+| 7    | Acceleration SLS Value                                  | KPI Trend      | 第二品类退后销售额值（#28）        | currency_M_K_Int_0db | 是       |
+| 8    | Acceleration SLS Display                                | KPI Trend      | 第二品类退后销售额格式化显示       | currency_M_K_Int_0db | 是       |
+| 9    | Acceleration SLS MOB% Value                             | KPI Trend      | 第二品类退后销售额 MOB% 值（#29）  | percent_0dp          | 否       |
+| 10   | Acceleration SLS MOB% Display                           | KPI Trend      | 第二品类退后销售额 MOB% 格式化显示 | percent_0dp          | 否       |
+| 11   | Acceleration Cost MOB% Value                            | KPI Trend      | 第二品类花费 MOB% 值（#30）        | percent_0dp          | 否       |
+| 12   | Acceleration Cost MOB% Display                          | KPI Trend      | 第二品类花费 MOB% 格式化显示       | percent_0dp          | 否       |
 
 ---
 
 ## 5. 指标口径来源对照
 
-| Metric_ID | Metric Name                                  | 口径文档出处   | 计算公式                                | 统计字段                                       | 数据底表                              | 数据类型            | 涉及汇率 |
-| --------- | -------------------------------------------- | -------------- | --------------------------------------- | ---------------------------------------------- | ------------------------------------- | ------------------- | -------- |
-| 25        | New Customer No.                             | 子模块三 §25   | COUNTROWS(EXCEPT(Step1, Step2))         | user_id + shop_info_id（EXCEPT 差集模式）      | a03_e2e_customer_data_m               | integer_M_K_Int_0db | 否       |
-| 26        | New Customer%                                | 子模块三 §26   | New Customer No / TTL Buyers            | user_id（分子 EXCEPT 差集 / 分母全部买家）     | a03_e2e_customer_data_m               | percent_0dp         | 否       |
-| 27        | Media Contribution to New Customer Acq%      | 子模块三 §27   | 媒体新客数 / 全店新客数                 | media_member_cnt / user_id + shop_info_id（EXCEPT 差集） | summary_d + customer_data_m     | percent_0dp         | 否       |
-| 28        | Acceleration SLS                             | 子模块四 §28   | SUM(net_sales_amt), framework='Accel'   | net_sales_amt                                  | a05_e2e_paid_media_product_data_d       | currency_M_K_Int_0db | 是       |
-| 29        | Acceleration SLS MOB%                        | 子模块四 §29   | SUM(net_sales_amt[Accel]) / SUM(全部)   | net_sales_amt(Accel) / net_sales_amt(全部)     | a05_e2e_paid_media_product_data_d       | percent_0dp         | 否       |
-| 30        | Acceleration Cost MOB%                       | 子模块四 §30   | SUM(cost_amt[Accel]) / SUM(cost_amt)    | cost_amt(Accel, mix_msg NULL) / cost_amt(全部, mix_msg NULL) | a05_e2e_paid_media_product_data_d | percent_0dp         | 否       |
+| Metric_ID | Metric Name                             | 口径文档出处  | 计算公式                              | 统计字段                                                     | 数据底表                          | 数据类型             | 涉及汇率 |
+| --------- | --------------------------------------- | ------------- | ------------------------------------- | ------------------------------------------------------------ | --------------------------------- | -------------------- | -------- |
+| 25        | New Customer No.                        | 子模块三 §25 | COUNTROWS(EXCEPT(Step1, Step2))       | user_id + shop_info_id（EXCEPT 差集模式）                    | a03_e2e_customer_data_m           | integer_M_K_Int_0db  | 否       |
+| 26        | New Customer%                           | 子模块三 §26 | New Customer No / TTL Buyers          | user_id（分子 EXCEPT 差集 / 分母全部买家）                   | a03_e2e_customer_data_m           | percent_0dp          | 否       |
+| 27        | Media Contribution to New Customer Acq% | 子模块三 §27 | 媒体新客数 / 全店新客数               | media_member_cnt / user_id + shop_info_id（EXCEPT 差集）     | summary_d + customer_data_m       | percent_0dp          | 否       |
+| 28        | Acceleration SLS                        | 子模块四 §28 | SUM(net_sales_amt), framework='Accel' | net_sales_amt                                                | a05_e2e_paid_media_product_data_d | currency_M_K_Int_0db | 是       |
+| 29        | Acceleration SLS MOB%                   | 子模块四 §29 | SUM(net_sales_amt[Accel]) / SUM(全部) | net_sales_amt(Accel) / net_sales_amt(全部)                   | a05_e2e_paid_media_product_data_d | percent_0dp          | 否       |
+| 30        | Acceleration Cost MOB%                  | 子模块四 §30 | SUM(cost_amt[Accel]) / SUM(cost_amt)  | cost_amt(Accel, mix_msg NULL) / cost_amt(全部, mix_msg NULL) | a05_e2e_paid_media_product_data_d | percent_0dp          | 否       |
 
 ---
 
@@ -716,21 +788,23 @@ Acceleration Cost MOB% Display =
 
 ### 7.1 格式类型说明
 
-| 格式类型             | 适用指标           | 格式规则                                                    |
-| -------------------- | ------------------ | ----------------------------------------------------------- |
+| 格式类型             | 适用指标           | 格式规则                                                                 |
+| -------------------- | ------------------ | ------------------------------------------------------------------------ |
 | integer_M_K_Int_0db  | #25                | <1K 千分位整数；≥1K 用 K（1位小数）；≥1M 用 M（1位小数），不带货币符号 |
 | currency_M_K_Int_0db | #28                | <1K 千分位整数；≥1K 用 K（1位小数）；≥1M 用 M（1位小数），带货币符号   |
-| percent_0dp          | #26、#27、#29、#30 | 百分比整数，不含正号，格式串 `#,##0%;-#,##0%;0%`            |
+| percent_0dp          | #26、#27、#29、#30 | 百分比整数，不含正号，格式串`#,##0%;-#,##0%;0%`                        |
 
 ### 7.2 金额类指标与汇率换算
 
 仅 #28（Acceleration SLS）为金额类指标，需 `DIVIDE(__Value, __FXRate)`（除法，非乘法）。
+
 - #25 为整数类型（integer_M_K_Int_0db），不涉及汇率换算
 - #26/#27/#29/#30 为比率类型（percent_0dp），不涉及汇率换算
 
 ### 7.3 独立筛选器设计
 
 本模块使用 Slicer_Month_Period 系列独立筛选器，与全局 Slicer_Time_Frame 结构完全一致但表名不同：
+
 - **全局范围**：Slicer_Month_Period_Min[TimeFrame_Min] ~ Slicer_Month_Period_Max[TimeFrame_Max]
 - **X 轴当前月份**：Slicer_Month_Period[TimeFrame_Min] ~ Slicer_Month_Period[TimeFrame_Max]
 - **时间粒度**：Slicer_Month_Period[TimeFrame_ID]（判断 Day/Week）
@@ -755,6 +829,7 @@ Acceleration Cost MOB% Display =
 ### 7.5 #27 媒体新客 MAX+SUM 聚合
 
 #27 分子（media_member_cnt）需要先按 platform, shop_id, data_month_name 分组取 MAX，再对所有分组 SUM：
+
 ```dax
 SUMX(
     SUMMARIZE(
@@ -767,12 +842,14 @@ SUMX(
     [__Value]    // 列引用写法：[__Value]，不是 "__Value"
 )
 ```
+
 - Day/Week 时整个指标无意义，在最终结果层 `IF(__IsDayOrWeek, BLANK(), DIVIDE(...))` 统一留空（#25/#26/#27 同此处理，不细分到分子分母）
 - SUMX+SUMMARIZE 中列引用用 `[__Value]`，不是字符串 `"__Value"`
 
 ### 7.6 #30 mix_msg is NULL 筛选
 
 #30 分子分母均需筛选 `mix_msg is NULL`：
+
 - 分子：`mix_msg is NULL AND framework='Acceleration'`
 - 分母：`mix_msg is NULL`（不限制 framework）
 - DAX 实现：`ISBLANK('a05_e2e_paid_media_product_data_d'[mix_msg])`
@@ -780,12 +857,14 @@ SUMX(
 ### 7.7 筛选器公用说明
 
 本模块与 KPIs、KPI by Platform 等模块共用以下筛选器：
+
 - **Slicer_Platform_Selection**：1:N 关系，模型自动筛选
 - **Slicer_Store_Name**：1:N 关系，模型自动筛选
 - **Slicer_Currency_Selection**：断开维度，仅金额类指标 #28 除以汇率
 - **trans_cycle**：1:N 关系，模型自动筛选
 
 本模块独有的独立日期筛选器：
+
 - **Slicer_Month_Period / Min / Max**：断开维度，仅作用于本模块柱形图
 
 ### 7.8 趋势图/柱形图使用方式
