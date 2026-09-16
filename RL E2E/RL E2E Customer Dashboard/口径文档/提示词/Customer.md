@@ -324,9 +324,9 @@ D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer
 
 
 # Customer测试第十二轮提示词：
-a03_e2e_customer_order_correlation_data_m
-行：category_summary
-列：co_category_summary
+事实表：a03_e2e_customer_order_correlation_data_m
+行：Dim_Category_Summary[category_summary]
+列：Dim_Co_Category_Summary[co_category_summary]
 度量：
 DIVIDE(
                 SUM('a03_e2e_customer_order_correlation_data_m'[co_net_pay_order_cnt]),

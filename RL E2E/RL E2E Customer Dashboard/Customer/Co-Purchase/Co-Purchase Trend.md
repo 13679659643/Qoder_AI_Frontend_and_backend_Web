@@ -200,7 +200,7 @@ VAR __HasValidDataInRow =
                 'a03_e2e_customer_order_correlation_data_m'[category_summary] = __CurrentCategory,
                 'a03_e2e_customer_order_correlation_data_m'[co_category_summary] = __CurrentCoCategory
             )
-      
+    
         RETURN
             IF(NOT ISBLANK(__CellResult), 1, 0)
     )
@@ -235,13 +235,168 @@ VAR __HasValidDataInCol =
                 'a03_e2e_customer_order_correlation_data_m'[category_summary] = __CurrentCategory,
                 'a03_e2e_customer_order_correlation_data_m'[co_category_summary] = __CurrentCoCategory
             )
-      
+    
         RETURN
             IF(NOT ISBLANK(__CellResult), 1, 0)
     )
 
 RETURN
     IF(__HasValidDataInCol = 1, 1, 0)
+```
+#### 4.1.5 Co-Purchase Cross-Sell-Class SVG
+```dax
+Co-Purchase Cross-Sell-Class SVG = 
+// ========================================
+// 度量值: Co-Purchase Cross-Sell-Class SVG
+// 用途: 热力矩阵图单元格，背景/字体颜色按值四点三段插值自适应
+// 背景插值: 0%→#d8dee5, 30%→#95afcf, 50%→#0c2340, 100%→#000000
+// 字体插值: 0%→#737373, 30%→#333333, 35%→#ffffff, 100%→#ffffff（白色提前到35%）
+// 无百分比切片器，全部视为范围内
+// 基础度量: [Co-Purchase Cross-Sell-Class Value]
+// ========================================
+
+// ── 1. 读取基础值 ──
+VAR _RawValue = [Co-Purchase Cross-Sell-Class Value]
+VAR _IsBlank = ISBLANK(_RawValue)
+VAR _Value = MIN(MAX(_RawValue, 0), 1)
+VAR _Pct = FORMAT(_Value, "#,##0%;#,##0%;0%")
+
+// ── 2. 背景颜色三段插值（0%→30%→50%→100%）──
+// 0%: #d8dee5 = rgb(216,222,229)
+// 30%: #95afcf = rgb(149,175,207)
+// 50%: #0c2340 = rgb(12,35,64)
+// 100%: #000000 = rgb(0,0,0)
+VAR _BR0 = 216
+VAR _BG0 = 222
+VAR _BB0 = 229
+
+VAR _BR30 = 149
+VAR _BG30 = 175
+VAR _BB30 = 207
+
+VAR _BR50 = 12
+VAR _BG50 = 35
+VAR _BB50 = 64
+
+VAR _BR100 = 0
+VAR _BG100 = 0
+VAR _BB100 = 0
+
+VAR _BR = IF(
+    _Value <= 0.3,
+    _BR0 + (_BR30 - _BR0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.5,
+        _BR30 + (_BR50 - _BR30) * ((_Value - 0.3) / 0.2),
+        _BR50 + (_BR100 - _BR50) * ((_Value - 0.5) / 0.5)
+    )
+)
+VAR _BG = IF(
+    _Value <= 0.3,
+    _BG0 + (_BG30 - _BG0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.5,
+        _BG30 + (_BG50 - _BG30) * ((_Value - 0.3) / 0.2),
+        _BG50 + (_BG100 - _BG50) * ((_Value - 0.5) / 0.5)
+    )
+)
+VAR _BB = IF(
+    _Value <= 0.3,
+    _BB0 + (_BB30 - _BB0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.5,
+        _BB30 + (_BB50 - _BB30) * ((_Value - 0.3) / 0.2),
+        _BB50 + (_BB100 - _BB50) * ((_Value - 0.5) / 0.5)
+    )
+)
+VAR _BgColor = "rgb(" & INT(_BR) & "," & INT(_BG) & "," & INT(_BB) & ")"
+
+// ── 3. 字体颜色三段插值（0%→30%→35%→100%，白色提前到35%）──
+// 0%: #737373 = rgb(115,115,115)
+// 30%: #333333 = rgb(51,51,51)
+// 35%: #ffffff = rgb(255,255,255)  ← 白色节点从50%提前到35%
+// 100%: #ffffff = rgb(255,255,255)
+VAR _FR0 = 115
+VAR _FG0 = 115
+VAR _FB0 = 115
+
+VAR _FR30 = 51
+VAR _FG30 = 51
+VAR _FB30 = 51
+
+VAR _FR35 = 255
+VAR _FG35 = 255
+VAR _FB35 = 255
+
+VAR _FR100 = 255
+VAR _FG100 = 255
+VAR _FB100 = 255
+
+VAR _FR = IF(
+    _Value <= 0.3,
+    _FR0 + (_FR30 - _FR0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.35,
+        _FR30 + (_FR35 - _FR30) * ((_Value - 0.3) / 0.05),
+        _FR35 + (_FR100 - _FR35) * ((_Value - 0.35) / 0.65)
+    )
+)
+VAR _FG = IF(
+    _Value <= 0.3,
+    _FG0 + (_FG30 - _FG0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.35,
+        _FG30 + (_FG35 - _FG30) * ((_Value - 0.3) / 0.05),
+        _FG35 + (_FG100 - _FG35) * ((_Value - 0.35) / 0.65)
+    )
+)
+VAR _FB = IF(
+    _Value <= 0.3,
+    _FB0 + (_FB30 - _FB0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.35,
+        _FB30 + (_FB35 - _FB30) * ((_Value - 0.3) / 0.05),
+        _FB35 + (_FB100 - _FB35) * ((_Value - 0.35) / 0.65)
+    )
+)
+VAR _FontColor = "rgb(" & INT(_FR) & "," & INT(_FG) & "," & INT(_FB) & ")"
+
+// ── 4. BLANK 处理：置灰显示 "-" ──
+VAR _FinalBg = IF(_IsBlank, "rgb(215,222,228)", _BgColor)
+VAR _FinalFont = IF(_IsBlank, "rgb(179,179,179)", _FontColor)
+VAR _FinalText = IF(_IsBlank, "-", _Pct)
+
+// ── 5. SVG 输出（圆角 4px，88x33 单元格）──
+VAR _URL =
+"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='88' height='33' viewBox='0 0 88 33' preserveAspectRatio='none'>
+<rect rx='4' ry='4' x='0' y='0' width='88' height='33' fill='" & _FinalBg & "' stroke='none'/>
+<text x='44' y='16.5' text-anchor='middle' dominant-baseline='central' font-size='12' font-family='Segoe UI' font-weight='normal' font-style='normal' fill='" & _FinalFont & "'>" & _FinalText & "</text>
+</svg>"
+
+// ── 6. 行列可见性：隐藏全空行列，保留内部空白占位 ──
+VAR __IsDetailCell =
+    ISINSCOPE(Dim_Category_Summary[category_summary])
+        && ISINSCOPE(Dim_Co_Category_Summary[co_category_summary])
+
+RETURN
+    IF(
+        NOT __IsDetailCell,
+        // 总计位置不绘制 SVG
+        BLANK(),
+        IF(
+            _IsBlank,
+            // 当前单元格为空时，检查所在行、列是否分别存在有效值
+            IF(
+                [Is_Matrix_Row_Visible_Category] = 1
+                    && [Is_Matrix_Col_Visible_CoCategory] = 1,
+                _URL,
+                BLANK()
+            ),
+            // 当前单元格有值，所在行、列必然有效
+            _URL
+        )
+    )
+
 ```
 
 ### 4.2 Co-Purchase Cross-Sell-Label（指标 2 — Label 图表）
@@ -319,7 +474,7 @@ VAR __HasValidDataInRow =
     MAXX(
         __AllVisibleCoBrands,
         VAR __CurrentCoBrand = Dim_Co_Brand[co_brand]
-        
+      
         // 严格复刻单元格计算逻辑，直接调用核心度量值
         VAR __CellResult = 
             CALCULATE(
@@ -327,7 +482,7 @@ VAR __HasValidDataInRow =
                 a03_e2e_customer_order_correlation_data_m[brand] = __CurrentBrand,
                 a03_e2e_customer_order_correlation_data_m[co_brand] = __CurrentCoBrand
             )
-            
+          
         RETURN
             IF(NOT ISBLANK(__CellResult), 1, 0)
     )
@@ -355,14 +510,14 @@ VAR __HasValidDataInCol =
     MAXX(
         __AllVisibleBrands,
         VAR __CurrentBrand = Dim_Brand[brand]
-      
+    
         VAR __CellResult = 
             CALCULATE(
                 [Co-Purchase Cross-Sell-Label Value], 
                 a03_e2e_customer_order_correlation_data_m[brand] = __CurrentBrand,
                 a03_e2e_customer_order_correlation_data_m[co_brand] = __CurrentCoBrand
             )
-          
+        
         RETURN
             IF(NOT ISBLANK(__CellResult), 1, 0)
     )
@@ -371,6 +526,186 @@ RETURN
     IF(__HasValidDataInCol = 1, 1, 0)
 ```
 
+#### 4.2.5 Co-Purchase Cross-Sell-Label SVG
+```dax
+Co-Purchase Cross-Sell-Label SVG = 
+// ========================================
+// 度量值: Co-Purchase Cross-Sell-Label SVG
+// 用途: 热力矩阵图单元格，背景/字体颜色按值四点三段插值自适应
+// 背景插值: 0%→#d8dee5, 30%→#95afcf, 50%→#0c2340, 100%→#000000
+// 字体插值: 0%→#737373, 30%→#333333, 35%→#ffffff, 100%→#ffffff（白色提前到35%）
+// 无百分比切片器，全部视为范围内
+// 基础度量: [Co-Purchase Cross-Sell-Label Value]
+// ========================================
+
+// ── 1. 读取基础值 ──
+VAR _RawValue = [Co-Purchase Cross-Sell-Label Value]
+VAR _IsBlank = ISBLANK(_RawValue)
+VAR _Value = MIN(MAX(_RawValue, 0), 1)
+VAR _Pct = FORMAT(_Value, "#,##0%;#,##0%;0%")
+
+// ── 2. 背景颜色三段插值（0%→30%→50%→100%）──
+// 0%: #d8dee5 = rgb(216,222,229)
+// 30%: #95afcf = rgb(149,175,207)
+// 50%: #0c2340 = rgb(12,35,64)
+// 100%: #000000 = rgb(0,0,0)
+VAR _BR0 = 216
+VAR _BG0 = 222
+VAR _BB0 = 229
+
+VAR _BR30 = 149
+VAR _BG30 = 175
+VAR _BB30 = 207
+
+VAR _BR50 = 12
+VAR _BG50 = 35
+VAR _BB50 = 64
+
+VAR _BR100 = 0
+VAR _BG100 = 0
+VAR _BB100 = 0
+
+VAR _BR = IF(
+    _Value <= 0.3,
+    _BR0 + (_BR30 - _BR0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.5,
+        _BR30 + (_BR50 - _BR30) * ((_Value - 0.3) / 0.2),
+        _BR50 + (_BR100 - _BR50) * ((_Value - 0.5) / 0.5)
+    )
+)
+VAR _BG = IF(
+    _Value <= 0.3,
+    _BG0 + (_BG30 - _BG0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.5,
+        _BG30 + (_BG50 - _BG30) * ((_Value - 0.3) / 0.2),
+        _BG50 + (_BG100 - _BG50) * ((_Value - 0.5) / 0.5)
+    )
+)
+VAR _BB = IF(
+    _Value <= 0.3,
+    _BB0 + (_BB30 - _BB0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.5,
+        _BB30 + (_BB50 - _BB30) * ((_Value - 0.3) / 0.2),
+        _BB50 + (_BB100 - _BB50) * ((_Value - 0.5) / 0.5)
+    )
+)
+VAR _BgColor = "rgb(" & INT(_BR) & "," & INT(_BG) & "," & INT(_BB) & ")"
+
+// ── 3. 字体颜色三段插值（0%→30%→35%→100%，白色提前到35%）──
+// 0%: #737373 = rgb(115,115,115)
+// 30%: #333333 = rgb(51,51,51)
+// 35%: #ffffff = rgb(255,255,255)  ← 白色节点从50%提前到35%
+// 100%: #ffffff = rgb(255,255,255)
+VAR _FR0 = 115
+VAR _FG0 = 115
+VAR _FB0 = 115
+
+VAR _FR30 = 51
+VAR _FG30 = 51
+VAR _FB30 = 51
+
+VAR _FR35 = 255
+VAR _FG35 = 255
+VAR _FB35 = 255
+
+VAR _FR100 = 255
+VAR _FG100 = 255
+VAR _FB100 = 255
+
+VAR _FR = IF(
+    _Value <= 0.3,
+    _FR0 + (_FR30 - _FR0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.35,
+        _FR30 + (_FR35 - _FR30) * ((_Value - 0.3) / 0.05),
+        _FR35 + (_FR100 - _FR35) * ((_Value - 0.35) / 0.65)
+    )
+)
+VAR _FG = IF(
+    _Value <= 0.3,
+    _FG0 + (_FG30 - _FG0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.35,
+        _FG30 + (_FG35 - _FG30) * ((_Value - 0.3) / 0.05),
+        _FG35 + (_FG100 - _FG35) * ((_Value - 0.35) / 0.65)
+    )
+)
+VAR _FB = IF(
+    _Value <= 0.3,
+    _FB0 + (_FB30 - _FB0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.35,
+        _FB30 + (_FB35 - _FB30) * ((_Value - 0.3) / 0.05),
+        _FB35 + (_FB100 - _FB35) * ((_Value - 0.35) / 0.65)
+    )
+)
+VAR _FontColor = "rgb(" & INT(_FR) & "," & INT(_FG) & "," & INT(_FB) & ")"
+
+// ── 4. BLANK 处理：置灰显示 "-" ──
+VAR _FinalBg = IF(_IsBlank, "rgb(215,222,228)", _BgColor)
+VAR _FinalFont = IF(_IsBlank, "rgb(179,179,179)", _FontColor)
+VAR _FinalText = IF(_IsBlank, "-", _Pct)
+
+// ── 5. SVG 输出（圆角 4px，88x33 单元格）──
+VAR _URL =
+"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='88' height='33' viewBox='0 0 88 33' preserveAspectRatio='none'>
+<rect rx='4' ry='4' x='0' y='0' width='88' height='33' fill='" & _FinalBg & "' stroke='none'/>
+<text x='44' y='16.5' text-anchor='middle' dominant-baseline='central' font-size='12' font-family='Segoe UI' font-weight='normal' font-style='normal' fill='" & _FinalFont & "'>" & _FinalText & "</text>
+</svg>"
+
+// ── 6. 判断当前计算位置 ──
+// 两个字段都处于分组层级，表示当前是 Brand × CoBrand 交叉明细。
+// 这里只区分明细与总计，不检查当前单元格是否存在业务数据。
+VAR __IsDetailCell =
+    ISINSCOPE(Dim_Brand[brand])
+        && ISINSCOPE(Dim_Co_Brand[co_brand])
+
+RETURN
+    IF(
+        NOT __IsDetailCell,
+
+        // 情况一：总计位置。
+        // 不绘制 SVG，也不使用仅适用于明细的行列可见性判断。
+        BLANK(),
+
+        IF(
+            _IsBlank,
+
+            // 情况二：当前交叉点的基础 Value 为空。
+            // 不能直接绘制灰色图片，否则全空行列也会被图片撑出来。
+            // 必须分别检查当前交叉点所在的整行、整列是否应当保留。
+            IF(
+                // 行有效：固定当前 Brand，
+                // 扫描所选 CoBrand，至少一个 Value 非空。
+                [Is_Matrix_Row_Visible_Brand] = 1
+
+                    // 列有效：固定当前 CoBrand，
+                    // 扫描所选 Brand，至少一个 Value 非空。
+                    && [Is_Matrix_Col_Visible_CoBrand] = 1,
+
+                // 行列均有效：
+                // 当前空值属于有效矩阵内部的缺口，保留灰色 "-" SVG。
+                _URL,
+
+                // 行全空或列全空：
+                // 返回真正的 BLANK()，而不是空白图片或 "-" 字符串。
+                // 该无效行/列上的每个单元格都会因此返回 BLANK()，
+                // 由矩阵自身的空值抑制机制隐藏整行或整列。
+                BLANK()
+            ),
+
+            // 情况三：当前交叉点的基础 Value 非空。
+            // 当前单元格本身已证明所在行、所在列都有有效数据，
+            // 无需再扫描两个方向，直接绘制百分比 SVG。
+            // 0% 也属于非空有效值，会正常保留。
+            _URL
+        )
+    )
+
+```
 ### 4.3 Product Path 1st Class（指标 3）
 
 #### 4.3.1 Product Path 1st Class Value
