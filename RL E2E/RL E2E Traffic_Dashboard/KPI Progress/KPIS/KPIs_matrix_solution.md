@@ -26,25 +26,25 @@
 
 ### 2.1 数据底表（4 张事实表）
 
-| 对象   | 名称                               | 用途                                                                                       | 日期字段  |
-| ------ | ---------------------------------- | ------------------------------------------------------------------------------------------ | --------- |
-| 事实表 | a05_e2e_paid_media_summary_d       | 汇总指标实际值（#1/#2/#3分子/#5分子/#6/#7分子/#9分子/#10分子分母/#12分子分母）              | data_date |
-| 事实表 | a05_e2e_paid_media_product_data_d    | 第二品类 Acceleration 实际值（#13/#15/#19/#21/#22/#24）                                     | data_date |
-| 事实表 | a03_e2e_customer_data_m            | 全店新客实际值（#7分母/#9分母/#16/#18分子）                                                 | data_date |
-| 事实表 | a05_e2e_paid_media_fcst_data_m     | 所有 Target 值（#3分母/#5分母/#9Target/#12Target/#15Target/#18Target/#21Target/#24Target） | data_date |
+| 对象   | 名称                              | 用途                                                                                       | 日期字段  |
+| ------ | --------------------------------- | ------------------------------------------------------------------------------------------ | --------- |
+| 事实表 | a05_e2e_paid_media_summary_d      | 汇总指标实际值（#1/#2/#3分子/#5分子/#6/#7分子/#9分子/#10分子分母/#12分子分母）             | data_date |
+| 事实表 | a05_e2e_paid_media_product_data_d | 第二品类 Acceleration 实际值（#13/#15/#19/#21/#22/#24）                                    | data_date |
+| 事实表 | a03_e2e_customer_data_m           | 全店新客实际值（#7分母/#9分母/#16/#18分子）                                                | data_date |
+| 事实表 | a05_e2e_paid_media_fcst_data_m    | 所有 Target 值（#3分母/#5分母/#9Target/#12Target/#15Target/#18Target/#21Target/#24Target） | data_date |
 
 ### 2.2 维度表清单
 
-| 维度表                    | 类型     | 连接方式                                                  | 出处                                 |
-| ------------------------- | -------- | --------------------------------------------------------- | ------------------------------------ |
-| Slicer_Time_Frame         | 断开维度 | SELECTEDVALUE 读取 TimeFrame_ID（时间粒度 Month/Quarter/Year/Day/Week） | 维度复用/Slicer_Time_Frame.sql |
-| Slicer_Time_Frame_Min     | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Min                          | 维度复用/Slicer_Time_Frame_Min.sql   |
-| Slicer_Time_Frame_Max     | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Max                          | 维度复用/Slicer_Time_Frame_Max.sql   |
-| Slicer_Platform_Selection | 1:N 关系 | Platform_ID → 事实表[platform]                           | 维度复用/Slicer_Platform_Selection   |
-| Slicer_Store_Name         | 1:N 关系 | Store_ID → 事实表[store_name]                            | 维度复用/Slicer_Store_Name           |
-| Slicer_Currency_Selection | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol | 维度复用/Slicer_Currency_Selection   |
-| trans_cycle 筛选器        | 1:N 关系 | → 事实表[trans_cycle]（模型自动筛选）                    | 用户需求                             |
-| Dim_ColMetric_KPIs        | 断开维度 | SELECTEDVALUE 读取 Metric_ID, Metric_Format               | KPI Progress/KPIS/Dim_ColMetric_KPIs |
+| 维度表                    | 类型     | 连接方式                                                                | 出处                                 |
+| ------------------------- | -------- | ----------------------------------------------------------------------- | ------------------------------------ |
+| Slicer_Time_Frame         | 断开维度 | SELECTEDVALUE 读取 TimeFrame_ID（时间粒度 Month/Quarter/Year/Day/Week） | 维度复用/Slicer_Time_Frame.sql       |
+| Slicer_Time_Frame_Min     | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Min                                        | 维度复用/Slicer_Time_Frame_Min.sql   |
+| Slicer_Time_Frame_Max     | 断开维度 | SELECTEDVALUE 读取 TimeFrame_Max                                        | 维度复用/Slicer_Time_Frame_Max.sql   |
+| Slicer_Platform_Selection | 1:N 关系 | Platform_ID → 事实表[platform]                                         | 维度复用/Slicer_Platform_Selection   |
+| Slicer_Store_Name         | 1:N 关系 | Store_ID → 事实表[store_name]                                          | 维度复用/Slicer_Store_Name           |
+| Slicer_Currency_Selection | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate, Currency_Symbol               | 维度复用/Slicer_Currency_Selection   |
+| trans_cycle 筛选器        | 1:N 关系 | → 事实表[trans_cycle]（模型自动筛选）                                  | 用户需求                             |
+| Dim_ColMetric_KPIs        | 断开维度 | SELECTEDVALUE 读取 Metric_ID, Metric_Format                             | KPI Progress/KPIS/Dim_ColMetric_KPIs |
 
 ### 2.3 指标维度表（Dim_ColMetric_KPIs）24 个指标
 
@@ -122,37 +122,40 @@ Dim_ColMetric_KPIs（断开维度，列头）
 
 ### 3.3 筛选器上下文
 
-| 筛选器                    | 作用方式                                   | DAX 处理                            |
-| ------------------------- | ------------------------------------------ | ----------------------------------- |
-| Slicer_Time_Frame         | 断开维度，SELECTEDVALUE 读取 TimeFrame_ID  | 判断时间粒度（Day/Week 时部分指标留空） |
+| 筛选器                    | 作用方式                                                                                                                                                                | DAX 处理                                                                                                                                                                                                           |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Slicer_Time_Frame         | 断开维度，SELECTEDVALUE 读取 TimeFrame_ID                                                                                                                               | 判断时间粒度（Day/Week 时部分指标留空）                                                                                                                                                                            |
 | Slicer_Time_Frame_Min     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Min / TimeFrame_Min_LY / First_Fiscal_Month_Min / First_Fiscal_Month_Max / First_Fiscal_Month_Min_LY / First_Fiscal_Month_Max_LY | `data_date >= __TimeMin`（本期）；`TimeFrame_Min_LY` 用于 vs LY；`First_Fiscal_Month_Min/Max` 用于新客 Step2 start_period（本期）；`First_Fiscal_Month_Min_LY/Max_LY` 用于新客 Step2 start_period（vs LY） |
-| Slicer_Time_Frame_Max     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max / TimeFrame_Max_LY | `data_date <= __TimeMax`（本期）；`TimeFrame_Max_LY` 用于 vs LY |
-| Slicer_Platform_Selection | 1:N 关系，模型自动筛选                     | 无需显式处理                        |
-| Slicer_Store_Name         | 1:N 关系，模型自动筛选                     | 无需显式处理                        |
-| trans_cycle               | 1:N 关系，模型自动筛选                     | 无需显式处理                        |
-| Slicer_Currency_Selection | 断开维度，SELECTEDVALUE 读取汇率和符号     | 仅在 Cell Value 层换算：金额类指标 ÷ Currency_ExchangeRate（除法，非乘法） |
+| Slicer_Time_Frame_Max     | 断开维度，SELECTEDVALUE 读取 TimeFrame_Max / TimeFrame_Max_LY                                                                                                           | `data_date <= __TimeMax`（本期）；`TimeFrame_Max_LY` 用于 vs LY                                                                                                                                                |
+| Slicer_Platform_Selection | 1:N 关系，模型自动筛选                                                                                                                                                  | 无需显式处理                                                                                                                                                                                                       |
+| Slicer_Store_Name         | 1:N 关系，模型自动筛选                                                                                                                                                  | 无需显式处理                                                                                                                                                                                                       |
+| trans_cycle               | 1:N 关系，模型自动筛选                                                                                                                                                  | 无需显式处理                                                                                                                                                                                                       |
+| Slicer_Currency_Selection | 断开维度，SELECTEDVALUE 读取汇率和符号                                                                                                                                  | 仅在 Cell Value 层换算：金额类指标 ÷ Currency_ExchangeRate（除法，非乘法）                                                                                                                                        |
 
 ### 3.4 vs LY 时间偏移规则（财历映射）
 
 直接读取日期表内置 LY 字段，无需 EDATE -12 或 Key 偏移计算：
+
 ```
 全局 LY 起始日：Slicer_Time_Frame_Min[TimeFrame_Min_LY]
 全局 LY 结束日：Slicer_Time_Frame_Max[TimeFrame_Max_LY]
 ```
+
 说明：日期表已内置财历映射的 LY 字段，vs LP 度量值直接 SELECTEDVALUE 读取即可。
 
 ### 3.5 汇率换算规则
 
 汇率换算**仅在 KPIs Cell Value 层处理**，Base Metrics 层（Current/vsLP/Target/Base Value）一律返回原始本币值：
 
-| 指标类型 | 换算方式 | 判断依据 | 涉及 Metric_ID |
-| -------- | -------- | -------- | -------------- |
-| 金额类 | `DIVIDE([Base Value], Currency_ExchangeRate)`（除法） | `Metric_IsCurrencyAmount = TRUE` | 2, 6, 10, 19 |
-| 比率/计数/基点类 | 不换算，直接返回 [Base Value] | `Metric_IsCurrencyAmount = FALSE` | 1, 3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23, 24 |
+| 指标类型         | 换算方式                                                | 判断依据                            | 涉及 Metric_ID                                                          |
+| ---------------- | ------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------- |
+| 金额类           | `DIVIDE([Base Value], Currency_ExchangeRate)`（除法） | `Metric_IsCurrencyAmount = TRUE`  | 2, 6, 10, 19                                                            |
+| 比率/计数/基点类 | 不换算，直接返回 [Base Value]                           | `Metric_IsCurrencyAmount = FALSE` | 1, 3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23, 24 |
 
 ### 3.6 Day/Week 留空规则
 
 涉及时间粒度判断的指标在 `Slicer_Time_Frame[TimeFrame_ID] IN {"Day","Week"}` 时返回 BLANK：
+
 - **TRA ACH% 类**：#3/#5/#9/#12/#15/#18/#21/#24（分子或分母涉及时间粒度判断）
 - **媒体新客聚合类**：#7/#9/#10/#12（分子分母涉及 MAX+SUM 聚合）
 - **新客类**：#16/#17/#18（新客判定依赖完整财月）
@@ -647,7 +650,7 @@ KPIs Target Base Value =
         && NOT ISBLANK(__TimeFrameValueMin)
         && NOT ISBLANK(__TimeFrameValueMax)
         && __TimeFrameValueMin <> __TimeFrameValueMax
-    
+  
     // ── 多选判定：多选Month/单选Quarter/多选Quarter 有值 ──
     VAR __IsQuarterOrMonth = 
         __IsQuarter || __IsMonthMultiSelection
@@ -661,7 +664,7 @@ KPIs Target Base Value =
         && NOT ISBLANK(__YearPartMax)
         && __YearPartMin = __YearPartMax
     // ── 多选判定：非单选（Year 多选也有值）──
-    VAR __IsYearMultiSelection =         
+    VAR __IsYearMultiSelection =       
         __IsYear
         && NOT ISBLANK(__YearPartMin)
         && NOT ISBLANK(__YearPartMax)
@@ -1412,7 +1415,17 @@ KPIs Base Value =
     // ── vs LY 派生计算 ──
     // #8/#14/#23 → 当期值 − 同期值（差值，bp 指标）
     // #11/#17/#20 → 当期值 / 同期值 − 1（增长率，百分比）
+    /*
+    旧逻辑：同期为空或 0 时仍直接相减（2026-09-17 弃用，保留备查）
     VAR __VSLYDiff = __CurrentValue - __LPValue
+    如需回退：取消本段块注释并移除说明文字，同时注释下方新版 __VSLYDiff 定义。
+    */
+    VAR __VSLYDiff =
+        IF(
+            ISBLANK(__LPValue) || __LPValue = 0,
+            BLANK(),
+            __CurrentValue - __LPValue
+        )
     VAR __VSLYGrowth =
         IF(
             ISBLANK(__LPValue) || __LPValue = 0,
@@ -1717,48 +1730,48 @@ KPIs Cell SVG Icon =
 
 ## 5. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称                 | Display Folder | 用途                                             |
-| ---- | -------------------------- | -------------- | ------------------------------------------------ |
-| 1    | KPIs Current Base Value    | Base Metrics   | 本期基础值（原始本币，不换算汇率）               |
-| 2    | KPIs vsLP Base Value       | Base Metrics   | 去年同期基础值（读取 TimeFrame_Min_LY/Max_LY，原始本币） |
-| 3    | KPIs Target Base Value     | Base Metrics   | 目标基础值（8 个 TRA ACH% 类指标的 Target）      |
+| 序号 | 度量值名称                 | Display Folder | 用途                                                                        |
+| ---- | -------------------------- | -------------- | --------------------------------------------------------------------------- |
+| 1    | KPIs Current Base Value    | Base Metrics   | 本期基础值（原始本币，不换算汇率）                                          |
+| 2    | KPIs vsLP Base Value       | Base Metrics   | 去年同期基础值（读取 TimeFrame_Min_LY/Max_LY，原始本币）                    |
+| 3    | KPIs Target Base Value     | Base Metrics   | 目标基础值（8 个 TRA ACH% 类指标的 Target）                                 |
 | 4    | KPIs Base Value            | Base Metrics   | 总路由（含 TRA ACH% Actual vs Target / vs LY / Cost vs SLS 派生，原始本币） |
-| 5    | KPIs Cell Value            | Cell Values    | 对外值；金额类指标在此层 ÷ 汇率换算为展示币种    |
-| 6    | KPIs Cell Display          | Formatting     | 格式化显示文本                                   |
-| 7    | KPIs Cell Font Color       | Formatting     | 字体颜色（仅 8 个指标启用条件色）                |
-| 8    | KPIs Cell Background Color | Formatting     | 背景色（统一白色）                               |
-| 9    | KPIs Cell SVG Icon         | Formatting     | SVG 图标（仅 6 个 vs LY 指标）                   |
+| 5    | KPIs Cell Value            | Cell Values    | 对外值；金额类指标在此层 ÷ 汇率换算为展示币种                              |
+| 6    | KPIs Cell Display          | Formatting     | 格式化显示文本                                                              |
+| 7    | KPIs Cell Font Color       | Formatting     | 字体颜色（仅 8 个指标启用条件色）                                           |
+| 8    | KPIs Cell Background Color | Formatting     | 背景色（统一白色）                                                          |
+| 9    | KPIs Cell SVG Icon         | Formatting     | SVG 图标（仅 6 个 vs LY 指标）                                              |
 
 ---
 
 ## 6. 指标口径来源对照
 
-| Metric_ID | Metric_Name                                              | 数据底表（实际值）                                                 | 数据底表（Target）                        | 计算公式                                               | customer_type | framework / mix_msg 筛选                          | 数据类型             |
-| --------- | -------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------- | ------------------------------------------------------ | ------------- | ------------------------------------------------- | -------------------- |
-| 1         | Media Cost Rate                                          | a05_e2e_paid_media_summary_d                                       | -                                         | Cost / SLS × 1.13 / 1.06                              | ALL           | -                                                 | percent_1dp          |
-| 2         | Media Cost                                               | a05_e2e_paid_media_summary_d                                       | -                                         | SUM(cost_amt)                                         | ALL           | -                                                 | currency             |
-| 3         | Cost ACH%                                                | 分子：a05_e2e_paid_media_summary_d；分母：a05_e2e_paid_media_fcst_data_m | a05_e2e_paid_media_fcst_data_m            | SUM(cost_amt) / Cost Target；Target=100%              | ALL           | -                                                 | percent_1dp          |
-| 4         | Cost vs SLS ACH%                                         | 派生                                                               | -                                         | Cost ACH% − SLS ACH%                                  | ALL           | -                                                 | delta_bp             |
-| 5         | SLS ACH%                                                 | 分子：a05_e2e_paid_media_summary_d；分母：a05_e2e_paid_media_fcst_data_m | a05_e2e_paid_media_fcst_data_m            | SUM(net_sales_amt) / SLS Target；Target=100%          | ALL           | -                                                 | percent_1dp          |
-| 6         | SLS DCom                                                 | a05_e2e_paid_media_summary_d                                       | -                                         | SUM(net_sales_amt)                                    | ALL           | -                                                 | currency             |
-| 7         | Media Contribution to New Customer Acquisition%          | 分子：a05_e2e_paid_media_summary_d；分母：a03_e2e_customer_data_m | -                                         | MAX+SUM(media_member_cnt) / COUNTROWS(EXCEPT)         | ALL（分子）   | 媒体新客 MAX+SUM；全店新客 EXCEPT 差集模式          | percent_1dp          |
-| 8         | Media Contribution to New Customer Acquisition% vs LY    | 同 #7                                                              | -                                         | 当期值 − 同期值（bp）                                 | ALL（分子）   | 同 #7                                             | delta_bp             |
-| 9         | Media Contribution to New Customer Acquisition% TRA ACH% | Actual 同 #7；Target：a05_e2e_paid_media_fcst_data_m              | a05_e2e_paid_media_fcst_data_m            | Actual / Target                                    | ALL（分子）   | 同 #7                                             | percent_1dp          |
-| 10        | Media Cost Per New Acquisition                           | a05_e2e_paid_media_summary_d                                       | -                                         | MAX+SUM(media_cost_amt) / MAX+SUM(media_member_cnt)   | ALL           | 媒体新客字段 MAX+SUM 聚合                         | currency_decimal_1dp |
-| 11        | Media Cost Per New Acquisition vs LY                     | 同 #10                                                             | -                                         | 当期值 / 同期值 − 1                                   | ALL           | 同 #10                                            | percent_1dp          |
-| 12        | Media Cost Per New Acquisition TRA ACH%                  | Actual 同 #10；Target：a05_e2e_paid_media_fcst_data_m             | a05_e2e_paid_media_fcst_data_m            | Actual / Target                                    | ALL           | 媒体新客字段 MAX+SUM 聚合                         | percent_1dp          |
-| 13        | ± Acceleration cost MOB% vs. store SLS MOB%             | a05_e2e_paid_media_product_data_d                                    | -                                         | Accel Cost MOB% − Store SLS MOB%                      | ALL           | Cost 分子：mix_msg=NULL AND Accel；SLS 分子：Accel | percent_1dp          |
-| 14        | ± Acceleration cost MOB% vs. store SLS MOB% vs LY       | 同 #13                                                             | -                                         | 当期值 − 同期值（bp）                                 | ALL           | 同 #13                                            | delta_bp             |
-| 15        | ± Acceleration SLS MOB% vs. store SLS MOB% TRA ACH%     | Actual 同 #13；Target：a05_e2e_paid_media_fcst_data_m             | a05_e2e_paid_media_fcst_data_m            | Actual / Target                                    | ALL           | 同 #13                                            | percent_1dp          |
-| 16        | New Customer No                                          | a03_e2e_customer_data_m                                            | -                                         | COUNTROWS(EXCEPT)，EXCEPT 差集模式                    | -             | Step1+Step2 不能合并区间，EXCEPT 差集             | integer              |
-| 17        | New Customer No vs LY                                    | 同 #16                                                             | -                                         | 当期值 / 同期值 − 1                                   | -             | 同 #16                                            | percent_1dp          |
-| 18        | New Customer No TRA ACH%                                 | Actual 同 #16；Target：a05_e2e_paid_media_fcst_data_m             | a05_e2e_paid_media_fcst_data_m            | Actual / Target                                    | -             | 同 #16                                            | percent_1dp          |
-| 19        | Acceleration SLS                                         | a05_e2e_paid_media_product_data_d                                    | -                                         | SUM(net_sales_amt) WHERE framework='Acceleration'     | ALL           | framework='Acceleration'                           | currency             |
-| 20        | Acceleration SLS vs LY                                   | 同 #19                                                             | -                                         | 当期值 / 同期值 − 1                                   | ALL           | framework='Acceleration'                           | percent_1dp          |
-| 21        | Acceleration SLS TRA ACH%                                | Actual 同 #19；Target：a05_e2e_paid_media_fcst_data_m             | a05_e2e_paid_media_fcst_data_m            | Actual / Target                                    | ALL           | framework='Acceleration'                           | percent_1dp          |
-| 22        | Acceleration SLS MOB%                                    | a05_e2e_paid_media_product_data_d                                    | -                                         | Accel SLS / TTL SLS                                   | ALL           | 分子：Accel；分母：全部 framework                  | percent_1dp          |
-| 23        | Acceleration SLS MOB% vs LY                              | 同 #22                                                             | -                                         | 当期占比 − 同期占比（bp）                             | ALL           | 同 #22                                            | delta_bp             |
-| 24        | Acceleration SLS MOB% TRA ACH%                           | Actual 同 #22；Target：a05_e2e_paid_media_fcst_data_m             | a05_e2e_paid_media_fcst_data_m            | Actual / Target                                    | ALL           | 同 #22                                            | percent_1dp          |
+| Metric_ID | Metric_Name                                              | 数据底表（实际值）                                                       | 数据底表（Target）             | 计算公式                                            | customer_type | framework / mix_msg 筛选                           | 数据类型             |
+| --------- | -------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------ | --------------------------------------------------- | ------------- | -------------------------------------------------- | -------------------- |
+| 1         | Media Cost Rate                                          | a05_e2e_paid_media_summary_d                                             | -                              | Cost / SLS × 1.13 / 1.06                           | ALL           | -                                                  | percent_1dp          |
+| 2         | Media Cost                                               | a05_e2e_paid_media_summary_d                                             | -                              | SUM(cost_amt)                                       | ALL           | -                                                  | currency             |
+| 3         | Cost ACH%                                                | 分子：a05_e2e_paid_media_summary_d；分母：a05_e2e_paid_media_fcst_data_m | a05_e2e_paid_media_fcst_data_m | SUM(cost_amt) / Cost Target；Target=100%            | ALL           | -                                                  | percent_1dp          |
+| 4         | Cost vs SLS ACH%                                         | 派生                                                                     | -                              | Cost ACH% − SLS ACH%                               | ALL           | -                                                  | delta_bp             |
+| 5         | SLS ACH%                                                 | 分子：a05_e2e_paid_media_summary_d；分母：a05_e2e_paid_media_fcst_data_m | a05_e2e_paid_media_fcst_data_m | SUM(net_sales_amt) / SLS Target；Target=100%        | ALL           | -                                                  | percent_1dp          |
+| 6         | SLS DCom                                                 | a05_e2e_paid_media_summary_d                                             | -                              | SUM(net_sales_amt)                                  | ALL           | -                                                  | currency             |
+| 7         | Media Contribution to New Customer Acquisition%          | 分子：a05_e2e_paid_media_summary_d；分母：a03_e2e_customer_data_m        | -                              | MAX+SUM(media_member_cnt) / COUNTROWS(EXCEPT)       | ALL（分子）   | 媒体新客 MAX+SUM；全店新客 EXCEPT 差集模式         | percent_1dp          |
+| 8         | Media Contribution to New Customer Acquisition% vs LY    | 同#7                                                                     | -                              | 当期值 − 同期值（bp）                              | ALL（分子）   | 同#7                                               | delta_bp             |
+| 9         | Media Contribution to New Customer Acquisition% TRA ACH% | Actual 同#7；Target：a05_e2e_paid_media_fcst_data_m                      | a05_e2e_paid_media_fcst_data_m | Actual / Target                                     | ALL（分子）   | 同#7                                               | percent_1dp          |
+| 10        | Media Cost Per New Acquisition                           | a05_e2e_paid_media_summary_d                                             | -                              | MAX+SUM(media_cost_amt) / MAX+SUM(media_member_cnt) | ALL           | 媒体新客字段 MAX+SUM 聚合                          | currency_decimal_1dp |
+| 11        | Media Cost Per New Acquisition vs LY                     | 同#10                                                                    | -                              | 当期值 / 同期值 − 1                                | ALL           | 同#10                                              | percent_1dp          |
+| 12        | Media Cost Per New Acquisition TRA ACH%                  | Actual 同#10；Target：a05_e2e_paid_media_fcst_data_m                     | a05_e2e_paid_media_fcst_data_m | Actual / Target                                     | ALL           | 媒体新客字段 MAX+SUM 聚合                          | percent_1dp          |
+| 13        | ± Acceleration cost MOB% vs. store SLS MOB%             | a05_e2e_paid_media_product_data_d                                        | -                              | Accel Cost MOB% − Store SLS MOB%                   | ALL           | Cost 分子：mix_msg=NULL AND Accel；SLS 分子：Accel | percent_1dp          |
+| 14        | ± Acceleration cost MOB% vs. store SLS MOB% vs LY       | 同#13                                                                    | -                              | 当期值 − 同期值（bp）                              | ALL           | 同#13                                              | delta_bp             |
+| 15        | ± Acceleration SLS MOB% vs. store SLS MOB% TRA ACH%     | Actual 同#13；Target：a05_e2e_paid_media_fcst_data_m                     | a05_e2e_paid_media_fcst_data_m | Actual / Target                                     | ALL           | 同#13                                              | percent_1dp          |
+| 16        | New Customer No                                          | a03_e2e_customer_data_m                                                  | -                              | COUNTROWS(EXCEPT)，EXCEPT 差集模式                  | -             | Step1+Step2 不能合并区间，EXCEPT 差集              | integer              |
+| 17        | New Customer No vs LY                                    | 同#16                                                                    | -                              | 当期值 / 同期值 − 1                                | -             | 同#16                                              | percent_1dp          |
+| 18        | New Customer No TRA ACH%                                 | Actual 同#16；Target：a05_e2e_paid_media_fcst_data_m                     | a05_e2e_paid_media_fcst_data_m | Actual / Target                                     | -             | 同#16                                              | percent_1dp          |
+| 19        | Acceleration SLS                                         | a05_e2e_paid_media_product_data_d                                        | -                              | SUM(net_sales_amt) WHERE framework='Acceleration'   | ALL           | framework='Acceleration'                           | currency             |
+| 20        | Acceleration SLS vs LY                                   | 同#19                                                                    | -                              | 当期值 / 同期值 − 1                                | ALL           | framework='Acceleration'                           | percent_1dp          |
+| 21        | Acceleration SLS TRA ACH%                                | Actual 同#19；Target：a05_e2e_paid_media_fcst_data_m                     | a05_e2e_paid_media_fcst_data_m | Actual / Target                                     | ALL           | framework='Acceleration'                           | percent_1dp          |
+| 22        | Acceleration SLS MOB%                                    | a05_e2e_paid_media_product_data_d                                        | -                              | Accel SLS / TTL SLS                                 | ALL           | 分子：Accel；分母：全部 framework                  | percent_1dp          |
+| 23        | Acceleration SLS MOB% vs LY                              | 同#22                                                                    | -                              | 当期占比 − 同期占比（bp）                          | ALL           | 同#22                                              | delta_bp             |
+| 24        | Acceleration SLS MOB% TRA ACH%                           | Actual 同#22；Target：a05_e2e_paid_media_fcst_data_m                     | a05_e2e_paid_media_fcst_data_m | Actual / Target                                     | ALL           | 同#22                                              | percent_1dp          |
 
 ---
 
@@ -1877,22 +1890,24 @@ KPIs Cell SVG Icon =
 
 TRA ACH% 类指标的卡片值统一使用 Actual / Target 计算：
 
-| Metric_ID | 指标名                                  | Actual 来源        | Target 来源                   | 卡片值 | DAX 实现 |
-| --------- | --------------------------------------- | ------------------ | ----------------------------- | ------ | -------- |
-| 3         | Cost ACH%                               | SUM(cost_amt) / Cost Target（fcst 表） | 100%（固定）           | Actual / Target | DIVIDE(Cur#3, Tgt#3) |
-| 5         | SLS ACH%                                | SUM(net_sales_amt) / SLS Target（fcst 表） | 100%（固定）      | Actual / Target | DIVIDE(Cur#5, Tgt#5) |
-| 9         | Media Contribution% TRA ACH%            | 同 #7              | fcst 表 SUMX+SUMMARIZE       | Actual / Target | DIVIDE(Cur#7, Tgt#9) |
-| 12        | Media Cost Per New Acquisition TRA ACH% | 同 #10             | fcst 表 SUMX+SUMMARIZE       | Actual / Target | DIVIDE(Cur#10, Tgt#12) |
-| 15        | ± Accel Cost MOB% TRA ACH%              | 同 #13             | fcst 表 SUMX+SUMMARIZE       | Actual / Target | DIVIDE(Cur#13, Tgt#15) |
-| 18        | New Customer No TRA ACH%                | 同 #16             | fcst 表 SUMX+SUMMARIZE       | Actual / Target | DIVIDE(Cur#16, Tgt#18) |
-| 21        | Acceleration SLS TRA ACH%               | 同 #19             | fcst 表 SUMX+SUMMARIZE       | Actual / Target | DIVIDE(Cur#19, Tgt#21) |
-| 24        | Acceleration SLS MOB% TRA ACH%          | 同 #22             | fcst 表 SUMX+SUMMARIZE       | Actual / Target | DIVIDE(Cur#22, Tgt#24) |
+| Metric_ID | 指标名                                  | Actual 来源                                | Target 来源            | 卡片值          | DAX 实现               |
+| --------- | --------------------------------------- | ------------------------------------------ | ---------------------- | --------------- | ---------------------- |
+| 3         | Cost ACH%                               | SUM(cost_amt) / Cost Target（fcst 表）     | 100%（固定）           | Actual / Target | DIVIDE(Cur#3, Tgt#3)   |
+| 5         | SLS ACH%                                | SUM(net_sales_amt) / SLS Target（fcst 表） | 100%（固定）           | Actual / Target | DIVIDE(Cur#5, Tgt#5)   |
+| 9         | Media Contribution% TRA ACH%            | 同#7                                       | fcst 表 SUMX+SUMMARIZE | Actual / Target | DIVIDE(Cur#7, Tgt#9)   |
+| 12        | Media Cost Per New Acquisition TRA ACH% | 同#10                                      | fcst 表 SUMX+SUMMARIZE | Actual / Target | DIVIDE(Cur#10, Tgt#12) |
+| 15        | ± Accel Cost MOB% TRA ACH%             | 同#13                                      | fcst 表 SUMX+SUMMARIZE | Actual / Target | DIVIDE(Cur#13, Tgt#15) |
+| 18        | New Customer No TRA ACH%                | 同#16                                      | fcst 表 SUMX+SUMMARIZE | Actual / Target | DIVIDE(Cur#16, Tgt#18) |
+| 21        | Acceleration SLS TRA ACH%               | 同#19                                      | fcst 表 SUMX+SUMMARIZE | Actual / Target | DIVIDE(Cur#19, Tgt#21) |
+| 24        | Acceleration SLS MOB% TRA ACH%          | 同#22                                      | fcst 表 SUMX+SUMMARIZE | Actual / Target | DIVIDE(Cur#22, Tgt#24) |
 
 说明：
+
 - 实现方式：映射表 `__TRAActualID`（9→7, 12→10, 15→13, 18→16, 21→19, 24→22, 3→3, 5→5）+ 统一取值 `__TRAActual`/`__TRATarget` + DIVIDE 统一计算
 - #4 Cost vs SLS ACH% 派生：DAX 变量不可按不同 Metric_ID 重算，#4 需显式取 #3/#5 的 Current/Target
 
 Target 缺失处理：
+
 - Target 缺失时，Target 及 Actual / Target 展示"-"
 - #12 Cost Per New Acquisition 额外处理：Target=0 或汇总后 `media_member_cnt`=0 时，Actual 及 Actual / Target 展示"-"
 
@@ -1911,28 +1926,28 @@ Target 缺失处理：
 
 涉及时间粒度判断的指标在 `Slicer_Time_Frame[TimeFrame_ID] IN {"Day","Week"}` 时返回 BLANK：
 
-| 指标类别             | Metric_ID                    | 留空原因                                   |
-| -------------------- | ---------------------------- | ------------------------------------------ |
-| TRA ACH% 类          | 3, 5, 9, 12, 15, 18, 21, 24 | Target 按财月/财季/财年粒度取数             |
-| 媒体新客聚合类       | 7, 9, 10, 12                 | media_member_cnt/media_cost_amt 需 MAX+SUM |
-| 新客类               | 16, 17, 18                   | 全店新客判定依赖完整财月                    |
-| vs LY 派生           | 8, 11, 14, 17, 20, 23        | 间接受上述影响（同期值留空则 vs LY 留空）   |
+| 指标类别       | Metric_ID                   | 留空原因                                                                              |
+| -------------- | --------------------------- | ------------------------------------------------------------------------------------- |
+| TRA ACH% 类    | 3, 5, 9, 12, 15, 18, 21, 24 | Target 按财月/财季/财年粒度取数                                                       |
+| 媒体新客聚合类 | 7, 9, 10, 12                | media_member_cnt/media_cost_amt 需 MAX+SUM                                            |
+| 新客类         | 16, 17, 18                  | 全店新客判定依赖完整财月                                                              |
+| vs LY 派生     | 8, 11, 14, 17, 20, 23       | 间接受上述影响；所有时间粒度下，同期值为`BLANK()` 或 0 时，vs LY 均返回 `BLANK()` |
 
 ### 8.4 汇率换算规则
 
 汇率换算**仅在 KPIs Cell Value 层处理**，Base Metrics 层（Current/vsLP/Target/Base Value）一律返回原始本币值，避免比值计算错误。
 
-| 指标类型 | 换算方式 | 判断依据 | 涉及 Metric_ID |
-| -------- | -------- | -------- | -------------- |
-| 金额类 | `DIVIDE([Base Value], Currency_ExchangeRate)`（除法，非乘法） | `Metric_IsCurrencyAmount = TRUE` | 2, 6, 10, 19 |
-| 比率/计数/基点类 | 不换算，直接返回 [Base Value] | `Metric_IsCurrencyAmount = FALSE` | 1, 3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23, 24 |
+| 指标类型         | 换算方式                                                        | 判断依据                            | 涉及 Metric_ID                                                          |
+| ---------------- | --------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------- |
+| 金额类           | `DIVIDE([Base Value], Currency_ExchangeRate)`（除法，非乘法） | `Metric_IsCurrencyAmount = TRUE`  | 2, 6, 10, 19                                                            |
+| 比率/计数/基点类 | 不换算，直接返回 [Base Value]                                   | `Metric_IsCurrencyAmount = FALSE` | 1, 3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23, 24 |
 
 ### 8.5 第二品类（Acceleration）筛选规则
 
-| 指标类型 | 分子筛选                                          | 分母筛选                     |
-| -------- | ------------------------------------------------- | ---------------------------- |
-| Cost 类  | `mix_msg IS NULL AND framework = "Acceleration"`  | `mix_msg IS NULL`（不限 framework） |
-| SLS 类   | `framework = "Acceleration"`（不限 mix_msg）      | 全部 framework（不限 mix_msg）      |
+| 指标类型 | 分子筛选                                           | 分母筛选                              |
+| -------- | -------------------------------------------------- | ------------------------------------- |
+| Cost 类  | `mix_msg IS NULL AND framework = "Acceleration"` | `mix_msg IS NULL`（不限 framework） |
+| SLS 类   | `framework = "Acceleration"`（不限 mix_msg）     | 全部 framework（不限 mix_msg）        |
 
 涉及 Metric_ID：13, 14, 15, 19, 20, 21, 22, 23, 24
 

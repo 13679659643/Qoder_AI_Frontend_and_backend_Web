@@ -1122,6 +1122,10 @@ RANKX(
 )
 ```
 
+### 4.16 ToolTips
+```dax
+ToolTips 01 = "New Customer% - TTL Customer%"
+```
 ---
 
 ## 5. 度量值清单
