@@ -222,7 +222,7 @@ Cost% 引力魔方 Value =
 // 数据底表: a05_e2e_paid_media_crowed_data_d
 // 筛选条件: channel in {"引力魔方","触点"}
 // 数据类型: percent_1dp → 百分比一位小数，不含正号
-// 说明: 分母用 REMOVEFILTERS 移除行维度（crowed_layer/crowed_type/customer_type
+// 说明: 分母用 REMOVEFILTERS 移除行维度（customer_type/crowed_layer/crowed_type
 //       卡片图场景下无行维度，REMOVEFILTERS 不影响结果，但保证矩阵场景兼容
 // ========================================
     // ── 时间筛选：本期 ──
@@ -572,7 +572,7 @@ ROI 直通车 Display =
 TM 引力魔方-->JD 触点 = 
     // ── 店铺筛选： ──
     VAR __Store_ID = SELECTEDVALUE(Slicer_Store_Name[Store_ID])
-        
+      
     RETURN
         SWITCH(__Store_ID,
             "TM","引力魔方",
@@ -585,7 +585,7 @@ TM 引力魔方-->JD 触点 =
 TM 直通车-->JD 快车 = 
     // ── 店铺筛选： ──
     VAR __Store_ID = SELECTEDVALUE(Slicer_Store_Name[Store_ID])
-        
+      
     RETURN
         SWITCH(__Store_ID,
             "TM","直通车",
@@ -652,6 +652,7 @@ RETURN
     )
 
 ```
+
 ### 2.12 度量加起来等于 0 的行过滤
 
 ```dax
@@ -678,42 +679,42 @@ RETURN
 
 ## 3. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称                          | Display Folder | 用途                              | 数据类型            | 是否金额类 |
-| ---- | ----------------------------------- | -------------- | --------------------------------- | ------------------- | ---------- |
-| 1    | Media Cost Value                    | KPIs Measure   | 媒体花费值（#1）                  | currency_M_K_Int_0db | 是         |
-| 2    | Media Cost Display                  | KPIs Measure   | 媒体花费格式化显示（K/M 切换）    | currency_M_K_Int_0db | 是         |
-| 3    | Cost 引力魔方 Value                 | KPIs Measure   | 引力魔方花费值（#6）              | currency            | 是         |
-| 4    | Cost 引力魔方 Display               | KPIs Measure   | 引力魔方花费格式化显示            | currency            | 是         |
-| 5    | Cost 引力魔方 触点占比 Value        | KPIs Measure   | 引力魔方触点占比值（#7）          | percent_0dp         | 否         |
-| 6    | Cost 引力魔方 触点占比 Display      | KPIs Measure   | 引力魔方触点占比格式化显示        | percent_0dp         | 否         |
-| 7    | Cost% 引力魔方 Value                | KPIs Measure   | 引力魔方花费占比值（#8）          | percent_1dp         | 否         |
-| 8    | Cost% 引力魔方 Display              | KPIs Measure   | 引力魔方花费占比格式化显示        | percent_1dp         | 否         |
-| 9    | ROI 引力魔方 Value                  | KPIs Measure   | 引力魔方 ROI 值（#9）             | decimal_1dp         | 否         |
-| 10   | ROI 引力魔方 Display                | KPIs Measure   | 引力魔方 ROI 格式化显示           | decimal_1dp         | 否         |
-| 11   | Cost 直通车 Value                   | KPIs Measure   | 直通车花费值（#10）               | currency            | 是         |
-| 12   | Cost 直通车 Display                 | KPIs Measure   | 直通车花费格式化显示              | currency            | 是         |
-| 13   | Cost 直通车 快车占比 Value          | KPIs Measure   | 直通车快车占比值（#11）           | percent_0dp         | 否         |
-| 14   | Cost 直通车 快车占比 Display        | KPIs Measure   | 直通车快车占比格式化显示          | percent_0dp         | 否         |
-| 15   | Cost% 直通车 Value                  | KPIs Measure   | 直通车花费占比值（#12）           | percent_1dp         | 否         |
-| 16   | Cost% 直通车 Display                | KPIs Measure   | 直通车花费占比格式化显示          | percent_1dp         | 否         |
-| 17   | ROI 直通车 Value                    | KPIs Measure   | 直通车 ROI 值（#13）              | decimal_1dp         | 否         |
-| 18   | ROI 直通车 Display                  | KPIs Measure   | 直通车 ROI 格式化显示             | decimal_1dp         | 否         |
+| 序号 | 度量值名称                     | Display Folder | 用途                           | 数据类型             | 是否金额类 |
+| ---- | ------------------------------ | -------------- | ------------------------------ | -------------------- | ---------- |
+| 1    | Media Cost Value               | KPIs Measure   | 媒体花费值（#1）               | currency_M_K_Int_0db | 是         |
+| 2    | Media Cost Display             | KPIs Measure   | 媒体花费格式化显示（K/M 切换） | currency_M_K_Int_0db | 是         |
+| 3    | Cost 引力魔方 Value            | KPIs Measure   | 引力魔方花费值（#6）           | currency             | 是         |
+| 4    | Cost 引力魔方 Display          | KPIs Measure   | 引力魔方花费格式化显示         | currency             | 是         |
+| 5    | Cost 引力魔方 触点占比 Value   | KPIs Measure   | 引力魔方触点占比值（#7）       | percent_0dp          | 否         |
+| 6    | Cost 引力魔方 触点占比 Display | KPIs Measure   | 引力魔方触点占比格式化显示     | percent_0dp          | 否         |
+| 7    | Cost% 引力魔方 Value           | KPIs Measure   | 引力魔方花费占比值（#8）       | percent_1dp          | 否         |
+| 8    | Cost% 引力魔方 Display         | KPIs Measure   | 引力魔方花费占比格式化显示     | percent_1dp          | 否         |
+| 9    | ROI 引力魔方 Value             | KPIs Measure   | 引力魔方 ROI 值（#9）          | decimal_1dp          | 否         |
+| 10   | ROI 引力魔方 Display           | KPIs Measure   | 引力魔方 ROI 格式化显示        | decimal_1dp          | 否         |
+| 11   | Cost 直通车 Value              | KPIs Measure   | 直通车花费值（#10）            | currency             | 是         |
+| 12   | Cost 直通车 Display            | KPIs Measure   | 直通车花费格式化显示           | currency             | 是         |
+| 13   | Cost 直通车 快车占比 Value     | KPIs Measure   | 直通车快车占比值（#11）        | percent_0dp          | 否         |
+| 14   | Cost 直通车 快车占比 Display   | KPIs Measure   | 直通车快车占比格式化显示       | percent_0dp          | 否         |
+| 15   | Cost% 直通车 Value             | KPIs Measure   | 直通车花费占比值（#12）        | percent_1dp          | 否         |
+| 16   | Cost% 直通车 Display           | KPIs Measure   | 直通车花费占比格式化显示       | percent_1dp          | 否         |
+| 17   | ROI 直通车 Value               | KPIs Measure   | 直通车 ROI 值（#13）           | decimal_1dp          | 否         |
+| 18   | ROI 直通车 Display             | KPIs Measure   | 直通车 ROI 格式化显示          | decimal_1dp          | 否         |
 
 ---
 
 ## 4. 指标口径来源对照
 
-| Metric_ID | Metric Name                | 口径文档出处   | 计算公式                                      | 数据底表                              | 筛选条件                                          | 数据类型            | 是否金额类 |
-| --------- | -------------------------- | -------------- | --------------------------------------------- | ------------------------------------- | ------------------------------------------------- | ------------------- | ---------- |
-| 1         | Media Cost                 | 子模块二 §1    | SUM(cost_amt)                                 | a05_e2e_paid_media_summary_d          | customer_type='ALL' AND page_type="1"             | currency_M_K_Int_0db | 是         |
-| 6         | Cost 引力魔方              | 子模块四 §6    | SUM(cost_amt), channel in {"引力魔方","触点"}             | a05_e2e_paid_media_crowed_data_d      | channel in {"引力魔方","触点"}                                | currency            | 是         |
-| 7         | Cost 引力魔方 触点占比     | 子模块四 §7    | cost_amt(引力魔方/触点) / cost_amt(四渠道)    | a05_e2e_paid_media_crowed_data_d      | 分子 channel IN {'引力魔方','触点'}；分母四渠道   | percent_0dp         | 否         |
-| 8         | Cost% 引力魔方             | 子模块四 §8    | TA层级Cost / TTL Cost（移除行维度）           | a05_e2e_paid_media_crowed_data_d      | channel in {"引力魔方","触点"}                                | percent_1dp         | 否         |
-| 9         | ROI 引力魔方               | 子模块四 §9    | media_sales_amt / cost_amt                    | a05_e2e_paid_media_crowed_data_d      | channel in {"引力魔方","触点"}                                | decimal_1dp         | 否         |
-| 10        | Cost 直通车                | 子模块五 §10   | SUM(cost_amt), channel in {"直通车","快车"}               | a05_e2e_paid_media_keyword_data_d     | channel in {"直通车","快车"}                                  | currency            | 是         |
-| 11        | Cost 直通车 快车占比       | 子模块五 §11   | cost_amt(直通车/快车) / cost_amt(四渠道)      | a05_e2e_paid_media_keyword_data_d     | 分子 channel IN {'直通车','快车'}；分母四渠道     | percent_0dp         | 否         |
-| 12        | Cost% 直通车               | 子模块五 §12   | 关键词层级Cost / TTL Cost（移除行维度）       | a05_e2e_paid_media_keyword_data_d     | channel in {"直通车","快车"}                                  | percent_1dp         | 否         |
-| 13        | ROI 直通车                 | 子模块五 §13   | media_sales_amt / cost_amt                    | a05_e2e_paid_media_keyword_data_d     | channel in {"直通车","快车"}                                  | decimal_1dp         | 否         |
+| Metric_ID | Metric Name            | 口径文档出处  | 计算公式                                      | 数据底表                          | 筛选条件                                        | 数据类型             | 是否金额类 |
+| --------- | ---------------------- | ------------- | --------------------------------------------- | --------------------------------- | ----------------------------------------------- | -------------------- | ---------- |
+| 1         | Media Cost             | 子模块二 §1  | SUM(cost_amt)                                 | a05_e2e_paid_media_summary_d      | customer_type='ALL' AND page_type="1"           | currency_M_K_Int_0db | 是         |
+| 6         | Cost 引力魔方          | 子模块四 §6  | SUM(cost_amt), channel in {"引力魔方","触点"} | a05_e2e_paid_media_crowed_data_d  | channel in {"引力魔方","触点"}                  | currency             | 是         |
+| 7         | Cost 引力魔方 触点占比 | 子模块四 §7  | cost_amt(引力魔方/触点) / cost_amt(四渠道)    | a05_e2e_paid_media_crowed_data_d  | 分子 channel IN {'引力魔方','触点'}；分母四渠道 | percent_0dp          | 否         |
+| 8         | Cost% 引力魔方         | 子模块四 §8  | TA层级Cost / TTL Cost（移除行维度）           | a05_e2e_paid_media_crowed_data_d  | channel in {"引力魔方","触点"}                  | percent_1dp          | 否         |
+| 9         | ROI 引力魔方           | 子模块四 §9  | media_sales_amt / cost_amt                    | a05_e2e_paid_media_crowed_data_d  | channel in {"引力魔方","触点"}                  | decimal_1dp          | 否         |
+| 10        | Cost 直通车            | 子模块五 §10 | SUM(cost_amt), channel in {"直通车","快车"}   | a05_e2e_paid_media_keyword_data_d | channel in {"直通车","快车"}                    | currency             | 是         |
+| 11        | Cost 直通车 快车占比   | 子模块五 §11 | cost_amt(直通车/快车) / cost_amt(四渠道)      | a05_e2e_paid_media_keyword_data_d | 分子 channel IN {'直通车','快车'}；分母四渠道   | percent_0dp          | 否         |
+| 12        | Cost% 直通车           | 子模块五 §12 | 关键词层级Cost / TTL Cost（移除行维度）       | a05_e2e_paid_media_keyword_data_d | channel in {"直通车","快车"}                    | percent_1dp          | 否         |
+| 13        | ROI 直通车             | 子模块五 §13 | media_sales_amt / cost_amt                    | a05_e2e_paid_media_keyword_data_d | channel in {"直通车","快车"}                    | decimal_1dp          | 否         |
 
 ---
 
@@ -822,13 +823,13 @@ RETURN
 
 ### 6.1 格式类型说明
 
-| 格式类型             | 适用指标       | 格式规则                                                    |
-| -------------------- | -------------- | ----------------------------------------------------------- |
-| currency_M_K_Int_0db | #1             | <1K 千分位整数；≥1K 用 K（1位小数）；≥1M 用 M（1位小数）    |
-| currency             | #6、#10        | 货币符号 + 千分位整数，格式串 `#,##0`                       |
-| percent_0dp          | #7、#11        | 百分比整数，不含正号，格式串 `#,##0%;#,##0%;0%`            |
-| percent_1dp          | #8、#12        | 百分比一位小数，不含正号，格式串 `#,##0.0%;-#,##0.0%;0.0%`  |
-| decimal_1dp          | #9、#13        | 数值一位小数，格式串 `#,##0.0`                              |
+| 格式类型             | 适用指标 | 格式规则                                                    |
+| -------------------- | -------- | ----------------------------------------------------------- |
+| currency_M_K_Int_0db | #1       | <1K 千分位整数；≥1K 用 K（1位小数）；≥1M 用 M（1位小数）  |
+| currency             | #6、#10  | 货币符号 + 千分位整数，格式串`#,##0`                      |
+| percent_0dp          | #7、#11  | 百分比整数，不含正号，格式串`#,##0%;#,##0%;0%`            |
+| percent_1dp          | #8、#12  | 百分比一位小数，不含正号，格式串`#,##0.0%;-#,##0.0%;0.0%` |
+| decimal_1dp          | #9、#13  | 数值一位小数，格式串`#,##0.0`                             |
 
 ### 6.2 金额类指标与汇率转换
 
@@ -841,11 +842,11 @@ RETURN
 
 ### 6.3 数据底表分布
 
-| 指标         | 数据底表                              | 特点                                  |
-| ------------ | ------------------------------------- | ------------------------------------- |
-| #1 Media Cost | a05_e2e_paid_media_summary_d          | 汇总表，有 page_type="1" 筛选         |
-| #6~#9 引力魔方 | a05_e2e_paid_media_crowed_data_d      | 下钻表，无 page_type 筛选             |
-| #10~#13 直通车 | a05_e2e_paid_media_keyword_data_d     | 下钻表，无 page_type 筛选             |
+| 指标           | 数据底表                          | 特点                          |
+| -------------- | --------------------------------- | ----------------------------- |
+| #1 Media Cost  | a05_e2e_paid_media_summary_d      | 汇总表，有 page_type="1" 筛选 |
+| #6~#9 引力魔方 | a05_e2e_paid_media_crowed_data_d  | 下钻表，无 page_type 筛选     |
+| #10~#13 直通车 | a05_e2e_paid_media_keyword_data_d | 下钻表，无 page_type 筛选     |
 
 ### 6.4 Cost% 分母移除行维度（#8、#12）
 
@@ -860,11 +861,11 @@ RETURN
 
 TM 和 JD 平台的渠道存在映射关系：
 
-| TM 渠道   | JD 渠道 |
-| --------- | ------- |
-| 直通车    | 快车    |
-| 引力魔方  | 触点    |
-| 全站推    | 海投    |
+| TM 渠道  | JD 渠道 |
+| -------- | ------- |
+| 直通车   | 快车    |
+| 引力魔方 | 触点    |
+| 全站推   | 海投    |
 
 #7 和 #11 的分子分母都用 `channel IN {...}` 包含所有映射渠道，platform 筛选器会自动筛选对应渠道，无需在 DAX 中额外处理平台映射。
 
@@ -887,6 +888,7 @@ TM 和 JD 平台的渠道存在映射关系：
 ### 6.8 is_controllable_channel 字段类型说明
 
 口径文档存在两处表述：
+
 - "筛选条件"栏：`is_controllable_channel="1"`（字符串）
 - "DAX 语法规范"示例：`[is_controllable_channel] = 1`（整数）
 
