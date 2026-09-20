@@ -1343,6 +1343,694 @@ Failed Request Ratio Display =
 
 ---
 
+## 子模块五：BOSS Unfulfillment - Unfulfilled Order by Store Type Group
+
+> 数据底表: t01_o2o_fulfillment_order_detail_d
+> 时间字段: dt（PBI 中已转换为 date 类型）
+> 预处理: 所选时间范围 dt 内，按 order_code + ext_code2 分组取 push_time 最新一条；根据 Slicer_Fulfillment_Calc_Type[Calc_Type_ID] 筛选 is_pay_date_cancel / is_ec_fulfillment
+> Unfulfilled Order Scope: failure_remark 不为空的记录（PBI 上实现，四个子分类各自按 failure_remark 值筛选）
+> 口径同子模块三，分组维度由 store_region 替换为 store_type_group，其余逻辑不变
+
+### 4.39 Store Type Group Rejected Order Value
+
+```dax
+Store Type Group Rejected Order Value = 
+// ========================================
+// 度量值: Store Type Group Rejected Order Value
+// Display Folder: PB Location
+// 用途: O2O失败订单数 - 门店拒绝接单分类（Store Type Group 维度），用于柱形图 Y 轴
+// 口径来源: PB Location.md 子模块五 - Unfulfilled Order
+// 计算公式: 预处理后按 failure_remark 筛选 + order_code 去重计数
+// 预处理:
+//   Step 1: dt ∈ [__TimeMin, __TimeMax]（全局时间范围）
+//   Step 2: 根据 Slicer_Fulfillment_Calc_Type[Calc_Type_ID] 筛选
+//     - Calc_Type_ID = 1: is_pay_date_cancel = 0
+//     - Calc_Type_ID = 2: is_pay_date_cancel = 0 AND is_ec_fulfillment = 0
+//   Step 3: 按 order_code + ext_code2 分组，取 push_time 最大的一条记录
+// 分类筛选:
+//   - failure_remark IN ("门店拒绝接单", "门店接单后取消配货")
+//   - store_type_group 由视觉对象图例自动传递
+// 数据类型: integer → 千分位整数
+// 格式: #,##0
+// ========================================
+VAR __StoreTypeGroup =
+    SELECTEDVALUE(
+        't01_o2o_fulfillment_order_detail_d'[store_type_group]
+    )
+VAR __TimeMin =
+    SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+VAR __TimeMax =
+    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+VAR __CalcTypeID =
+    SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
+
+VAR __FilteredTable =
+    CALCULATETABLE(
+        FILTER(
+            't01_o2o_fulfillment_order_detail_d',
+            't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin
+                && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+                && SWITCH(
+                    TRUE(),
+                    __CalcTypeID = "1",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
+                    __CalcTypeID = "2",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
+                            && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
+                    FALSE()
+                )
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[store_type_group]
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[failure_remark]
+        )
+    )
+
+VAR __OrderMaxPush =
+    GROUPBY(
+        __FilteredTable,
+        't01_o2o_fulfillment_order_detail_d'[order_code],
+        't01_o2o_fulfillment_order_detail_d'[ext_code2],
+        "__MaxPush",
+            MAXX(
+                CURRENTGROUP(),
+                't01_o2o_fulfillment_order_detail_d'[push_time]
+            )
+    )
+
+VAR __LatestTable =
+    FILTER(
+        __FilteredTable,
+        VAR __Order = [order_code]
+        VAR __Ext = [ext_code2]
+        VAR __Push = [push_time]
+        RETURN
+            COUNTROWS(
+                FILTER(
+                    __OrderMaxPush,
+                    [order_code] = __Order
+                        && [ext_code2] = __Ext
+                        && [__MaxPush] = __Push
+                )
+            ) > 0
+    )
+
+VAR __QualifiedTable =
+    FILTER(
+        __LatestTable,
+        [store_type_group] = __StoreTypeGroup
+            && [failure_remark]
+                IN { "门店拒绝接单", "门店接单后取消配货" }
+            && NOT ISBLANK([order_code])
+    )
+
+RETURN
+    IF(
+        ISBLANK(__StoreTypeGroup)
+            || ISBLANK(__TimeMin)
+            || ISBLANK(__TimeMax),
+        BLANK(),
+        COUNTROWS(
+            DISTINCT(
+                SELECTCOLUMNS(
+                    __QualifiedTable,
+                    "__OrderCode", [order_code]
+                )
+            )
+        )
+    )
+```
+
+### 4.40 Store Type Group Rejected Order Display
+
+```dax
+Store Type Group Rejected Order Display =
+// ========================================
+// 度量值: Store Type Group Rejected Order Display
+// Display Folder: PB Location
+// 用途: O2O失败订单数 - 门店拒绝接单 格式化显示（Store Type Group 维度）
+// 依赖: [Store Type Group Rejected Order Value]
+// 格式类型: integer → #,##0
+// ========================================
+    VAR __Value = [Store Type Group Rejected Order Value]
+    RETURN
+        IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0"))
+```
+
+### 4.41 Store Type Group Cancelled Order by Overdue Value
+
+```dax
+Store Type Group Cancelled Order by Overdue Value = 
+// ========================================
+// 度量值: Store Type Group Cancelled Order by Overdue Value
+// Display Folder: PB Location
+// 用途: O2O失败订单数 - 超时分类（Store Type Group 维度），用于柱形图 Y 轴
+// 口径来源: PB Location.md 子模块五 - Unfulfilled Order
+// 计算公式: 预处理后按 failure_remark 筛选 + order_code 去重计数
+// 预处理: 同 Store Type Group Rejected Order Value（时间范围 + Calc_Type + push_time 取最新）
+// 分类筛选:
+//   - failure_remark IN ("待接单超时", "门店接单后超时未处理", "接单超时")
+// 数据类型: integer → 千分位整数
+// ========================================
+VAR __StoreTypeGroup =
+    SELECTEDVALUE(
+        't01_o2o_fulfillment_order_detail_d'[store_type_group]
+    )
+VAR __TimeMin =
+    SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+VAR __TimeMax =
+    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+VAR __CalcTypeID =
+    SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
+
+VAR __FilteredTable =
+    CALCULATETABLE(
+        FILTER(
+            't01_o2o_fulfillment_order_detail_d',
+            't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin
+                && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+                && SWITCH(
+                    TRUE(),
+                    __CalcTypeID = "1",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
+                    __CalcTypeID = "2",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
+                            && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
+                    FALSE()
+                )
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[store_type_group]
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[failure_remark]
+        )
+    )
+
+VAR __OrderMaxPush =
+    GROUPBY(
+        __FilteredTable,
+        't01_o2o_fulfillment_order_detail_d'[order_code],
+        't01_o2o_fulfillment_order_detail_d'[ext_code2],
+        "__MaxPush",
+            MAXX(
+                CURRENTGROUP(),
+                't01_o2o_fulfillment_order_detail_d'[push_time]
+            )
+    )
+
+VAR __LatestTable =
+    FILTER(
+        __FilteredTable,
+        VAR __Order = [order_code]
+        VAR __Ext = [ext_code2]
+        VAR __Push = [push_time]
+        RETURN
+            COUNTROWS(
+                FILTER(
+                    __OrderMaxPush,
+                    [order_code] = __Order
+                        && [ext_code2] = __Ext
+                        && [__MaxPush] = __Push
+                )
+            ) > 0
+    )
+
+VAR __QualifiedTable =
+    FILTER(
+        __LatestTable,
+        [store_type_group] = __StoreTypeGroup
+            && 
+                [failure_remark] IN {
+                        "待接单超时", "门店接单后超时未处理", "接单超时"
+                    }
+            && NOT ISBLANK([order_code])
+    )
+
+RETURN
+    IF(
+        ISBLANK(__StoreTypeGroup)
+            || ISBLANK(__TimeMin)
+            || ISBLANK(__TimeMax),
+        BLANK(),
+        COUNTROWS(
+            DISTINCT(
+                SELECTCOLUMNS(
+                    __QualifiedTable,
+                    "__OrderCode", [order_code]
+                )
+            )
+        )
+    )
+```
+
+### 4.42 Store Type Group Cancelled Order by Overdue Display
+
+```dax
+Store Type Group Cancelled Order by Overdue Display =
+// ========================================
+// 度量值: Store Type Group Cancelled Order by Overdue Display
+// Display Folder: PB Location
+// 用途: O2O失败订单数 - 超时 格式化显示（Store Type Group 维度）
+// 依赖: [Store Type Group Cancelled Order by Overdue Value]
+// 格式类型: integer → #,##0
+// ========================================
+    VAR __Value = [Store Type Group Cancelled Order by Overdue Value]
+    RETURN
+        IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0"))
+```
+
+### 4.43 Store Type Group Cancelled Order by Customer Value
+
+```dax
+Store Type Group Cancelled Order by Customer Value = 
+// ========================================
+// 度量值: Store Type Group Cancelled Order by Customer Value
+// Display Folder: PB Location
+// 用途: O2O失败订单数 - 顾客取消分类（Store Type Group 维度），用于柱形图 Y 轴
+// 口径来源: PB Location.md 子模块五 - Unfulfilled Order
+// 计算公式: 预处理后按 failure_remark 筛选 + order_code 去重计数
+// 预处理: 同 Store Type Group Rejected Order Value（时间范围 + Calc_Type + push_time 取最新）
+// 分类筛选:
+//   - failure_remark IN ("顾客取消订单", "消费者取消")
+// 数据类型: integer → 千分位整数
+// ========================================
+VAR __StoreTypeGroup =
+    SELECTEDVALUE(
+        't01_o2o_fulfillment_order_detail_d'[store_type_group]
+    )
+VAR __TimeMin =
+    SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+VAR __TimeMax =
+    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+VAR __CalcTypeID =
+    SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
+
+VAR __FilteredTable =
+    CALCULATETABLE(
+        FILTER(
+            't01_o2o_fulfillment_order_detail_d',
+            't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin
+                && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+                && SWITCH(
+                    TRUE(),
+                    __CalcTypeID = "1",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
+                    __CalcTypeID = "2",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
+                            && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
+                    FALSE()
+                )
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[store_type_group]
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[failure_remark]
+        )
+    )
+
+VAR __OrderMaxPush =
+    GROUPBY(
+        __FilteredTable,
+        't01_o2o_fulfillment_order_detail_d'[order_code],
+        't01_o2o_fulfillment_order_detail_d'[ext_code2],
+        "__MaxPush",
+            MAXX(
+                CURRENTGROUP(),
+                't01_o2o_fulfillment_order_detail_d'[push_time]
+            )
+    )
+
+VAR __LatestTable =
+    FILTER(
+        __FilteredTable,
+        VAR __Order = [order_code]
+        VAR __Ext = [ext_code2]
+        VAR __Push = [push_time]
+        RETURN
+            COUNTROWS(
+                FILTER(
+                    __OrderMaxPush,
+                    [order_code] = __Order
+                        && [ext_code2] = __Ext
+                        && [__MaxPush] = __Push
+                )
+            ) > 0
+    )
+
+VAR __QualifiedTable =
+    FILTER(
+        __LatestTable,
+        [store_type_group] = __StoreTypeGroup
+            && [failure_remark]
+                IN { "顾客取消订单", "消费者取消" }
+            && NOT ISBLANK([order_code])
+    )
+
+RETURN
+    IF(
+        ISBLANK(__StoreTypeGroup)
+            || ISBLANK(__TimeMin)
+            || ISBLANK(__TimeMax),
+        BLANK(),
+        COUNTROWS(
+            DISTINCT(
+                SELECTCOLUMNS(
+                    __QualifiedTable,
+                    "__OrderCode", [order_code]
+                )
+            )
+        )
+    )
+```
+
+### 4.44 Store Type Group Cancelled Order by Customer Display
+
+```dax
+Store Type Group Cancelled Order by Customer Display =
+// ========================================
+// 度量值: Store Type Group Cancelled Order by Customer Display
+// Display Folder: PB Location
+// 用途: O2O失败订单数 - 顾客取消 格式化显示（Store Type Group 维度）
+// 依赖: [Store Type Group Cancelled Order by Customer Value]
+// 格式类型: integer → #,##0
+// ========================================
+    VAR __Value = [Store Type Group Cancelled Order by Customer Value]
+    RETURN
+        IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0"))
+```
+
+### 4.45 Store Type Group Cancelled Order by Other Value
+
+```dax
+Store Type Group Cancelled Order by Other Value = 
+// ========================================
+// 度量值: Store Type Group Cancelled Order by Other Value
+// Display Folder: PB Location
+// 用途: O2O失败订单数 - 其他原因分类（Store Type Group 维度），用于柱形图 Y 轴
+// 口径来源: PB Location.md 子模块五 - Unfulfilled Order
+// 计算公式: 预处理后按 failure_remark 筛选 + order_code 去重计数
+// 预处理: 同 Store Type Group Rejected Order Value（时间范围 + Calc_Type + push_time 取最新）
+// 分类筛选:
+//   - failure_remark NOT IN ("门店拒绝接单", "门店接单后取消配货", "待接单超时",
+//     "门店接单后超时未处理", "接单超时", "顾客取消订单", "消费者取消")
+//   - 即排除以上三类后，failure_remark 不为空的所有其他原因
+// 数据类型: integer → 千分位整数
+// ========================================
+VAR __StoreTypeGroup =
+    SELECTEDVALUE(
+        't01_o2o_fulfillment_order_detail_d'[store_type_group]
+    )
+VAR __TimeMin =
+    SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+VAR __TimeMax =
+    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+VAR __CalcTypeID =
+    SELECTEDVALUE('Slicer_Fulfillment_Calc_Type'[Calc_Type_ID])
+
+VAR __FilteredTable =
+    CALCULATETABLE(
+        FILTER(
+            't01_o2o_fulfillment_order_detail_d',
+            't01_o2o_fulfillment_order_detail_d'[dt] >= __TimeMin
+                && 't01_o2o_fulfillment_order_detail_d'[dt] <= __TimeMax
+                && SWITCH(
+                    TRUE(),
+                    __CalcTypeID = "1",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0,
+                    __CalcTypeID = "2",
+                        't01_o2o_fulfillment_order_detail_d'[is_pay_date_cancel] = 0
+                            && 't01_o2o_fulfillment_order_detail_d'[is_ec_fulfillment] = 0,
+                    FALSE()
+                )
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[store_type_group]
+        ),
+        REMOVEFILTERS(
+            't01_o2o_fulfillment_order_detail_d'[failure_remark]
+        )
+    )
+
+VAR __OrderMaxPush =
+    GROUPBY(
+        __FilteredTable,
+        't01_o2o_fulfillment_order_detail_d'[order_code],
+        't01_o2o_fulfillment_order_detail_d'[ext_code2],
+        "__MaxPush",
+            MAXX(
+                CURRENTGROUP(),
+                't01_o2o_fulfillment_order_detail_d'[push_time]
+            )
+    )
+
+VAR __LatestTable =
+    FILTER(
+        __FilteredTable,
+        VAR __Order = [order_code]
+        VAR __Ext = [ext_code2]
+        VAR __Push = [push_time]
+        RETURN
+            COUNTROWS(
+                FILTER(
+                    __OrderMaxPush,
+                    [order_code] = __Order
+                        && [ext_code2] = __Ext
+                        && [__MaxPush] = __Push
+                )
+            ) > 0
+    )
+
+VAR __QualifiedTable =
+    FILTER(
+        __LatestTable,
+        [store_type_group] = __StoreTypeGroup
+            && 
+                NOT [failure_remark] IN {
+                        "门店拒绝接单", "门店接单后取消配货",
+                        "待接单超时", "门店接单后超时未处理", "接单超时",
+                        "顾客取消订单", "消费者取消"
+                    }
+            && NOT ISBLANK([order_code])
+    )
+
+RETURN
+    IF(
+        ISBLANK(__StoreTypeGroup)
+            || ISBLANK(__TimeMin)
+            || ISBLANK(__TimeMax),
+        BLANK(),
+        COUNTROWS(
+            DISTINCT(
+                SELECTCOLUMNS(
+                    __QualifiedTable,
+                    "__OrderCode", [order_code]
+                )
+            )
+        )
+    )
+```
+
+### 4.46 Store Type Group Cancelled Order by Other Display
+
+```dax
+Store Type Group Cancelled Order by Other Display =
+// ========================================
+// 度量值: Store Type Group Cancelled Order by Other Display
+// Display Folder: PB Location
+// 用途: O2O失败订单数 - 其他原因 格式化显示（Store Type Group 维度）
+// 依赖: [Store Type Group Cancelled Order by Other Value]
+// 格式类型: integer → #,##0
+// ========================================
+    VAR __Value = [Store Type Group Cancelled Order by Other Value]
+    RETURN
+        IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0"))
+```
+
+### 4.47 Store Type Group Rejected Order Share Value
+
+```dax
+Store Type Group Rejected Order Share Value =
+// ========================================
+// 度量值: Store Type Group Rejected Order Share Value
+// Display Folder: PB Location
+// 用途: 门店拒绝接单订单数占所有失败订单数的比例（Store Type Group 维度）
+// 口径来源: PB Location.md 子模块五 - Unfulfilled Order Share
+// 计算公式: [Store Type Group Rejected Order Value] / 四类之和
+//   分母使用四个指标相加，不使用 REMOVEFILTERS 函数
+// 数据类型: percent_1dp → 百分比，保留一位小数，不含正号
+// ========================================
+    VAR __Numerator = [Store Type Group Rejected Order Value]
+    VAR __Denominator =
+        [Store Type Group Rejected Order Value]
+        + [Store Type Group Cancelled Order by Overdue Value]
+        + [Store Type Group Cancelled Order by Customer Value]
+        + [Store Type Group Cancelled Order by Other Value]
+    RETURN DIVIDE(__Numerator, __Denominator)
+```
+
+### 4.48 Store Type Group Rejected Order Share Display
+
+```dax
+Store Type Group Rejected Order Share Display =
+// ========================================
+// 度量值: Store Type Group Rejected Order Share Display
+// Display Folder: PB Location
+// 用途: 门店拒绝接单占比 格式化显示（Store Type Group 维度）
+// 依赖: [Store Type Group Rejected Order Share Value]
+// 格式类型: percent_1dp → #,##0.0%
+// ========================================
+    VAR __Value = [Store Type Group Rejected Order Share Value]
+    RETURN
+        IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0.0%"))
+```
+
+### 4.49 Store Type Group Cancelled Order Share by Overdue Value
+
+```dax
+Store Type Group Cancelled Order Share by Overdue Value =
+// ========================================
+// 度量值: Store Type Group Cancelled Order Share by Overdue Value
+// Display Folder: PB Location
+// 用途: 超时订单数占所有失败订单数的比例（Store Type Group 维度）
+// 口径来源: PB Location.md 子模块五 - Unfulfilled Order Share
+// 计算公式: [Store Type Group Cancelled Order by Overdue Value] / 四类之和
+//   分母使用四个指标相加，不使用 REMOVEFILTERS 函数
+// 数据类型: percent_1dp → 百分比，保留一位小数，不含正号
+// ========================================
+    VAR __Numerator = [Store Type Group Cancelled Order by Overdue Value]
+    VAR __Denominator =
+        [Store Type Group Rejected Order Value]
+        + [Store Type Group Cancelled Order by Overdue Value]
+        + [Store Type Group Cancelled Order by Customer Value]
+        + [Store Type Group Cancelled Order by Other Value]
+    RETURN DIVIDE(__Numerator, __Denominator)
+```
+
+### 4.50 Store Type Group Cancelled Order Share by Overdue Display
+
+```dax
+Store Type Group Cancelled Order Share by Overdue Display =
+// ========================================
+// 度量值: Store Type Group Cancelled Order Share by Overdue Display
+// Display Folder: PB Location
+// 用途: 超时订单占比 格式化显示（Store Type Group 维度）
+// 依赖: [Store Type Group Cancelled Order Share by Overdue Value]
+// 格式类型: percent_1dp → #,##0.0%
+// ========================================
+    VAR __Value = [Store Type Group Cancelled Order Share by Overdue Value]
+    RETURN
+        IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0.0%"))
+```
+
+### 4.51 Store Type Group Cancelled Order Share by Customer Value
+
+```dax
+Store Type Group Cancelled Order Share by Customer Value =
+// ========================================
+// 度量值: Store Type Group Cancelled Order Share by Customer Value
+// Display Folder: PB Location
+// 用途: 顾客取消订单数占所有失败订单数的比例（Store Type Group 维度）
+// 口径来源: PB Location.md 子模块五 - Unfulfilled Order Share
+// 计算公式: [Store Type Group Cancelled Order by Customer Value] / 四类之和
+//   分母使用四个指标相加，不使用 REMOVEFILTERS 函数
+// 数据类型: percent_1dp → 百分比，保留一位小数，不含正号
+// ========================================
+    VAR __Numerator = [Store Type Group Cancelled Order by Customer Value]
+    VAR __Denominator =
+        [Store Type Group Rejected Order Value]
+        + [Store Type Group Cancelled Order by Overdue Value]
+        + [Store Type Group Cancelled Order by Customer Value]
+        + [Store Type Group Cancelled Order by Other Value]
+    RETURN DIVIDE(__Numerator, __Denominator)
+```
+
+### 4.52 Store Type Group Cancelled Order Share by Customer Display
+
+```dax
+Store Type Group Cancelled Order Share by Customer Display =
+// ========================================
+// 度量值: Store Type Group Cancelled Order Share by Customer Display
+// Display Folder: PB Location
+// 用途: 顾客取消订单占比 格式化显示（Store Type Group 维度）
+// 依赖: [Store Type Group Cancelled Order Share by Customer Value]
+// 格式类型: percent_1dp → #,##0.0%
+// ========================================
+    VAR __Value = [Store Type Group Cancelled Order Share by Customer Value]
+    RETURN
+        IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0.0%"))
+```
+
+### 4.53 Store Type Group Cancelled Order Share by Other Value
+
+```dax
+Store Type Group Cancelled Order Share by Other Value =
+// ========================================
+// 度量值: Store Type Group Cancelled Order Share by Other Value
+// Display Folder: PB Location
+// 用途: 其他原因失败订单数占所有失败订单数的比例（Store Type Group 维度）
+// 口径来源: PB Location.md 子模块五 - Unfulfilled Order Share
+// 计算公式: [Store Type Group Cancelled Order by Other Value] / 四类之和
+//   分母使用四个指标相加，不使用 REMOVEFILTERS 函数
+// 数据类型: percent_1dp → 百分比，保留一位小数，不含正号
+// ========================================
+    VAR __Numerator = [Store Type Group Cancelled Order by Other Value]
+    VAR __Denominator =
+        [Store Type Group Rejected Order Value]
+        + [Store Type Group Cancelled Order by Overdue Value]
+        + [Store Type Group Cancelled Order by Customer Value]
+        + [Store Type Group Cancelled Order by Other Value]
+    RETURN DIVIDE(__Numerator, __Denominator)
+```
+
+### 4.54 Store Type Group Cancelled Order Share by Other Display
+
+```dax
+Store Type Group Cancelled Order Share by Other Display =
+// ========================================
+// 度量值: Store Type Group Cancelled Order Share by Other Display
+// Display Folder: PB Location
+// 用途: 其他原因失败订单占比 格式化显示（Store Type Group 维度）
+// 依赖: [Store Type Group Cancelled Order Share by Other Value]
+// 格式类型: percent_1dp → #,##0.0%
+// ========================================
+    VAR __Value = [Store Type Group Cancelled Order Share by Other Value]
+    RETURN
+        IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0.0%"))
+```
+
+### 4.55 Store Type Group Unfulfilled Order Tooltip Display
+
+```dax
+Store Type Group Unfulfilled Order Tooltip Display = 
+// ========================================
+// 度量值: Store Type Group Unfulfilled Order Tooltip Display
+// Display Folder: PB Location
+// 用途: Unfulfilled Order 工具提示（Store Type Group 维度）
+// 口径来源: PB Location.md 子模块五 - Unfulfilled Order Tooltip Display
+// 格式:
+//   Store Type Group：{Store Type Group}
+//   Rejected By Store：{Store Type Group Rejected Order} 占比：{Store Type Group Rejected Order Share}
+//   Cancelled By Overdue：{Store Type Group Cancelled Order by Overdue} 占比：{Store Type Group Cancelled Order Share by Overdue}
+//   Cancelled By Customer：{Store Type Group Cancelled Order by Customer} 占比：{Store Type Group Cancelled Order Share by Customer}
+//   Cancelled By Other：{Store Type Group Cancelled Order by Other} 占比：{Store Type Group Cancelled Order Share by Other}
+//   共五行，换行拼接
+// ========================================
+    VAR __StoreTypeGroup = SELECTEDVALUE('t01_o2o_fulfillment_order_detail_d'[store_type_group])
+    VAR __Line1 = "Store Type Group：" & IF(ISBLANK(__StoreTypeGroup), "-", __StoreTypeGroup)
+    VAR __Line2 = "Rejected By Store：" & [Store Type Group Rejected Order Display] & " , " & [Store Type Group Rejected Order Share Display]
+    VAR __Line3 = "Cancelled By Overdue：" & [Store Type Group Cancelled Order by Overdue Display] & " , " & [Store Type Group Cancelled Order Share by Overdue Display]
+    VAR __Line4 = "Cancelled By Customer：" & [Store Type Group Cancelled Order by Customer Display] & " , " & [Store Type Group Cancelled Order Share by Customer Display]
+    VAR __Line5 = "Cancelled By Other：" & [Store Type Group Cancelled Order by Other Display] & " , " & [Store Type Group Cancelled Order Share by Other Display]
+    RETURN
+        __Line1 & UNICHAR(10) & __Line2 & UNICHAR(10) & __Line3 & UNICHAR(10) & __Line4 & UNICHAR(10) & __Line5
+```
+
+---
+
 ## 5. 度量值清单与 Display Folder
 
 | 序号 | 度量值名称                                | Display Folder | 用途                          | 子模块 |
