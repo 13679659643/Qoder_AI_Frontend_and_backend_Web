@@ -119,13 +119,13 @@ Category Growth Diff EOH(OMS)% =
             // ② 其余行：移除全部行维度（含 mix_msg），全店口径
             CALCULATE(
                 SUM(a05_e2e_paid_media_product_data_d[stock_qty]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[season]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[brand]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[category]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[channel]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg_Label_02]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg]), // 新增：同步移除 mix_msg 列筛选
-                REMOVEFILTERS(Dim_Date_Current),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[season]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[brand]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[category]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[channel]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[mix_msg_Label_02]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[mix_msg]), // 新增：同步移除 mix_msg 列筛选
+                ALLSELECTED(Dim_Date_Current),
                 FILTER(
                         ALL(Dim_Date_Current),
                         Dim_Date_Current[数据日期] = __Current_End
@@ -450,12 +450,12 @@ Category Growth Diff Net Sales% =
             // ② 其余行：移除全部行维度（含 mix_msg），全店口径
             CALCULATE(
                 SUM(a05_e2e_paid_media_product_data_d[net_sales_amt]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[season]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[brand]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[category]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[channel]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg_Label_02]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg]), // 新增：同步移除 mix_msg 列筛选
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[season]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[brand]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[category]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[channel]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[mix_msg_Label_02]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[mix_msg]), // 新增：同步移除 mix_msg 列筛选
                 __PlatformFilter,   // 交集 1：限定平台
                 __TransCycleFilter, // 交集 2：限定周期
                 __LevelFilter
@@ -748,12 +748,12 @@ Category Growth Diff Cost% =
             // ② 其余行：移除全部行维度（含 mix_msg），总计口径
             CALCULATE(
                 SUM(a05_e2e_paid_media_product_data_d[cost_amt]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[season]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[brand]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[category]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[channel]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg_Label_02]),
-                REMOVEFILTERS(a05_e2e_paid_media_product_data_d[mix_msg]), // 新增：同步移除 mix_msg 列筛选
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[season]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[brand]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[category]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[channel]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[mix_msg_Label_02]),
+                ALLSELECTED(a05_e2e_paid_media_product_data_d[mix_msg]), // 新增：同步移除 mix_msg 列筛选
                 __PlatformFilter,   // 交集 1：限定平台
                 __TransCycleFilter, // 交集 2：限定周期
                 __LevelFilter
