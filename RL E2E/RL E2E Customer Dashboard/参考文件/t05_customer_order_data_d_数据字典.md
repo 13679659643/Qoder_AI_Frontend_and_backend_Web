@@ -32,6 +32,7 @@
 | category_summary | String | 品类归纳 | | | | |
 | is_member | int | 是否会员 | | | | |
 | register_time | String | 会员注册日期 | | | | |
+| register_date | date | 注册日期 | | | | |
 | pay_amt | decimal(19, 5) | 购买金额 | | | | |
 | pay_order_cnt | bigint | 购买订单数 | | | | |
 | pay_qty | bigint | 购买商品数量 | | | | |

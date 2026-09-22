@@ -34,7 +34,8 @@ SELECT
     `return_qty`,
     `cancel_amt`,
     `cancel_order_cnt`,
-    `cancel_qty`
+    `cancel_qty`,
+    STR_TO_DATE(register_time, '%Y-%m-%d') AS register_date
 FROM `indep_rl_dw`.`t05_customer_order_data_d`
 
     "),

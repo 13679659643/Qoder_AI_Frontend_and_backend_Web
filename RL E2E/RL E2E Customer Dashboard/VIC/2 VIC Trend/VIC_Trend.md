@@ -2,7 +2,8 @@
 
 > status: ready
 > created: 2026-08-13
-> revised: 2026-09-14（VIC Retention% 分母弃用 Rolling 12 区间，改为"X 轴 end period 往前推 12 个月的单月"：Act=-12 / LY=-24 / LP=-13，与 VIC_KPIs_Table.md 1.4 节口径对齐；旧 Rolling 12 逻辑以块注释保留于 Act/LY/LP 三个基础度量值备查）
+> revised: 2026-09-21（① is_member 筛选重构：TTL VIC 筛 is_member = 0；Member VIC 筛 is_member = 0 AND register_date <= X 轴 end period 末日（哨兵日期恒真模式，Act/LY/LP 各取对应期末日）；② VIC Retention% 分母改为 X 轴 end period 当月 last_fy_net_pay_amt >= 20000 的 count(distinct user_id)，不再筛 is_vic=1、不再做目标月推导，与 VIC_KPIs_Table.md 口径对齐；旧分母逻辑两代（Rolling 12 / 往前推 12 个月单月）不再以块注释保留）
+> revised: 2026-09-14（VIC Retention% 分母弃用 Rolling 12 区间，改为"X 轴 end period 往前推 12 个月的单月"：Act=-12 / LY=-24 / LP=-13；该口径已于 2026-09-21 再次调整，历史沿革见口径文档 VIC KPI.md §2）
 > type: 度量值开发 + 柱形图视觉对象
 > 口径来源: 口径文档/VIC KPI.md（Metric_ID 1/2/3/6/7/8/10/11/12/14 共 10 个指标）
 > 参考实现: VIC_KPIs_Pie_Chart.md（独立 Value/Display 范式）、PB_Location_Trend.md 子模块二 Fulfillment% Trend（柱形图 X 轴 + IsTimeFrameVisible 范式）
@@ -19,7 +20,7 @@
 | 1         | VIC No.                | Act          | DISTINCTCOUNT(user_id) WHERE is_vic=1                     | integer       | integer     |
 | 2         | VIC No. vs LY          | 数量类 vs LY | Act / LY - 1                                              | delta_pct_1dp | percent_1dp |
 | 3         | VIC No. vs LP          | 数量类 vs LP | Act / LP - 1                                              | delta_pct_1dp | percent_1dp |
-| 6         | VIC Retention%         | Act（比率）  | DIVIDE(分子 is_retention_vic=1, 分母 往前推 12 个月单月 is_vic=1) | percent_1dp   | percent_1dp |
+| 6         | VIC Retention%         | Act（比率）  | DIVIDE(分子 is_retention_vic=1, 分母 end period 当月 last_fy_net_pay_amt>=20000) | percent_1dp   | percent_1dp |
 | 7         | VIC Retention% vs LY   | 比率类 vs LY | Act - LY（差值）                                          | delta_pts     | integer_pts |
 | 8         | VIC Retention% vs LP   | 比率类 vs LP | Act - LP（差值）                                          | delta_pts     | integer_pts |
 | 10        | T4-5 Upgrade No.       | Act          | DISTINCTCOUNT(user_id) WHERE is_upgrade_vic=1             | integer       | integer     |
@@ -33,7 +34,7 @@
 - 度量值作用于柱形图（非卡片图/矩阵），X 轴 = Slicer_Time_Frame_VIC_Trend[TimeFrame_Value]
 - 参考 PB_Location_Trend.md 子模块二 Fulfillment% Trend 实现，配置 IsTimeFrameVisible 视觉对象级别筛选器
 - 日期表替换为 VIC Trend 专用版本（Slicer_Time_Frame_VIC_Trend / Slicer_Time_Frame_Max_VIC_Trend / Slicer_Time_Frame_Min_VIC_Trend），避免与其他模块互相筛选影响
-- 保留 VIC 项目口径：end period 当月聚合（Last_Fiscal_Month_Min/Max）、is_member / is_employee 双重人群筛选、VIC Retention% 专用"往前推 12 个月单月"分母（2026-09-14 由 Rolling 12 区间调整，与 VIC_KPIs_Table.md 1.4 节口径对齐）
+- 保留 VIC 项目口径：end period 当月聚合（Last_Fiscal_Month_Min/Max）、is_member=0 + register_date <= end period 末日（Member VIC）+ is_employee 人群筛选（2026-09-21 重构，与 VIC_KPIs_Table.md 口径对齐）、VIC Retention% 专用 end period 当月 last_fy_net_pay_amt >= 20000 分母（2026-09-21 调整）
 - 格式调整：所有指标不含正号
 
 ### 1.1 格式调整说明
@@ -55,26 +56,22 @@
   - 全局范围（冗余但保留）：Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min] ~ Slicer_Time_Frame_Max_VIC_Trend[TimeFrame_Max]
   - X 轴 end period 当月上下文：Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min] ~ [Last_Fiscal_Month_Max]
 
-### 1.3 VIC Retention% 的"往前推 12 个月单月"分母（柱形图适配）
+### 1.3 VIC Retention% 的 end period 当月 last_fy_net_pay_amt 分母（柱形图适配）
 
-口径与 VIC_KPIs_Table.md 1.4 节一致（业务口径 2026-09-12 修订：分母由 Rolling 12 个财月区间调整为"以 end period 为基准直接往前推 12 个月的单月"，分子口径不变），分母 = 以 X 轴当前时间点 end period 为基准往前推 12 个月的单月 count(distinct user_id)、`is_vic = 1`：
+口径与 VIC_KPIs_Table.md 1.4 节一致（业务口径 2026-09-21 修订：分母由"往前推 12 个月的单月 is_vic=1"调整为"end period 当月 last_fy_net_pay_amt >= 20000"，分子口径不变、不再筛 is_vic=1），分母 = 所选时间范围 end period 当月 `last_fy_net_pay_amt >= 20000` 的 count(distinct user_id)：
 
-- **ACT**：X 轴 end period 直接往前推 12 个月（如 "2026-09" → "2025-09"）
-- **LY**：直接往前推 12 个月，再推 12 个月（如 "2026-09" → "2024-09"，等价于往前推 24 个月）
-- **LP**：直接往前推 1 个月，再推 12 个月（如 "2026-09" → "2026-08" → "2025-08"，等价于往前推 13 个月）
+- **ACT**：X 轴当前柱 end period 当月（data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]）
+- **LY**：X 轴当前柱 LY end period 当月（data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]）
+- **LP**：X 轴当前柱 LP end period 当月（data_date ∈ [Last_Fiscal_Month_Min_LP, Last_Fiscal_Month_Max_LP]）
 
-**分母计算方式（单月 DISTINCT）**：在上述目标月的单月区间内 `count(distinct user_id) where is_vic = 1`。
+**分母计算方式（当月 DISTINCT）**：在上述 end period 当月区间内 `count(distinct user_id) where last_fy_net_pay_amt >= 20000`，与分子同期间、同人群筛选（is_member=0 + register_date <= 对应期末日 + is_employee）。
 
-**柱形图适配（与主表差异）**：每个柱子的分母目标月基于**该柱子 X 轴当前时间点**的 `Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month]` 月份字符串推导（主表用 Slicer_Time_Frame_Max 全局 end period），每个柱子独立计算自己的目标月（非全局统一区间）：
+**柱形图适配（与主表差异）**：主表分母区间基于全局 Slicer_Time_Frame_Max 的 end period；本方案每个柱子基于**该柱子 X 轴自己的 end period**（Slicer_Time_Frame_VIC_Trend 行级 Last_Fiscal_Month_Min/Max 系列），每个柱子独立计算自己的分母（非全局统一区间），无需再做目标月字符串推导。
 
-- 目标月字符串：X 轴 Last_Fiscal_Month 月份字符串按偏移量 EDATE 推导（Act=-12；LY=-12 后再 -12 即 -24；LP=-1 后再 -12 即 -13），FORMAT 回 "yyyy-MM"
-- 目标月区间起止日：目标月字符串 → 在 Slicer_Time_Frame_VIC_Trend 中按 `TimeFrame_Label='月' AND TimeFrame_Value=目标月字符串` 查 `TimeFrame_Min` / `TimeFrame_Max`（自然日起止日）
-- 分母区间 = [目标月 TimeFrame_Min, 目标月 TimeFrame_Max]（单月；LY/LP 不再复用 Last_Fiscal_Month_Max_LY / Max_LP）
-
-> **历史口径（Rolling 12 个财月区间，2026-09-12 弃用，保留备查；旧 DAX 逻辑已以块注释保留在 Act/LY/LP 三个基础度量值中，如需回退取消注释即可）**：
+> **历史口径沿革（弃用备查；旧 DAX 逻辑不再以块注释保留，完整沿革见口径文档 VIC KPI.md §2）**：
 >
-> - 原分母：X 轴 end period 往前 Rolling 12 个财月（当前月 + 往前 11 个月，共 12 个月）区间内 `count(distinct user_id) where is_vic=1`，同一用户只计一次（非按月 SUM 累加）
-> - 原区间：起始月 = X 轴 Last_Fiscal_Month EDATE(-11)（LY 为 -12 后再 -11，等价往前推 23 个月；LP 为 -1 后再 -11，等价往前推 12 个月），起始日 = 起始月行的 TimeFrame_Min；结束日 = X 轴 Last_Fiscal_Month_Max（LY/LP 复用 Last_Fiscal_Month_Max_LY / Max_LP）
+> - 2026-09-12 ~ 2026-09-20：分母 = 以 X 轴 end period 为基准往前推 12 个月的单月（Act=-12 / LY=-24 / LP=-13）区间内 `count(distinct user_id) where is_vic=1`（EDATE 目标月字符串推导）
+> - ~ 2026-09-11：分母 = X 轴 end period 往前 Rolling 12 个财月区间内 `count(distinct user_id) where is_vic=1`
 
 ---
 
@@ -85,7 +82,7 @@
 | 对象     | 名称                                                                                                         | 出处              |
 | -------- | ------------------------------------------------------------------------------------------------------------ | ----------------- |
 | 事实表   | a03_e2e_customer_data_m                                                                                      | 口径文档 全局逻辑 |
-| 关键字段 | data_date, platform, shop_info_id, user_id, is_member, is_employee, is_vic, is_retention_vic, is_upgrade_vic | 口径文档          |
+| 关键字段 | data_date, platform, shop_info_id, user_id, is_member, register_date, last_fy_net_pay_amt, is_employee, is_vic, is_retention_vic, is_upgrade_vic | 口径文档          |
 
 ### 2.2 维度表清单（VIC Trend 专用日期表，与其他模块隔离）
 
@@ -111,9 +108,9 @@
 | Slicer_Time_Frame_VIC_Trend（X 轴 LY）          | SELECTEDVALUE 读取 Last_Fiscal_Month_Min_LY/Max_LY     | `data_date >= __CurrentLFMMin_LY AND data_date <= __CurrentLFMMax_LY`              |
 | Slicer_Time_Frame_VIC_Trend（X 轴 LP）          | SELECTEDVALUE 读取 Last_Fiscal_Month_Min_LP/Max_LP     | `data_date >= __CurrentLFMMin_LP AND data_date <= __CurrentLFMMax_LP`              |
 | Slicer_Time_Frame_Min/Max_VIC_Trend（全局范围） | 冗余保护，防止 X 轴超出全局范围                        | `data_date >= __GlobalMin AND data_date <= __GlobalMax`                            |
-| Slicer_Time_Frame_VIC_Trend（分母目标月）       | 用 X 轴 `Last_Fiscal_Month` 月份字符串 → EDATE 偏移（Act=-12 / LY=-24 / LP=-13）→ 目标月字符串 → 查 `TimeFrame_Min/Max` | VIC Retention% Trend Act/LY/LP Value 分母专用（内化于各基础度量值）              |
+| Slicer_Time_Frame_VIC_Trend（Retention% 分母）  | X 轴当前柱 end period 当月区间（Last_Fiscal_Month_Min/Max 系列）内 `last_fy_net_pay_amt >= 20000` | VIC Retention% Trend Act/LY/LP Value 分母专用（内化于各基础度量值，与分子同期间）              |
 | Slicer_Is_Employee_Selection                    | 断开维度，SELECTEDVALUE 读取 IsEmployee_Code           | `is_employee in __IsEmployeeFilter`（默认 1）                                      |
-| IsMemberFilter                                  | 断开维度，SELECTEDVALUE 读取 IsMember                  | `is_member = __IsMemberFilter`（默认 0）                                           |
+| IsMemberFilter                                  | 断开维度，SELECTEDVALUE 读取 IsMember                  | `is_member = 0` + `register_date <= __EndPeriodDate`（Member VIC 时期末日上限，TTL VIC 哨兵日期恒真；默认 0） |
 | 事实表分组字段（platform / shop_info_id）       | 柱形图图例直接拉取，模型自动传递                       | DAX 无需显式处理                                                                     |
 
 ### 3.2 度量值架构
@@ -126,7 +123,7 @@ IsTimeFrameVisible VIC Trend（辅助度量 — X 轴视觉对象级别筛选器
 │  基础度量层（Base Metrics，用于派生 vs LY / vs LP）       │
 │                                                         │
 │  VIC No. Trend Act/LY/LP Value                         │
-│  VIC Retention% Trend Act/LY/LP Value（内化单月分母）  │
+│  VIC Retention% Trend Act/LY/LP Value（内化 last_fy_net_pay_amt 分母）│
 │  T4-5 Upgrade No. Trend Act/LY/LP Value                │
 └──────────────────────────┬──────────────────────────────┘
                            │
@@ -229,7 +226,7 @@ VIC No. Trend Act Value =
 // 筛选条件:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（X 轴 end period 当月）
 //   - 全局范围冗余筛选: data_date ∈ [TimeFrame_Min, TimeFrame_Max]
-//   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
+//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 end period 末日（哨兵日期恒真模式）
 //   - is_employee in __IsEmployeeFilter（默认 所有）
 // 数据类型: integer
 // ========================================
@@ -238,12 +235,20 @@ VIC No. Trend Act Value =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -266,18 +271,27 @@ VIC No. Trend LY Value =
 // 时间偏移: 财历映射
 //   全局 LY 范围: Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min_LY] / Slicer_Time_Frame_Max_VIC_Trend[TimeFrame_Max_LY]
 //   X 轴 LY end period: Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY] / [Last_Fiscal_Month_Max_LY]
+// 筛选: is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 LY end period 末日（Last_Fiscal_Month_Max_LY，哨兵日期恒真模式）
 // ========================================
     VAR __GlobalMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min_LY])
     VAR __GlobalMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Trend[TimeFrame_Max_LY])
     VAR __CurrentLFMMin_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY])
     VAR __CurrentLFMMax_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 LY end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LY]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax_LY,
@@ -299,17 +313,26 @@ VIC No. Trend LP Value =
 // 计算公式: DISTINCTCOUNT(user_id) WHERE is_vic = 1（上期）
 // 时间偏移: 财历映射
 //   X 轴 LP end period: Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP] / [Last_Fiscal_Month_Max_LP]
+// 筛选: is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 LP end period 末日（Last_Fiscal_Month_Max_LP，哨兵日期恒真模式）
 // 注: LP = Last Period（上一期），按所选粒度的上一期
 // ========================================
     VAR __CurrentLFMMin_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP])
     VAR __CurrentLFMMax_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LP])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 LP end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LP]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LP,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LP
@@ -319,7 +342,7 @@ VIC No. Trend LP Value =
 
 ---
 
-### 4.5 VIC Retention% Trend Act Value（本期比率，内化"往前推 12 个月单月"分母）
+### 4.5 VIC Retention% Trend Act Value（本期比率，内化 end period 当月 last_fy_net_pay_amt 分母）
 
 ```dax
 VIC Retention% Trend Act Value =
@@ -327,16 +350,16 @@ VIC Retention% Trend Act Value =
 // 度量值: VIC Retention% Trend Act Value
 // Display Folder: VIC Trend Base
 // 用途: VIC Retention% 本期比率（柱形图 Y 轴基础值）
-// 口径来源: 口径文档/VIC KPI.md - 2. VIC Retention%（2026-09-12 口径修订：分母由 Rolling 12 区间改为"往前推 12 个月的单月"）
+// 口径来源: 口径文档/VIC KPI.md - 2. VIC Retention%（2026-09-21 口径修订：分母改为 X 轴 end period 当月 last_fy_net_pay_amt >= 20000，不再筛 is_vic=1、不再做目标月推导）
 // 计算公式: DIVIDE(分子, 分母)
 //   分子: DISTINCTCOUNT(user_id) WHERE is_retention_vic = 1（X 轴 end period 当月）
-//   分母: DISTINCTCOUNT(user_id) WHERE is_vic = 1（X 轴 end period 直接往前推 12 个月的单月区间）
-// 分母目标月推导（基于 X 轴当前时间点的 Last_Fiscal_Month，与 VIC_KPIs_Table.md 1.4 节口径一致）:
-//   1. 取 X 轴 Last_Fiscal_Month 月份字符串（如 "2026-09"）
-//   2. EDATE(-12) 得分母目标月字符串（如 "2025-09"）
-//   3. 在 Slicer_Time_Frame_VIC_Trend 中查 TimeFrame_Label='月' AND TimeFrame_Value=目标月字符串 的 TimeFrame_Min / TimeFrame_Max
-//   4. 区间 = [目标月 TimeFrame_Min, 目标月 TimeFrame_Max]（单月）
-//   （2026-09-14 弃用 Rolling 12 区间分母，旧逻辑以块注释保留在下方代码中备查）
+//   分母: DISTINCTCOUNT(user_id) WHERE last_fy_net_pay_amt >= 20000（X 轴 end period 当月，与分子同期间同人群）
+// 筛选条件（分子与分母共用）:
+//   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（X 轴 end period 当月）
+//   - 全局范围冗余筛选: data_date ∈ [TimeFrame_Min, TimeFrame_Max]
+//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 end period 末日（哨兵日期恒真模式）
+//   - is_employee in __IsEmployeeFilter（默认 所有）
+//   （2026-09-12~09-14 的 Rolling 12 区间、往前推 12 个月单月两代分母口径已弃用，历史沿革见口径文档 VIC KPI.md §2；旧 DAX 逻辑不再以块注释保留）
 // 数据类型: percent_1dp（比率，0~1）
 // ========================================
     VAR __GlobalMin = SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min])
@@ -344,6 +367,13 @@ VIC Retention% Trend Act Value =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ── 分子: is_retention_vic=1 在 X 轴 end period 当月的 DISTINCTCOUNT ──
@@ -351,7 +381,8 @@ VIC Retention% Trend Act Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -359,88 +390,24 @@ VIC Retention% Trend Act Value =
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
         )
 
-    /* ═══ 旧逻辑：Rolling 12 区间分母（业务口径 2026-09-12 修订，本方案 2026-09-14 弃用，保留备查）═══
-       如需回退：删除/注释下方新逻辑，并取消本块注释
-    // ── 分母: is_vic=1 在 X 轴 end period 往前 Rolling 12 个财月区间的 DISTINCTCOUNT ──
-    // 1. 取 X 轴当前时间点的 Last_Fiscal_Month 月份字符串
-    VAR __LFM = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month])
-    // 2. EDATE(-11) 得 Rolling 12 起始月字符串
-    VAR __Rolling12StartMonthValue =
-        FORMAT(
-            EDATE(
-                DATE(LEFT(__LFM, 4), RIGHT(__LFM, 2), 1),
-                -11
-            ),
-            "yyyy-MM"
-        )
-    // 3. 在 Slicer_Time_Frame_VIC_Trend 中查起始月的 TimeFrame_Min
-    VAR __Rolling12StartMin =
-        CALCULATE(
-            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[TimeFrame_Min]),
-            FILTER(
-                ALL(Slicer_Time_Frame_VIC_Trend),
-                Slicer_Time_Frame_VIC_Trend[TimeFrame_Label] = "月"
-                && Slicer_Time_Frame_VIC_Trend[TimeFrame_Value] = __Rolling12StartMonthValue
-            )
-        )
-    // 4. Rolling 12 区间 [起始月 TimeFrame_Min, X 轴 Last_Fiscal_Month_Max] 的 is_vic=1 DISTINCTCOUNT
+    // ── 分母: X 轴 end period 当月 last_fy_net_pay_amt >= 20000 的 DISTINCTCOUNT（与分子同期间同人群）──
     VAR __Denominator =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[last_fy_net_pay_amt] >= 20000,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __Rolling12StartMin,
+            'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
+            'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
+            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-        )
-    ═══ 旧逻辑结束 ═══ */
-
-    // ── 分母: is_vic=1 在 X 轴 end period 往前推 12 个月的单月区间的 DISTINCTCOUNT ──
-    // 1. 取 X 轴当前时间点的 Last_Fiscal_Month 月份字符串
-    VAR __LFM = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month])
-    // 2. 分母目标月 = X 轴 end period 直接往前推 12 个月（如 "2026-09" → "2025-09"）
-    VAR __DenominatorMonthValue =
-        FORMAT(
-            EDATE(
-                DATE(LEFT(__LFM, 4), RIGHT(__LFM, 2), 1),
-                -12
-            ),
-            "yyyy-MM"
-        )
-    // 3. 在 Slicer_Time_Frame_VIC_Trend 中查目标月的 TimeFrame_Min / TimeFrame_Max
-    VAR __DenominatorMin =
-        CALCULATE(
-            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[TimeFrame_Min]),
-            FILTER(
-                ALL(Slicer_Time_Frame_VIC_Trend),
-                Slicer_Time_Frame_VIC_Trend[TimeFrame_Label] = "月"
-                && Slicer_Time_Frame_VIC_Trend[TimeFrame_Value] = __DenominatorMonthValue
-            )
-        )
-    VAR __DenominatorMax =
-        CALCULATE(
-            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[TimeFrame_Max]),
-            FILTER(
-                ALL(Slicer_Time_Frame_VIC_Trend),
-                Slicer_Time_Frame_VIC_Trend[TimeFrame_Label] = "月"
-                && Slicer_Time_Frame_VIC_Trend[TimeFrame_Value] = __DenominatorMonthValue
-            )
-        )
-    // 4. 分母 = 目标月单月区间 [TimeFrame_Min, TimeFrame_Max] 的 is_vic=1 DISTINCTCOUNT
-    VAR __Denominator =
-        CALCULATE(
-            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __DenominatorMin,
-            'a03_e2e_customer_data_m'[data_date] <= __DenominatorMax
         )
 
     RETURN DIVIDE(__Numerator, __Denominator)
 ```
 
-### 4.6 VIC Retention% Trend LY Value（LY 比率，内化单月 LY 分母）
+### 4.6 VIC Retention% Trend LY Value（LY 比率，内化 LY end period 当月 last_fy_net_pay_amt 分母）
 
 ```dax
 VIC Retention% Trend LY Value =
@@ -448,21 +415,27 @@ VIC Retention% Trend LY Value =
 // 度量值: VIC Retention% Trend LY Value
 // Display Folder: VIC Trend Base
 // 用途: VIC Retention% 去年同期比率（柱形图 Y 轴基础值）
-// 口径来源: 口径文档/VIC KPI.md - 2.1 VIC Retention% vs LY（2026-09-12 口径修订：分母由 Rolling 12 区间改为"往前推 12 个月的单月"）
+// 口径来源: 口径文档/VIC KPI.md - 2.1 VIC Retention% vs LY（2026-09-21 口径修订：分母改为 X 轴 LY end period 当月 last_fy_net_pay_amt >= 20000，不再筛 is_vic=1、不再做目标月推导）
 // 计算公式: DIVIDE(分子_LY, 分母_LY)
 //   分子_LY: DISTINCTCOUNT(user_id) WHERE is_retention_vic = 1（X 轴 LY end period 当月）
-//   分母_LY: DISTINCTCOUNT(user_id) WHERE is_vic = 1（X 轴 LY end period 再往前推 12 个月的单月区间）
-// 分母目标月推导（与 VIC_KPIs_Table.md 1.4 节口径一致）:
-//   1. LY 月份字符串 = X 轴 Last_Fiscal_Month EDATE(-12)（如 "2026-09" → "2025-09"）
-//   2. 分母目标月 = LY 月份字符串再 EDATE(-12)（如 "2025-09" → "2024-09"，等价于 Last_Fiscal_Month 往前推 24 个月）
-//   3. 区间 = [目标月 TimeFrame_Min, 目标月 TimeFrame_Max]（单月）
-//   （2026-09-14 弃用 Rolling 12 LY 区间分母，旧逻辑以块注释保留在下方代码中备查）
+//   分母_LY: DISTINCTCOUNT(user_id) WHERE last_fy_net_pay_amt >= 20000（X 轴 LY end period 当月，与分子同期间同人群）
+// 筛选（分子与分母共用）:
+//   - data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]（X 轴 LY end period 当月）+ 全局 LY 范围冗余筛选
+//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 LY end period 末日（Last_Fiscal_Month_Max_LY，哨兵日期恒真模式）
+//   （2026-09-12~09-14 的 Rolling 12 LY 区间、往前推 24 个月单月两代分母口径已弃用，历史沿革见口径文档 VIC KPI.md §2；旧 DAX 逻辑不再以块注释保留）
 // ========================================
     VAR __GlobalMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min_LY])
     VAR __GlobalMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Trend[TimeFrame_Max_LY])
     VAR __CurrentLFMMin_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY])
     VAR __CurrentLFMMax_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 LY end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LY]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ── 分子_LY: is_retention_vic=1 在 X 轴 LY end period 当月的 DISTINCTCOUNT ──
@@ -470,7 +443,8 @@ VIC Retention% Trend LY Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax_LY,
@@ -478,104 +452,24 @@ VIC Retention% Trend LY Value =
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LY
         )
 
-    /* ═══ 旧逻辑：Rolling 12 LY 区间分母（业务口径 2026-09-12 修订，本方案 2026-09-14 弃用，保留备查）═══
-       如需回退：删除/注释下方新逻辑，并取消本块注释
-    // ── 分母_LY: is_vic=1 在 X 轴 LY end period 往前 Rolling 12 个财月区间的 DISTINCTCOUNT ──
-    VAR __LFM = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month])
-    // LY 月份字符串: Last_Fiscal_Month 往前推 12 个月
-    VAR __LFM_LY =
-        FORMAT(
-            EDATE(
-                DATE(LEFT(__LFM, 4), RIGHT(__LFM, 2), 1),
-                -12
-            ),
-            "yyyy-MM"
-        )
-    // Rolling 12 LY 起始月: LY 月份字符串往前推 11 个月
-    VAR __Rolling12StartMonthValue_LY =
-        FORMAT(
-            EDATE(
-                DATE(LEFT(__LFM_LY, 4), RIGHT(__LFM_LY, 2), 1),
-                -11
-            ),
-            "yyyy-MM"
-        )
-    // 在 Slicer_Time_Frame_VIC_Trend 中查起始月的 TimeFrame_Min
-    VAR __Rolling12StartMin =
-        CALCULATE(
-            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[TimeFrame_Min]),
-            FILTER(
-                ALL(Slicer_Time_Frame_VIC_Trend),
-                Slicer_Time_Frame_VIC_Trend[TimeFrame_Label] = "月"
-                && Slicer_Time_Frame_VIC_Trend[TimeFrame_Value] = __Rolling12StartMonthValue_LY
-            )
-        )
-    // Rolling 12 LY 区间 [起始月 TimeFrame_Min, X 轴 Last_Fiscal_Month_Max_LY] 的 is_vic=1 DISTINCTCOUNT
+    // ── 分母_LY: X 轴 LY end period 当月 last_fy_net_pay_amt >= 20000 的 DISTINCTCOUNT（与分子同期间同人群）──
     VAR __Denominator_LY =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[last_fy_net_pay_amt] >= 20000,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __Rolling12StartMin,
+            'a03_e2e_customer_data_m'[data_date] >= __GlobalMin_LY,
+            'a03_e2e_customer_data_m'[data_date] <= __GlobalMax_LY,
+            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LY
-        )
-    ═══ 旧逻辑结束 ═══ */
-
-    // ── 分母_LY: is_vic=1 在 X 轴 LY end period 再往前推 12 个月的单月区间的 DISTINCTCOUNT ──
-    VAR __LFM = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month])
-    // LY 月份字符串: X 轴 Last_Fiscal_Month 往前推 12 个月（如 "2026-09" → "2025-09"）
-    VAR __LFM_LY =
-        FORMAT(
-            EDATE(
-                DATE(LEFT(__LFM, 4), RIGHT(__LFM, 2), 1),
-                -12
-            ),
-            "yyyy-MM"
-        )
-    // 分母目标月: LY 月份字符串再往前推 12 个月（如 "2025-09" → "2024-09"，等价于往前推 24 个月）
-    VAR __DenominatorMonthValue_LY =
-        FORMAT(
-            EDATE(
-                DATE(LEFT(__LFM_LY, 4), RIGHT(__LFM_LY, 2), 1),
-                -12
-            ),
-            "yyyy-MM"
-        )
-    // 在 Slicer_Time_Frame_VIC_Trend 中查目标月的 TimeFrame_Min / TimeFrame_Max
-    VAR __DenominatorMin_LY =
-        CALCULATE(
-            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[TimeFrame_Min]),
-            FILTER(
-                ALL(Slicer_Time_Frame_VIC_Trend),
-                Slicer_Time_Frame_VIC_Trend[TimeFrame_Label] = "月"
-                && Slicer_Time_Frame_VIC_Trend[TimeFrame_Value] = __DenominatorMonthValue_LY
-            )
-        )
-    VAR __DenominatorMax_LY =
-        CALCULATE(
-            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[TimeFrame_Max]),
-            FILTER(
-                ALL(Slicer_Time_Frame_VIC_Trend),
-                Slicer_Time_Frame_VIC_Trend[TimeFrame_Label] = "月"
-                && Slicer_Time_Frame_VIC_Trend[TimeFrame_Value] = __DenominatorMonthValue_LY
-            )
-        )
-    // 分母_LY = 目标月单月区间 [TimeFrame_Min, TimeFrame_Max] 的 is_vic=1 DISTINCTCOUNT
-    VAR __Denominator_LY =
-        CALCULATE(
-            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __DenominatorMin_LY,
-            'a03_e2e_customer_data_m'[data_date] <= __DenominatorMax_LY
         )
 
     RETURN DIVIDE(__Numerator_LY, __Denominator_LY)
 ```
 
-### 4.7 VIC Retention% Trend LP Value（LP 比率，内化单月 LP 分母）
+### 4.7 VIC Retention% Trend LP Value（LP 比率，内化 LP end period 当月 last_fy_net_pay_amt 分母）
 
 ```dax
 VIC Retention% Trend LP Value =
@@ -583,19 +477,26 @@ VIC Retention% Trend LP Value =
 // 度量值: VIC Retention% Trend LP Value
 // Display Folder: VIC Trend Base
 // 用途: VIC Retention% 上期比率（柱形图 Y 轴基础值）
-// 口径来源: 口径文档/VIC KPI.md - 2.2 VIC Retention% vs LP（2026-09-12 口径修订：分母由 Rolling 12 区间改为"往前推 12 个月的单月"）
+// 口径来源: 口径文档/VIC KPI.md - 2.2 VIC Retention% vs LP（2026-09-21 口径修订：分母改为 X 轴 LP end period 当月 last_fy_net_pay_amt >= 20000，不再筛 is_vic=1、不再做目标月推导）
 // 计算公式: DIVIDE(分子_LP, 分母_LP)
 //   分子_LP: DISTINCTCOUNT(user_id) WHERE is_retention_vic = 1（X 轴 LP end period 当月）
-//   分母_LP: DISTINCTCOUNT(user_id) WHERE is_vic = 1（X 轴 LP end period 再往前推 12 个月的单月区间）
-// 分母目标月推导（与 VIC_KPIs_Table.md 1.4 节口径一致）:
-//   1. LP 月份字符串 = X 轴 Last_Fiscal_Month EDATE(-1)（如 "2026-09" → "2026-08"）
-//   2. 分母目标月 = LP 月份字符串再 EDATE(-12)（如 "2026-08" → "2025-08"，等价于 Last_Fiscal_Month 往前推 13 个月）
-//   3. 区间 = [目标月 TimeFrame_Min, 目标月 TimeFrame_Max]（单月）
-//   （2026-09-14 弃用 Rolling 12 LP 区间分母，旧逻辑以块注释保留在下方代码中备查）
+//   分母_LP: DISTINCTCOUNT(user_id) WHERE last_fy_net_pay_amt >= 20000（X 轴 LP end period 当月，与分子同期间同人群）
+// 筛选（分子与分母共用）:
+//   - data_date ∈ [Last_Fiscal_Month_Min_LP, Last_Fiscal_Month_Max_LP]（X 轴 LP end period 当月）
+//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 LP end period 末日（Last_Fiscal_Month_Max_LP，哨兵日期恒真模式）
+//   （2026-09-12~09-14 的 Rolling 12 LP 区间、往前推 13 个月单月两代分母口径已弃用，历史沿革见口径文档 VIC KPI.md §2；旧 DAX 逻辑不再以块注释保留）
+// 注: LP = Last Period（上一期），按所选粒度的上一期
 // ========================================
     VAR __CurrentLFMMin_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP])
     VAR __CurrentLFMMax_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LP])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 LP end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LP]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ── 分子_LP: is_retention_vic=1 在 X 轴 LP end period 当月的 DISTINCTCOUNT ──
@@ -603,104 +504,23 @@ VIC Retention% Trend LP Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LP,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LP
         )
 
-    /* ═══ 旧逻辑：Rolling 12 LP 区间分母（业务口径 2026-09-12 修订，本方案 2026-09-14 弃用，保留备查）═══
-       如需回退：删除/注释下方新逻辑，并取消本块注释
-    // ── 分母_LP: is_vic=1 在 X 轴 LP end period 往前 Rolling 12 个财月区间的 DISTINCTCOUNT ──
-    VAR __LFM = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month])
-    // LP 月份字符串: Last_Fiscal_Month 往前推 1 个月
-    VAR __LFM_LP =
-        FORMAT(
-            EDATE(
-                DATE(LEFT(__LFM, 4), RIGHT(__LFM, 2), 1),
-                -1
-            ),
-            "yyyy-MM"
-        )
-    // Rolling 12 LP 起始月: LP 月份字符串往前推 11 个月
-    VAR __Rolling12StartMonthValue_LP =
-        FORMAT(
-            EDATE(
-                DATE(LEFT(__LFM_LP, 4), RIGHT(__LFM_LP, 2), 1),
-                -11
-            ),
-            "yyyy-MM"
-        )
-    // 在 Slicer_Time_Frame_VIC_Trend 中查起始月的 TimeFrame_Min
-    VAR __Rolling12StartMin =
-        CALCULATE(
-            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[TimeFrame_Min]),
-            FILTER(
-                ALL(Slicer_Time_Frame_VIC_Trend),
-                Slicer_Time_Frame_VIC_Trend[TimeFrame_Label] = "月"
-                && Slicer_Time_Frame_VIC_Trend[TimeFrame_Value] = __Rolling12StartMonthValue_LP
-            )
-        )
-    // Rolling 12 LP 区间 [起始月 TimeFrame_Min, X 轴 Last_Fiscal_Month_Max_LP] 的 is_vic=1 DISTINCTCOUNT
+    // ── 分母_LP: X 轴 LP end period 当月 last_fy_net_pay_amt >= 20000 的 DISTINCTCOUNT（与分子同期间同人群）──
     VAR __Denominator_LP =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[last_fy_net_pay_amt] >= 20000,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __Rolling12StartMin,
+            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LP,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LP
-        )
-    ═══ 旧逻辑结束 ═══ */
-
-    // ── 分母_LP: is_vic=1 在 X 轴 LP end period 再往前推 12 个月的单月区间的 DISTINCTCOUNT ──
-    VAR __LFM = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month])
-    // LP 月份字符串: X 轴 Last_Fiscal_Month 往前推 1 个月（如 "2026-09" → "2026-08"）
-    VAR __LFM_LP =
-        FORMAT(
-            EDATE(
-                DATE(LEFT(__LFM, 4), RIGHT(__LFM, 2), 1),
-                -1
-            ),
-            "yyyy-MM"
-        )
-    // 分母目标月: LP 月份字符串再往前推 12 个月（如 "2026-08" → "2025-08"，等价于往前推 13 个月）
-    VAR __DenominatorMonthValue_LP =
-        FORMAT(
-            EDATE(
-                DATE(LEFT(__LFM_LP, 4), RIGHT(__LFM_LP, 2), 1),
-                -12
-            ),
-            "yyyy-MM"
-        )
-    // 在 Slicer_Time_Frame_VIC_Trend 中查目标月的 TimeFrame_Min / TimeFrame_Max
-    VAR __DenominatorMin_LP =
-        CALCULATE(
-            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[TimeFrame_Min]),
-            FILTER(
-                ALL(Slicer_Time_Frame_VIC_Trend),
-                Slicer_Time_Frame_VIC_Trend[TimeFrame_Label] = "月"
-                && Slicer_Time_Frame_VIC_Trend[TimeFrame_Value] = __DenominatorMonthValue_LP
-            )
-        )
-    VAR __DenominatorMax_LP =
-        CALCULATE(
-            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[TimeFrame_Max]),
-            FILTER(
-                ALL(Slicer_Time_Frame_VIC_Trend),
-                Slicer_Time_Frame_VIC_Trend[TimeFrame_Label] = "月"
-                && Slicer_Time_Frame_VIC_Trend[TimeFrame_Value] = __DenominatorMonthValue_LP
-            )
-        )
-    // 分母_LP = 目标月单月区间 [TimeFrame_Min, TimeFrame_Max] 的 is_vic=1 DISTINCTCOUNT
-    VAR __Denominator_LP =
-        CALCULATE(
-            DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __DenominatorMin_LP,
-            'a03_e2e_customer_data_m'[data_date] <= __DenominatorMax_LP
         )
 
     RETURN DIVIDE(__Numerator_LP, __Denominator_LP)
@@ -721,7 +541,7 @@ T4-5 Upgrade No. Trend Act Value =
 // 筛选条件:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（X 轴 end period 当月）
 //   - 全局范围冗余筛选: data_date ∈ [TimeFrame_Min, TimeFrame_Max]
-//   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
+//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 end period 末日（哨兵日期恒真模式）
 //   - is_employee in __IsEmployeeFilter（默认 所有）
 // 数据类型: integer
 // ========================================
@@ -730,12 +550,20 @@ T4-5 Upgrade No. Trend Act Value =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -758,18 +586,27 @@ T4-5 Upgrade No. Trend LY Value =
 // 时间偏移: 财历映射
 //   全局 LY 范围: Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min_LY] / Slicer_Time_Frame_Max_VIC_Trend[TimeFrame_Max_LY]
 //   X 轴 LY end period: Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY] / [Last_Fiscal_Month_Max_LY]
+// 筛选: is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 LY end period 末日（Last_Fiscal_Month_Max_LY，哨兵日期恒真模式）
 // ========================================
     VAR __GlobalMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min_LY])
     VAR __GlobalMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Trend[TimeFrame_Max_LY])
     VAR __CurrentLFMMin_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY])
     VAR __CurrentLFMMax_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 LY end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LY]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax_LY,
@@ -791,16 +628,25 @@ T4-5 Upgrade No. Trend LP Value =
 // 计算公式: DISTINCTCOUNT(user_id) WHERE is_upgrade_vic = 1（上期）
 // 时间偏移: 财历映射
 //   X 轴 LP end period: Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP] / [Last_Fiscal_Month_Max_LP]
+// 筛选: is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 LP end period 末日（Last_Fiscal_Month_Max_LP，哨兵日期恒真模式）
 // ========================================
     VAR __CurrentLFMMin_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP])
     VAR __CurrentLFMMax_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LP])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 LP end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LP]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __Result =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LP,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LP
@@ -933,7 +779,7 @@ VIC No. vs LP Trend Display =
 
 ### 指标 6：VIC Retention%（Metric_ID=6）
 
-> 比率类 · DIVIDE(分子 is_retention_vic=1, 分母 往前推 12 个月单月 is_vic=1) · 格式: percent_1dp
+> 比率类 · DIVIDE(分子 is_retention_vic=1, 分母 end period 当月 last_fy_net_pay_amt>=20000) · 格式: percent_1dp
 
 ### 4.17 VIC Retention% Trend Value
 
@@ -943,7 +789,7 @@ VIC Retention% Trend Value =
 // 度量值: VIC Retention% Trend Value
 // Display Folder: VIC Trend
 // 用途: VIC Retention% 本期比率（柱形图 Y 轴）
-// 依赖: [VIC Retention% Trend Act Value]（已内化"往前推 12 个月单月"分母）
+// 依赖: [VIC Retention% Trend Act Value]（已内化 end period 当月 last_fy_net_pay_amt >= 20000 分母）
 // Metric_ID: 6
 // 数据类型: percent_1dp → 百分比，保留一位小数，不含正号
 // ========================================
@@ -983,7 +829,7 @@ VIC Retention% vs LY Trend Value =
 // 依赖: [VIC Retention% Trend Act Value], [VIC Retention% Trend LY Value]
 // Metric_ID: 7
 // 数据类型: integer_pts → 整数 pts，不含正号
-// 说明: Act/LY Base Value 已内化"往前推 12 个月单月"分母返回比率，此处做比率差值
+// 说明: Act/LY Base Value 已内化 end period 当月 last_fy_net_pay_amt >= 20000 分母返回比率，此处做比率差值
 // ========================================
     VAR __Act = [VIC Retention% Trend Act Value]
     VAR __LY = [VIC Retention% Trend LY Value]
@@ -1024,7 +870,7 @@ VIC Retention% vs LP Trend Value =
 // 依赖: [VIC Retention% Trend Act Value], [VIC Retention% Trend LP Value]
 // Metric_ID: 8
 // 数据类型: integer_pts → 整数 pts，不含正号
-// 说明: Act/LP Base Value 已内化"往前推 12 个月单月"分母返回比率，此处做比率差值
+// 说明: Act/LP Base Value 已内化 end period 当月 last_fy_net_pay_amt >= 20000 分母返回比率，此处做比率差值
 // ========================================
     VAR __Act = [VIC Retention% Trend Act Value]
     VAR __LP = [VIC Retention% Trend LP Value]
@@ -1283,6 +1129,7 @@ T4-5 Upgrade No. Share Trend Display =
 -- VIC No. 本期值（某月，所有 platform 汇总）
 -- 假设 X 轴 TimeFrame = 2026-09, Last_Fiscal_Month_Min='2026-09-01', Last_Fiscal_Month_Max='2026-09-30'
 -- is_member=0 (TTL VIC), is_employee=1 (Yes)
+-- TTL VIC 时 register_date 不设限；Member VIC 时增加 register_date <= '2026-09-30'（X 轴 end period 末日）
 SELECT COUNT(DISTINCT user_id) AS VIC_No_Trend_Act
 FROM a03_e2e_customer_data_m
 WHERE data_date BETWEEN '2026-09-01' AND '2026-09-30'
@@ -1291,12 +1138,12 @@ WHERE data_date BETWEEN '2026-09-01' AND '2026-09-30'
   AND is_employee = 1;
 ```
 
-### 7.2 验证 SQL（VIC Retention% Trend Act Value，含往前推 12 个月单月分母）
+### 7.2 验证 SQL（VIC Retention% Trend Act Value，end period 当月 last_fy_net_pay_amt 分母）
 
 ```sql
 -- VIC Retention% 本期比率
 -- 分子: is_retention_vic=1 当月 DISTINCTCOUNT
--- 分母: is_vic=1 单月区间 DISTINCTCOUNT（X 轴 2026-09 往前推 12 个月 = 2025-09）
+-- 分母: last_fy_net_pay_amt >= 20000 当月 DISTINCTCOUNT（X 轴 2026-09 end period 当月，与分子同期间同人群）
 WITH numerator AS (
   SELECT COUNT(DISTINCT user_id) AS cnt
   FROM a03_e2e_customer_data_m
@@ -1308,8 +1155,8 @@ WITH numerator AS (
 denominator AS (
   SELECT COUNT(DISTINCT user_id) AS cnt
   FROM a03_e2e_customer_data_m
-  WHERE data_date BETWEEN '2025-09-01' AND '2025-09-30'
-    AND is_vic = 1
+  WHERE data_date BETWEEN '2026-09-01' AND '2026-09-30'
+    AND last_fy_net_pay_amt >= 20000
     AND is_member = 0
     AND is_employee = 1
 )
@@ -1327,20 +1174,19 @@ FROM numerator n, denominator d;
 1. **日期表隔离**：本方案使用 Slicer_Time_Frame_VIC_Trend / Slicer_Time_Frame_Max_VIC_Trend / Slicer_Time_Frame_Min_VIC_Trend 三张专用日期表，结构与原 Slicer_Time_Frame 系列一致，仅改名以避免与其他模块（VIC KPI 矩阵、Pie Chart 等）互相筛选影响。
 2. **柱形图 X 轴筛选**：必须配置 [IsTimeFrameVisible VIC Trend] = 1 作为视觉对象级别筛选器，否则 X 轴会显示所有时间段（超出 Min/Max 选择范围）。逻辑与 PB_Location_Trend.md IsTimeFrameVisible 一致。
 3. **双层时间筛选**：度量值内部同时应用全局范围（TimeFrame_Min/Max）和 X 轴 end period 当月范围（Last_Fiscal_Month_Min/Max）。全局筛选冗余但保留，防止 X 轴超出全局范围时的异常显示（参考 PB_Location_Trend.md 子模块二的范式）。
-4. **VIC Retention% 的"往前推 12 个月单月"分母（关键逻辑；2026-09-14 由 Rolling 12 区间调整而来，与 VIC_KPIs_Table.md 1.4 节口径对齐，旧口径见 1.3 节历史口径块）**：分母为"以 X 轴当前时间点 end period 为基准往前推 12 个月的单月 count(distinct user_id) where is_vic=1"，每个柱子独立计算自己的分母目标月（非全局统一区间；主表用 Slicer_Time_Frame_Max 全局 end period，本方案用 X 轴当前时间点 end period）。
+4. **VIC Retention% 的 end period 当月 last_fy_net_pay_amt 分母（关键逻辑；2026-09-21 由"往前推 12 个月单月 is_vic=1"调整而来，与 VIC_KPIs_Table.md 1.4 节口径对齐，历史沿革见 1.3 节及口径文档 VIC KPI.md §2）**：分母为"X 轴当前柱 end period 当月 count(distinct user_id) where last_fy_net_pay_amt >= 20000"，不再筛 is_vic=1、不再做目标月字符串推导，与分子同期间同人群；每个柱子独立计算自己的分母区间（非全局统一区间；主表用 Slicer_Time_Frame_Max 全局 end period，本方案用 X 轴当前时间点 end period）。
 
-   - ACT：X 轴 Last_Fiscal_Month EDATE(-12) 得目标月 → [目标月 TimeFrame_Min, 目标月 TimeFrame_Max]（如 "2026-09" → "2025-09"）
-   - LY：Last_Fiscal_Month EDATE(-12) 得 LY 月份，再 EDATE(-12) 得目标月（等价往前推 24 个月，如 "2026-09" → "2024-09"）→ [目标月 TimeFrame_Min, 目标月 TimeFrame_Max]
-   - LP：Last_Fiscal_Month EDATE(-1) 得 LP 月份，再 EDATE(-12) 得目标月（等价往前推 13 个月，如 "2026-09" → "2026-08" → "2025-08"）→ [目标月 TimeFrame_Min, 目标月 TimeFrame_Max]
-   - 聚合方式：单月区间 DISTINCT（同一用户只计一次）
-   - 目标月字符串通过 Slicer_Time_Frame_VIC_Trend 查 TimeFrame_Label='月' AND TimeFrame_Value=目标月字符串 的 TimeFrame_Min / TimeFrame_Max 获取（不再复用 Last_Fiscal_Month_Max_LY / Max_LP）
+   - ACT：data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（X 轴当前柱 end period 当月）
+   - LY：data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]（X 轴当前柱 LY end period 当月）
+   - LP：data_date ∈ [Last_Fiscal_Month_Min_LP, Last_Fiscal_Month_Max_LP]（X 轴当前柱 LP end period 当月）
+   - 聚合方式：当月区间 DISTINCT（同一用户只计一次）
 5. **格式调整（不含正号）**：
 
    - 原 delta_pct_1dp（+14.5% / -3.2%）→ 新 percent_1dp（14.5% / -3.2%），使用 `FORMAT(__Value, "#,##0.0%")`
    - 原 delta_pts（+120pts / -80pts）→ 新 integer_pts（120pts / -80pts），使用 `FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")`
    - 去掉正号前缀 `IF(__Value>0,"+","")`，直接用 FORMAT 的正负数格式串实现
-6. **is_member / is_employee 双重筛选**：与主表 VIC_KPIs_Table.md 口径一致，默认 is_member=0（TTL VIC）、is_employee=1（Yes）。
-7. **Share 类分母**：Metric_ID=14（T4-5 Upgrade No. Share）的分母使用 X 轴 end period 当月 is_vic=1 的 DISTINCTCOUNT，等价于 [VIC No. Trend Act Value]。与 VIC Retention% 的"往前推 12 个月单月"分母不同。
+6. **is_member / is_employee 双重筛选**：与主表 VIC_KPIs_Table.md 口径一致（2026-09-21 重构）：TTL VIC（IsMember=0）筛 `is_member = 0`（register_date 不设限，哨兵日期 DATE(9999,12,31) 恒真）；Member VIC（IsMember=1）筛 `is_member = 0 AND register_date <= X 轴 end period 末日`（Act/LY/LP 各取对应期末日 Last_Fiscal_Month_Max/_LY/_LP）；默认 is_employee=1（Yes）。
+7. **Share 类分母**：Metric_ID=14（T4-5 Upgrade No. Share）的分母使用 X 轴 end period 当月 is_vic=1 的 DISTINCTCOUNT，等价于 [VIC No. Trend Act Value]。与 VIC Retention% 的 end period 当月 last_fy_net_pay_amt 分母不同。
 8. **独立性**：本方案 10 个指标的 Value/Display 度量完全独立，不依赖 Dim_ColMetric_VIC_KPIs 断开维度、Metric_ID 路由体系，与 VIC_KPIs_Table.md 主表解耦。基础度量（Act/LY/LP）在内部复用，但对外暴露的 Value/Display 度量按指标独立命名。
 9. **LP 全局筛选省略**：LP 度量（VIC No. Trend LP Value / T4-5 Upgrade No. Trend LP Value / VIC Retention% Trend LP Value）未应用全局 LP 范围筛选，仅用 X 轴 LP end period 区间（Last_Fiscal_Month_Min_LP/Max_LP）。因为 LP 是"上一期"概念，全局 LP 范围字段在日期表中可能不存在；若日期表有对应字段，可按需补充全局 LP 筛选。
 10. **LY 全局筛选使用 TimeFrame_Min_LY / TimeFrame_Max_LY**：LY 度量应用全局 LY 范围筛选，字段来自 Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min_LY] 和 Slicer_Time_Frame_Max_VIC_Trend[TimeFrame_Max_LY]。这假设日期表已预算这些字段（与 PB_Location_Trend.md 范式一致）。

@@ -31,7 +31,7 @@
 子模块三所有指标（指标 2~8）均应用 end period 时间筛选到事实表 `data_date`：
 
 - 本期：`data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]`
-- LY（用于 YOY 分子）：`data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]`
+- LY（用于计算 YOY 的去年比率）：`data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]`
 
 `Slicer_Time_Frame_Max` 已内置 `Last_Fiscal_Month_*` 系列字段，直接 SELECTEDVALUE 读取即可，无需 EDATE 计算。
 
@@ -42,7 +42,14 @@
 > **is_member 使用**: `VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)`，默认 TTL VIC
 > **is_employee 使用**: `VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])`，默认 Yes
 
-所有指标均应用这两个筛选到事实表 `a03_e2e_customer_data_m[is_member]` / `[is_employee]`。
+`IsMemberFilter` 与事实表断开，由 DAX 显式应用以下规则；`is_employee` 原有筛选逻辑保持不变。
+
+| 切片器选择 | 事实表筛选 | 注册日期截止日 |
+|---|---|---|
+| TTL VIC（0，默认） | `is_member = 0` | 不追加注册日期限制 |
+| Member VIC（1） | `is_member = 0 AND register_date <= end_period_date` | 本期取 `Last_Fiscal_Month_Max`，LY 取 `Last_Fiscal_Month_Max_LY` |
+
+所有基础值及比率分子、分母均应用上述规则。`end_period_date` 为对应期间最后一个财月的最后一天；本文件无 LP 指标，无需新增 LP 分支。
 
 ### 1.3 关键特殊逻辑三：行维度字段自动传递
 
@@ -65,7 +72,9 @@
 - VIC Repurchase% YOY = (今年 VIC Repurchase No. / 今年 LY VIC No.) / (去年 VIC Repurchase No. / 去年 LY VIC No.) - 1
 - VIC Retention% YOY = (今年 VIC Retention No. / 今年 LY VIC No.) / (去年 VIC Retention No. / 去年 LY VIC No.) - 1
 
-其中"今年"= end period 当期，"去年"= LY end period。分子分母均使用同一时间区间的字段筛选。
+其中"今年"= end period 当期，"去年"= LY end period。分子分母均使用同一时间区间的字段筛选，Member VIC 的注册日期截止日也随期间切换。
+
+本模块业务指标为 **Retention% = Retention No. / LY VIC No.**，复用既有基础人数，不增加独立分母。分子使用 `is_fy_retention_vic = 1`，分母使用 `is_fy_vic = 1`，均在对应 end period 当月对 `user_id` 去重计数。现有 DAX 名称 `VIC Retention%` / `VIC Retention No.` 保持不变，但不适用其他模块 VIC Retention% 的分母调整口径。
 
 ### 1.5 与参考文件 VIC_KPIs_Table.md 的关键差异
 
@@ -88,7 +97,7 @@
 | 对象 | 名称 | 出处 |
 |---|---|---|
 | 事实表 | a03_e2e_customer_data_m | 口径文档全局逻辑 |
-| 关键字段 | data_date, platform, shop_info_id, user_id, is_member, is_employee, is_fy_vic, is_fy_retention_vic, last_12m_net_pay_amt, last_fy_last_order_month_type | 口径文档子模块三各指标 |
+| 关键字段 | data_date, platform, shop_info_id, user_id, is_member, register_date, is_employee, is_fy_vic, is_fy_retention_vic, last_12m_net_pay_amt, last_fy_last_order_month_type | 口径文档子模块三各指标 |
 
 > 表为月度聚合表，`data_date` 为月末日期，用于 end period 时间筛选。
 
@@ -99,7 +108,7 @@
 | Slicer_Time_Frame_Max | 断开维度 | SELECTEDVALUE 读取 `Last_Fiscal_Month_Min/Max`（本期自然日）、`Last_Fiscal_Month_Min_LY/Max_LY`（LY 区间自然日，已预算，YOY 直接读） |
 | Slicer_Time_Frame_Min | 断开维度 | 本方案 end period 逻辑不使用（仅 Max 即可） |
 | Slicer_Is_Employee_Selection | 断开维度 | SELECTEDVALUE 读取 `IsEmployee_Code` |
-| IsMemberFilter | 断开维度 | SELECTEDVALUE 读取 `IsMember` |
+| IsMemberFilter | 断开维度 | SELECTEDVALUE 读取 `IsMember`，默认 0；事实表固定 `is_member = 0`，选 1 时追加对应期末注册日期上限 |
 | Slicer_Platform_Selection | 断开维度 | 行维度直接拉事实表 platform 字段，模型自动传递 |
 | Slicer_Store_Name | 断开维度 | 行维度直接拉事实表 shop_info_id 字段，模型自动传递 |
 | Slicer_Currency_Selection | 断开维度 | 本方案无金额类指标，不参与计算 |
@@ -142,7 +151,7 @@ a03_e2e_customer_data_m（事实表）
               │  ├ _LY VIC No. Base Act / _LY VIC No. Base LY     │
               │  ├ _VIC Repurchase No. Base Act / Base LY         │
               │  └ _VIC Retention No. Base Act / Base LY          │
-              │     统一应用 is_member / is_employee / end period │
+              │     统一应用会员规则 / is_employee / end period   │
               │     Act 用本期区间，LY 用 LY 区间                 │
               │                                                    │
               │  对外 Value 层（7 个独立度量值）                  │
@@ -195,7 +204,7 @@ VIC Retention% YOY Display              ← percent_1dp 格式 #,##0.0%（不含
 | Slicer_Time_Frame_Max（本期） | 断开维度，SELECTEDVALUE 读取 `Last_Fiscal_Month_Min/Max` | `data_date >= __PeriodMin AND data_date <= __PeriodMax` |
 | Slicer_Time_Frame_Max（LY） | SELECTEDVALUE 读取 `Last_Fiscal_Month_Min_LY/Max_LY` | `data_date >= __LYMin AND data_date <= __LYMax`（YOY 派生专用） |
 | Slicer_Is_Employee_Selection | 断开维度，SELECTEDVALUE 读取 `IsEmployee_Code` | `a03_e2e_customer_data_m[is_employee] in __IsEmployeeFilter` |
-| IsMemberFilter | 断开维度，SELECTEDVALUE 读取 `IsMember` | `a03_e2e_customer_data_m[is_member] = __IsMemberFilter` |
+| IsMemberFilter | 断开维度，SELECTEDVALUE 读取 `IsMember`，默认 0 | 固定 `is_member = 0`；选 1 时追加 `register_date <= __PeriodMax`（本期）或 `<= __LYMax`（LY） |
 | 事实表分组字段 | 表格行直接拉取，模型自动传递筛选 | DAX 无需显式处理 |
 
 ### 3.4 YOY 时间偏移规则（财历映射）
@@ -228,7 +237,8 @@ VIC Retention% YOY Display              ← percent_1dp 格式 #,##0.0%（不含
 ### 4.1 内部基础层 — Base Act / Base LY（私有度量值）
 
 > 私有度量值（下划线前缀），放 Base Metrics 文件夹，供对外 Value 层调用，避免重复代码。
-> Act = 本期 end period 区间，LY = LY end period 区间。
+> Act = 本期 end period 区间，LY = LY end period 区间。共 6 个基础度量值；Retention% 复用 Retention No. 和 LY VIC No.。
+> 所有基础度量值固定筛选 `is_member = 0`；`KEEPFILTERS` 仅在 Member VIC 模式下收窄注册日期范围，保留已有注册日期筛选。TTL VIC 不追加日期限制。
 
 #### 4.1.1 _LY VIC No. Base Act（LY VIC No. 本期基础值）
 
@@ -246,7 +256,7 @@ _LY VIC No. Base Act =
 // 筛选上下文:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //   - is_fy_vic = 1
-//   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
+//   - is_member = 0；Member VIC 追加 register_date <= __PeriodMax
 //   - is_employee in __IsEmployeeFilter（默认 所有）
 // 聚合粒度: DISTINCTCOUNT(user_id)
 // ========================================
@@ -259,7 +269,11 @@ _LY VIC No. Base Act =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_fy_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __PeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -278,7 +292,7 @@ _LY VIC No. Base LY =
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY/Max_LY],
 //       Slicer_Is_Employee_Selection[IsEmployee_Code],
 //       IsMemberFilter[IsMember]
-// 口径来源: 口径文档/LY Last Purchase Time.md 指标 2（LY 版本，用于指标 6 YOY 分母）
+// 口径来源: 口径文档/LY Last Purchase Time.md 指标 2（LY 版本，用于指标 6、8 的去年比率分母）
 // 筛选上下文:
 //   - data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]（LY end period 当月）
 //   - is_fy_vic = 1
@@ -294,7 +308,11 @@ _LY VIC No. Base LY =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_fy_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __LYMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
@@ -331,7 +349,11 @@ _VIC Repurchase No. Base Act =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_fy_vic] = 1,
             'a03_e2e_customer_data_m'[last_12m_net_pay_amt] > 0,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __PeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -368,7 +390,11 @@ _VIC Repurchase No. Base LY =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_fy_vic] = 1,
             'a03_e2e_customer_data_m'[last_12m_net_pay_amt] > 0,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __LYMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
@@ -403,7 +429,11 @@ _VIC Retention No. Base Act =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_fy_retention_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __PeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -438,7 +468,11 @@ _VIC Retention No. Base LY =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_fy_retention_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __LYMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
@@ -546,7 +580,7 @@ VIC Retention% Value =
 // 用途: 指标 7 — 留存VIC占比（对外值）
 // 依赖: [_VIC Retention No. Base Act], [_LY VIC No. Base Act]
 // 口径来源: 口径文档/LY Last Purchase Time.md 指标 7
-// 计算公式: 分子 VIC Retention No. / 分母 LY VIC No.
+// 计算公式: 分子 Retention No. / 分母 LY VIC No.
 // 边界处理: 分母为 0 或 BLANK 时返回 BLANK（DIVIDE 默认行为）
 // ========================================
     DIVIDE(
@@ -771,7 +805,8 @@ VIC Retention% YOY Display =
 │  a03_e2e_customer_data_m（月度事实表）                               │
 │  字段: data_date, platform, shop_info_id, user_id, is_member,       │
 │        is_employee, is_fy_vic, is_fy_retention_vic,                 │
-│        last_12m_net_pay_amt, last_fy_last_order_month_type          │
+│        last_12m_net_pay_amt, last_fy_last_order_month_type,         │
+│        register_date                                               │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
                                │ 模型自动传递（行维度 = 事实表字段直接拉取）
@@ -843,7 +878,7 @@ VIC Retention% YOY Display =
 
 1. **end period 时间筛选（关键逻辑）**：所有指标均使用 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Min]` ~ `[Last_Fiscal_Month_Max]` 作为本期时间范围；YOY 派生的"去年"使用 `Last_Fiscal_Month_Min_LY` ~ `Last_Fiscal_Month_Max_LY`。这些字段已由 Slicer_Time_Frame_Max 日期维度表预算，无需在 DAX 中重复实现。
 
-2. **is_member / is_employee 双重筛选（关键逻辑）**：所有指标均应用 `is_member = SELECTEDVALUE(IsMemberFilter[IsMember], 0)` 和 `is_employee = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])` 筛选。默认值：is_member=0（TTL VIC），is_employee=1（Yes）。
+2. **is_member / is_employee 双重筛选（关键逻辑）**：`SELECTEDVALUE(IsMemberFilter[IsMember], 0)` 默认 TTL VIC。两档均筛选事实表 `is_member = 0`；Member VIC（1）追加 `register_date <= __PeriodMax`（本期）或 `register_date <= __LYMax`（LY）。员工筛选保持原有 `is_employee IN VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])` 逻辑。
 
 3. **行维度字段自动传递（关键逻辑）**：`last_fy_last_order_month_type` / `platform` / `shop_info_id` 三个分组维度直接拉取事实表字段，模型自动传递筛选，DAX 度量值无需显式处理分组逻辑。这是口径文档明确要求的方式。
 
@@ -875,3 +910,23 @@ VIC Retention% YOY Display =
     - 行维度由 platform / shop_info_id 扩展为 last_fy_last_order_month_type / platform / shop_info_id
     - 派生指标类型由 vs LY / vs LP / Share / Share vs LY / Share vs LP / TAR ACH% 简化为 VIC Repurchase% / VIC Repurchase% YOY / VIC Retention% / VIC Retention% YOY
     - 颜色规则暂不实现（参考文件有 Cell Font Color / Cell Background Color，本方案未要求）
+
+12. **字段类型与空值**：`register_date` 在 Power BI 中应为 Date。注册日期按需求直接执行 `<=` 比较，不额外增加非空条件；DAX 的 BLANK 日期可能通过该比较，实际数据存在空值时需确认其业务处理方式。
+
+---
+
+## 8. 验证方法
+
+| 场景 | 预期结果 |
+|---|---|
+| TTL VIC（0）或未单选 | 事实表仅取 `is_member = 0`，不追加注册日期上限，所有指标维持原计算口径 |
+| Member VIC（1），注册日期早于或等于期末 | 仅统计事实表 `is_member = 0` 且满足注册截止条件的记录，等于期末当天应纳入 |
+| Member VIC（1），注册日期晚于期末 | 不纳入任何基础值或比率分子、分母 |
+| 事实表 `is_member = 1` | 两档均不纳入，不再直接映射切片器值 |
+| Member VIC 的 LY 计算 | 注册截止日使用 `Last_Fiscal_Month_Max_LY`，不能误用本期截止日 |
+| Retention% 分子、分母 | 分子复用 Retention No.（`is_fy_retention_vic = 1`），分母复用 LY VIC No.（`is_fy_vic = 1`），均按 `user_id` 去重 |
+| Retention% YOY | 本期、LY 分别计算 Retention No. / LY VIC No.，再计算今年 / 去年 - 1，不引入独立分母 |
+| end period 和分组 | 仅统计所选最后财月；保持当前 Recency、platform、shop_info_id、员工及已有注册日期筛选，不跨月或跨组累计 |
+| 分母为 0 / BLANK、去年留存率为 0 / BLANK | 比率和 YOY 沿用原有空值保护，Display 显示 "-" |
+
+> 本表为 Power BI 模型内验收用例；文件静态核对不等同于真实数据执行验证。

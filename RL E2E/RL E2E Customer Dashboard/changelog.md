@@ -396,3 +396,118 @@
   - SLS% 分母维持分步（VIC vs Store.sql 未覆盖 SLS%），如数据方后续确认 SLS% 也需单步，仅需将 SWITCH 中 4/5/6/26/27/28 分支的 __SLS_Store 引用改为单步实现（演进记录块有说明）
   - currency_M_K_Int_0db 当前无指标使用（预留格式），如需启用在 Dim_ColMetric_New_Retention_VIC 的 Metric_Format 字段配置即可
 ---
+
+## [2026-09-21 15:51] DAX 修改 — VIC_KPIs_Table.md is_member 筛选重构 + VIC Retention% 分母口径调整（含口径文档同步）
+
+- **模块**: VIC（1 VIC KPI）
+- **任务**: IsMemberFilter 切片器逻辑调整（is_member=1 时事实表筛选改用 is_member=0 AND register_date <= end_period_date）+ VIC Retention%（Metric_ID=6）分母口径调整（end period 当月 last_fy_net_pay_amt >= 20000）
+- **操作**: 修改
+- **变更内容**:
+  - **is_member 筛选重构（Act/LY/LP 三个 Base Value 全量生效）**:
+    - 新增 `__EndPeriodDate` 变量：Member VIC（IsMember=1）时取对应期 end period 末日（Act=Last_Fiscal_Month_Max / LY=Last_Fiscal_Month_Max_LY / LP=Last_Fiscal_Month_Max_LP），TTL VIC 时取哨兵日期 DATE(9999,12,31) 恒真不设限
+    - 事实表谓词统一改为 `is_member = 0` + `register_date <= __EndPeriodDate`（TTL VIC 逻辑不变；Member VIC 不再筛 is_member=1，改用注册日期界定会员人群）；共 15 处 CALCULATE 谓词（3 个度量值 × 5 处：4 个基础聚合 + Metric_ID=6 分母）
+    - 旧分母块注释（Rolling 12 / 单月偏移两代旧逻辑）全部删除，不再保留（用户要求）
+  - **VIC Retention% 分母口径调整（Metric_ID=6，分子不变）**: 分母由"往前推 12 个月的单月 is_vic=1 人数"改为"对应期 end period 当月 last_fy_net_pay_amt >= 20000 的 count(distinct user_id)"（Act/LY/LP 各取各自期 end period 当月区间 [Last_Fiscal_Month_Min(_LY/_LP), Last_Fiscal_Month_Max(_LY/_LP)]；不再筛 is_vic=1，不再做财月字符串 EDATE 偏移推导目标月）
+  - **文档同步（VIC_KPIs_Table.md）**: 头部 revised 2026-09-21 行；§1.2 is_member 筛选规则表；§1.4 分母定义重写；§2.1/§2.2 关键字段与维度表清单；§3.1/§3.2/§3.3/§3.6；§4.1 表 Metric_ID=6 行；§4.2/§4.3/§4.4 标题+头部注释+VAR区+基础聚合+Retention块+SWITCH注释；§4.5 总路由派生注释+TAR ACH% 实际值注释；§5 度量值清单；§6 血缘图（字段清单+内化描述）；§7 item 2/4/6/14
+  - **口径文档同步（VIC KPI.md）**: 头部新增 2026-09-21 口径修订行；模块全局影响说明/is_member使用（头部引用块+全局逻辑表共 4 处）更新 Member VIC 筛选描述；§2 VIC Retention% 业务定义/计算公式/分母行重写 + 分母目标月基准块改为分母期间基准块（含历史口径沿革）
+- **关联文件**:
+  - `VIC/1 VIC KPI/VIC_KPIs_Table.md`
+  - `口径文档/VIC/VIC KPI.md`
+- **备注**:
+  - TAR ACH%（Metric_ID=9）实际值复用 Act Base Value(Metric_ID=6)，自动继承新口径，无需改 DAX
+  - 其他 VIC 模块（VIC_Segment_Table.md / VIC_Breakdown_ms.md / VIC_Breakdown_Trend.md 等）同样使用 IsMemberFilter[IsMember] 直筛事实表 is_member 的模式，本次未调整；如需同步 is_member=0+register_date 新规则，需另行确认
+  - Share 类指标分母（end period 当月 is_vic=1）不受本次调整影响（VIC_KPIs_Table.md §7 item 5）
+---
+
+## [2026-09-21 16:04] DAX 修改 — LY Last Purchase Time 会员筛选调整，Retention% 保持原口径（含口径文档同步）
+
+- **模块**: VIC（3 LY Last Purchase Time）
+- **任务**: 按用户最终确认结果调整会员筛选，并明确本模块 Retention% 与 VIC KPI 模块 VIC Retention% 的口径区别
+- **操作**: 修改
+- **变更内容**:
+  - **会员筛选调整（6 个基础度量值）**: `_LY VIC No. Base Act / Base LY`、`_VIC Repurchase No. Base Act / Base LY`、`_VIC Retention No. Base Act / Base LY` 均保留 `SELECTEDVALUE(IsMemberFilter[IsMember], 0)`；TTL VIC（0）维持事实表 `is_member = 0`，不追加注册日期限制；Member VIC（1）改为事实表 `is_member = 0 AND register_date <= end_period_date`。
+  - **期间对应与筛选保留**: 本期注册截止日取 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]`，LY 取 `Last_Fiscal_Month_Max_LY`，包含截止当天；使用 `KEEPFILTERS` 保留已有注册日期筛选。员工、行分组和 end period 当月时间筛选保持不变，本文件不涉及 LP。
+  - **Retention% 原口径恢复**: 本模块为 `Retention% = Retention No. / LY VIC No.`，不适用 VIC KPI 模块的 VIC Retention% 分母调整。`VIC Retention% Value` 恢复引用 `_VIC Retention No. Base Act` / `_LY VIC No. Base Act`；`VIC Retention% YOY Value` 的本期、LY 比率均恢复复用各自期间的 Retention No. / LY VIC No.，再计算今年 / 去年 - 1。分子仍筛选 `is_fy_retention_vic = 1`，分母仍筛选 `is_fy_vic = 1` 后对 `user_id` 去重计数。
+  - **清理误增实现**: 删除本轮曾误增的 `_VIC Retention Denominator Base Act / Base LY` 及金额门槛分母相关引用、字段依赖、说明和验证用例；最终维持 6 个 Base、7 个 Value、7 个 Display，共 20 个度量值。复购率公式、Display 格式和空值保护保持不变，不保留旧逻辑注释。
+  - **文档同步**: 更新解决方案的会员规则、指标公式、依赖注释、度量值清单、血缘图和验收用例；原始口径文档同步会员筛选与 Retention% 定义，明确现有 `VIC Retention%` / `VIC Retention No.` 命名保留，但业务口径不与 VIC KPI 模块混用。
+- **关联文件**:
+  - `VIC/3 LY Last Purchase Time/LY_Last_Purchase_Time_Table.md`
+  - `口径文档/VIC/LY Last Purchase Time.md`
+- **备注**:
+  - 用户已确认最终方案；`IsMemberFilter` 维度表及日期维度表未修改。
+  - 已完成静态核对：6 处会员注册日期筛选保留，误增专用分母及金额条件无残留，Retention% 与 YOY 引用恢复；`git diff --check` 通过，未在 Power BI DAX 引擎中执行验证。
+---
+
+## [2026-09-21 16:13] 知识沉淀 — 模块关键点提炼.md 新增第 17 点：哨兵日期恒真模式
+
+- **模块**: 项目配置（模版复用知识库）
+- **任务**: 将 VIC_KPIs_Table.md is_member 筛选重构中的"哨兵日期恒真模式"（register_date 上限变量化 __EndPeriodDate）沉淀为通用关键点，供后续 AI 对话关键词输入
+- **操作**: 修改
+- **变更内容**:
+  - 六、关键指标计算逻辑新增第 17 点"哨兵日期恒真模式：register_date 上限变量化（TTL 档谓词恒真）"，紧接第 16 点（同业务的 KEEPFILTERS + OR 实现）之后，含：核心机制（变量级开关 + DATE(9999,12,31) 哨兵恒真）、VAR 定义区完整 DAX 示例、开关与谓词效果对照表、与第 16 点的选型对照表（开关位置/同列筛选关系/谓词书写/适用场景 4 维度）、复用边界（Act/LY/LP 期间字段切换、哨兵值前提、BLANK 语义、只复用筛选模式）
+- **关联文件**:
+  - `模版复用/模块关键点提炼.md`
+  - 模式来源: `VIC/1 VIC KPI/VIC_KPIs_Table.md`
+- **备注**:
+  - 第 16 点（KEEPFILTERS + OR，行级开关）与第 17 点（哨兵日期，变量级开关）为同一业务（IsMember 模式开关 + register_date 上限）的两种实现，选型对照表已注明各自适用场景：外部存在 register_date 筛选需保留交集时选第 16 点；度量值全权接管谓词、多 CALCULATE/多期别统一书写时选第 17 点
+---
+
+## [2026-09-21 16:23] DAX 修改 — VIC Segment 会员筛选调整（含口径文档同步）
+
+- **模块**: DAX / VIC（4 VIC Segment）
+- **任务**: 将 VIC Segment 的会员筛选统一为事实表 is_member=0，Member VIC 追加 register_date 不晚于对应期间最后财月末，并保留既有指标计算口径
+- **操作**: 修改
+- **变更内容**:
+  - **12 个基础度量值、20 处筛选**: `_Customer No. Base Act / Base LY`、`_Customer Total Base Act / Base LY` 各 1 处；`_SLS Base Act / Base LY`、`_SLS Total Base Act / Base LY`、`_Net Pay Qty Base Act / Base LY`、`_Net Pay Order Cnt Base Act / Base LY` 的 Step 1 / Step 2 各 1 处。
+  - **会员模式**: 保留 `SELECTEDVALUE(IsMemberFilter[IsMember], 0)`；两档事实表均筛 `is_member = 0`。TTL VIC（0）不追加注册日期限制；Member VIC（1）使用 `KEEPFILTERS(__IsMemberFilter = 0 || register_date <= 对应财月末)` 与已有注册日期筛选取交集，不增加注册日期下限。
+  - **期间对应**: Act 注册截止日读取 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]`，LY 读取 `Last_Fiscal_Month_Max_LY`；Customer 单步分别使用 `__PeriodMax / __LYMax`，双步两阶段分别使用 `__EndPeriodMax / __EndPeriodMax_LY`，不误用 Step 2 的 `TimeFrame_Max / TimeFrame_Max_LY`。本模块无 LP，不新增 LP 分支。
+  - **保持原计算**: Step1 end period 框定用户、Step2 所选完整区间聚合，以及员工筛选、TREATAS、分组关系、占比分母 ALLSELECTED、全部 Value / Display / SVG 代码不变；本模块不涉及 VIC Retention%，不变更指标分子、分母公式。
+  - **文档与清理**: 同步方案会员规则、register_date 字段依赖、Base 注释、筛选上下文、血缘字段及验收用例；原口径头部、全局规则、12 个指标筛选条件和汇总同步。删除受影响 Base 中 6 段历史合并计算块注释及其回退指引，不新增旧逻辑注释。
+- **关联文件**:
+  - `VIC/4 VIC Segment/VIC_Segment_Table.md`
+  - `口径文档/VIC/VIC Segment.md`
+- **备注**:
+  - 静态核验：20/20 处会员条件覆盖；去除注释与会员谓词后 Base 代码与修改前一致，12 个 Value、12 个 Display、2 个 SVG 代码块无变化；两份文档无旧会员直筛映射残留，`git diff --check` 通过。
+  - 未运行 Power BI DAX 引擎；实际模型需确认 register_date 与财月末字段为 Date 且日期切片器提供有效单值。未新增非空过滤，BLANK 注册日期可能通过 <= 比较，其业务处理需另行确认。
+  - `IsMemberFilter`、事实查询、日期维度和模型关系未修改。
+---
+
+## [2026-09-21 16:35] DAX 修改 — VIC_Trend.md is_member 筛选重构 + VIC Retention% 分母口径调整（含口径文档同步）
+
+- **模块**: VIC（2 VIC Trend）
+- **任务**: 与 VIC_KPIs_Table.md 同步两项口径调整：IsMemberFilter 切片器逻辑（is_member=1 时事实表筛选改用 is_member=0 AND register_date <= X 轴 end period 末日）+ VIC Retention%（Metric_ID=6）分母口径调整（end period 当月 last_fy_net_pay_amt >= 20000）
+- **操作**: 修改
+- **变更内容**:
+  - **is_member 筛选重构（9 个基础度量值全量生效: VIC No. / VIC Retention% / T4-5 Upgrade No. 各 Act/LY/LP）**:
+    - 各度量值新增 `__EndPeriodDate` 变量：Member VIC（IsMember=1）时取 X 轴对应期 end period 末日（Act=Last_Fiscal_Month_Max / LY=Last_Fiscal_Month_Max_LY / LP=Last_Fiscal_Month_Max_LP，均读自 Slicer_Time_Frame_VIC_Trend 行级字段），TTL VIC 时取哨兵日期 DATE(9999,12,31) 恒真不设限
+    - 事实表谓词统一改为 `is_member = 0` + `register_date <= __EndPeriodDate`，共 12 处 CALCULATE 谓词（VIC No. 3 处 + Retention 分子/分母 6 处 + T4-5 3 处）
+  - **VIC Retention% 分母口径调整（分子不变）**: 分母由"往前推 12 个月的单月 is_vic=1 人数（EDATE 目标月推导）"改为"X 轴对应期 end period 当月 last_fy_net_pay_amt >= 20000 的 count(distinct user_id)"（Act/LY/LP 各取 X 轴当前柱对应期 end period 当月区间，与分子同期间同人群；不再筛 is_vic=1、不再做目标月字符串推导）
+  - **旧逻辑清理**: 三个 Retention% 度量值中 Rolling 12 区间块注释（2026-09-14 弃用版）与"往前推 12 个月单月"现行旧逻辑（EDATE 推导约 40 行/处）全部删除，共 -273 行，不再保留（用户要求）
+  - **文档同步（VIC_Trend.md）**: 头部 revised 2026-09-21 行；§1 需求表 Metric_ID=6 行 + 核心设计原则；§1.3 分母节整节重写（含历史沿革）；§2.1 关键字段加 register_date/last_fy_net_pay_amt；§3.1 筛选上下文表 2 行；§3.2 架构图；§4.2-4.10 标题+注释头+VAR区+谓词；指标 6 引言 + §4.17/§4.19/§4.21 依赖注释；§7.1/§7.2 验证 SQL；§8 item 4/6/7
+  - **口径文档同步（VIC KPI.md）**: is_member 使用说明 2 处（头部引用块+全局逻辑表）补充"VIC Trend 柱形图中上述期末日取 X 轴各柱自己的时间点"；§2 分母期间基准块新增 VIC Trend 柱形图适配说明
+- **关联文件**:
+  - `VIC/2 VIC Trend/VIC_Trend.md`
+  - `口径文档/VIC/VIC KPI.md`
+- **备注**:
+  - 每柱独立计算：与主表（Slicer_Time_Frame_Max 全局 end period）不同，本方案 end period/register_date 上限/分母区间均基于 X 轴各柱自己的时间点
+  - Metric_ID=14（T4-5 Upgrade No. Share）分母复用 [VIC No. Trend Act Value]，自动继承 is_member 新口径；Share 类分母本身不变
+  - 静态核验：旧谓词 `is_member = __IsMemberFilter` 0 残留；新谓词 12+12 处一一配对；__EndPeriodDate 9 处定义（Act/LY/LP 取值各 3 处）；未运行 Power BI DAX 引擎
+---
+
+## [2026-09-21 16:47] DAX 修改 — VIC_KPIs_Pie_Chart.md is_member 筛选重构（仅 is_member，不涉及 Retention%）
+
+- **模块**: VIC（1 VIC KPI / Pie Chart）
+- **任务**: 与 VIC_KPIs_Table.md 同步 is_member 筛选重构；本方案仅本期 Act 快照、无比率指标（Retention VIC No. 为人数口径，即 VIC Retention% 分子，分子口径不变），不涉及 VIC Retention% 分母调整
+- **操作**: 修改
+- **变更内容**:
+  - **is_member 筛选重构（3 个 Value 度量: T4-5 Upgrade No. / Retention VIC No. / Direct VIC No. Pie Value）**:
+    - 各度量值新增 `__EndPeriodDate` 变量：Member VIC（IsMember=1）时取 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]`（全局 end period 末日，与主表 Act 一致），TTL VIC 时取哨兵日期 DATE(9999,12,31) 恒真不设限
+    - 事实表谓词统一改为 `is_member = 0` + `register_date <= __EndPeriodDate`，共 3 处 CALCULATE 谓词
+  - **文档同步（VIC_KPIs_Pie_Chart.md）**: 头部新增 revised 2026-09-21 行；§2.1 关键字段加 register_date；§3.1 IsMemberFilter 筛选行；§4.1/4.3/4.5 注释头+VAR区+谓词；§7.1 验证 SQL 补充 Member VIC register_date 说明；§8 item 3
+- **关联文件**:
+  - `VIC/1 VIC KPI/VIC_KPIs_Pie_Chart.md`
+- **备注**:
+  - Display 度量（§4.2/4.4/4.6）仅引用 Value 度量，自动继承新口径，无需修改
+  - 口径文档 VIC KPI.md 无需同步：is_member 使用说明已覆盖"本期取 Last_Fiscal_Month_Max"，本方案与主表 Act 同源；§4 Retention VIC No.（人数）定义不涉及分母
+  - 静态核验：旧谓词 0 残留；新谓词 3+3 处一一配对；未运行 Power BI DAX 引擎
+---

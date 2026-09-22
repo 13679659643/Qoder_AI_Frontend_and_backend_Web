@@ -1,11 +1,10 @@
 # Power BI 解决方案 — VIC Breakdown Trend：4 个指标 Value/Display 度量（柱形图趋势）
 
-> status: ready
+> status: 待模型验收
 > created: 2026-08-15
-> revised: 2026-09-16（Month 改为 VIC 标记行级筛选，Quarter 保留 VIC 分子 Step1+Step2；SLS% 分母对齐 VIC_Breakdown_ms.md 当前有效 __TTL_SLS：当前柱期间内 net_pay_amt > 0 行直接汇总，不框定全客集合）
-> history: 2026-09-12 曾将所有粒度及 SLS% 分母统一改为 Step1+Step2；该版本已由本次修订替代，旧代码和验证 SQL 块注释保留备查。
+> revised: 2026-09-21（仅修改会员筛选：两档事实 is_member=0，Member VIC 追加当前柱最后财月末注册上限；Month 行级、Quarter 分子两步及 SLS% 正金额全客分母等其他有效逻辑不变）
 > type: 度量值开发 + 柱形图视觉对象
-> 口径来源: 口径文档/VIC Breakdown KPI.md（Metric_ID 1/4/23/26 共 4 个指标）
+> 口径来源: 口径文档/VIC/VIC Breakdown KPI.md（Metric_ID 1/4/23/26 共 4 个指标）
 > 参考实现: VIC_Trend.md（柱形图 X 轴 + IsTimeFrameVisible 范式）、VIC_Breakdown_ms.md（VIC Breakdown 主表口径）
 > 底表: a03_e2e_customer_data_m
 
@@ -30,7 +29,9 @@
 - 日期表使用 VIC Breakdown 专用版本（Slicer_Time_Frame_VIC_Breakdown / _Min_ / _Max_），与主表 VIC_Breakdown_ms.md 共用，但与其他模块（VIC KPI、VIC Trend、Pie Chart 等）隔离
 - 按 X 轴真实粒度值 `Month` / `Quarter` 分支：Month 对当前月直接筛选 `is_xxx_vic=1`；Quarter 保留季末月识别用户、整季消费聚合两步，集合变量放在 Quarter 分支内部。
 - SLS% 全客分母对齐主表当前有效 `__TTL_SLS`：月/季均在当前柱 TimeFrame 区间直接筛选 `net_pay_amt > 0` 后汇总，不框定用户、不添加任何 VIC 标记筛选；不能把正金额条件添加到 VIC 分子。
-- 保留 is_member / is_employee 双重人群筛选、平台/店铺等已有分组上下文、金额类 ÷ Currency_ExchangeRate；不移除整张事实表筛选。
+- 会员切片器 `0 = TTL VIC`、`1 = Member VIC`，无唯一选值默认 0；两档事实均筛选 `is_member=0`，仅 Member 追加 `register_date <= __CurrentLFMMax`，通过 `KEEPFILTERS` 与已有注册日期筛选取交集，TTL 不追加注册日期限制。
+- `__CurrentLFMMax` 沿用 `SELECTEDVALUE(Slicer_Time_Frame_VIC_Breakdown[Last_Fiscal_Month_Max])`，即每根柱子的最后财月末，不使用全局 Max 或 `TimeFrame_Max` 替代；月分子、季度 Step 1 / Step 2、单步全客分母全部覆盖，不新增注册日期下限。
+- 保留现有员工 `VALUES` + `IN` 筛选、平台/店铺等分组上下文、金额类 ÷ Currency_ExchangeRate；不移除整张事实表筛选。
 - 本方案仅输出 Act 值（本期），不涉及 vs LY / vs LP / vs Store 派生指标
 
 ### 1.1 格式说明
@@ -49,13 +50,13 @@
 
 - 柱形图 X 轴 = Slicer_Time_Frame_VIC_Breakdown[TimeFrame_Value]
 - 视觉对象级别筛选器：IsTimeFrameVisible VIC Breakdown = 1（控制 X 轴显示范围：同粒度 + Key 在 [MinKey, MaxKey] 区间）
-- `Month`：当前柱 `Last_Fiscal_Month_Min/Max` 与 `TimeFrame_Min/Max` 对应同一财月；按本次指定的行级口径，直接在该月筛选 `is_xxx_vic=1` 汇总，不构建用户集合。
+- `Month`：当前柱 `Last_Fiscal_Month_Min/Max` 与 `TimeFrame_Min/Max` 对应同一财月；按现有行级口径，直接在该月筛选 `is_xxx_vic=1` 汇总，不构建用户集合。
 - `Quarter`：两步时间不同，保留原 VIC 计算结构：
   - **Step 1**：当前柱 `Last_Fiscal_Month_Min/Max`（季末财月）筛选 `is_xxx_vic=1`，框定 user_id。
   - **Step 2**：当前柱 `TimeFrame_Min/Max`（整季）通过 `TREATAS` 汇总该用户集合消费，不再次施加 VIC 标记。
-- **SLS% 分母（月/季共用）**：当前柱 `TimeFrame_Min/Max` 内直接汇总 `net_pay_amt > 0` 行；不再使用 `is_xxx_vic IN {0,1}` 或 `TREATAS(__AllUsers, ...)`。
+- **SLS% 分母（月/季共用）**：当前柱 `TimeFrame_Min/Max` 内直接汇总 `net_pay_amt > 0` 行；不施加 VIC 标记、不框定全客用户集合。
 - 月分子、季度 Step 2 及分母均保留全局 Min/Max 日期范围；季度 Step 1 保留原季末月范围。未知粒度或粒度非单值时返回 BLANK。
-- **等价性边界**：同月不等于每用户唯一。若同一用户跨店 VIC 标记不同，Month 行级筛选与旧用户集合扩展消费可能不同；本次以用户指定的 Month 行级口径为准，不将其描述为无条件等价优化。
+- **Month 行级范围**：同一用户跨店 VIC 标记不同时，仅汇总标记为 1 的行，不通过用户集合扩展到其他店的未标记行。
 
 ---
 
@@ -66,7 +67,8 @@
 | 对象     | 名称                                                                                  | 出处              |
 | -------- | ------------------------------------------------------------------------------------- | ----------------- |
 | 事实表   | a03_e2e_customer_data_m                                                               | 口径文档 全局逻辑 |
-| 关键字段 | data_date, user_id, net_pay_amt, is_member, is_employee, is_new_vic, is_retention_vic | 口径文档          |
+| 关键字段 | data_date, user_id, net_pay_amt, is_member, register_date, is_employee, is_new_vic, is_retention_vic | 口径文档 |
+| 注册日期 | register_date（源为 String，模型须与财月末字段统一转换为 Date） | Member VIC 的当前柱财月末注册上限；不新增下限或非空条件 |
 
 ### 2.2 维度表清单（VIC Breakdown 专用日期表，与其他模块隔离）
 
@@ -75,7 +77,7 @@
 | Slicer_Time_Frame_VIC_Breakdown     | 断开维度 | 柱形图 X 轴；SELECTEDVALUE 读取 TimeFrame_ID/Key/Value、Last_Fiscal_Month_Min/Max（Step 1：X 轴每个时间点的 end period 当月区间）、TimeFrame_Min/Max（Step 2：X 轴每个时间点自身的时间范围） |
 | Slicer_Time_Frame_Max_VIC_Breakdown | 断开维度 | 结束切片器；SELECTEDVALUE 读取 TimeFrame_Max（全局范围上界）                                                                                                                                 |
 | Slicer_Time_Frame_Min_VIC_Breakdown | 断开维度 | 起始切片器；SELECTEDVALUE 读取 TimeFrame_Min（全局范围下界）                                                                                                                                 |
-| Slicer_Is_Employee_Selection        | 断开维度 | SELECTEDVALUE 读取 IsEmployee_Code（默认 所有）                                                                                                                                              |
+| Slicer_Is_Employee_Selection        | 断开维度 | VALUES 读取当前可见 IsEmployee_Code 集合，通过 IN 筛选；无显式筛选时使用当前可见全部值 |
 | IsMemberFilter                      | 断开维度 | SELECTEDVALUE 读取 IsMember（默认 0 = TTL VIC）                                                                                                                                              |
 | Slicer_Currency_Selection           | 断开维度 | SELECTEDVALUE 读取 Currency_ExchangeRate（默认 1）、Currency_Symbol（默认 "¥"）                                                                                                             |
 
@@ -93,10 +95,12 @@
 | Slicer_Time_Frame_VIC_Breakdown（Quarter Step 1） | 断开维度，读取 Last_Fiscal_Month_Min/Max | 季末月 `is_xxx_vic = 1` 框定 VIC 用户，仅用于 Quarter 分子 |
 | Slicer_Time_Frame_VIC_Breakdown（当前柱期间） | 读取 TimeFrame_Min/Max | Month 分子行筛选、Quarter Step 2 TREATAS 聚合、月/季全客分母正金额行汇总 |
 | Slicer_Time_Frame_Min/Max_VIC_Breakdown（全局范围） | 月分子、Quarter Step 2 及分母的冗余保护 | `data_date >= __GlobalMin AND data_date <= __GlobalMax` |
-| Slicer_Is_Employee_Selection                                   | SELECTEDVALUE 读取 IsEmployee_Code                         | `is_employee in __IsEmployeeFilter`（默认 1）                                                                        |
-| IsMemberFilter                                                 | SELECTEDVALUE 读取 IsMember                                | `is_member = __IsMemberFilter`（默认 0）                                                                             |
+| Slicer_Is_Employee_Selection | VALUES 读取当前可见 IsEmployee_Code 集合 | `is_employee in __IsEmployeeFilter`；保持现有员工筛选行为，不设固定默认 1 |
+| IsMemberFilter | SELECTEDVALUE 读取 IsMember，非单值默认 0 | 两档事实 `is_member=0`；0=TTL VIC 不追加注册限制，1=Member VIC 通过 `KEEPFILTERS` 追加 `register_date <= __CurrentLFMMax`，与已有注册筛选取交集 |
 | Slicer_Currency_Selection                                      | SELECTEDVALUE 读取 Currency_ExchangeRate / Currency_Symbol | 金额类`DIVIDE(SUM(net_pay_amt), __FXRate)`；Display 拼接 `__CurrencySymbol`                                        |
 | 事实表行维度字段（platform / shop_info_id / 新老客分层等）     | 柱形图图例/小多图直接拉取，模型自动传递                    | DAX 无需显式处理                                                                                                       |
+
+**会员上下文与日期前提**：四个 Value 的会员筛选共 14 处（SLS New 3、SLS% New 4、SLS Retention 3、SLS% Retention 4），分别覆盖月分子、季度两步及 SLS% 全客分母。截止统一读取当前柱 `Last_Fiscal_Month_Max`；模型 `register_date` 与财月末字段须为 Date，当前柱日期须为有效单值。仅追加注册日期上限，原数据日期范围、员工/分组、FX、FORMAT、可见性和 Display 逻辑不变；BLANK / SQL NULL 差异单列于 §7。
 
 ### 3.2 度量值架构
 
@@ -184,8 +188,8 @@ SLS Trend Value (New VIC) =
 // 度量值: SLS Trend Value (New VIC)
 // Display Folder: VIC Breakdown Trend
 // 用途: New VIC SLS 本期值（柱形图 Y 轴）
-// 口径来源: 口径文档/VIC Breakdown KPI.md - Metric_ID=1 SLS Act (New VIC)
-//           （2026-09-16 修订：Month 行级筛选；Quarter 保留 VIC 分子分步；全客分母对齐主表当前返回值）
+// 口径来源: 口径文档/VIC/VIC Breakdown KPI.md - Metric_ID=1 SLS Act (New VIC)
+//           （现行口径：Month 行级；Quarter VIC 分子分步；SLS% 为当前柱正金额全客分母）
 // 计算公式（按 X 轴 TimeFrame_ID 分支，两个分支均返回数值）:
 //   Month: 当前柱月份直接筛选 is_xxx_vic=1 后 SUM(net_pay_amt)，不框定 user_id 集合
 //   Quarter: 沿用以下 Step1+Step2 分步；集合变量仅在 Quarter 分支内部定义
@@ -196,8 +200,11 @@ SLS Trend Value (New VIC) =
 //          （另加全局范围冗余筛选，防止 X 轴超出全局范围时的异常显示）
 //   结果 ÷ FXRate
 // 筛选条件:
-//   - is_member = __IsMemberFilter（默认 0 = TTL VIC，两步均施加）
-//   - is_employee in __IsEmployeeFilter（默认 所有，两步均施加）
+//   - 会员模式 0=TTL VIC、1=Member VIC，非单值默认 0；两档事实 is_member=0
+//   - 仅 Member 通过 KEEPFILTERS 追加 register_date <= __CurrentLFMMax，与已有注册筛选取交集
+//   - __CurrentLFMMax 取当前柱 Last_Fiscal_Month_Max，不是全局 Max 或 TimeFrame_Max
+//   - 月分子、Quarter Step 1 / Step 2 及 SLS% 全客分母均应用会员规则，不新增注册下限或排空
+//   - is_employee in __IsEmployeeFilter：VALUES 当前可见员工集合，各事实筛选阶段保持不变
 // 货币转换: 金额类 ÷ Currency_ExchangeRate（RMB=1, USD=7）
 // Metric_ID: 1
 // 数据类型: currency（内部值，未格式化）
@@ -216,45 +223,6 @@ SLS Trend Value (New VIC) =
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
-    /*
-    旧逻辑：所有粒度统一 Step1+Step2 的 New VIC SLS（2026-09-16 弃用，保留备查）
-    如需回退：取消本块注释，并注释下方 __RawSLS 的 Month/Quarter 分支及对应 RETURN。
-    Quarter 的两步计算在新实现中保留；本块不参与执行。
-    // ═══════════════════════════════════════
-    // Step 1: X 轴时间点 end period 当月，筛选 is_new_vic=1，框定 user_id 集合
-    // （VICType 固定为 New VIC，直接 CALCULATETABLE 框定，无需 UNION 分支）
-    // ═══════════════════════════════════════
-    VAR __VICUsers =
-        CALCULATETABLE(
-            VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_new_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-        )
-
-    // ═══════════════════════════════════════
-    // Step 2: 该 user_id 集合在 X 轴时间点自身时间范围（+全局冗余）的 SUM(net_pay_amt)
-    // is_new_vic=1 不再施加（Step 1 已框定主体）；分组维度（图例/小多图）自动传递保留（不移除）
-    // ═══════════════════════════════════════
-    VAR __Result =
-        DIVIDE(
-            CALCULATE(
-                SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-                TREATAS(__VICUsers, 'a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
-                'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
-                'a03_e2e_customer_data_m'[data_date] >= __CurrentTFMin,
-                'a03_e2e_customer_data_m'[data_date] <= __CurrentTFMax
-            ),
-            __FXRate
-        )
-    RETURN __Result
-    */
-
     // ── 按粒度计算原币 SLS；Month 分支不引用用户集合 ──
     VAR __RawSLS =
         SWITCH(
@@ -263,7 +231,8 @@ SLS Trend Value (New VIC) =
                 CALCULATE(
                     SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                     'a03_e2e_customer_data_m'[is_new_vic] = 1,
-                    'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                    'a03_e2e_customer_data_m'[is_member] = 0,
+                    KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
                     'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
                     'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -276,7 +245,8 @@ SLS Trend Value (New VIC) =
                     CALCULATETABLE(
                         VALUES('a03_e2e_customer_data_m'[user_id]),
                         'a03_e2e_customer_data_m'[is_new_vic] = 1,
-                        'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                        'a03_e2e_customer_data_m'[is_member] = 0,
+                        KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
                         'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                         'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
                         'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
@@ -286,7 +256,8 @@ SLS Trend Value (New VIC) =
                     CALCULATE(
                         SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                         TREATAS(__VICUsers, 'a03_e2e_customer_data_m'[user_id]),
-                        'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                        'a03_e2e_customer_data_m'[is_member] = 0,
+                        KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
                         'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                         'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
                         'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -297,30 +268,6 @@ SLS Trend Value (New VIC) =
         )
     RETURN DIVIDE(__RawSLS, __FXRate)
     // Month：行筛选；Quarter：两步；未识别粒度：BLANK；分组上下文始终保留。
-
-/* ── 旧逻辑：end period 当月单步聚合（2026-09-12 弃用，保留备查）──
-   当时口径理解: "dt = 所选时间范围 end period" 直接单步聚合（is_new_vic=1 + 当月区间 + 全局冗余）。
-   2026-09-12 修订: 与主表同步改为 Step1+Step2 分步——单步版无法体现"end period 当月框定人群、
-   再看时间范围消费"的两步语义（Quarter 粒度时 Step 1 为季末当月、Step 2 为整季，两步区间不同）。
-   如需回退至此历史版本: 注释当前 __RawSLS 的 Month/Quarter 分支及对应 RETURN，再恢复下方实现；
-   已有 2026-09-16 旧逻辑块仍保持注释，不能同时启用多个实现:
-
-    VAR __Result =
-        DIVIDE(
-            CALCULATE(
-                SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-                'a03_e2e_customer_data_m'[is_new_vic] = 1,
-                'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
-                'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
-                'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
-                'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-            ),
-            __FXRate
-        )
-    RETURN __Result
-── 旧逻辑结束 ── */
 ```
 
 ### 4.3 SLS Trend Display (New VIC)
@@ -355,18 +302,20 @@ SLS% Trend Value (New VIC) =
 // 度量值: SLS% Trend Value (New VIC)
 // Display Folder: VIC Breakdown Trend
 // 用途: New VIC SLS% 本期比率（柱形图 Y 轴）
-// 口径来源: 口径文档/VIC Breakdown KPI.md - Metric_ID=4 SLS% Act (New VIC)
-//           （2026-09-16 修订：Month 行级筛选；Quarter 保留 VIC 分子分步；全客分母对齐主表当前返回值）
-// 计算公式: DIVIDE(分子, 分母)，不再使用 is_new_vic IN {0,1} 框定分母:
+// 口径来源: 口径文档/VIC/VIC Breakdown KPI.md - Metric_ID=4 SLS% Act (New VIC)
+//           （现行口径：Month 行级；Quarter VIC 分子分步；SLS% 为当前柱正金额全客分母）
+// 计算公式: DIVIDE(分子, 分母):
 //   Month 分子: 当前柱月份直接筛选 is_new_vic=1 后 SUM(net_pay_amt)
 //   Quarter 分子: 季末月筛选 is_new_vic=1 框定用户，再 TREATAS 汇总整季（不再次筛选 VIC 标记）
 //   分母（月/季统一）: 当前柱 TimeFrame 区间直接筛选 net_pay_amt > 0 后 SUM(net_pay_amt)
 //   分母不框定用户集合、不施加 VIC 标记筛选；分子不添加 net_pay_amt > 0
 //   月分子、季度 Step 2 和分母均保留全局范围及分组维度筛选
-// 与原方案差异: Month 不执行集合计算；Quarter 仅保留 VIC 分子分步，不保留旧全客分母
 // 筛选条件:
-//   - is_member = __IsMemberFilter（默认 0 = TTL VIC，两步均施加）
-//   - is_employee in __IsEmployeeFilter（默认 所有，两步均施加）
+//   - 会员模式 0=TTL VIC、1=Member VIC，非单值默认 0；两档事实 is_member=0
+//   - 仅 Member 通过 KEEPFILTERS 追加 register_date <= __CurrentLFMMax，与已有注册筛选取交集
+//   - __CurrentLFMMax 取当前柱 Last_Fiscal_Month_Max，不是全局 Max 或 TimeFrame_Max
+//   - 月分子、Quarter Step 1 / Step 2 及 SLS% 全客分母均应用会员规则，不新增注册下限或排空
+//   - is_employee in __IsEmployeeFilter：VALUES 当前可见员工集合，各事实筛选阶段保持不变
 // 货币转换: SLS% 占比不除（分子分母同币种抵消）
 // Metric_ID: 4
 // 数据类型: percent_0dp（比率，不额外裁剪净额结果）
@@ -384,63 +333,6 @@ SLS% Trend Value (New VIC) =
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
-    /*
-    旧逻辑：New VIC SLS% 分子分母均分步（2026-09-16 弃用，保留备查）
-    如需回退：取消本块注释，并注释下方新的 __Numerator、__Denominator 与对应 RETURN。
-    注意：回退将恢复已弃用的 is_new_vic IN {0,1} 全客集合分母。
-    // ═══════════════════════════════════════
-    // Step 1: X 轴时间点 end period 当月，各自框定分子/分母 user_id 集合
-    // （分母与分子唯一区别是筛选条件：is_new_vic IN {0,1} 全客 vs =1 New VIC）
-    // ═══════════════════════════════════════
-    VAR __VICUsers =
-        CALCULATETABLE(
-            VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_new_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-        )
-    VAR __AllUsers =
-        CALCULATETABLE(
-            VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_new_vic] IN {0, 1},
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-        )
-
-    // ═══════════════════════════════════════
-    // Step 2: 各集合在 X 轴时间点自身时间范围（+全局冗余）的 SUM(net_pay_amt)
-    // is_new_vic 筛选不再施加（Step 1 已框定主体）；分组维度自动传递保留（不移除）
-    // ═══════════════════════════════════════
-    VAR __Numerator =
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-            TREATAS(__VICUsers, 'a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
-            'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentTFMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentTFMax
-        )
-    VAR __Denominator =
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-            TREATAS(__AllUsers, 'a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
-            'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentTFMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentTFMax
-        )
-
-    RETURN DIVIDE(__Numerator, __Denominator)
-    */
-
     // ── 分子：Month 行级筛选；Quarter 季末主体 + 整季消费 ──
     VAR __Numerator =
         SWITCH(
@@ -449,7 +341,8 @@ SLS% Trend Value (New VIC) =
                 CALCULATE(
                     SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                     'a03_e2e_customer_data_m'[is_new_vic] = 1,
-                    'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                    'a03_e2e_customer_data_m'[is_member] = 0,
+                    KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
                     'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
                     'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -461,7 +354,8 @@ SLS% Trend Value (New VIC) =
                     CALCULATETABLE(
                         VALUES('a03_e2e_customer_data_m'[user_id]),
                         'a03_e2e_customer_data_m'[is_new_vic] = 1,
-                        'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                        'a03_e2e_customer_data_m'[is_member] = 0,
+                        KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
                         'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                         'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
                         'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
@@ -470,7 +364,8 @@ SLS% Trend Value (New VIC) =
                     CALCULATE(
                         SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                         TREATAS(__VICUsers, 'a03_e2e_customer_data_m'[user_id]),
-                        'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                        'a03_e2e_customer_data_m'[is_member] = 0,
+                        KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
                         'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                         'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
                         'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -484,7 +379,8 @@ SLS% Trend Value (New VIC) =
         CALCULATE(
             SUM('a03_e2e_customer_data_m'[net_pay_amt]),
             'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -493,42 +389,6 @@ SLS% Trend Value (New VIC) =
         )
     RETURN DIVIDE(__Numerator, __Denominator)
     // Month/Quarter 共用全客分母；其他粒度或分母为 0/BLANK 时返回 BLANK。
-
-/* ── 旧逻辑：end period 当月单步聚合（2026-09-12 弃用，保留备查）──
-   当时口径理解: 分子分母均单步聚合（各自筛选 + 当月区间 + 全局冗余）。
-   2026-09-12 修订: 与主表同步改为 Step1+Step2 分步——分子分母均先框定集合再看时间范围，
-   分母集合（is_new_vic IN {0,1}）与分子唯一区别是 Step 1 的筛选条件（与主表 Store 分母分步化一致）。
-   如需回退至此历史版本: 注释当前 __Numerator、__Denominator 及对应 RETURN，再恢复下方实现；
-   已有 2026-09-16 旧逻辑块仍保持注释；此历史分母已弃用，不能与新口径混用:
-
-    // ── 分子: is_new_vic=1 的 SLS ──
-    VAR __Numerator =
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-            'a03_e2e_customer_data_m'[is_new_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
-            'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-        )
-
-    // ── 分母: is_new_vic IN {0, 1} 的全客 SLS ──
-    VAR __Denominator =
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-            'a03_e2e_customer_data_m'[is_new_vic] IN {0, 1},
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
-            'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-        )
-
-    RETURN DIVIDE(__Numerator, __Denominator)
-── 旧逻辑结束 ── */
 ```
 
 ### 4.5 SLS% Trend Display (New VIC)
@@ -558,8 +418,8 @@ SLS Trend Value (Retention VIC) =
 // 度量值: SLS Trend Value (Retention VIC)
 // Display Folder: VIC Breakdown Trend
 // 用途: Retention VIC SLS 本期值（柱形图 Y 轴）
-// 口径来源: 口径文档/VIC Breakdown KPI.md - Metric_ID=23 SLS Act (Retention VIC)
-//           （2026-09-16 修订：Month 行级筛选；Quarter 保留 VIC 分子分步；全客分母对齐主表当前返回值）
+// 口径来源: 口径文档/VIC/VIC Breakdown KPI.md - Metric_ID=23 SLS Act (Retention VIC)
+//           （现行口径：Month 行级；Quarter VIC 分子分步；SLS% 为当前柱正金额全客分母）
 // 计算公式（按 X 轴 TimeFrame_ID 分支，两个分支均返回数值）:
 //   Month: 当前柱月份直接筛选 is_xxx_vic=1 后 SUM(net_pay_amt)，不框定 user_id 集合
 //   Quarter: 沿用以下 Step1+Step2 分步；集合变量仅在 Quarter 分支内部定义
@@ -570,8 +430,11 @@ SLS Trend Value (Retention VIC) =
 //          （另加全局范围冗余筛选，防止 X 轴超出全局范围时的异常显示）
 //   结果 ÷ FXRate
 // 筛选条件:
-//   - is_member = __IsMemberFilter（默认 0 = TTL VIC，两步均施加）
-//   - is_employee in __IsEmployeeFilter（默认 所有，两步均施加）
+//   - 会员模式 0=TTL VIC、1=Member VIC，非单值默认 0；两档事实 is_member=0
+//   - 仅 Member 通过 KEEPFILTERS 追加 register_date <= __CurrentLFMMax，与已有注册筛选取交集
+//   - __CurrentLFMMax 取当前柱 Last_Fiscal_Month_Max，不是全局 Max 或 TimeFrame_Max
+//   - 月分子、Quarter Step 1 / Step 2 及 SLS% 全客分母均应用会员规则，不新增注册下限或排空
+//   - is_employee in __IsEmployeeFilter：VALUES 当前可见员工集合，各事实筛选阶段保持不变
 // 货币转换: 金额类 ÷ Currency_ExchangeRate（RMB=1, USD=7）
 // Metric_ID: 23
 // 数据类型: currency（内部值，未格式化）
@@ -590,45 +453,6 @@ SLS Trend Value (Retention VIC) =
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
     VAR __FXRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
-    /*
-    旧逻辑：所有粒度统一 Step1+Step2 的 Retention VIC SLS（2026-09-16 弃用，保留备查）
-    如需回退：取消本块注释，并注释下方 __RawSLS 的 Month/Quarter 分支及对应 RETURN。
-    Quarter 的两步计算在新实现中保留；本块不参与执行。
-    // ═══════════════════════════════════════
-    // Step 1: X 轴时间点 end period 当月，筛选 is_retention_vic=1，框定 user_id 集合
-    // （VICType 固定为 Retention VIC，直接 CALCULATETABLE 框定，无需 UNION 分支）
-    // ═══════════════════════════════════════
-    VAR __VICUsers =
-        CALCULATETABLE(
-            VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-        )
-
-    // ═══════════════════════════════════════
-    // Step 2: 该 user_id 集合在 X 轴时间点自身时间范围（+全局冗余）的 SUM(net_pay_amt)
-    // is_retention_vic=1 不再施加（Step 1 已框定主体）；分组维度自动传递保留（不移除）
-    // ═══════════════════════════════════════
-    VAR __Result =
-        DIVIDE(
-            CALCULATE(
-                SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-                TREATAS(__VICUsers, 'a03_e2e_customer_data_m'[user_id]),
-                'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
-                'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
-                'a03_e2e_customer_data_m'[data_date] >= __CurrentTFMin,
-                'a03_e2e_customer_data_m'[data_date] <= __CurrentTFMax
-            ),
-            __FXRate
-        )
-    RETURN __Result
-    */
-
     // ── 按粒度计算原币 SLS；Month 分支不引用用户集合 ──
     VAR __RawSLS =
         SWITCH(
@@ -637,7 +461,8 @@ SLS Trend Value (Retention VIC) =
                 CALCULATE(
                     SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                     'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-                    'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                    'a03_e2e_customer_data_m'[is_member] = 0,
+                    KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
                     'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
                     'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -650,7 +475,8 @@ SLS Trend Value (Retention VIC) =
                     CALCULATETABLE(
                         VALUES('a03_e2e_customer_data_m'[user_id]),
                         'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-                        'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                        'a03_e2e_customer_data_m'[is_member] = 0,
+                        KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
                         'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                         'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
                         'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
@@ -660,7 +486,8 @@ SLS Trend Value (Retention VIC) =
                     CALCULATE(
                         SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                         TREATAS(__VICUsers, 'a03_e2e_customer_data_m'[user_id]),
-                        'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                        'a03_e2e_customer_data_m'[is_member] = 0,
+                        KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
                         'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                         'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
                         'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -671,30 +498,6 @@ SLS Trend Value (Retention VIC) =
         )
     RETURN DIVIDE(__RawSLS, __FXRate)
     // Month：行筛选；Quarter：两步；未识别粒度：BLANK；分组上下文始终保留。
-
-/* ── 旧逻辑：end period 当月单步聚合（2026-09-12 弃用，保留备查）──
-   当时口径理解: "dt = 所选时间范围 end period" 直接单步聚合（is_retention_vic=1 + 当月区间 + 全局冗余）。
-   2026-09-12 修订: 与主表同步改为 Step1+Step2 分步——单步版无法体现"end period 当月框定人群、
-   再看时间范围消费"的两步语义（Quarter 粒度时 Step 1 为季末当月、Step 2 为整季，两步区间不同）。
-   如需回退至此历史版本: 注释当前 __RawSLS 的 Month/Quarter 分支及对应 RETURN，再恢复下方实现；
-   已有 2026-09-16 旧逻辑块仍保持注释，不能同时启用多个实现:
-
-    VAR __Result =
-        DIVIDE(
-            CALCULATE(
-                SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-                'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-                'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
-                'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
-                'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
-                'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-            ),
-            __FXRate
-        )
-    RETURN __Result
-── 旧逻辑结束 ── */
 ```
 
 ### 4.7 SLS Trend Display (Retention VIC)
@@ -729,18 +532,20 @@ SLS% Trend Value (Retention VIC) =
 // 度量值: SLS% Trend Value (Retention VIC)
 // Display Folder: VIC Breakdown Trend
 // 用途: Retention VIC SLS% 本期比率（柱形图 Y 轴）
-// 口径来源: 口径文档/VIC Breakdown KPI.md - Metric_ID=26 SLS% Act (Retention VIC)
-//           （2026-09-16 修订：Month 行级筛选；Quarter 保留 VIC 分子分步；全客分母对齐主表当前返回值）
-// 计算公式: DIVIDE(分子, 分母)，不再使用 is_retention_vic IN {0,1} 框定分母:
+// 口径来源: 口径文档/VIC/VIC Breakdown KPI.md - Metric_ID=26 SLS% Act (Retention VIC)
+//           （现行口径：Month 行级；Quarter VIC 分子分步；SLS% 为当前柱正金额全客分母）
+// 计算公式: DIVIDE(分子, 分母):
 //   Month 分子: 当前柱月份直接筛选 is_retention_vic=1 后 SUM(net_pay_amt)
 //   Quarter 分子: 季末月筛选 is_retention_vic=1 框定用户，再 TREATAS 汇总整季（不再次筛选 VIC 标记）
 //   分母（月/季统一）: 当前柱 TimeFrame 区间直接筛选 net_pay_amt > 0 后 SUM(net_pay_amt)
 //   分母不框定用户集合、不施加 VIC 标记筛选；分子不添加 net_pay_amt > 0
 //   月分子、季度 Step 2 和分母均保留全局范围及分组维度筛选
-// 与原方案差异: Month 不执行集合计算；Quarter 仅保留 VIC 分子分步，不保留旧全客分母
 // 筛选条件:
-//   - is_member = __IsMemberFilter（默认 0 = TTL VIC，两步均施加）
-//   - is_employee in __IsEmployeeFilter（默认 所有，两步均施加）
+//   - 会员模式 0=TTL VIC、1=Member VIC，非单值默认 0；两档事实 is_member=0
+//   - 仅 Member 通过 KEEPFILTERS 追加 register_date <= __CurrentLFMMax，与已有注册筛选取交集
+//   - __CurrentLFMMax 取当前柱 Last_Fiscal_Month_Max，不是全局 Max 或 TimeFrame_Max
+//   - 月分子、Quarter Step 1 / Step 2 及 SLS% 全客分母均应用会员规则，不新增注册下限或排空
+//   - is_employee in __IsEmployeeFilter：VALUES 当前可见员工集合，各事实筛选阶段保持不变
 // 货币转换: SLS% 占比不除（分子分母同币种抵消）
 // Metric_ID: 26
 // 数据类型: percent_0dp（比率，不额外裁剪净额结果）
@@ -758,63 +563,6 @@ SLS% Trend Value (Retention VIC) =
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
-    /*
-    旧逻辑：Retention VIC SLS% 分子分母均分步（2026-09-16 弃用，保留备查）
-    如需回退：取消本块注释，并注释下方新的 __Numerator、__Denominator 与对应 RETURN。
-    注意：回退将恢复已弃用的 is_retention_vic IN {0,1} 全客集合分母。
-    // ═══════════════════════════════════════
-    // Step 1: X 轴时间点 end period 当月，各自框定分子/分母 user_id 集合
-    // （分母与分子唯一区别是筛选条件：is_retention_vic IN {0,1} 全客 vs =1 Retention VIC）
-    // ═══════════════════════════════════════
-    VAR __VICUsers =
-        CALCULATETABLE(
-            VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-        )
-    VAR __AllUsers =
-        CALCULATETABLE(
-            VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_retention_vic] IN {0, 1},
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-        )
-
-    // ═══════════════════════════════════════
-    // Step 2: 各集合在 X 轴时间点自身时间范围（+全局冗余）的 SUM(net_pay_amt)
-    // is_retention_vic 筛选不再施加（Step 1 已框定主体）；分组维度自动传递保留（不移除）
-    // ═══════════════════════════════════════
-    VAR __Numerator =
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-            TREATAS(__VICUsers, 'a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
-            'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentTFMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentTFMax
-        )
-    VAR __Denominator =
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-            TREATAS(__AllUsers, 'a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
-            'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentTFMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentTFMax
-        )
-
-    RETURN DIVIDE(__Numerator, __Denominator)
-    */
-
     // ── 分子：Month 行级筛选；Quarter 季末主体 + 整季消费 ──
     VAR __Numerator =
         SWITCH(
@@ -823,7 +571,8 @@ SLS% Trend Value (Retention VIC) =
                 CALCULATE(
                     SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                     'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-                    'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                    'a03_e2e_customer_data_m'[is_member] = 0,
+                    KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
                     'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
                     'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -835,7 +584,8 @@ SLS% Trend Value (Retention VIC) =
                     CALCULATETABLE(
                         VALUES('a03_e2e_customer_data_m'[user_id]),
                         'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-                        'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                        'a03_e2e_customer_data_m'[is_member] = 0,
+                        KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
                         'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                         'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
                         'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
@@ -844,7 +594,8 @@ SLS% Trend Value (Retention VIC) =
                     CALCULATE(
                         SUM('a03_e2e_customer_data_m'[net_pay_amt]),
                         TREATAS(__VICUsers, 'a03_e2e_customer_data_m'[user_id]),
-                        'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                        'a03_e2e_customer_data_m'[is_member] = 0,
+                        KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
                         'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                         'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
                         'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -858,7 +609,8 @@ SLS% Trend Value (Retention VIC) =
         CALCULATE(
             SUM('a03_e2e_customer_data_m'[net_pay_amt]),
             'a03_e2e_customer_data_m'[net_pay_amt] > 0,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(__IsMemberFilter = 0 || 'a03_e2e_customer_data_m'[register_date] <= __CurrentLFMMax),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -867,42 +619,6 @@ SLS% Trend Value (Retention VIC) =
         )
     RETURN DIVIDE(__Numerator, __Denominator)
     // Month/Quarter 共用全客分母；其他粒度或分母为 0/BLANK 时返回 BLANK。
-
-/* ── 旧逻辑：end period 当月单步聚合（2026-09-12 弃用，保留备查）──
-   当时口径理解: 分子分母均单步聚合（各自筛选 + 当月区间 + 全局冗余）。
-   2026-09-12 修订: 与主表同步改为 Step1+Step2 分步——分子分母均先框定集合再看时间范围，
-   分母集合（is_retention_vic IN {0,1}）与分子唯一区别是 Step 1 的筛选条件（与主表 Store 分母分步化一致）。
-   如需回退至此历史版本: 注释当前 __Numerator、__Denominator 及对应 RETURN，再恢复下方实现；
-   已有 2026-09-16 旧逻辑块仍保持注释；此历史分母已弃用，不能与新口径混用:
-
-    // ── 分子: is_retention_vic=1 的 SLS ──
-    VAR __Numerator =
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-            'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
-            'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-        )
-
-    // ── 分母: is_retention_vic IN {0, 1} 的全客 SLS ──
-    VAR __Denominator =
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-            'a03_e2e_customer_data_m'[is_retention_vic] IN {0, 1},
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
-            'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
-            'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin,
-            'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax
-        )
-
-    RETURN DIVIDE(__Numerator, __Denominator)
-── 旧逻辑结束 ── */
 ```
 
 ### 4.9 SLS% Trend Display (Retention VIC)
@@ -966,7 +682,15 @@ SLS% Trend Display (Retention VIC) =
 
 ## 7. 验证方法
 
-以下为参数化 SQL 模板，执行前替换 `${...}`：`CurrentTFMin/Max` 为当前柱财历期间，`CurrentLFMMin/Max` 为该柱季末财月，`GlobalMin/Max` 为起止切片器范围，`IsMember`、`IsEmployeeList`、`FXRate` 对应当前人群及币种。日期参数使用日期表实际字段值，不把财月标签当自然月。平台、店铺等报表筛选需一致地追加到模板中每个事实表查询的 WHERE。
+以下为**待执行的参数化 SQL 测试模板**，不是已运行验证结果。执行前替换 `${...}`：
+
+- `CurrentTFMin/Max` 为当前柱财历期间，`CurrentLFMMin/Max` 为该柱最后财月区间（月柱为当月，季柱为季末财月），`GlobalMin/Max` 为起止切片器范围；原数据日期条件保持不变。
+- 注册截止参数 `CurrentLFMMax` 必须取当前柱 `Slicer_Time_Frame_VIC_Breakdown[Last_Fiscal_Month_Max]` 的实际单值，与 DAX `__CurrentLFMMax` 一致，不取全局 Max、不用 `TimeFrame_Max` 替代，不把财月标签当自然月。
+- `IsMemberMode` 为会员模式（0=TTL VIC，1=Member VIC；无唯一选值按 DAX 默认 0），不是事实表标记；事实表始终 `is_member=0`。`IsEmployeeList` 为当前可见员工集合，`FXRate` 对应当前币种。
+- 源 `register_date` 为 String，不假定 SQL 字段已为 Date。模板用 `CAST(register_date AS DATE)` 与日期截止比较；执行前须按实际 SQL 引擎、源字符串格式及模型转换规则确认/适配日期转换表达式。不得默认字符串比较等价，也不得擅自把无效日期转成默认日期。
+- 平台、店铺及已有注册日期筛选等报表上下文，需一致追加到每个事实表查询的 WHERE，与会员注册上限取交集。Month 的 `period_data` 覆盖分子/分母；Quarter 的 `vic_users` 覆盖 Step 1，`period_data` 覆盖 Step 2 主查询及单步全客分母。
+
+**BLANK / NULL 差异（单独验收）**：模型 DAX 日期比较可能纳入 BLANK 注册日期；SQL 的 NULL 日期比较在 Member 模式下为 UNKNOWN，会被 WHERE 排除。TTL 模式的 OR 左支为真，不因新增注册上限排除空日期。空值样本须单独核对，不能直接把 SQL 与 DAX 的差异判为计算错误；未获业务授权，不新增排空、`COALESCE`、默认日期或其他空值补偿来改变现有 DAX。
 
 ### 7.1 Month 验证 SQL（New VIC SLS / SLS% 行级筛选）
 
@@ -976,7 +700,8 @@ WITH period_data AS (
     FROM a03_e2e_customer_data_m
     WHERE data_date BETWEEN '${CurrentTFMin}' AND '${CurrentTFMax}'
       AND data_date BETWEEN '${GlobalMin}' AND '${GlobalMax}'
-      AND is_member = ${IsMember}
+      AND is_member = 0
+      AND (${IsMemberMode} = 0 OR CAST(register_date AS DATE) <= CAST('${CurrentLFMMax}' AS DATE))
       AND is_employee IN (${IsEmployeeList})
 ), totals AS (
     SELECT
@@ -994,38 +719,6 @@ FROM totals;
 
 Retention VIC 的 Month 验证只需将此模板的 `is_new_vic` 替换为 `is_retention_vic`，全客分母不变。
 
-历史验证 SQL（已弃用，仅供追溯）：
-
-```sql
-/*
-旧验证：所有粒度均走用户集合法（2026-09-16 弃用，保留备查）。
-如需回退验证，须同时恢复对应旧 DAX；下列自然月日期仅为旧示例，不作为当前财历依据。
--- New VIC SLS 本期值（某月，所有 platform 汇总，Step1+Step2 分步）
--- 假设 X 轴 TimeFrame = 2026-09（Month 粒度：Step 1 与 Step 2 区间同为当月）
---        Last_Fiscal_Month_Min='2026-09-01', Last_Fiscal_Month_Max='2026-09-30'
---        TimeFrame_Min='2026-09-01', TimeFrame_Max='2026-09-30'
---        （Quarter 粒度示例：X 轴 = 2026 Q3 时 Step 1 为 2025-12-28~2026-01-24 季末当月，Step 2 为整季区间）
--- is_member=0 (TTL VIC), is_employee=1 (Yes), FXRate=1 (RMB)
--- Step 1: end period 当月框定 is_new_vic=1 user_id 集合
--- Step 2: 该集合在 TimeFrame 区间 SUM(net_pay_amt)（is_new_vic 不再施加）
-WITH vic_users AS (
-  SELECT DISTINCT user_id
-  FROM a03_e2e_customer_data_m
-  WHERE data_date BETWEEN '2026-09-01' AND '2026-09-30'   -- Step 1: end period 当月
-    AND is_new_vic = 1
-    AND is_member = 0
-    AND is_employee = 1
-)
-SELECT
-    SUM(f.net_pay_amt) / 1 AS SLS_Trend_NewVIC  -- FXRate=1 (RMB), 若 USD 则除以 7
-FROM a03_e2e_customer_data_m f
-JOIN vic_users u ON f.user_id = u.user_id
-WHERE f.data_date BETWEEN '2026-09-01' AND '2026-09-30'   -- Step 2: TimeFrame 区间
-  AND f.is_member = 0
-  AND f.is_employee = 1;
-*/
-```
-
 ### 7.2 Quarter 验证 SQL（VIC 分子分步 / 全客分母单步）
 
 ```sql
@@ -1034,14 +727,16 @@ WITH vic_users AS (
     FROM a03_e2e_customer_data_m
     WHERE data_date BETWEEN '${CurrentLFMMin}' AND '${CurrentLFMMax}'
       AND is_new_vic = 1
-      AND is_member = ${IsMember}
+      AND is_member = 0
+      AND (${IsMemberMode} = 0 OR CAST(register_date AS DATE) <= CAST('${CurrentLFMMax}' AS DATE))
       AND is_employee IN (${IsEmployeeList})
 ), period_data AS (
     SELECT user_id, net_pay_amt
     FROM a03_e2e_customer_data_m
     WHERE data_date BETWEEN '${CurrentTFMin}' AND '${CurrentTFMax}'
       AND data_date BETWEEN '${GlobalMin}' AND '${GlobalMax}'
-      AND is_member = ${IsMember}
+      AND is_member = 0
+      AND (${IsMemberMode} = 0 OR CAST(register_date AS DATE) <= CAST('${CurrentLFMMax}' AS DATE))
       AND is_employee IN (${IsEmployeeList})
 ), numerator AS (
     SELECT SUM(f.net_pay_amt) AS amt
@@ -1062,71 +757,26 @@ FROM numerator n CROSS JOIN denominator d;
 
 Retention VIC 的 Quarter 验证只替换 Step 1 的 VIC 标记；Step 2 不再施加标记，分母不依赖 New / Retention 类型。
 
-历史验证 SQL（旧全客集合分母已弃用）：
-
-```sql
-/*
-旧验证：分子分母都先框定期末用户集合（2026-09-16 弃用，保留备查）。
-如需回退验证，须同时恢复对应旧 DAX；本块不代表当前全客分母口径。
--- New VIC SLS% 本期比率（Step1+Step2 分步）
--- Step 1: end period 当月各自框定分子集合（is_new_vic=1）与分母集合（is_new_vic IN (0,1)，
---         与分子唯一区别是筛选条件）
--- Step 2: 各集合在 TimeFrame 区间 SUM(net_pay_amt) 后相除
-WITH vic_users AS (
-  SELECT DISTINCT user_id
-  FROM a03_e2e_customer_data_m
-  WHERE data_date BETWEEN '2026-09-01' AND '2026-09-30'   -- Step 1: end period 当月
-    AND is_new_vic = 1
-    AND is_member = 0
-    AND is_employee = 1
-),
-all_users AS (
-  SELECT DISTINCT user_id
-  FROM a03_e2e_customer_data_m
-  WHERE data_date BETWEEN '2026-09-01' AND '2026-09-30'   -- Step 1: end period 当月
-    AND is_new_vic IN (0, 1)
-    AND is_member = 0
-    AND is_employee = 1
-),
-numerator AS (
-  SELECT SUM(f.net_pay_amt) AS amt
-  FROM a03_e2e_customer_data_m f
-  JOIN vic_users u ON f.user_id = u.user_id
-  WHERE f.data_date BETWEEN '2026-09-01' AND '2026-09-30' -- Step 2: TimeFrame 区间
-    AND f.is_member = 0
-    AND f.is_employee = 1
-),
-denominator AS (
-  SELECT SUM(f.net_pay_amt) AS amt
-  FROM a03_e2e_customer_data_m f
-  JOIN all_users u ON f.user_id = u.user_id
-  WHERE f.data_date BETWEEN '2026-09-01' AND '2026-09-30' -- Step 2: TimeFrame 区间
-    AND f.is_member = 0
-    AND f.is_employee = 1
-)
-SELECT
-  n.amt AS numerator,
-  d.amt AS denominator,
-  ROUND(n.amt * 1.0 / d.amt, 4) AS sls_pct
-FROM numerator n, denominator d;
-*/
-```
-
-### 7.3 验收与性能对比
+### 7.3 待执行验收
 
 | 场景 | 预期结果 |
 | --- | --- |
-| Month，单店/多店，New 与 Retention | 分子分别匹配 §7.1 行级 SQL；分母相同，不受度量中的 VIC 类型选择影响 |
-| 同一用户同月 A 店标记为 1、B 店为 0 | Month 仅汇总标记为 1 的行；不以旧集合版跨店扩展结果作为等价验收标准 |
+| Month，单店/多店，New 与 Retention | 非空有效日期样本按 §7.1 行级 SQL 对账；空值按前述差异单独核对；分母相同，不受度量中的 VIC 类型选择影响 |
+| 同一用户同月 A 店标记为 1、B 店为 0 | Month 仅汇总标记为 1 的行，不扩展到 B 店未标记行 |
 | Quarter，用户只在季末月标记为 1 | 分子包含该用户整季消费，不局限季末月，也不要求之前月份标记为 1 |
-| 当季有正消费、季末月无记录的非 VIC 用户 | 消费仍计入 SLS% 全客分母，不再被期末用户集合排除 |
+| 当季有正消费、季末月无记录的非 VIC 用户 | 满足会员和现有上下文时，消费计入 SLS% 全客分母，无须期末用户集合 |
 | 净额为负的 VIC 记录 | 分子保留该净额；分母只汇总正金额行 |
 | 分母为 0 / BLANK、粒度非单值或不支持 | 返回 BLANK；Display 沿用原有空值显示 |
-| 切换会员、员工、平台/店铺、币种 | 保留原人群和分组上下文；SLS 按汇率换算，SLS% 不随币种改变 |
+| 会员模式 0 / 无唯一选值 | 事实均筛选 is_member=0；不追加注册限制，已有注册筛选仍保留 |
+| 会员模式 1，注册日期早于/等于/晚于当前柱财月末 | 在其他条件满足时，早于或等于可纳入，晚于排除；不切换事实 is_member=1 |
+| 多根柱子，全局结束晚于当前柱财月末 | 各柱分别用自身 Last_Fiscal_Month_Max，不以全局截止提前纳入后注册记录 |
+| Quarter 两步及全客分母覆盖 | 季末框定与整季消费均需满足当前柱注册上限；Step 2 不因用户已入集合而豁免逐行会员筛选，分母也应用同一上限 |
+| 已有更窄注册日期筛选 | KEEPFILTERS 取交集，不扩大既有筛选范围 |
+| BLANK 注册日期 / SQL NULL | 按 §7 的差异单独核对，不擅自增添排空或 COALESCE |
+| 切换员工、平台/店铺、币种 | 员工沿用 VALUES + IN 当前可见集合；保留分组上下文；SLS 按汇率换算，SLS% 不随币种改变 |
 
-- 在相同数据、相同切片器及柱子数量下，用 Performance Analyzer / DAX Studio 分别记录旧版和新版的 Month / Quarter 耗时、FE/SE 耗时、存储引擎查询数及中间结果行数；冷/热缓存分开对比。
-- Month 新分支没有 `CALCULATETABLE(VALUES(user_id))` 或 `TREATAS` 依赖；Quarter 仅保留 VIC 分子集合。该结构减少月粒度的集合计算，但实际提速幅度需在模型中实测，不能由代码长度推断。
-- 本次只做方案代码与静态检查，未执行真实数据 SQL、Power BI 引擎计算或耗时基准测试。
+- 静态验收：相对 HEAD 去除注释与空白，将新增会员谓词还原后，四个 Value 的其余有效代码应完全一致；四个 Display 和 IsTimeFrameVisible 应完全不变。会员覆盖应为 3/4/3/4 共 14 处，SQL 三处事实查询均覆盖会员模式。
+- 本次仅做文本修改与只读静态验收，未执行真实数据 SQL、Power BI 引擎计算或耗时基准测试；上表均为待执行预期。
 
 ---
 
@@ -1134,7 +784,7 @@ FROM numerator n, denominator d;
 
 1. **日期表共用**：本方案与 VIC_Breakdown_ms.md 主表共用 Slicer_Time_Frame_VIC_Breakdown / _Min_ / _Max_ 三张专用日期表，但与其他模块（VIC KPI、VIC Trend、Pie Chart 等）隔离。柱形图的 X 轴筛选与主表的切片器筛选互不影响（断开维度）。
 2. **柱形图 X 轴筛选**：必须配置 [IsTimeFrameVisible VIC Breakdown] = 1 作为视觉对象级别筛选器，否则 X 轴会显示所有时间段（超出 Min/Max 选择范围）。逻辑与 VIC_Trend.md IsTimeFrameVisible VIC Trend 一致。
-3. **按粒度分支（2026-09-16 修订）**：`Month` 的 VIC 分子在当前柱 `TimeFrame_Min/Max` 内直接行筛选；`Quarter` 的 VIC 分子仍用 `Last_Fiscal_Month_Min/Max` 季末月框定用户，再在 `TimeFrame_Min/Max` 整季汇总。全局范围保留在月分子、季度 Step 2 及全客分母中，不扩大为所有柱子的全局累计。`SWITCH` 返回数值，不使用 IF 返回表；季度集合变量只定义在季度分支中。
+3. **按粒度分支**：`Month` 的 VIC 分子在当前柱 `TimeFrame_Min/Max` 内直接行筛选；`Quarter` 的 VIC 分子仍用 `Last_Fiscal_Month_Min/Max` 季末月框定用户，再在 `TimeFrame_Min/Max` 整季汇总。全局范围保留在月分子、季度 Step 2 及全客分母中，不扩大为所有柱子的全局累计。`SWITCH` 返回数值，不使用 IF 返回表；季度集合变量只定义在季度分支中。
 4. **New VIC / Retention VIC 区分（关键逻辑）**：
 
    - New VIC（Metric_ID=1/4）：Month 行筛选或 Quarter Step 1 使用 `is_new_vic = 1`。
@@ -1149,6 +799,6 @@ FROM numerator n, denominator d;
    - 货币符号从 Slicer_Currency_Selection[Currency_Symbol] 读取（默认 "¥"，USD 时为 "$"）
 6. **currency_k 格式**：SLS 金额除以 1000 后保留整数，拼接货币符号 + "k"。例如 ¥1234 → "¥1k"，$5678 → "$6k"。若未来需要更精细的小数位，可调整 FORMAT 串为 "#,##0.0" 等。
 7. **percent_0dp 格式**：SLS% 为比率，FORMAT "0%" 不保留小数。例如 0.4567 → "46%"。分子保留净额，可能为负，不额外裁剪范围。若未来需要小数位，可调整为 "0.0%"。
-8. **is_member / is_employee 双重筛选**：与 VIC_Breakdown_ms.md 主表口径一致，默认 is_member=0（TTL VIC）、is_employee=1（Yes）。
-9. **与主表的对齐边界**：以 VIC_Breakdown_ms.md 当前可执行代码为准，Metric_ID 4/26 的全客分母实际返回 `__TTL_SLS`，不是残留注释所述的 `__SLS_Store`。Trend 分母同步为期间正金额行，Quarter VIC 分子保留主表两步结构；Month 按本次要求采用行级口径，跨店标记不一致时不保证与旧集合法等价。主表聚合期间起点来自 Min 表、终点来自 Max 表，Trend 则读取每个 X 轴时间点自身区间，并保留全局日期保护。本次仅 Act，不新增 LY/LP。旧版分步实现和更早的单步实现均以独立块注释保留；回退时只启用一个版本。
+8. **会员模式与员工筛选**：两档事实均为 `is_member=0`；Member 通过 `KEEPFILTERS` 追加当前柱财月末注册上限，TTL 不追加注册限制。会员无唯一选值默认 TTL；员工始终使用 `VALUES` + `IN` 当前可见集合，不设固定默认 Yes。日期转换与空值边界见 §3、§7。
+9. **与主表的对齐边界**：主表 Metric_ID 4/26 的有效全客分母返回 `__TTL_SLS`。Trend 同样采用期间正金额行分母，Quarter VIC 分子为两步、Month 为行级筛选。主表聚合期间起点来自 Min 表、终点来自 Max 表；Trend 读取每个 X 轴时间点自身区间并保留全局日期保护，会员截止只取当前柱最后财月末。本次仅 Act，不新增 LY/LP；除会员筛选外，其余有效逻辑均以现有代码为准。
 10. **行维度自动传递**：柱形图若配置图例（platform / shop_info_id 等）或小多图，事实表分组字段由模型自动传递筛选上下文，DAX 无需显式处理。

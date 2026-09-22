@@ -3,8 +3,8 @@
 > **Dashboard**: Customer Dashboard  
 > **Tab**: VIC  
 > **数据底表**: `a03_e2e_customer_data_m` / `t05_customer_order_data_d`  
-> **模块全局影响说明**:  `is_member`和`is_employee`筛选,人群细分 ：TTL VIC `is_member = 0` / Member VIC `is_member = 1` / Is Employee `is_employee = 1` or `is_employee = 0`
-> **is_member使用**: VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)，如果没有筛选，则默认TTL VIC。这样过滤事实表a03_e2e_customer_data_m[is_member] = __IsMemberFilter
+> **模块全局影响说明**:  `is_member`和`is_employee`筛选,人群细分 ：TTL VIC `is_member = 0` / Member VIC `is_member = 1` / Is Employee `is_employee = 1` or `is_employee = 0`；is_member 两档事实表统一筛 `a03_e2e_customer_data_m[is_member] = 0`、`t05_customer_order_data_d[is_member] IN {0, 1}`，Member VIC 档两表均追加 `register_date <= end_period_date`（end_period_date 为最后财月的最后一天）
+> **is_member使用**: VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)，如果没有筛选，则默认TTL VIC。两档统一过滤事实表 `a03_e2e_customer_data_m[is_member] = 0`、`t05_customer_order_data_d[is_member] IN {0, 1}`；Member VIC（__IsMemberFilter = 1）时两表均追加 `register_date <= end_period_date`（register_date 为事实表字段，end_period_date 为最后财月的最后一天，日期维度表对应字段：Last_Fiscal_Month_Max / Last_Fiscal_Month_Max_LY / Last_Fiscal_Month_Max_LP）
 > **is_employee使用**: VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)，如果没有筛选，则默认Yes。这样过滤事实表a03_e2e_customer_data_m[is_employee] = __IsEmployeeFilter
 > **is_member和is_employee维度表路径**:is_member： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\IsMemberFilter；is_employee： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\Slicer_Is_Employee_Selection
 
@@ -20,8 +20,8 @@
 | **货币转换规则** | 数据源默认为 RMB，转化为美元需要除以固定值 7 |
 | **派生指标** | LY（去年同期）、LP（上期）、vs LY（同比）、vs LP（环比）、占比、YOY 等为派生指标，依据基础指标计算生成 |
 | **必须遵守** | 口径文档中定义的所有指标，必须遵守其数据类型和数据格式，如果和解决方案中存在争议的，一切以口径文档为准，必须按照口径文档中的格式进行调整 |
-| **模块全局影响说明** | `is_member`和`is_employee`筛选,人群细分 ：TTL VIC `is_member = 0` / Member VIC `is_member = 1` / Is Employee `is_employee = 1` or `is_employee = 0`  |
-| **is_member使用** | VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)，如果没有筛选，则默认TTL VIC。这样过滤事实表a03_e2e_customer_data_m[is_member] = __IsMemberFilter |
+| **模块全局影响说明** | `is_member`和`is_employee`筛选,人群细分 ：TTL VIC `is_member = 0` / Member VIC `is_member = 1` / Is Employee `is_employee = 1` or `is_employee = 0`；is_member 两档事实表统一筛 `a03_e2e_customer_data_m[is_member] = 0`、`t05_customer_order_data_d[is_member] IN {0, 1}`，Member VIC 档两表均追加 `register_date <= end_period_date`（end_period_date 为最后财月的最后一天）  |
+| **is_member使用** | VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)，如果没有筛选，则默认TTL VIC。两档统一过滤事实表 `a03_e2e_customer_data_m[is_member] = 0`、`t05_customer_order_data_d[is_member] IN {0, 1}`；Member VIC（__IsMemberFilter = 1）时两表均追加 `register_date <= end_period_date`（register_date 为事实表字段，end_period_date 为最后财月的最后一天，日期维度表对应字段：Last_Fiscal_Month_Max / Last_Fiscal_Month_Max_LY / Last_Fiscal_Month_Max_LP） |
 | **is_employee使用** | VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)，如果没有筛选，则默认Yes。这样过滤事实表a03_e2e_customer_data_m[is_employee] = __IsEmployeeFilter |
 | **is_member和is_employee维度表路径** | is_member： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\IsMemberFilter；is_employee： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\Slicer_Is_Employee_Selection |
 | **end period说明** | 所选时间范围的最后一个财月,Slicer_Time_Frame_Max维度表已经给出了具体的Last_Fiscal_Month、Last_Fiscal_Month_Min等字段，只关注Slicer_Time_Frame_Max值,比如2026-09，只关注2023-09；2026 Q2，只关注2026-06；财年2026，对应最后一个财月只关注2026-12； |
@@ -36,6 +36,7 @@
 > - Step 1：在 `a03_e2e_customer_data_m` 中，dt = 所选时间范围 end period，筛选对应 VIC 标识（is_retention_vic / is_upgrade_vic / is_direct_vic / is_new_vic = 1），框定 user_id 范围；
 > - Step 2：在 `t05_customer_order_data_d` 中，dt = 所选时间范围，限定 user_id ∈ Step 1 框定范围，直接统计 count(distinct user_id)，我理解分组字段会自动进行模型的筛选。platform, shop_info_id,, tier直接拉取`a03_e2e_customer_data_m`表，category_summary, framework,product_id拉取`t05_customer_order_data_d`表中的字段。
 > **VIC 类型区分**: 不同 VIC 类型仅 Step 1 的筛选标识不同（is_retention_vic = 1 / is_upgrade_vic = 1 / is_direct_vic = 1 / is_new_vic = 1），Step 2 逻辑完全一致。
+> **is_member 筛选（Step 1 + Step 2 均应用）**: TTL VIC（is_member = 0）：a03 筛 `is_member = 0`、t05 筛 `is_member IN {0, 1}`；Member VIC（is_member = 1）：a03 筛 `is_member = 0 AND register_date <= end_period_date`、t05 筛 `is_member IN {0, 1} AND register_date <= end_period_date`；end_period_date = 最后财月的最后一天（读取 Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]）
 > **dt = 所选时间范围** | 涉及到t05_customer_order_data_d表计算，dt = 所选时间范围，所选时间范围的计算,dt ∈ [__TimeMin, __TimeMax]（全局时间范围），Slicer_Time_Frame_Min和Slicer_Time_Frame_Max维度表已经给出了具体的TimeFrame_Min和TimeFrame_Max值
 
 ### 1. VIC No.（Net_Retention VIC） — 留存VIC数量
@@ -48,7 +49,7 @@
 | **计算公式** | Step 1：在 `a03_e2e_customer_data_m` 中，dt = 所选时间范围 end period，筛选 is_retention_vic = 1，框定 user_id 范围；Step 2：在 `t05_customer_order_data_d` 中，dt = 所选时间范围，统计各个 product_id 下 count(distinct user_id)，限定 user_id ∈ Step 1 框定范围，product_id由表字段自动传递，DAX 无需显式处理分组。 |
 | **统计字段** | `user_id`（Step 2 在 `t05_customer_order_data_d` 中 count distinct） |
 | **数据底表** | `a03_e2e_customer_data_m`、`t05_customer_order_data_d` |
-| **筛选条件** | Step 1：`is_retention_vic = 1`、`is_member`和`is_employee`筛选；Step 2：`user_id` ∈ Step 1 范围 |
+| **筛选条件** | Step 1：`is_retention_vic = 1`、`is_member`和`is_employee`筛选（is_member 全局规则：两档 a03 `is_member = 0`、t05 `is_member IN {0,1}`，Member VIC 追加 `register_date <= end_period_date`）；Step 2：`user_id` ∈ Step 1 范围、`is_member IN {0,1}`（Member VIC 追加 `register_date <= end_period_date`） |
 | **聚合粒度** | 按 `platform, shop_info_id, category_summary, framework, tier，product_id` 分组，由表字段自动传递，DAX 无需显式处理分组。 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
@@ -65,7 +66,7 @@
 | **计算公式** | Step 1：在 `a03_e2e_customer_data_m` 中，dt = 所选时间范围 end period，筛选 is_upgrade_vic = 1，框定 user_id 范围；Step 2：在 `t05_customer_order_data_d` 中，dt = 所选时间范围，统计各个 product_id 下 count(distinct user_id)，限定 user_id ∈ Step 1 框定范围 |
 | **统计字段** | `user_id`（Step 2 在 `t05_customer_order_data_d` 中 count distinct） |
 | **数据底表** | `a03_e2e_customer_data_m`、`t05_customer_order_data_d` |
-| **筛选条件** | Step 1：`is_upgrade_vic = 1`、`is_member`和`is_employee`筛选；Step 2：`user_id` ∈ Step 1 范围 |
+| **筛选条件** | Step 1：`is_upgrade_vic = 1`、`is_member`和`is_employee`筛选（is_member 全局规则：两档 a03 `is_member = 0`、t05 `is_member IN {0,1}`，Member VIC 追加 `register_date <= end_period_date`）；Step 2：`user_id` ∈ Step 1 范围、`is_member IN {0,1}`（Member VIC 追加 `register_date <= end_period_date`） |
 | **聚合粒度** | 按 `platform, shop_info_id, category_summary, framework, tier，product_id` 分组，由表字段自动传递，DAX 无需显式处理分组。 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
@@ -82,7 +83,7 @@
 | **计算公式** | Step 1：在 `a03_e2e_customer_data_m` 中，dt = 所选时间范围 end period，筛选 is_direct_vic = 1，框定 user_id 范围；Step 2：在 `t05_customer_order_data_d` 中，dt = 所选时间范围，统计各个 product_id 下 count(distinct user_id)，限定 user_id ∈ Step 1 框定范围 |
 | **统计字段** | `user_id`（Step 2 在 `t05_customer_order_data_d` 中 count distinct） |
 | **数据底表** | `a03_e2e_customer_data_m`、`t05_customer_order_data_d` |
-| **筛选条件** | Step 1：`is_direct_vic = 1`、`is_member`和`is_employee`筛选；Step 2：`user_id` ∈ Step 1 范围 |按 `platform, shop_info_id, category_summary, framework, tier，product_id` 分组，由表字段自动传递，DAX 无需显式处理分组。 |
+| **筛选条件** | Step 1：`is_direct_vic = 1`、`is_member`和`is_employee`筛选（is_member 全局规则：两档 a03 `is_member = 0`、t05 `is_member IN {0,1}`，Member VIC 追加 `register_date <= end_period_date`）；Step 2：`user_id` ∈ Step 1 范围、`is_member IN {0,1}`（Member VIC 追加 `register_date <= end_period_date`） |按 `platform, shop_info_id, category_summary, framework, tier，product_id` 分组，由表字段自动传递，DAX 无需显式处理分组。 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 
@@ -98,7 +99,7 @@
 | **计算公式** | Step 1：在 `a03_e2e_customer_data_m` 中，dt = 所选时间范围 end period，筛选 is_new_vic = 1，框定 user_id 范围；Step 2：在 `t05_customer_order_data_d` 中，dt = 所选时间范围，统计各个 product_id 下 count(distinct user_id)，限定 user_id ∈ Step 1 框定范围 |
 | **统计字段** | `user_id`（Step 2 在 `t05_customer_order_data_d` 中 count distinct） |
 | **数据底表** | `a03_e2e_customer_data_m`、`t05_customer_order_data_d` |
-| **筛选条件** | Step 1：`is_new_vic = 1`、`is_member`和`is_employee`筛选；Step 2：`user_id` ∈ Step 1 范围 |
+| **筛选条件** | Step 1：`is_new_vic = 1`、`is_member`和`is_employee`筛选（is_member 全局规则：两档 a03 `is_member = 0`、t05 `is_member IN {0,1}`，Member VIC 追加 `register_date <= end_period_date`）；Step 2：`user_id` ∈ Step 1 范围、`is_member IN {0,1}`（Member VIC 追加 `register_date <= end_period_date`） |
 | **聚合粒度** | 按 `platform, shop_info_id, category_summary, framework, tier，product_id` 分组，由表字段自动传递，DAX 无需显式处理分组。 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
@@ -122,4 +123,4 @@
 | **Tier 分层定义** | T1：≧ 200K；T2：80-200K；T3：20-80K；T4：5-20K；T5：< 5K |
 | **Recency 分层定义** | R3：上财年 10-12 月；R4-6：上财年 7-9 月；R7-9：上财年 4-6 月；R10-12：上财年 1-3 月；TTL：全部 |
 | **两步法计算说明** | 本模块所有 VIC No. 指标均采用两步法：Step 1 在 `a03_e2e_customer_data_m` 中按对应 VIC 标识框定 user_id 范围（dt = end period）；Step 2 在 `t05_customer_order_data_d` 中按 dt = 所选时间范围统计 count(distinct user_id) by product_id，限定 user_id ∈ Step 1 范围 |
-| **人群细分** | TTL VIC: `is_member = 0`；Member VIC: `is_member = 1`；Is Employee: `is_employee = 1`（在 `a03_e2e_customer_data_m` 的 Step 1 中应用） |
+| **人群细分** | TTL VIC（is_member = 0）: a03 `is_member = 0`、t05 `is_member IN {0,1}`；Member VIC（is_member = 1）: a03 `is_member = 0 AND register_date <= end_period_date`、t05 `is_member IN {0,1} AND register_date <= end_period_date`；Is Employee: `is_employee = 1`（在 `a03_e2e_customer_data_m` 的 Step 1 中应用） |

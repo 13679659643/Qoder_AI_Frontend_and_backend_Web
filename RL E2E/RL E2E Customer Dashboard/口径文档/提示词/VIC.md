@@ -316,3 +316,52 @@ Step 1: 在dt = 所选时间范围end period；Step 2: 再看所选时间范围�
         SUMMARIZE ( __OldCust_Step2, [user_id] )
     ))
 ```
+
+
+
+# Vic测试第十四轮提示词：
+要调整的文件：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\1 VIC KPI\VIC_KPIs_Table.md
+要调整的原始口径文件：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\VIC\VIC KPI.md
+参考维度表：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\IsMemberFilter
+需求：
+目前所有指标都会受到is_member的筛选，即：VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)，默认 TTL VIC。
+is_member在事实表中分为0和1两个值，在我们维度表中也是0和1，分别对应TTL VIC和Member VIC；维度表和事实表断开维度，由Dax显性处理，TTL VIC `is_member = 0` / Member VIC `is_member = 1`。
+现在调整如下：
+1、如果is_member = 0，逻辑不变，表字段已经筛选is_member = 0；如果is_member = 1，即SELECTEDVALUE(IsMemberFilter[IsMember], 0)的结果为1，事实表的筛选变为is_member = 0 and register_date <= end_period_date，其中register_date是事实表中的字段，end_period_date是最后财月的最后一天，日期维度表中是有对应字段的Last_Fiscal_Month_Max。
+2、VIC Retention%指标的分子逻辑保持不变，分母改为：所选时间范围end period对应的字段last_fy_net_pay_amt >= 20000, count(distinct user_id)
+请调整D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\1 VIC KPI\VIC_KPIs_Table.md文件，不用注释旧逻辑，这样太冗余了。
+
+
+# Vic测试第十五轮提示词：
+要调整的文件：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\3 LY Last Purchase Time\LY_Last_Purchase_Time_Table.md
+要调整的原始口径文件：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\VIC\LY Last Purchase Time.md
+参考维度表：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\IsMemberFilter
+需求：
+目前所有指标都会受到is_member的筛选，即：VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)，默认 TTL VIC。
+is_member在事实表中分为0和1两个值，在我们维度表中也是0和1，分别对应TTL VIC和Member VIC；维度表和事实表断开维度，由Dax显性处理，TTL VIC `is_member = 0` / Member VIC `is_member = 1`。
+现在调整如下：
+1、如果is_member = 0，逻辑不变，表字段已经筛选is_member = 0；如果is_member = 1，即SELECTEDVALUE(IsMemberFilter[IsMember], 0)的结果为1，事实表的筛选变为is_member = 0 and register_date <= end_period_date，其中register_date是事实表中的字段，end_period_date是最后财月的最后一天，日期维度表中是有对应字段的Last_Fiscal_Month_Max、Last_Fiscal_Month_Max_LY、Last_Fiscal_Month_Max_LP。
+2、VIC Retention%指标的分子逻辑保持不变，分母改为：所选时间范围end period对应的字段last_fy_net_pay_amt >= 20000, count(distinct user_id)；没有涉及VIC Retention%指标的文件就不用管这条调整。
+请调整D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\3 LY Last Purchase Time\LY_Last_Purchase_Time_Table.md文件，不用注释旧逻辑，这样太冗余了。
+
+# Vic测试第十六轮提示词：
+要调整的文件：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\6 Class x Label Drilldown\Class_x_Label_Drilldown_list.md
+要调整的原始口径文件：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\口径文档\VIC\Class x Label Drilldown.md
+参考维度表：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\IsMemberFilter
+需求：
+目前所有指标都会受到is_member的筛选，即：VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)，默认 TTL VIC。
+is_member在事实表中分为0和1两个值，在我们维度表中也是0和1，分别对应TTL VIC和Member VIC；维度表和事实表断开维度，由Dax显性处理，TTL VIC `is_member = 0` / Member VIC `is_member = 1`。
+现在调整如下：
+如果is_member = 0，逻辑不变，表字段依旧筛选is_member = 0；即，a03_e2e_customer_data_m：is_member = 0、t05_customer_order_data_d in { 0, 1 }
+如果is_member = 1，即SELECTEDVALUE(IsMemberFilter[IsMember], 0)的结果为1，事实表的筛选变为is_member = 0 and register_date <= end_period_date，其中register_date是事实表中的字段，end_period_date是最后财月的最后一天，日期维度表中是有对应字段的Last_Fiscal_Month_Max、Last_Fiscal_Month_Max_LY、Last_Fiscal_Month_Max_LP。即，a03_e2e_customer_data_m：is_member = 0 and register_date <= end_period_date、t05_customer_order_data_d in { 0, 1 } and register_date <= end_period_date；
+其余逻辑保持不变，请调整D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\6 Class x Label Drilldown\Class_x_Label_Drilldown_list.md文件，不用注释旧逻辑，这样太冗余了。
+is_member的实现可以参考D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\模版复用\模块关键点提炼.md中的17. 哨兵日期恒真模式：register_date 上限变量化（TTL 档谓词恒真）

@@ -4,6 +4,7 @@
 > created: 2026-08-12
 > revised: 2026-08-13（Rolling 12 分母内化到 Act/LY/LP Base Value 的 Metric_ID=6 分支 + 起始月用财月字段而非天日期 EDATE）
 > revised: 2026-09-12（Metric_ID=6 分母弃用 Rolling 12 区间，改为"end period 往前推 12 个月的单月"：Act=-12 / LY=-24 / LP=-13；旧 Rolling 12 逻辑以块注释保留于各 Base Value 备查）
+> revised: 2026-09-21（is_member 筛选重构：Member VIC（IsMember=1）时事实表筛选由 is_member=1 改为 is_member=0 AND register_date <= end period 末日，Act/LY/LP 各取 Last_Fiscal_Month_Max/_LY/_LP；Metric_ID=6 分母调整为"end period 当月 last_fy_net_pay_amt >= 20000 的 count distinct user_id"，分子不变；旧分母逻辑按用户要求不再保留注释）
 > type: 度量值开发 + 可视化构建
 > 口径来源: 口径文档/VIC KPI.md（子模块一 VIC KPI，5 个 KPI 分组共 28 列指标）
 > 参考实现: PB_Merchandise_Fulfillment_detail_ms.md（总路由 REMOVEFILTERS 范式）
@@ -25,7 +26,7 @@
   - Slicer_Time_Frame_Max（断开维度，读取 `Last_Fiscal_Month_*` 系列字段 → end period 时间范围）
   - Slicer_Time_Frame_Min（断开维度，end period 逻辑只需要 Max；Min 仅用于辅助）
   - Slicer_Is_Employee_Selection（断开维度，筛选 `is_employee`）
-  - IsMemberFilter（断开维度，筛选 `is_member`）
+  - IsMemberFilter（断开维度，筛选 is_member；Member VIC 时改用 is_member=0 + register_date <= end period 末日）
   - Slicer_Platform_Selection / Slicer_Store_Name（断开维度，行维度直接拉事实表字段实现自动传递）
   - Slicer_Currency_Selection（断开维度，本方案无金额类指标，不参与汇率换算）
 
@@ -49,7 +50,17 @@
 > **is_member 使用**: `VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)`，默认 TTL VIC
 > **is_employee 使用**: `VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])`，默认 Yes
 
-所有指标（除特殊说明外）都需要应用这两个筛选到事实表 `a03_e2e_customer_data_m[is_member]` / `[is_employee]`。
+**is_member 筛选规则（2026-09-21 调整）**——维度表与事实表断开，由 DAX 显式处理：
+
+| 切片器选择      | __IsMemberFilter | 事实表筛选                                                                                             |
+| --------------- | ---------------- | ------------------------------------------------------------------------------------------------------ |
+| TTL VIC（默认） | 0                | `is_member = 0`（逻辑不变）                                                                          |
+| Member VIC      | 1                | `is_member = 0 AND register_date <= end_period_date`（不再筛 is_member=1，改用注册日期界定会员人群） |
+
+- `register_date` 为事实表字段；`end_period_date` = 最后财月最后一天，取 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]`（LY/LP 分别取 `Last_Fiscal_Month_Max_LY` / `Last_Fiscal_Month_Max_LP`）
+- 实现方式：is_member 谓词统一写 `is_member = 0`；register_date 谓词用 `__EndPeriodDate` 变量承载（Member VIC 取对应期末日，TTL VIC 用哨兵日期 DATE(9999,12,31) 恒真不设限）
+
+所有指标（除特殊说明外）都需要应用这两个筛选到事实表 `a03_e2e_customer_data_m`。
 
 ### 1.3 关键特殊逻辑三：派生指标分类
 
@@ -62,36 +73,21 @@
 | **TAR ACH%**                                                    | 占位值 1                          | `percent_1dp`（不含正号）                    |
 | **Retention VIC No. vs LY**（数量类特殊）                       | 今年 / 去年 - 1                   | `percent_1dp`（不含正号，口径文档 4.1 明确） |
 
-### 1.4 关键特殊逻辑四：VIC Retention% 的"往前推 12 个月单月"分母（仅此指标使用）
+### 1.4 关键特殊逻辑四：VIC Retention% 的"end period 当月 last_fy_net_pay_amt >= 20000"分母（仅此指标使用）
 
-口径文档 2. VIC Retention% 的分母原为 Rolling 12 个财月区间，2026-09-12 按业务要求调整为"以 end period 为基准直接往前推 12 个月的单月"（分子口径不变）：
+口径文档 2. VIC Retention% 的分母 2026-09-21 按业务要求调整（分子口径不变）：
 
-> **分母**: `user_id`（以所选时间范围 end period 为基准往前推 12 个月的单月 count(distinct user_id)、`is_vic = 1`）
+> **分母**: `user_id`（所选时间范围 end period 当月 `last_fy_net_pay_amt >= 20000` 的 count(distinct user_id)）
 >
-> - **ACT**：直接往前推 12 个月（如 "2027-09" → "2026-09"）
-> - **LY**：直接往前推 12 个月，再推 12 个月（如 "2027-09" → "2025-09"，等价于往前推 24 个月）
-> - **LP**：直接往前推 1 个月，再推 12 个月（如 "2027-09" → "2027-08" → "2026-08"，等价于往前推 13 个月）
+> - **ACT**：end period 当月（如 2027-09）
+> - **LY**：LY end period 当月（`data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]`）
+> - **LP**：LP end period 当月（`data_date ∈ [Last_Fiscal_Month_Min_LP, Last_Fiscal_Month_Max_LP]`）
 
-**分母计算方式（单月 DISTINCT）**：在上述目标月的单月区间内 `count(distinct user_id) where is_vic = 1`。
+**分母计算方式（单月 DISTINCT）**：在对应期 end period 当月区间（`data_date ∈ [该期 Min, 该期 Max]`）内，`last_fy_net_pay_amt >= 20000` 的 `count(distinct user_id)`（同一用户只计一次；不再筛 is_vic=1，不再做财月字符串偏移推导目标月）。
 
-**目标月单月区间起止日获取（基于财月字段，不用天日期 EDATE）**：
+**适用范围**：仅 VIC Retention% 分组（Metric_ID 6/7/8）的分母使用此口径；其他分组（T4-5 Upgrade No. Share / Retention VIC No. Share / Direct VIC No. Share）的分母仍使用 end period 当月 `is_vic=1` 的人数。
 
-- 目标月字符串：用 end period 当月字符串 `Slicer_Time_Frame_Max[Last_Fiscal_Month]`（如 "2027-09"）按上述偏移量推导（如 "2027-09" → "2026-09"）。财月字符串偏移用 `FORMAT(EDATE(DATE(LEFT(__LFM,4), RIGHT(__LFM,2), 1), -12), "yyyy-MM")` 实现：先把 "2027-09" 解析为月首日期 2027-09-01，再 EDATE(-12) 得到 2026-09-01，最后 FORMAT 回 "2026-09"
-- 目标月起止日：用目标月字符串（如 "2026-09"）作为 `TimeFrame_Value` 去 `Slicer_Time_Frame_Max` 中匹配 `TimeFrame_Label='月' AND TimeFrame_Value='2026-09'` 的行，取其 `TimeFrame_Min` 与 `TimeFrame_Max`（自然日起止日）
-- 最终区间 = `[目标月 TimeFrame_Min, 目标月 TimeFrame_Max]`，共 1 个自然月（单月）
-
-**适用范围**：仅 VIC Retention% 分组（Metric_ID 6/7/8）的分母使用此单月区间；其他分组（T4-5 Upgrade No. Share / Retention VIC No. Share / Direct VIC No. Share）的分母仍使用 end period 当月 `is_vic=1` 的人数。
-
-**LY/LP 的分母目标月**：end period 当月区间（基础聚合用）直接读取 Slicer_Time_Frame_Max 已预算的 `Last_Fiscal_Month_Min_LY/Max_LY/Min_LP/Max_LP` 字段。仅分母目标月（Metric_ID=6 用）因无 LY/LP 月份字符串字段，需用 `Last_Fiscal_Month` 月份字符串偏移推导：
-
-- LY 分母目标月：`Last_Fiscal_Month` EDATE(-12) 得 LY 月份字符串，再 EDATE(-12)（等价于 Last_Fiscal_Month 往前推 24 个月，如 "2027-09" → "2025-09"）
-- LP 分母目标月：`Last_Fiscal_Month` EDATE(-1) 得 LP 月份字符串，再 EDATE(-12)（等价于 Last_Fiscal_Month 往前推 13 个月，如 "2027-09" → "2027-08" → "2026-08"）
-- 分母区间起止日均取目标月行的 `TimeFrame_Min` / `TimeFrame_Max`（LY/LP 不再复用 `Last_Fiscal_Month_Max_LY` / `Last_Fiscal_Month_Max_LP`）
-
-> **历史口径（Rolling 12 个财月区间，2026-09-12 弃用，保留备查；旧 DAX 逻辑已以块注释保留在 Act/LY/LP Base Value 的 Metric_ID=6 分支中，如需回退取消注释即可）**：
->
-> - 原分母：end period 往前 Rolling 12 个财月（当前月 + 往前 11 个月，共 12 个月）区间内 `count(distinct user_id) where is_vic=1`，同一用户只计一次（非按月 SUM 累加）
-> - 原区间：结束日 = `Last_Fiscal_Month_Max`（LY/LP 复用 `Last_Fiscal_Month_Max_LY/Max_LP`）；起始月 = `Last_Fiscal_Month` EDATE(-11)（LY 为 -12 后再 -11，等价往前推 23 个月；LP 为 -1 后再 -11，等价往前推 12 个月），起始日 = 起始月行的 `TimeFrame_Min`
+> **历史口径（弃用，仅备查）**：2026-09-12 ~ 2026-09-20 分母为"以 end period 为基准往前推 12 个月的单月 count(distinct user_id) where is_vic=1"（ACT=-12 / LY=-24 / LP=-13）；更早为 Rolling 12 个财月区间 DISTINCT 汇总。旧 DAX 逻辑不再以块注释保留。
 
 ---
 
@@ -99,25 +95,25 @@
 
 ### 2.1 数据底表
 
-| 对象     | 名称                                                                                                                        | 出处                |
-| -------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| 事实表   | a03_e2e_customer_data_m                                                                                                     | VIC KPI.md 全局逻辑 |
-| 关键字段 | data_date, platform, shop_info_id, user_id, is_member, is_employee, is_vic, is_retention_vic, is_upgrade_vic, is_direct_vic | VIC KPI.md 全部指标 |
+| 对象     | 名称                                                                                                                                                            | 出处                |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| 事实表   | a03_e2e_customer_data_m                                                                                                                                         | VIC KPI.md 全局逻辑 |
+| 关键字段 | data_date, platform, shop_info_id, user_id, is_member, is_employee, register_date, last_fy_net_pay_amt, is_vic, is_retention_vic, is_upgrade_vic, is_direct_vic | VIC KPI.md 全部指标 |
 
 > 表为月度聚合表（每用户每月一行），`data_date` 已在 Power Query 中通过 `LAST_DAY(DATE_SUB(STR_TO_DATE(CONCAT(data_month,'01'),'%Y%m%d'), INTERVAL 10 MONTH))` 计算得到月末日期。
 
 ### 2.2 维度表清单
 
-| 维度表                       | 类型     | 连接方式                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ---------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Slicer_Time_Frame_Max        | 断开维度 | SELECTEDVALUE 读取`Last_Fiscal_Month`（本期月份字符串）、`Last_Fiscal_Month_Min/Max`（本期自然日）、`Last_Fiscal_Month_Min_LY/Max_LY/Min_LP/Max_LP`（LY/LP 区间自然日，已预算，基础聚合直接读）；本表无 LY/LP 月份字符串字段，Metric_ID=6 分母目标月由 `Last_Fiscal_Month` 财月偏移推导（Act=-12；LY=-12 后再 -12 即 -24；LP=-1 后再 -12 即 -13）；并支持通过 `TimeFrame_Value` 查找任意月份的 `TimeFrame_Min/TimeFrame_Max` |
-| Slicer_Time_Frame_Min        | 断开维度 | 本方案 end period 逻辑不使用（仅 Max 即可）                                                                                                                                                                                                                                                                                                                                                                                              |
-| Slicer_Is_Employee_Selection | 断开维度 | SELECTEDVALUE 读取`IsEmployee_Code`                                                                                                                                                                                                                                                                                                                                                                                                    |
-| IsMemberFilter               | 断开维度 | SELECTEDVALUE 读取`IsMember`                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Slicer_Platform_Selection    | 断开维度 | 行维度直接拉事实表 platform 字段，模型自动传递                                                                                                                                                                                                                                                                                                                                                                                           |
-| Slicer_Store_Name            | 断开维度 | 行维度直接拉事实表 shop_info_id 字段，模型自动传递                                                                                                                                                                                                                                                                                                                                                                                       |
-| Slicer_Currency_Selection    | 断开维度 | 本方案无金额类指标，不参与计算                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Dim_ColMetric_VIC_KPIs       | 断开维度 | SELECTEDVALUE 读取`Metric_ID` / `ColType` / `Metric_Format` / `Metric_ColorRule` / 颜色字段                                                                                                                                                                                                                                                                                                                                      |
+| 维度表                       | 类型     | 连接方式                                                                                                                                                                                                                                           |
+| ---------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Slicer_Time_Frame_Max        | 断开维度 | SELECTEDVALUE 读取`Last_Fiscal_Month_Min/Max`（本期自然日）、`Last_Fiscal_Month_Max`（end period 末日，Member VIC 的 register_date 截止）、`Last_Fiscal_Month_Min_LY/Max_LY/Min_LP/Max_LP`（LY/LP 区间自然日及末日，已预算，基础聚合直接读） |
+| Slicer_Time_Frame_Min        | 断开维度 | 本方案 end period 逻辑不使用（仅 Max 即可）                                                                                                                                                                                                        |
+| Slicer_Is_Employee_Selection | 断开维度 | SELECTEDVALUE 读取`IsEmployee_Code`                                                                                                                                                                                                              |
+| IsMemberFilter               | 断开维度 | SELECTEDVALUE 读取`IsMember`（0=TTL VIC → is_member=0；1=Member VIC → is_member=0 AND register_date <= end period 末日）                                                                                                                       |
+| Slicer_Platform_Selection    | 断开维度 | 行维度直接拉事实表 platform 字段，模型自动传递                                                                                                                                                                                                     |
+| Slicer_Store_Name            | 断开维度 | 行维度直接拉事实表 shop_info_id 字段，模型自动传递                                                                                                                                                                                                 |
+| Slicer_Currency_Selection    | 断开维度 | 本方案无金额类指标，不参与计算                                                                                                                                                                                                                     |
+| Dim_ColMetric_VIC_KPIs       | 断开维度 | SELECTEDVALUE 读取`Metric_ID` / `ColType` / `Metric_Format` / `Metric_ColorRule` / 颜色字段                                                                                                                                                |
 
 > **行维度处理**：`platform` / `shop_info_id` 直接拉取事实表字段实现自动传递，模型自动传递筛选，DAX 无需显式处理。
 
@@ -150,13 +146,13 @@ Dim_ColMetric_VIC_KPIs（断开维度，列头）
               │  [VIC KPIs Cell Value]                             │
               │    └→ [VIC KPIs Base Value]（总路由）              │
               │         ├→ [VIC KPIs Act Base Value]（本期值）     │
-              │         │     └ Metric_ID=6 内化单月分母           │
+              │         │     └ Metric_ID=6 内化 last_fy 分母    │
               │         │        返回 VIC Retention% 比率          │
               │         ├→ [VIC KPIs LY Base Value]（去年同期值）  │
-              │         │     └ Metric_ID=6 内化单月 LY 分母      │
+              │         │     └ Metric_ID=6 内化 LY last_fy 分母 │
               │         │        返回 VIC Retention% LY 比率       │
               │         ├→ [VIC KPIs LP Base Value]（上期值）      │
-              │         │     └ Metric_ID=6 内化单月 LP 分母      │
+              │         │     └ Metric_ID=6 内化 LP last_fy 分母 │
               │         │        返回 VIC Retention% LP 比率       │
               │         └→ 派生：vs LY / vs LP / TAR ACH% / Share  │
               │            （按 Metric_ID 路由到对应计算分支）     │
@@ -168,16 +164,15 @@ Dim_ColMetric_VIC_KPIs（断开维度，列头）
 ```
 [VIC KPIs Act Base Value]              ← 本期基础值
                                        ← 按 Metric_ID 路由到对应字段的 DISTINCTCOUNT
-                                       ← 统一应用 is_member / is_employee / end period 时间筛选
-                                       ← Metric_ID=6 特殊：内化单月分母，返回 VIC Retention% 比率
-                                       ←   分母目标月 = Last_Fiscal_Month EDATE(-12)（如 "2027-09" → "2026-09"）
-                                       ←   区间 [目标月 TimeFrame_Min, 目标月 TimeFrame_Max] is_vic=1 DISTINCTCOUNT
+                                       ← 统一应用 is_member（Member VIC: is_member=0 + register_date<=end period 末日）/ is_employee / end period 时间筛选
+                                       ← Metric_ID=6 特殊：内化 last_fy_net_pay_amt 分母，返回 VIC Retention% 比率
+                                       ←   分母 = end period 当月 last_fy_net_pay_amt >= 20000 DISTINCTCOUNT
 [VIC KPIs LY Base Value]               ← 去年同期基础值（财历映射 Last_Fiscal_Month_Min_LY/Max_LY，直接读取）
-                                       ← Metric_ID=6 特殊：内化单月 LY 分母，返回 VIC Retention% LY 比率
-                                       ←   分母目标月 = Last_Fiscal_Month EDATE(-12) 得 LY 月份，再 EDATE(-12)（等价于往前推 24 个月）
+                                       ← Metric_ID=6 特殊：内化 LY last_fy_net_pay_amt 分母，返回 VIC Retention% LY 比率
+                                       ←   分母 = LY end period 当月 last_fy_net_pay_amt >= 20000 DISTINCTCOUNT
 [VIC KPIs LP Base Value]               ← 上期基础值（财历映射 Last_Fiscal_Month_Min_LP/Max_LP，直接读取）
-                                       ← Metric_ID=6 特殊：内化单月 LP 分母，返回 VIC Retention% LP 比率
-                                       ←   分母目标月 = Last_Fiscal_Month EDATE(-1) 得 LP 月份，再 EDATE(-12)（等价于往前推 13 个月）
+                                       ← Metric_ID=6 特殊：内化 LP last_fy_net_pay_amt 分母，返回 VIC Retention% LP 比率
+                                       ←   分母 = LP end period 当月 last_fy_net_pay_amt >= 20000 DISTINCTCOUNT
 [VIC KPIs Base Value]                  ← 总路由（含 vs LY / vs LP / TAR ACH% / Share 派生）
                                        ← REMOVEFILTERS 清除断开维度筛选，再应用目标 Metric_ID
                                        ← VIC Retention% Act/vs LY/vs LP：直接取 Act/LY/LP Base Value（已内化分母）
@@ -191,15 +186,14 @@ Dim_ColMetric_VIC_KPIs（断开维度，列头）
 
 ### 3.3 筛选器上下文
 
-| 筛选器                              | 作用方式                                                                                                                 | DAX 处理                                                           |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| Slicer_Time_Frame_Max               | 断开维度，SELECTEDVALUE 读取`Last_Fiscal_Month_Min/Max`                                                                | `data_date >= __PeriodMin AND data_date <= __PeriodMax`          |
-| Slicer_Time_Frame_Max（LY）         | SELECTEDVALUE 读取`Last_Fiscal_Month_Min_LY/Max_LY`                                                                    | `data_date >= __LYMin AND data_date <= __LYMax`                  |
-| Slicer_Time_Frame_Max（LP）         | SELECTEDVALUE 读取`Last_Fiscal_Month_Min_LP/Max_LP`                                                                    | `data_date >= __LPMin AND data_date <= __LPMax`                  |
-| Slicer_Time_Frame_Max（分母目标月） | 用`Last_Fiscal_Month` 月份字符串 → EDATE 偏移（Act=-12 / LY=-24 / LP=-13）→ 目标月字符串 → 查 `TimeFrame_Min/Max` | VIC Retention% Metric_ID=6 分母专用（内化于 Act/LY/LP Base Value） |
-| Slicer_Is_Employee_Selection        | 断开维度，SELECTEDVALUE 读取`IsEmployee_Code`                                                                          | `a03_e2e_customer_data_m[is_employee] in __IsEmployeeFilter`     |
-| IsMemberFilter                      | 断开维度，SELECTEDVALUE 读取`IsMember`                                                                                 | `a03_e2e_customer_data_m[is_member] = __IsMemberFilter`          |
-| 事实表分组字段                      | 表格行直接拉取，模型自动传递筛选                                                                                         | DAX 无需显式处理                                                   |
+| 筛选器                       | 作用方式                                                   | DAX 处理                                                                                                        |
+| ---------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Slicer_Time_Frame_Max        | 断开维度，SELECTEDVALUE 读取`Last_Fiscal_Month_Min/Max`  | `data_date >= __PeriodMin AND data_date <= __PeriodMax`                                                       |
+| Slicer_Time_Frame_Max（LY）  | SELECTEDVALUE 读取`Last_Fiscal_Month_Min_LY/Max_LY`      | `data_date >= __LYMin AND data_date <= __LYMax`                                                               |
+| Slicer_Time_Frame_Max（LP）  | SELECTEDVALUE 读取`Last_Fiscal_Month_Min_LP/Max_LP`      | `data_date >= __LPMin AND data_date <= __LPMax`                                                               |
+| Slicer_Is_Employee_Selection | 断开维度，SELECTEDVALUE 读取`IsEmployee_Code`            | `a03_e2e_customer_data_m[is_employee] in __IsEmployeeFilter`                                                  |
+| IsMemberFilter               | 断开维度，SELECTEDVALUE 读取`IsMember`（0=TTL/1=Member） | `is_member = 0`；Member VIC 额外 `register_date <= __EndPeriodDate`（对应期 Last_Fiscal_Month_Max/_LY/_LP） |
+| 事实表分组字段               | 表格行直接拉取，模型自动传递筛选                           | DAX 无需显式处理                                                                                                |
 
 ### 3.4 vs LY / vs LP 时间偏移规则（财历映射）
 
@@ -241,7 +235,7 @@ Dim_ColMetric_VIC_KPIs（断开维度，列头）
 | 20        | Retention VIC No. Share | `is_retention_vic=1` 的 DISTINCTCOUNT user_id | `is_vic=1` 的 DISTINCTCOUNT user_id（end period 当月） | percent_1dp   |
 | 26        | Direct VIC No. Share    | `is_direct_vic=1` 的 DISTINCTCOUNT user_id    | `is_vic=1` 的 DISTINCTCOUNT user_id（end period 当月） | percent_1dp   |
 
-> **VIC Retention% 分母特殊**：分母为 end period 往前推 12 个月的单月 `is_vic=1` 的 DISTINCTCOUNT user_id（LY/LP 相应再偏移，详见 1.4 节）。
+> **VIC Retention% 分母特殊**：分母为对应期 end period 当月 `last_fy_net_pay_amt >= 20000` 的 DISTINCTCOUNT user_id（详见 1.4 节）。
 
 ### 3.7 TAR ACH% 类指标计算（实际值 / 目标值）
 
@@ -295,38 +289,38 @@ Dim_ColMetric_VIC_KPIs（断开维度，列头）
 
 > 维度表已存在于 `Dim_ColMetric_VIC_KPIs.md`，此处不再重复定义，直接引用。下表明晰 Metric_ID 与口径文档指标的映射关系：
 
-| Metric_ID | KPIGroup          | ColName                          | ColType          | 口径文档对应指标                  | Act/LP/LY 字段                                                        | 数据底表                                               |
-| --------- | ----------------- | -------------------------------- | ---------------- | --------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------ |
-| 1         | VIC No.           | 1-VIC No.                        | Act              | 1. VIC No.                        | is_vic=1                                                              | a03_e2e_customer_data_m                                |
-| 2         | VIC No.           | 2-VIC No. vs LY                  | vs LY            | 1.1 VIC No. vs LY                 | —                                                                    | 派生                                                   |
-| 3         | VIC No.           | 3-VIC No. vs LP                  | vs LP            | 1.2 VIC No. vs LP                 | —                                                                    | 派生                                                   |
-| 4         | VIC No.           | 4-VIC Monthly TAR ACH%           | TAR ACH% Monthly | 1.3 VIC Monthly TAR ACH%          | 实际值: Metric_ID=1；目标值: SUM(vic_customer_cnt)                    | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
-| 5         | VIC No.           | 5-VIC Yearly TAR ACH%            | TAR ACH% Yearly  | 1.4 VIC Yearly TAR ACH%           | 实际值: Metric_ID=1；目标值: SUM(DISTINCT year_vic_customer_cnt)      | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
-| 6         | VIC Retention%    | 6-VIC Retention%                 | Act              | 2. VIC Retention%                 | 分子: is_retention_vic=1；分母: is_vic=1（往前推 12 个月单月）        | a03_e2e_customer_data_m                                |
-| 7         | VIC Retention%    | 7-VIC Retention% vs LY           | vs LY            | 2.1 VIC Retention% vs LY          | —                                                                    | 派生                                                   |
-| 8         | VIC Retention%    | 8-VIC Retention% vs LP           | vs LP            | 2.2 VIC Retention% vs LP          | —                                                                    | 派生                                                   |
-| 9         | VIC Retention%    | 9-VIC Retention% TAR ACH%        | TAR ACH%         | 2.3 VIC Retention% TAR ACH%       | 实际值: Metric_ID=6；目标值: DISTINCT(year_vic_retention_percent)     | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
-| 10        | T4-5 Upgrade No.  | 10-T4-5 Upgrade No.              | Act              | 3. T4-5 Upgrade No.               | is_upgrade_vic=1                                                      | a03_e2e_customer_data_m                                |
-| 11        | T4-5 Upgrade No.  | 11-T4-5 Upgrade No. vs LY        | vs LY            | 3.1 T4-5 Upgrade No. vs LY        | —                                                                    | 派生                                                   |
-| 12        | T4-5 Upgrade No.  | 12-T4-5 Upgrade No. vs LP        | vs LP            | 3.2 T4-5 Upgrade No. vs LP        | —                                                                    | 派生                                                   |
-| 13        | T4-5 Upgrade No.  | 13-T4-5 Upgrade No. TAR ACH%     | TAR ACH%         | 3.3 T4-5 Upgrade No. TAR ACH%     | 实际值: Metric_ID=10；目标值: SUM(DISTINCT year_upgrade_customer_cnt) | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
-| 14        | T4-5 Upgrade No.  | 14-T4-5 Upgrade No. Share        | Share            | 3.4 T4-5 Upgrade No. Share        | 分子: is_upgrade_vic=1；分母: is_vic=1（end period 当月）             | a03_e2e_customer_data_m                                |
-| 15        | T4-5 Upgrade No.  | 15-T4-5 Upgrade No. Share vs LY  | Share vs LY      | 3.5 T4-5 Upgrade No. Share vs LY  | —                                                                    | 派生                                                   |
-| 16        | T4-5 Upgrade No.  | 16-T4-5 Upgrade No. Share vs LP  | Share vs LP      | 3.6 T4-5 Upgrade No. Share vs LP  | —                                                                    | 派生                                                   |
-| 17        | Retention VIC No. | 17-Retention VIC No.             | Act              | 4. Retention VIC No.              | is_retention_vic=1                                                    | a03_e2e_customer_data_m                                |
-| 18        | Retention VIC No. | 18-Retention VIC No. vs LY       | vs LY            | 4.1 Retention VIC No. vs LY       | —                                                                    | 派生                                                   |
-| 19        | Retention VIC No. | 19-Retention VIC No. vs LP       | vs LP            | 4.2 Retention VIC No. vs LP       | —                                                                    | 派生                                                   |
-| 20        | Retention VIC No. | 20-Retention VIC No. Share       | Share            | 4.3 Retention VIC No. Share       | 分子: is_retention_vic=1；分母: is_vic=1（end period 当月）           | a03_e2e_customer_data_m                                |
-| 21        | Retention VIC No. | 21-Retention VIC No. Share vs LY | Share vs LY      | 4.4 Retention VIC No. Share vs LY | —                                                                    | 派生                                                   |
-| 22        | Retention VIC No. | 22-Retention VIC No. Share vs LP | Share vs LP      | 4.5 Retention VIC No. Share vs LP | —                                                                    | 派生                                                   |
-| 23        | Direct VIC No.    | 23-Direct VIC No.                | Act              | 5. Direct VIC No.                 | is_direct_vic=1                                                       | a03_e2e_customer_data_m                                |
-| 24        | Direct VIC No.    | 24-Direct VIC No. vs LY          | vs LY            | 5.1 Direct VIC No. vs LY          | —                                                                    | 派生                                                   |
-| 25        | Direct VIC No.    | 25-Direct VIC No. vs LP          | vs LP            | 5.2 Direct VIC No. vs LP          | —                                                                    | 派生                                                   |
-| 26        | Direct VIC No.    | 26-Direct VIC No. Share          | Share            | 5.3 Direct VIC No. Share          | 分子: is_direct_vic=1；分母: is_vic=1（end period 当月）              | a03_e2e_customer_data_m                                |
-| 27        | Direct VIC No.    | 27-Direct VIC No. Share vs LY    | Share vs LY      | 5.4 Direct VIC No. Share vs LY    | —                                                                    | 派生                                                   |
-| 28        | Direct VIC No.    | 28-Direct VIC No. Share vs LP    | Share vs LP      | 5.5 Direct VIC No. Share vs LP    | —                                                                    | 派生                                                   |
+| Metric_ID | KPIGroup          | ColName                          | ColType          | 口径文档对应指标                  | Act/LP/LY 字段                                                                  | 数据底表                                               |
+| --------- | ----------------- | -------------------------------- | ---------------- | --------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| 1         | VIC No.           | 1-VIC No.                        | Act              | 1. VIC No.                        | is_vic=1                                                                        | a03_e2e_customer_data_m                                |
+| 2         | VIC No.           | 2-VIC No. vs LY                  | vs LY            | 1.1 VIC No. vs LY                 | —                                                                              | 派生                                                   |
+| 3         | VIC No.           | 3-VIC No. vs LP                  | vs LP            | 1.2 VIC No. vs LP                 | —                                                                              | 派生                                                   |
+| 4         | VIC No.           | 4-VIC Monthly TAR ACH%           | TAR ACH% Monthly | 1.3 VIC Monthly TAR ACH%          | 实际值: Metric_ID=1；目标值: SUM(vic_customer_cnt)                              | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
+| 5         | VIC No.           | 5-VIC Yearly TAR ACH%            | TAR ACH% Yearly  | 1.4 VIC Yearly TAR ACH%           | 实际值: Metric_ID=1；目标值: SUM(DISTINCT year_vic_customer_cnt)                | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
+| 6         | VIC Retention%    | 6-VIC Retention%                 | Act              | 2. VIC Retention%                 | 分子: is_retention_vic=1；分母: last_fy_net_pay_amt >= 20000（end period 当月） | a03_e2e_customer_data_m                                |
+| 7         | VIC Retention%    | 7-VIC Retention% vs LY           | vs LY            | 2.1 VIC Retention% vs LY          | —                                                                              | 派生                                                   |
+| 8         | VIC Retention%    | 8-VIC Retention% vs LP           | vs LP            | 2.2 VIC Retention% vs LP          | —                                                                              | 派生                                                   |
+| 9         | VIC Retention%    | 9-VIC Retention% TAR ACH%        | TAR ACH%         | 2.3 VIC Retention% TAR ACH%       | 实际值: Metric_ID=6；目标值: DISTINCT(year_vic_retention_percent)               | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
+| 10        | T4-5 Upgrade No.  | 10-T4-5 Upgrade No.              | Act              | 3. T4-5 Upgrade No.               | is_upgrade_vic=1                                                                | a03_e2e_customer_data_m                                |
+| 11        | T4-5 Upgrade No.  | 11-T4-5 Upgrade No. vs LY        | vs LY            | 3.1 T4-5 Upgrade No. vs LY        | —                                                                              | 派生                                                   |
+| 12        | T4-5 Upgrade No.  | 12-T4-5 Upgrade No. vs LP        | vs LP            | 3.2 T4-5 Upgrade No. vs LP        | —                                                                              | 派生                                                   |
+| 13        | T4-5 Upgrade No.  | 13-T4-5 Upgrade No. TAR ACH%     | TAR ACH%         | 3.3 T4-5 Upgrade No. TAR ACH%     | 实际值: Metric_ID=10；目标值: SUM(DISTINCT year_upgrade_customer_cnt)           | a03_e2e_customer_data_m / a03_e2e_customer_fcst_data_m |
+| 14        | T4-5 Upgrade No.  | 14-T4-5 Upgrade No. Share        | Share            | 3.4 T4-5 Upgrade No. Share        | 分子: is_upgrade_vic=1；分母: is_vic=1（end period 当月）                       | a03_e2e_customer_data_m                                |
+| 15        | T4-5 Upgrade No.  | 15-T4-5 Upgrade No. Share vs LY  | Share vs LY      | 3.5 T4-5 Upgrade No. Share vs LY  | —                                                                              | 派生                                                   |
+| 16        | T4-5 Upgrade No.  | 16-T4-5 Upgrade No. Share vs LP  | Share vs LP      | 3.6 T4-5 Upgrade No. Share vs LP  | —                                                                              | 派生                                                   |
+| 17        | Retention VIC No. | 17-Retention VIC No.             | Act              | 4. Retention VIC No.              | is_retention_vic=1                                                              | a03_e2e_customer_data_m                                |
+| 18        | Retention VIC No. | 18-Retention VIC No. vs LY       | vs LY            | 4.1 Retention VIC No. vs LY       | —                                                                              | 派生                                                   |
+| 19        | Retention VIC No. | 19-Retention VIC No. vs LP       | vs LP            | 4.2 Retention VIC No. vs LP       | —                                                                              | 派生                                                   |
+| 20        | Retention VIC No. | 20-Retention VIC No. Share       | Share            | 4.3 Retention VIC No. Share       | 分子: is_retention_vic=1；分母: is_vic=1（end period 当月）                     | a03_e2e_customer_data_m                                |
+| 21        | Retention VIC No. | 21-Retention VIC No. Share vs LY | Share vs LY      | 4.4 Retention VIC No. Share vs LY | —                                                                              | 派生                                                   |
+| 22        | Retention VIC No. | 22-Retention VIC No. Share vs LP | Share vs LP      | 4.5 Retention VIC No. Share vs LP | —                                                                              | 派生                                                   |
+| 23        | Direct VIC No.    | 23-Direct VIC No.                | Act              | 5. Direct VIC No.                 | is_direct_vic=1                                                                 | a03_e2e_customer_data_m                                |
+| 24        | Direct VIC No.    | 24-Direct VIC No. vs LY          | vs LY            | 5.1 Direct VIC No. vs LY          | —                                                                              | 派生                                                   |
+| 25        | Direct VIC No.    | 25-Direct VIC No. vs LP          | vs LP            | 5.2 Direct VIC No. vs LP          | —                                                                              | 派生                                                   |
+| 26        | Direct VIC No.    | 26-Direct VIC No. Share          | Share            | 5.3 Direct VIC No. Share          | 分子: is_direct_vic=1；分母: is_vic=1（end period 当月）                        | a03_e2e_customer_data_m                                |
+| 27        | Direct VIC No.    | 27-Direct VIC No. Share vs LY    | Share vs LY      | 5.4 Direct VIC No. Share vs LY    | —                                                                              | 派生                                                   |
+| 28        | Direct VIC No.    | 28-Direct VIC No. Share vs LP    | Share vs LP      | 5.5 Direct VIC No. Share vs LP    | —                                                                              | 派生                                                   |
 
-### 4.2 VIC KPIs Act Base Value（本期基础值，Metric_ID=6 内化单月分母返回比率）
+### 4.2 VIC KPIs Act Base Value（本期基础值，Metric_ID=6 内化 last_fy_net_pay_amt 分母返回比率）
 
 ```dax
 VIC KPIs Act Base Value = 
@@ -336,22 +330,20 @@ VIC KPIs Act Base Value =
 // 用途: 根据 Metric_ID 路由到本期（Act）基础值
 // 依赖: 'Dim_ColMetric_VIC_KPIs'[Metric_ID],
 //       a03_e2e_customer_data_m,
-//       Slicer_Time_Frame_Max[Last_Fiscal_Month, Last_Fiscal_Month_Min/Max, TimeFrame_Label, TimeFrame_Value, TimeFrame_Min/Max],
+//       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min/Max, Last_Fiscal_Month_Max],
 //       Slicer_Is_Employee_Selection[IsEmployee_Code],
 //       IsMemberFilter[IsMember]
 // 口径来源: 口径文档/VIC KPI.md
 // 筛选上下文:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
-//   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
+//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= Last_Fiscal_Month_Max（end period 末日）
 //   - is_employee in __IsEmployeeFilter（默认 所有）
 //   - 按 Metric_ID 路由到 is_vic / is_retention_vic / is_upgrade_vic / is_direct_vic 字段
 // 聚合粒度: DISTINCTCOUNT(user_id) WHERE 对应 is_xxx_vic = 1
 // 说明:
 //   - Metric_ID=1/10/14/17/20/23/26: 返回 DISTINCTCOUNT（数量类/Share 分子）
-//   - Metric_ID=6 特殊：内化"往前推 12 个月单月"分母，返回 VIC Retention% 比率
-//     分母目标月 = end period 月份字符串 Last_Fiscal_Month 直接往前推 12 个月（如 "2027-09" → "2026-09"），
-//            再用 TimeFrame_Value 查目标月 TimeFrame_Min/TimeFrame_Max，区间 [目标月 TimeFrame_Min, 目标月 TimeFrame_Max]
-//     （2026-09-12 弃用 Rolling 12 区间分母，旧逻辑以块注释保留在下方代码中备查）
+//   - Metric_ID=6 特殊：内化"end period 当月 last_fy_net_pay_amt >= 20000"分母，返回 VIC Retention% 比率
+//     （2026-09-21 调整，弃用"往前推 12 个月单月"分母，旧逻辑不再保留注释）
 //     分子 = is_retention_vic=1 在 end period 当月的 DISTINCTCOUNT（不变）
 //     比率 = DIVIDE(分子, 分母)
 //   - Share 类的分母（end period 当月 is_vic=1）在 Base Value 中通过 Metric_ID=1 取值
@@ -361,7 +353,16 @@ VIC KPIs Act Base Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     // ── 人群筛选 ──
+    // TTL VIC（IsMember=0）: 事实表筛 is_member = 0（逻辑不变）
+    // Member VIC（IsMember=1）: 事实表筛 is_member = 0 AND register_date <= end period 末日
+    //   end period 末日 = 本期 Last_Fiscal_Month_Max；TTL VIC 时 register_date 不设限（哨兵日期恒真）
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ═══════════════════════════════════════
@@ -372,7 +373,8 @@ VIC KPIs Act Base Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -381,7 +383,8 @@ VIC KPIs Act Base Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -390,7 +393,8 @@ VIC KPIs Act Base Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -399,98 +403,33 @@ VIC KPIs Act Base Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
 
     // ═══════════════════════════════════════
-    // Metric_ID=6 专用：VIC Retention% 本期比率（内化"往前推 12 个月单月"分母）
-    //   1. 取 end period 月份字符串 Last_Fiscal_Month（如 "2027-09"）
-    //   2. 分母目标月 = end period 直接往前推 12 个月（如 "2027-09" → "2026-09"）
-    //   3. 在 Slicer_Time_Frame_Max 中按 TimeFrame_Label='月' AND TimeFrame_Value=目标月字符串 查 TimeFrame_Min / TimeFrame_Max
-    //   4. 分母 = 目标月单月区间 [TimeFrame_Min, TimeFrame_Max] 内 is_vic=1 的 DISTINCTCOUNT(user_id)
-    //   5. 比率 = DIVIDE(分子 is_retention_vic=1, 分母 is_vic=1)
+    // Metric_ID=6 专用：VIC Retention% 本期比率（分母 = end period 当月 last_fy_net_pay_amt >= 20000 人数）
+    //   1. 分母 = end period 当月区间 [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max] 内
+    //      last_fy_net_pay_amt >= 20000 的 DISTINCTCOUNT(user_id)（不再筛 is_vic=1）
+    //   2. 分子 = is_retention_vic=1 在 end period 当月的 DISTINCTCOUNT（不变）
+    //   3. 比率 = DIVIDE(分子, 分母)
+    //   （2026-09-21 调整：弃用"往前推 12 个月单月"分母，旧逻辑不再保留注释）
     // ═══════════════════════════════════════
     VAR __RetentionPctAct =
         IF(
             __MetricID = 6,
-            /* ═══ 旧逻辑：Rolling 12 区间分母（2026-09-12 弃用，保留备查）═══
-               如需回退：删除/注释下方新逻辑，并取消本块注释
-            // ── end period 月份字符串（本期）──
-            VAR __LFM = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month])
-            // ── 解析为月首日期并往前推 11 个月，再 FORMAT 回 "yyyy-MM" ──
-            VAR __Rolling12StartMonthValue =
-                FORMAT(
-                    EDATE(
-                        DATE(LEFT(__LFM, 4), RIGHT(__LFM, 2), 1),
-                        -11
-                    ),
-                    "yyyy-MM"
-                )
-            // ── 在 Slicer_Time_Frame_Max 中查起始月的 TimeFrame_Min ──
-            VAR __Rolling12StartMin =
-                CALCULATE(
-                    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Min]),
-                    FILTER(
-                        ALL(Slicer_Time_Frame_Max),
-                        Slicer_Time_Frame_Max[TimeFrame_Label] = "月"
-                        && Slicer_Time_Frame_Max[TimeFrame_Value] = __Rolling12StartMonthValue
-                    )
-                )
-            // ── Rolling 12 区间 is_vic=1 的 DISTINCTCOUNT(user_id) ──
             VAR __RetentionDenominator =
                 CALCULATE(
                     DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                    'a03_e2e_customer_data_m'[is_vic] = 1,
-                    'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                    'a03_e2e_customer_data_m'[last_fy_net_pay_amt] >= 20000,
+                    'a03_e2e_customer_data_m'[is_member] = 0,
+                    'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
                     'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                    'a03_e2e_customer_data_m'[data_date] >= __Rolling12StartMin,
+                    'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                     'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
-                )
-            RETURN
-                DIVIDE(__RetentionVICCount_Act, __RetentionDenominator)
-            ═══ 旧逻辑结束 ═══ */
-            // ── 新逻辑：end period 月份字符串（本期）──
-            VAR __LFM = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month])
-            // ── 分母目标月：end period 直接往前推 12 个月（如 "2027-09" → "2026-09"）──
-            VAR __DenominatorMonthValue =
-                FORMAT(
-                    EDATE(
-                        DATE(LEFT(__LFM, 4), RIGHT(__LFM, 2), 1),
-                        -12
-                    ),
-                    "yyyy-MM"
-                )
-            // ── 在 Slicer_Time_Frame_Max 中查目标月的 TimeFrame_Min / TimeFrame_Max ──
-            VAR __DenominatorMin =
-                CALCULATE(
-                    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Min]),
-                    FILTER(
-                        ALL(Slicer_Time_Frame_Max),
-                        Slicer_Time_Frame_Max[TimeFrame_Label] = "月"
-                        && Slicer_Time_Frame_Max[TimeFrame_Value] = __DenominatorMonthValue
-                    )
-                )
-            VAR __DenominatorMax =
-                CALCULATE(
-                    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max]),
-                    FILTER(
-                        ALL(Slicer_Time_Frame_Max),
-                        Slicer_Time_Frame_Max[TimeFrame_Label] = "月"
-                        && Slicer_Time_Frame_Max[TimeFrame_Value] = __DenominatorMonthValue
-                    )
-                )
-            // ── 分母：目标月单月 is_vic=1 的 DISTINCTCOUNT(user_id) ──
-            VAR __RetentionDenominator =
-                CALCULATE(
-                    DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                    'a03_e2e_customer_data_m'[is_vic] = 1,
-                    'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                    'a03_e2e_customer_data_m'[data_date] >= __DenominatorMin,
-                    'a03_e2e_customer_data_m'[data_date] <= __DenominatorMax
                 )
             RETURN
                 DIVIDE(__RetentionVICCount_Act, __RetentionDenominator)
@@ -501,7 +440,7 @@ VIC KPIs Act Base Value =
             __MetricID,
             // ── VIC No. 分组（Act）──
             1,  __VICCount_Act,
-            // ── VIC Retention% 分组（Act：内化单月分母，返回比率）──
+            // ── VIC Retention% 分组（Act：内化 last_fy_net_pay_amt 分母，返回比率）──
             6,  __RetentionPctAct,
             // ── T4-5 Upgrade No. 分组（Act）──
             10, __UpgradeVICCount_Act,
@@ -519,7 +458,7 @@ VIC KPIs Act Base Value =
         )
 ```
 
-### 4.3 VIC KPIs LY Base Value（去年同期基础值，Metric_ID=6 内化单月 LY 分母返回比率）
+### 4.3 VIC KPIs LY Base Value（去年同期基础值，Metric_ID=6 内化 LY last_fy_net_pay_amt 分母返回比率）
 
 ```dax
 VIC KPIs LY Base Value = 
@@ -528,22 +467,33 @@ VIC KPIs LY Base Value =
 // Display Folder: Base Metrics
 // 用途: 根据 Metric_ID 路由到去年同期（LY）基础值
 // 依赖: 'Dim_ColMetric_VIC_KPIs'[Metric_ID],
-//       Slicer_Time_Frame_Max[Last_Fiscal_Month, Last_Fiscal_Month_Min_LY/Max_LY, TimeFrame_Label, TimeFrame_Value, TimeFrame_Min/Max],
+//       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY/Max_LY, Last_Fiscal_Month_Max_LY],
 //       a03_e2e_customer_data_m
 // 口径来源: 口径文档/VIC KPI.md
 // 时间偏移: 财历映射
 //   - end period 基础聚合（Metric_ID=1/10/14/17/20/23/26）: 直接读取 Slicer_Time_Frame_Max 已预算的 Last_Fiscal_Month_Min_LY/Max_LY
-//   - Metric_ID=6 分母目标月: Last_Fiscal_Month 月份字符串 EDATE(-12) 得 LY 月份字符串，再 EDATE(-12)（等价于往前推 24 个月；旧 Rolling 12 逻辑已弃用，保留于代码注释）
+//   - Metric_ID=6 分母: LY end period 当月 last_fy_net_pay_amt >= 20000 的 DISTINCTCOUNT
+// 筛选上下文:
+//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= Last_Fiscal_Month_Max_LY（LY end period 末日）
 // 说明:
 //   - Metric_ID=1/10/14/17/20/23/26: 返回 DISTINCTCOUNT（数量类/Share 分子）
-//   - Metric_ID=6 特殊：内化单月 LY 分母（LY end period 再往前推 12 个月的单月），返回 VIC Retention% LY 比率
+//   - Metric_ID=6 特殊：内化 LY 分母（LY end period 当月 last_fy_net_pay_amt >= 20000），返回 VIC Retention% LY 比率
 // ========================================
     VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_VIC_KPIs'[Metric_ID])
     // ── end period LY 区间：直接读取（Slicer_Time_Frame_Max 已预算）──
     VAR __LYMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY])
     VAR __LYMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY])
     // ── 人群筛选 ──
+    // TTL VIC（IsMember=0）: 事实表筛 is_member = 0（逻辑不变）
+    // Member VIC（IsMember=1）: 事实表筛 is_member = 0 AND register_date <= end period 末日
+    //   end period 末日 = LY 期 Last_Fiscal_Month_Max_LY；TTL VIC 时 register_date 不设限（哨兵日期恒真）
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ═══════════════════════════════════════
@@ -553,7 +503,8 @@ VIC KPIs LY Base Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
@@ -562,7 +513,8 @@ VIC KPIs LY Base Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
@@ -571,7 +523,8 @@ VIC KPIs LY Base Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
@@ -580,117 +533,33 @@ VIC KPIs LY Base Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
         )
 
     // ═══════════════════════════════════════
-    // Metric_ID=6 专用：VIC Retention% LY 比率（内化单月 LY 分母）
-    //   1. LY end period 月份字符串 = Last_Fiscal_Month 往前推 12 个月（如 "2027-09" → "2026-09"）
-    //   2. 分母目标月 = LY 月份字符串再往前推 12 个月（如 "2026-09" → "2025-09"）
-    //      等价于 Last_Fiscal_Month 往前推 24 个月（-12 后再 -12）
-    //   3. 在 Slicer_Time_Frame_Max 中按 TimeFrame_Label='月' AND TimeFrame_Value=目标月字符串 查 TimeFrame_Min / TimeFrame_Max
-    //   4. 分母 = 目标月单月区间 [TimeFrame_Min, TimeFrame_Max] 内 is_vic=1 的 DISTINCTCOUNT(user_id)
-    //   5. 比率 = DIVIDE(分子 is_retention_vic=1 LY, 分母 is_vic=1 LY)
+    // Metric_ID=6 专用：VIC Retention% LY 比率（分母 = LY end period 当月 last_fy_net_pay_amt >= 20000 人数）
+    //   1. 分母 = LY end period 当月区间 [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY] 内
+    //      last_fy_net_pay_amt >= 20000 的 DISTINCTCOUNT(user_id)（不再筛 is_vic=1）
+    //   2. 分子 = is_retention_vic=1 在 LY end period 当月的 DISTINCTCOUNT（不变）
+    //   3. 比率 = DIVIDE(分子, 分母)
+    //   （2026-09-21 调整：弃用"往前推 12 个月单月"分母，旧逻辑不再保留注释）
     // ═══════════════════════════════════════
     VAR __RetentionPctLY =
         IF(
             __MetricID = 6,
-            /* ═══ 旧逻辑：Rolling 12 LY 区间分母（2026-09-12 弃用，保留备查）═══
-               如需回退：删除/注释下方新逻辑，并取消本块注释
-            // ── 本期 end period 月份字符串（用于推导 LY 月份字符串）──
-            VAR __LFM = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month])
-            // ── LY 月份字符串：Last_Fiscal_Month 往前推 12 个月 ──
-            VAR __LFM_LY =
-                FORMAT(
-                    EDATE(
-                        DATE(LEFT(__LFM, 4), RIGHT(__LFM, 2), 1),
-                        -12
-                    ),
-                    "yyyy-MM"
-                )
-            // ── Rolling 12 LY 起始月字符串：LY 月份字符串往前推 11 个月 ──
-            VAR __Rolling12StartMonthValue_LY =
-                FORMAT(
-                    EDATE(
-                        DATE(LEFT(__LFM_LY, 4), RIGHT(__LFM_LY, 2), 1),
-                        -11
-                    ),
-                    "yyyy-MM"
-                )
-            // ── 在 Slicer_Time_Frame_Max 中查起始月的 TimeFrame_Min ──
-            VAR __Rolling12StartMin =
-                CALCULATE(
-                    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Min]),
-                    FILTER(
-                        ALL(Slicer_Time_Frame_Max),
-                        Slicer_Time_Frame_Max[TimeFrame_Label] = "月"
-                        && Slicer_Time_Frame_Max[TimeFrame_Value] = __Rolling12StartMonthValue_LY
-                    )
-                )
-            // ── Rolling 12 LY 区间 is_vic=1 的 DISTINCTCOUNT(user_id) ──
             VAR __RetentionDenominatorLY =
                 CALCULATE(
                     DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                    'a03_e2e_customer_data_m'[is_vic] = 1,
-                    'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                    'a03_e2e_customer_data_m'[last_fy_net_pay_amt] >= 20000,
+                    'a03_e2e_customer_data_m'[is_member] = 0,
+                    'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
                     'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                    'a03_e2e_customer_data_m'[data_date] >= __Rolling12StartMin,
+                    'a03_e2e_customer_data_m'[data_date] >= __LYMin,
                     'a03_e2e_customer_data_m'[data_date] <= __LYMax
-                )
-            RETURN
-                DIVIDE(__RetentionVICCount_LY, __RetentionDenominatorLY)
-            ═══ 旧逻辑结束 ═══ */
-            // ── 新逻辑：本期 end period 月份字符串（用于推导 LY 月份字符串）──
-            VAR __LFM = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month])
-            // ── LY 月份字符串：Last_Fiscal_Month 往前推 12 个月（如 "2027-09" → "2026-09"）──
-            VAR __LFM_LY =
-                FORMAT(
-                    EDATE(
-                        DATE(LEFT(__LFM, 4), RIGHT(__LFM, 2), 1),
-                        -12
-                    ),
-                    "yyyy-MM"
-                )
-            // ── 分母目标月：LY 月份字符串再往前推 12 个月（如 "2026-09" → "2025-09"，等价于往前推 24 个月）──
-            VAR __DenominatorMonthValue_LY =
-                FORMAT(
-                    EDATE(
-                        DATE(LEFT(__LFM_LY, 4), RIGHT(__LFM_LY, 2), 1),
-                        -12
-                    ),
-                    "yyyy-MM"
-                )
-            // ── 在 Slicer_Time_Frame_Max 中查目标月的 TimeFrame_Min / TimeFrame_Max ──
-            VAR __DenominatorMin_LY =
-                CALCULATE(
-                    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Min]),
-                    FILTER(
-                        ALL(Slicer_Time_Frame_Max),
-                        Slicer_Time_Frame_Max[TimeFrame_Label] = "月"
-                        && Slicer_Time_Frame_Max[TimeFrame_Value] = __DenominatorMonthValue_LY
-                    )
-                )
-            VAR __DenominatorMax_LY =
-                CALCULATE(
-                    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max]),
-                    FILTER(
-                        ALL(Slicer_Time_Frame_Max),
-                        Slicer_Time_Frame_Max[TimeFrame_Label] = "月"
-                        && Slicer_Time_Frame_Max[TimeFrame_Value] = __DenominatorMonthValue_LY
-                    )
-                )
-            // ── 分母：目标月单月 is_vic=1 的 DISTINCTCOUNT(user_id) ──
-            VAR __RetentionDenominatorLY =
-                CALCULATE(
-                    DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                    'a03_e2e_customer_data_m'[is_vic] = 1,
-                    'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                    'a03_e2e_customer_data_m'[data_date] >= __DenominatorMin_LY,
-                    'a03_e2e_customer_data_m'[data_date] <= __DenominatorMax_LY
                 )
             RETURN
                 DIVIDE(__RetentionVICCount_LY, __RetentionDenominatorLY)
@@ -701,7 +570,7 @@ VIC KPIs LY Base Value =
             __MetricID,
             // ── VIC No. LY ──
             1,  __VICCount_LY,
-            // ── VIC Retention% LY（内化单月 LY 分母，返回比率）──
+            // ── VIC Retention% LY（内化 LY last_fy_net_pay_amt 分母，返回比率）──
             6,  __RetentionPctLY,
             // ── T4-5 Upgrade No. LY ──
             10, __UpgradeVICCount_LY,
@@ -719,7 +588,7 @@ VIC KPIs LY Base Value =
         )
 ```
 
-### 4.4 VIC KPIs LP Base Value（上期基础值，Metric_ID=6 内化单月 LP 分母返回比率）
+### 4.4 VIC KPIs LP Base Value（上期基础值，Metric_ID=6 内化 LP last_fy_net_pay_amt 分母返回比率）
 
 ```dax
 VIC KPIs LP Base Value = 
@@ -728,23 +597,34 @@ VIC KPIs LP Base Value =
 // Display Folder: Base Metrics
 // 用途: 根据 Metric_ID 路由到上期（LP）基础值
 // 依赖: 'Dim_ColMetric_VIC_KPIs'[Metric_ID],
-//       Slicer_Time_Frame_Max[Last_Fiscal_Month, Last_Fiscal_Month_Min_LP/Max_LP, TimeFrame_Label, TimeFrame_Value, TimeFrame_Min/Max],
+//       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LP/Max_LP, Last_Fiscal_Month_Max_LP],
 //       a03_e2e_customer_data_m
 // 口径来源: 口径文档/VIC KPI.md
 // 时间偏移: 财历映射
 //   - end period 基础聚合（Metric_ID=1/10/14/17/20/23/26）: 直接读取 Slicer_Time_Frame_Max 已预算的 Last_Fiscal_Month_Min_LP/Max_LP
-//   - Metric_ID=6 分母目标月: Last_Fiscal_Month 月份字符串 EDATE(-1) 得 LP 月份字符串，再 EDATE(-12)（等价于往前推 13 个月；旧 Rolling 12 逻辑已弃用，保留于代码注释）
+//   - Metric_ID=6 分母: LP end period 当月 last_fy_net_pay_amt >= 20000 的 DISTINCTCOUNT
+// 筛选上下文:
+//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= Last_Fiscal_Month_Max_LP（LP end period 末日）
 // 注: LP = Last Period（上一期），按所选粒度（月/季/年）的上一期
 // 说明:
 //   - Metric_ID=1/10/14/17/20/23/26: 返回 DISTINCTCOUNT（数量类/Share 分子）
-//   - Metric_ID=6 特殊：内化单月 LP 分母（LP end period 再往前推 12 个月的单月），返回 VIC Retention% LP 比率
+//   - Metric_ID=6 特殊：内化 LP 分母（LP end period 当月 last_fy_net_pay_amt >= 20000），返回 VIC Retention% LP 比率
 // ========================================
     VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_VIC_KPIs'[Metric_ID])
     // ── end period LP 区间：直接读取（Slicer_Time_Frame_Max 已预算）──
     VAR __LPMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LP])
     VAR __LPMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LP])
     // ── 人群筛选 ──
+    // TTL VIC（IsMember=0）: 事实表筛 is_member = 0（逻辑不变）
+    // Member VIC（IsMember=1）: 事实表筛 is_member = 0 AND register_date <= end period 末日
+    //   end period 末日 = LP 期 Last_Fiscal_Month_Max_LP；TTL VIC 时 register_date 不设限（哨兵日期恒真）
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LP]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     // ═══════════════════════════════════════
@@ -754,7 +634,8 @@ VIC KPIs LP Base Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LPMin,
             'a03_e2e_customer_data_m'[data_date] <= __LPMax
@@ -763,7 +644,8 @@ VIC KPIs LP Base Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LPMin,
             'a03_e2e_customer_data_m'[data_date] <= __LPMax
@@ -772,7 +654,8 @@ VIC KPIs LP Base Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LPMin,
             'a03_e2e_customer_data_m'[data_date] <= __LPMax
@@ -781,117 +664,33 @@ VIC KPIs LP Base Value =
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LPMin,
             'a03_e2e_customer_data_m'[data_date] <= __LPMax
         )
 
     // ═══════════════════════════════════════
-    // Metric_ID=6 专用：VIC Retention% LP 比率（内化单月 LP 分母）
-    //   1. LP end period 月份字符串 = Last_Fiscal_Month 往前推 1 个月（如 "2027-09" → "2027-08"）
-    //   2. 分母目标月 = LP 月份字符串再往前推 12 个月（如 "2027-08" → "2026-08"）
-    //      等价于 Last_Fiscal_Month 往前推 13 个月（-1 后再 -12）
-    //   3. 在 Slicer_Time_Frame_Max 中按 TimeFrame_Label='月' AND TimeFrame_Value=目标月字符串 查 TimeFrame_Min / TimeFrame_Max
-    //   4. 分母 = 目标月单月区间 [TimeFrame_Min, TimeFrame_Max] 内 is_vic=1 的 DISTINCTCOUNT(user_id)
-    //   5. 比率 = DIVIDE(分子 is_retention_vic=1 LP, 分母 is_vic=1 LP)
+    // Metric_ID=6 专用：VIC Retention% LP 比率（分母 = LP end period 当月 last_fy_net_pay_amt >= 20000 人数）
+    //   1. 分母 = LP end period 当月区间 [Last_Fiscal_Month_Min_LP, Last_Fiscal_Month_Max_LP] 内
+    //      last_fy_net_pay_amt >= 20000 的 DISTINCTCOUNT(user_id)（不再筛 is_vic=1）
+    //   2. 分子 = is_retention_vic=1 在 LP end period 当月的 DISTINCTCOUNT（不变）
+    //   3. 比率 = DIVIDE(分子, 分母)
+    //   （2026-09-21 调整：弃用"往前推 13 个月单月"分母，旧逻辑不再保留注释）
     // ═══════════════════════════════════════
     VAR __RetentionPctLP =
         IF(
             __MetricID = 6,
-            /* ═══ 旧逻辑：Rolling 12 LP 区间分母（2026-09-12 弃用，保留备查）═══
-               如需回退：删除/注释下方新逻辑，并取消本块注释
-            // ── 本期 end period 月份字符串（用于推导 LP 月份字符串）──
-            VAR __LFM = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month])
-            // ── LP 月份字符串：Last_Fiscal_Month 往前推 1 个月 ──
-            VAR __LFM_LP =
-                FORMAT(
-                    EDATE(
-                        DATE(LEFT(__LFM, 4), RIGHT(__LFM, 2), 1),
-                        -1
-                    ),
-                    "yyyy-MM"
-                )
-            // ── Rolling 12 LP 起始月字符串：LP 月份字符串往前推 11 个月 ──
-            VAR __Rolling12StartMonthValue_LP =
-                FORMAT(
-                    EDATE(
-                        DATE(LEFT(__LFM_LP, 4), RIGHT(__LFM_LP, 2), 1),
-                        -11
-                    ),
-                    "yyyy-MM"
-                )
-            // ── 在 Slicer_Time_Frame_Max 中查起始月的 TimeFrame_Min ──
-            VAR __Rolling12StartMin =
-                CALCULATE(
-                    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Min]),
-                    FILTER(
-                        ALL(Slicer_Time_Frame_Max),
-                        Slicer_Time_Frame_Max[TimeFrame_Label] = "月"
-                        && Slicer_Time_Frame_Max[TimeFrame_Value] = __Rolling12StartMonthValue_LP
-                    )
-                )
-            // ── Rolling 12 LP 区间 is_vic=1 的 DISTINCTCOUNT(user_id) ──
             VAR __RetentionDenominatorLP =
                 CALCULATE(
                     DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                    'a03_e2e_customer_data_m'[is_vic] = 1,
-                    'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+                    'a03_e2e_customer_data_m'[last_fy_net_pay_amt] >= 20000,
+                    'a03_e2e_customer_data_m'[is_member] = 0,
+                    'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
                     'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                    'a03_e2e_customer_data_m'[data_date] >= __Rolling12StartMin,
+                    'a03_e2e_customer_data_m'[data_date] >= __LPMin,
                     'a03_e2e_customer_data_m'[data_date] <= __LPMax
-                )
-            RETURN
-                DIVIDE(__RetentionVICCount_LP, __RetentionDenominatorLP)
-            ═══ 旧逻辑结束 ═══ */
-            // ── 新逻辑：本期 end period 月份字符串（用于推导 LP 月份字符串）──
-            VAR __LFM = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month])
-            // ── LP 月份字符串：Last_Fiscal_Month 往前推 1 个月（如 "2027-09" → "2027-08"）──
-            VAR __LFM_LP =
-                FORMAT(
-                    EDATE(
-                        DATE(LEFT(__LFM, 4), RIGHT(__LFM, 2), 1),
-                        -1
-                    ),
-                    "yyyy-MM"
-                )
-            // ── 分母目标月：LP 月份字符串再往前推 12 个月（如 "2027-08" → "2026-08"，等价于往前推 13 个月）──
-            VAR __DenominatorMonthValue_LP =
-                FORMAT(
-                    EDATE(
-                        DATE(LEFT(__LFM_LP, 4), RIGHT(__LFM_LP, 2), 1),
-                        -12
-                    ),
-                    "yyyy-MM"
-                )
-            // ── 在 Slicer_Time_Frame_Max 中查目标月的 TimeFrame_Min / TimeFrame_Max ──
-            VAR __DenominatorMin_LP =
-                CALCULATE(
-                    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Min]),
-                    FILTER(
-                        ALL(Slicer_Time_Frame_Max),
-                        Slicer_Time_Frame_Max[TimeFrame_Label] = "月"
-                        && Slicer_Time_Frame_Max[TimeFrame_Value] = __DenominatorMonthValue_LP
-                    )
-                )
-            VAR __DenominatorMax_LP =
-                CALCULATE(
-                    SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max]),
-                    FILTER(
-                        ALL(Slicer_Time_Frame_Max),
-                        Slicer_Time_Frame_Max[TimeFrame_Label] = "月"
-                        && Slicer_Time_Frame_Max[TimeFrame_Value] = __DenominatorMonthValue_LP
-                    )
-                )
-            // ── 分母：目标月单月 is_vic=1 的 DISTINCTCOUNT(user_id) ──
-            VAR __RetentionDenominatorLP =
-                CALCULATE(
-                    DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-                    'a03_e2e_customer_data_m'[is_vic] = 1,
-                    'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-                    'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-                    'a03_e2e_customer_data_m'[data_date] >= __DenominatorMin_LP,
-                    'a03_e2e_customer_data_m'[data_date] <= __DenominatorMax_LP
                 )
             RETURN
                 DIVIDE(__RetentionVICCount_LP, __RetentionDenominatorLP)
@@ -902,7 +701,7 @@ VIC KPIs LP Base Value =
             __MetricID,
             // ── VIC No. LP ──
             1,  __VICCount_LP,
-            // ── VIC Retention% LP（内化单月 LP 分母，返回比率）──
+            // ── VIC Retention% LP（内化 LP last_fy_net_pay_amt 分母，返回比率）──
             6,  __RetentionPctLP,
             // ── T4-5 Upgrade No. LP ──
             10, __UpgradeVICCount_LP,
@@ -944,7 +743,7 @@ VIC KPIs Base Value =
 //   - 数量类 vs LY: 今年 / 去年 - 1
 //   - 数量类 vs LP: 当期 / 上期 - 1
 //   - 比率类（Retention%）vs LY: 今年 - 去年（差值，×100 转 pts）
-//     VIC Retention% 的 Act/LY/LP Base Value 已内化单月分母（end period 往前推 12 个月）返回比率，
+//     VIC Retention% 的 Act/LY/LP Base Value 已内化 last_fy_net_pay_amt 分母（end period 当月）返回比率，
 //     总路由直接取 Act Base Value(Metric_ID=6) - LY Base Value(Metric_ID=6) 做差值
 //   - 比率类（Share）vs LY: 今年 - 去年（差值，×100 转 pts）
 //     分母: end period 当月 is_vic=1 的 Act Base Value（Metric_ID=1）
@@ -1043,7 +842,7 @@ VIC KPIs Base Value =
 
     // ═══════════════════════════════════════
     // VIC Retention% 分组（Metric_ID 6/7/8）
-    //   Act/LY/LP Base Value 在 Metric_ID=6 时已内化单月分母（end period 往前推 12 个月），直接返回比率
+    //   Act/LY/LP Base Value 在 Metric_ID=6 时已内化 last_fy_net_pay_amt 分母（end period 当月），直接返回比率
     //   总路由只需做比率差值：
     //     vs LY = Act Base Value(Metric_ID=6) - LY Base Value(Metric_ID=6)
     //     vs LP = Act Base Value(Metric_ID=6) - LP Base Value(Metric_ID=6)
@@ -1051,14 +850,14 @@ VIC KPIs Base Value =
     VAR __IsRetentionVsLY = __MetricID = 7
     VAR __IsRetentionVsLP = __MetricID = 8
 
-    // VIC Retention% 本期比率（已内化单月分母）
+    // VIC Retention% 本期比率（已内化 last_fy_net_pay_amt 分母）
     VAR __RetentionPctAct =
         CALCULATE(
             [VIC KPIs Act Base Value],
             REMOVEFILTERS('Dim_ColMetric_VIC_KPIs'),
             'Dim_ColMetric_VIC_KPIs'[Metric_ID] = 6
         )
-    // VIC Retention% LY 比率（已内化单月 LY 分母）
+    // VIC Retention% LY 比率（已内化 LY last_fy_net_pay_amt 分母）
     VAR __RetentionPctLY =
         IF(
             __IsRetentionVsLY,
@@ -1068,7 +867,7 @@ VIC KPIs Base Value =
                 'Dim_ColMetric_VIC_KPIs'[Metric_ID] = 6
             )
         )
-    // VIC Retention% LP 比率（已内化单月 LP 分母）
+    // VIC Retention% LP 比率（已内化 LP last_fy_net_pay_amt 分母）
     VAR __RetentionPctLP =
         IF(
             __IsRetentionVsLP,
@@ -1214,7 +1013,7 @@ VIC KPIs Base Value =
     // 实际值取数（复用 Act Base Value，按 Metric_ID 分支）：
     //   - Metric_ID=4 / 5(Month单选) / 13(Month单选)：VIC No. Act（Metric_ID=1，月度实际值）
     //   - Metric_ID=5(Year单选) / 13(Year单选)：VIC No. Act（Metric_ID=1，财年实际值 = data_date ∈ 全年区间 DISTINCTCOUNT）
-    //   - Metric_ID=9：VIC Retention% Act（Metric_ID=6，已内化单月分母返回比率）
+    //   - Metric_ID=9：VIC Retention% Act（Metric_ID=6，已内化 last_fy_net_pay_amt 分母返回比率）
     //     分子：Month单选 → VIC Retention% Act(month)；Year单选 → VIC Retention% Act(year)
     // ═══════════════════════════════════════
     VAR __IsTARACH = __MetricID IN {4, 5, 9, 13}
@@ -1315,7 +1114,7 @@ VIC KPIs Base Value =
     //   - Metric_ID=4 (VIC Monthly TAR ACH%)：VIC No. Act（Metric_ID=1，月度实际值）
     //   - Metric_ID=5 (VIC Yearly TAR ACH%)：VIC No. Act（Metric_ID=1）
     //       Month 单选 → 当月实际值；Year 单选 → 全年实际值（end period 为该年最后一月，全年区间由 Slicer_Time_Frame_Max 在 Year 粒度下提供）
-    //   - Metric_ID=9 (VIC Retention% TAR ACH%)：VIC Retention% Act（Metric_ID=6，已内化单月分母返回比率）
+    //   - Metric_ID=9 (VIC Retention% TAR ACH%)：VIC Retention% Act（Metric_ID=6，已内化 last_fy_net_pay_amt 分母返回比率）
     //       Month 单选 → VIC Retention% Act(month)；Year 单选 → VIC Retention% Act(year)
     //   - Metric_ID=13 (T4-5 Upgrade No. TAR ACH%)：T4-5 Upgrade No. Act（Metric_ID=10）
     VAR __ActMetricID_ForTAR =
@@ -1365,7 +1164,7 @@ VIC KPIs Base Value =
             __MetricID,
             // ─── Act 本期值 ───
             1,  [VIC KPIs Act Base Value],      // VIC No. Act
-            6,  __RetentionPctAct,               // VIC Retention% Act（Act Base Value 已内化单月分母返回比率）
+            6,  __RetentionPctAct,               // VIC Retention% Act（Act Base Value 已内化 last_fy_net_pay_amt 分母返回比率）
             10, [VIC KPIs Act Base Value],      // T4-5 Upgrade No. Act
             14, __ShareAct,                      // T4-5 Upgrade No. Share Act
             17, [VIC KPIs Act Base Value],      // Retention VIC No. Act
@@ -1382,7 +1181,7 @@ VIC KPIs Base Value =
             12, __QtyVsLPResult,                 // T4-5 Upgrade No. vs LP
             19, __QtyVsLPResult,                 // Retention VIC No. vs LP
             25, __QtyVsLPResult,                 // Direct VIC No. vs LP
-            // ─── VIC Retention% vs LY / vs LP（Act/LY/LP Base Value 已内化单月分母，比率差值，×100 转 pts）───
+            // ─── VIC Retention% vs LY / vs LP（Act/LY/LP Base Value 已内化 last_fy_net_pay_amt 分母，比率差值，×100 转 pts）───
             7,  __RetentionPctVsLYResult,        // VIC Retention% vs LY
             8,  __RetentionPctVsLPResult,        // VIC Retention% vs LP
             // ─── Share vs LY / vs LP 派生（end period 当月分母差值，×100 转 pts）───
@@ -1556,9 +1355,9 @@ VIC KPIs Cell Background Color =
 
 | 序号 | 度量值名称                     | Display Folder | 用途                                                                                                                                                                                                                                        |
 | ---- | ------------------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | VIC KPIs Act Base Value        | Base Metrics   | 本期基础值（end period 当月 DISTINCTCOUNT）；Metric_ID=6 特殊：内化单月分母（end period 往前推 12 个月）返回 VIC Retention% 比率                                                                                                            |
-| 2    | VIC KPIs LY Base Value         | Base Metrics   | 去年同期基础值（财历映射 Last_Fiscal_Month_*_LY）；Metric_ID=6 特殊：内化单月 LY 分母（LY 再往前推 12 个月）返回 VIC Retention% LY 比率                                                                                                     |
-| 3    | VIC KPIs LP Base Value         | Base Metrics   | 上期基础值（财历映射 Last_Fiscal_Month_*_LP）；Metric_ID=6 特殊：内化单月 LP 分母（LP 再往前推 12 个月）返回 VIC Retention% LP 比率                                                                                                         |
+| 1    | VIC KPIs Act Base Value        | Base Metrics   | 本期基础值（end period 当月 DISTINCTCOUNT）；Metric_ID=6 特殊：内化 last_fy_net_pay_amt 分母（end period 当月）返回 VIC Retention% 比率                                                                                                     |
+| 2    | VIC KPIs LY Base Value         | Base Metrics   | 去年同期基础值（财历映射 Last_Fiscal_Month_*_LY）；Metric_ID=6 特殊：内化 LY last_fy_net_pay_amt 分母（LY end period 当月）返回 VIC Retention% LY 比率                                                                                      |
+| 3    | VIC KPIs LP Base Value         | Base Metrics   | 上期基础值（财历映射 Last_Fiscal_Month_*_LP）；Metric_ID=6 特殊：内化 LP last_fy_net_pay_amt 分母（LP end period 当月）返回 VIC Retention% LP 比率                                                                                          |
 | 4    | VIC KPIs Base Value            | Base Metrics   | 总路由（含 vs LY / vs LP / TAR ACH% / Share 派生 + REMOVEFILTERS）；VIC Retention% 派生直接取 Act/LY/LP Base Value(Metric_ID=6) 做比率差值；TAR ACH% = 实际值(Act Base Value) / 目标值(a03_e2e_customer_fcst_data_m)，仅单选财月/财年时有值 |
 | 5    | VIC KPIs Cell Value            | Cell Values    | 对外值 = Base Value                                                                                                                                                                                                                         |
 | 6    | VIC KPIs Cell Display          | Formatting     | 格式化显示文本（按 Metric_Format 单字段分发）                                                                                                                                                                                               |
@@ -1574,8 +1373,8 @@ VIC KPIs Cell Background Color =
 │                        数据源层                                      │
 │  a03_e2e_customer_data_m（月度事实表）                               │
 │  字段: data_date, platform, shop_info_id, user_id, is_member,       │
-│        is_employee, is_vic, is_retention_vic, is_upgrade_vic,       │
-│        is_direct_vic                                                │
+│        register_date, last_fy_net_pay_amt, is_employee, is_vic,     │
+│        is_retention_vic, is_upgrade_vic, is_direct_vic              │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
                                │ 模型自动传递（行维度 = 事实表字段直接拉取）
@@ -1589,7 +1388,7 @@ VIC KPIs Cell Background Color =
 │  │ Act Base Value        │   │ LY Base Value         │              │
 │  │ (本期 end period 当月) │   │ (财历映射 LY)         │              │
 │  │ Metric_ID=6 内化      │   │ Metric_ID=6 内化      │              │
-│  │ 单月分母(-12)         │   │ 单月 LY 分母(-24)     │              │
+│  │ last_fy_net_pay_amt  │   │ last_fy_net_pay_amt  │              │
 │  └───────────┬───────────┘   └───────────┬───────────┘              │
 │              │                           │                          │
 │  ┌───────────────────────┐               │                          │
@@ -1597,7 +1396,7 @@ VIC KPIs Cell Background Color =
 │  │ LP Base Value         │               │                          │
 │  │ (财历映射 LP)         │               │                          │
 │  │ Metric_ID=6 内化      │               │                          │
-│  │ 单月 LP 分母(-13)     │               │                          │
+│  │ last_fy_net_pay_amt  │               │                          │
 │  └───────────┬───────────┘               │                          │
 │              │                            │                          │
 │              ▼                            ▼                          │
@@ -1649,28 +1448,24 @@ VIC KPIs Cell Background Color =
 ## 7. 注意事项
 
 1. **end period 时间范围（关键逻辑）**：所有指标均使用 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Min]` ~ `[Last_Fiscal_Month_Max]` 作为本期时间范围；LY 使用 `Last_Fiscal_Month_Min_LY` ~ `Last_Fiscal_Month_Max_LY`；LP 使用 `Last_Fiscal_Month_Min_LP` ~ `Last_Fiscal_Month_Max_LP`。这些字段已由 Slicer_Time_Frame_Max 日期维度表通过自关联计算得到，无需在 DAX 中重复实现。
-2. **is_member / is_employee 双重筛选（关键逻辑）**：所有指标均应用 `is_member = SELECTEDVALUE(IsMemberFilter[IsMember], 0)` 和 `is_employee = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])` 筛选。默认值：is_member=0（TTL VIC），is_employee=1（Yes）。
+2. **is_member / is_employee 双重筛选（关键逻辑；is_member 规则 2026-09-21 调整）**：所有指标均应用 `is_member = 0` 谓词（TTL VIC 与 Member VIC 统一），Member VIC（IsMember=1）时额外应用 `register_date <= end period 末日`（Act 取 `Last_Fiscal_Month_Max`、LY 取 `Last_Fiscal_Month_Max_LY`、LP 取 `Last_Fiscal_Month_Max_LP`；TTL VIC 时 register_date 不设限，哨兵日期 DATE(9999,12,31) 恒真）；is_employee 应用 `VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])` 筛选。默认值：is_member=0（TTL VIC），is_employee=1（Yes）。
 3. **REMOVEFILTERS 机制**：派生指标（vs LY / vs LP / Share / Share vs LY / Share vs LP）的取值必须先 `REMOVEFILTERS('Dim_ColMetric_VIC_KPIs')` 再应用目标 Metric_ID，否则矩阵行标题保留的筛选器会导致冲突返回 BLANK。这与 PB_Merchandise_Fulfillment_detail_ms.md 的总路由范式完全一致。
-4. **VIC Retention% 的"往前推 12 个月单月"分母（关键逻辑，仅此指标使用；2026-09-12 由 Rolling 12 区间调整而来，旧口径见 1.4 节历史口径块）**：分母为"以 end period 为基准往前推 12 个月的单月 count(distinct user_id) where is_vic=1"。
+4. **VIC Retention% 的"end period 当月 last_fy_net_pay_amt >= 20000"分母（关键逻辑，仅此指标使用；2026-09-21 由"往前推 12 个月单月"调整而来，旧口径见 1.4 节历史口径块）**：分母为"所选时间范围 end period 当月 `last_fy_net_pay_amt >= 20000` 的 count(distinct user_id)"。
 
-   - ACT：end period 直接往前推 12 个月（如 "2027-09" → "2026-09"）
-   - LY：直接往前推 12 个月，再推 12 个月（如 "2027-09" → "2025-09"，等价于往前推 24 个月）
-   - LP：直接往前推 1 个月，再推 12 个月（如 "2027-09" → "2027-08" → "2026-08"，等价于往前推 13 个月）
-   - 聚合方式：单月区间 DISTINCT（同一用户只计一次）
-   - 目标月区间获取（基于财月字段偏移，不用天日期 EDATE 反推自然日）：
-     - 目标月字符串：取 `Slicer_Time_Frame_Max[Last_Fiscal_Month]` 月份字符串（如 "2027-09"），解析为月首日期后按上述偏移 `EDATE` 再 FORMAT 回 "yyyy-MM"（Act=-12；LY=-12 后再 -12；LP=-1 后再 -12）
-     - 目标月字符串 → 在 `Slicer_Time_Frame_Max` 中按 `TimeFrame_Label='月' AND TimeFrame_Value=目标月字符串` 查 `TimeFrame_Min` / `TimeFrame_Max`（自然日起止日）
-   - 分母区间 = [目标月 TimeFrame_Min, 目标月 TimeFrame_Max]（单月；不再复用 `Last_Fiscal_Month_Max_LY/Max_LP`）
+   - ACT：本期 end period 当月区间（`data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]`）
+   - LY：LY end period 当月区间（`data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]`）
+   - LP：LP end period 当月区间（`data_date ∈ [Last_Fiscal_Month_Min_LP, Last_Fiscal_Month_Max_LP]`）
+   - 聚合方式：单月区间 DISTINCT（同一用户只计一次）；不再筛 is_vic=1，不再做财月字符串偏移推导目标月
+   - 分母人群筛选：与其他指标一致（is_member = 0 + register_date <= __EndPeriodDate + is_employee）
    - 分子不变：is_retention_vic=1 在 end period 当月（Act/LY/LP 对应期）的 DISTINCTCOUNT
-   - **end period 基础聚合区间（非分母目标月）**：LY/LP 直接读取 `Last_Fiscal_Month_Min_LY/Max_LY/Min_LP/Max_LP`（已预算），不走月份字符串偏移
-   - **内化实现**：分母逻辑已内化于 `[VIC KPIs Act Base Value]` / `[VIC KPIs LY Base Value]` / `[VIC KPIs LP Base Value]` 的 `Metric_ID=6` 分支，返回 VIC Retention% 比率（DIVIDE(分子, 分母)），不再单列分母度量值；**旧 Rolling 12 区间分母逻辑（当前月 + 往前 11 个月共 12 个月，区间 DISTINCT 汇总）已按用户要求以块注释保留在各度量值代码中，如需回退取消注释即可**
+   - **内化实现**：分母逻辑已内化于 `[VIC KPIs Act Base Value]` / `[VIC KPIs LY Base Value]` / `[VIC KPIs LP Base Value]` 的 `Metric_ID=6` 分支，返回 VIC Retention% 比率（DIVIDE(分子, 分母)），不再单列分母度量值；旧分母逻辑（2026-09-12 单月偏移版、更早 Rolling 12 区间版）已按用户要求不再以块注释保留
    - 总路由 `[VIC KPIs Base Value]` 的 VIC Retention% vs LY / vs LP 派生：直接取 Act Base Value(Metric_ID=6) - LY/LP Base Value(Metric_ID=6) 做比率差值
 5. **Share 类分母（end period 当月 is_vic=1）**：与 VIC Retention% 分母不同，Share 类指标（T4-5 Upgrade No. Share / Retention VIC No. Share / Direct VIC No. Share）的分母使用 end period 当月 `is_vic=1` 的人数，等价于 VIC No. Act（Metric_ID=1）。
 6. **TAR ACH% 完整取数逻辑（实际值 / 目标值）**：Metric_ID 4, 5, 9, 13 为目标达成率指标，公式 = 实际值 / 目标值。
 
    - **实际值**：复用 Act Base Value（REMOVEFILTERS + 目标 Metric_ID）
      - Metric_ID=4/5：VIC No. Act（Metric_ID=1）
-     - Metric_ID=9：VIC Retention% Act（Metric_ID=6，已内化单月分母返回比率）
+     - Metric_ID=9：VIC Retention% Act（Metric_ID=6，已内化 last_fy_net_pay_amt 分母返回比率）
      - Metric_ID=13：T4-5 Upgrade No. Act（Metric_ID=10）
    - **目标值**：取自 `a03_e2e_customer_fcst_data_m`，日期字段 `data_date`
      - 时间范围：`data_date ∈ [Slicer_Time_Frame_Min[TimeFrame_Min], Slicer_Time_Frame_Max[TimeFrame_Max]]`（全局时间范围）
@@ -1714,8 +1509,8 @@ VIC KPIs Cell Background Color =
     - 列指标维度表替换为 Dim_ColMetric_VIC_KPIs（28 行 vs 36 行）
     - 数据底表由 a02_e2e_boss_performance_summary_d / a02_e2e_boss_fulfillment_request_data_d 改为 a03_e2e_customer_data_m（单一事实表）
     - 时间逻辑由"区间 SUM"改为"end period 当月 DISTINCTCOUNT"
-    - 新增 is_member / is_employee 双重人群筛选
-    - 新增 VIC Retention% 专用分母（end period 往前推 12 个月的单月；原 Rolling 12 区间口径已于 2026-09-12 弃用，旧逻辑以注释保留；内化于 Act/LY/LP Base Value 的 Metric_ID=6 分支，非独立度量值）
+    - 新增 is_member / is_employee 双重人群筛选（is_member 规则 2026-09-21 调整：统一 is_member=0，Member VIC 额外 register_date <= end period 末日）
+    - 新增 VIC Retention% 专用分母（end period 当月 last_fy_net_pay_amt >= 20000；旧口径沿革见 1.4 节历史口径块；内化于 Act/LY/LP Base Value 的 Metric_ID=6 分支，非独立度量值）
     - 派生指标新增 vs LP / Share / Share vs LY / Share vs LP / TAR ACH% 等类型
     - 颜色规则由"按 ColType 判断"改为"按 Metric_ColorRule 字段三值标识统一调度"
     - 格式字段由三字段（Metric_Format_Act/LY/VsLY）精简为单字段（Metric_Format）

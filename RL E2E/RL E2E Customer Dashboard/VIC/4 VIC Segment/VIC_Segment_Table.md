@@ -4,6 +4,7 @@
 > created: 2026-08-14
 > revised: 2026-09-12（SLS 类指标 Step1+Step2 由"合并为 end period 当月单步聚合"调整为分步实现：Step1 在 end period 当月框定 user_id，Step2 在所选时间范围 TimeFrame 区间聚合，两步时间范围不同不能合并）
 > revised: 2026-09-14（占比类分母口径调整：_Customer Total 去掉 net_pay_amt>0 与分子完全对称；_SLS Total 由"所选时间范围单步全量"改为与 _SLS 同结构 Step1+Step2 分步；两者 customer_tier 均扩为全部 T1-T5，Total = T1+T2+T3+T4+T5 加总；LY 版本同步，旧逻辑块注释删除）
+> revised: 2026-09-21（会员筛选统一为事实表 is_member=0；Member VIC 通过 KEEPFILTERS 追加 register_date<=对应本期/LY 最后财月末，单步计算与 Step1/Step2 均生效；不改变指标公式，不保留旧逻辑块注释）
 > type: 度量值开发 + 表格可视化
 > 口径来源: 口径文档/VIC Segment.md（子模块四 VIC Segment，12 个指标，指标 0 为行维度本身）
 > 参考实现: VIC/LY Last Purchase Time/LY_Last_Purchase_Time_Table.md（表格 + 每指标独立 Value/Display 范式，无 SWITCH 路由，无 x 轴时间处理）
@@ -51,7 +52,17 @@
 > **is_member 使用**: `VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)`，默认 TTL VIC
 > **is_employee 使用**: `VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])`，默认 Yes
 
-所有指标均应用这两个筛选到事实表 `a03_e2e_customer_data_m[is_member]` / `[is_employee]`。
+`IsMemberFilter` 与事实表保持断开关系，`__IsMemberFilter` 仅控制是否追加注册日期限制，不能直接作为事实表 `is_member` 的筛选值。
+
+| 切片器结果 | 事实表会员筛选 | 注册日期限制 |
+|---|---|---|
+| 0：TTL VIC（默认） | `is_member = 0` | 不追加限制，保留已有注册日期筛选 |
+| 1：Member VIC | `is_member = 0` | `register_date <= end_period_date`，通过 `KEEPFILTERS` 与已有筛选取交集 |
+
+- 本期 `end_period_date` = `Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]`；LY = `Last_Fiscal_Month_Max_LY`，均包含截止当天。本方案没有 LP 指标，不新增 LP 分支；含 LP 的扩展才使用 `Last_Fiscal_Month_Max_LP`。
+- Customer No. / Customer Total 的单步计算使用 `__PeriodMax`（Act）或 `__LYMax`（LY），它们已经读取对应财月末。
+- SLS / SLS Total / Net Pay Qty / Net Pay Order Cnt 的 **Step 1、Step 2 均追加相同会员条件**：Act 上限为 `__EndPeriodMax`，LY 上限为 `__EndPeriodMax_LY`。这两步的 `__PeriodMax` / `__PeriodMax_LY` 表示 Step 2 的 TimeFrame 区间终点，不能用作注册截止日，也不增加注册日期下限。
+- 原有 `is_employee in __IsEmployeeFilter`、分组维度、Step1/Step2 数据日期区间和占比类分母的 `ALLSELECTED` 保持不变；本模块不涉及 VIC Retention%，不调整任何指标的分子、分母公式。
 
 ### 1.3 关键特殊逻辑三：分组维度自动传递
 
@@ -74,10 +85,6 @@
 - **Step 1（end period 当月框定分层买家）**：`CALCULATETABLE(VALUES(user_id), ...)`，data_date ∈ end period 当月区间，customer_tier 分组由 DIM_Row_VIC_Tier 1:N 模型关系自动传递（当前行筛选即为 T1/T2/.../T5），is_member / is_employee 双重人群筛选，框定 user_id 集合
 - **Step 2（所选时间范围聚合）**：`CALCULATE(SUM(...), TREATAS(__TierUsers, a03_e2e_customer_data_m[user_id]), ...)`，data_date ∈ TimeFrame 区间，TREATAS 将 Step 1 的 user_id 集合传递回事实表，is_member / is_employee 双重人群筛选；customer_tier / platform / shop_info_id 分组维度由模型自动传递保留（Step 2 **不移除分组维度筛选**，与 Step 1 行上下文一致，分组维度无需显式 DAX 处理；仅占比类分母（4.1.3/4.1.4 Customer Total、4.1.7/4.1.8 SLS Total）用 `ALLSELECTED('DIM_Row_VIC_Tier')` 将 customer_tier 扩为全部 T1-T5——2026-09-14 修订：_SLS Total 与分子同结构 Step1+Step2 分步，_Customer Total 与分子完全对称去掉 net_pay_amt>0，Total = T1-T5 加总口径）
 - **LY 版本对应偏移**：Step 1 用 `Last_Fiscal_Month_Min_LY ~ Last_Fiscal_Month_Max_LY`（LY end period 当月），Step 2 用 `TimeFrame_Min_LY ~ TimeFrame_Max_LY`（LY 所选时间范围）
-
-> **历史口径（弃用，保留备查）**：
-> 2026-08-14 初版方案曾"经业务确认"将 Step 2 的"所选时间范围"理解为 end period 当月（与 Step 1 一致），从而将 Step1+Step2 合并为：在 end period 当月对事实表直接按当前 customer_tier 行上下文做 SUM/DISTINCTCOUNT，无需显式用 TREATAS/CONTAINS 做 user_id 传递。
-> 2026-09-12 口径修订回归口径文档原文本意：Step 2 的"所选时间范围"即切片器所选的完整时间范围（TimeFrame_Min ~ TimeFrame_Max），两步时间范围不一致，必须分步计算。旧逻辑在相关 Base 度量值（4.1.5/4.1.6/4.1.9~4.1.12）中以块注释保留，如需回退可取消块注释并注释新逻辑（4.1.7/4.1.8 的旧逻辑块注释已随 2026-09-14 占比类分母口径调整删除，不再保留）。
 
 ### 1.5 关键特殊逻辑五：货币转换
 
@@ -130,7 +137,7 @@
 | 对象     | 名称                                                                                                                           | 出处                   |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
 | 事实表   | a03_e2e_customer_data_m                                                                                                        | 口径文档全局逻辑       |
-| 关键字段 | data_date, platform, shop_info_id, user_id, is_member, is_employee, customer_tier, net_pay_amt, net_pay_qty, net_pay_order_cnt | 口径文档子模块四各指标 |
+| 关键字段 | data_date, platform, shop_info_id, user_id, is_member, register_date, is_employee, customer_tier, net_pay_amt, net_pay_qty, net_pay_order_cnt | 口径文档子模块四各指标及全局会员规则 |
 
 > 表为月度聚合表，`data_date` 为月末日期，用于 end period 时间筛选。
 
@@ -269,7 +276,7 @@ Freq. Display                           ← decimal_1dp 格式 #,##0.0
 | Slicer_Time_Frame_Min/Max（Step2 本期所选时间范围） | 断开维度，SELECTEDVALUE 读取`TimeFrame_Min`（Min 表）/ `TimeFrame_Max`（Max 表） | `data_date >= __PeriodMin AND data_date <= __PeriodMax`（Step2 聚合区间，2026-09-12 修订新增） |
 | Slicer_Time_Frame_Min/Max（Step2 LY 所选时间范围） | SELECTEDVALUE 读取`TimeFrame_Min_LY`（Min 表）/ `TimeFrame_Max_LY`（Max 表） | `data_date >= __PeriodMin_LY AND data_date <= __PeriodMax_LY`（LY Step2） |
 | Slicer_Is_Employee_Selection              | 断开维度，SELECTEDVALUE 读取`IsEmployee_Code`                            | `a03_e2e_customer_data_m[is_employee] in __IsEmployeeFilter`           |
-| IsMemberFilter                            | 断开维度，SELECTEDVALUE 读取`IsMember`                                   | `a03_e2e_customer_data_m[is_member] = __IsMemberFilter`                |
+| IsMemberFilter                            | 断开维度，SELECTEDVALUE 读取`IsMember`，默认 0 | 事实表固定 `is_member = 0`；Member VIC 用 KEEPFILTERS 追加 `register_date <= 对应本期/LY 最后财月末`，单步及 Step1/Step2 均生效 |
 | DIM_Row_VIC_Tier                          | 1:N 模型关系；视觉对象筛选：Tier ≠ 空白（排除未分层买家，保占比类分母 tier 范围 = T1-T5） | Step1/Step2 均保留自动传递（分组维度，无需显式处理）；仅占比类分母用 ALLSELECTED(Row Label) 将 tier 扩为全部 T1-T5（保留外部切片器与视觉筛选影响，Total = 五行加总口径） |
 | Slicer_Currency_Selection                 | 断开维度，SELECTEDVALUE 读取`Currency_ExchangeRate`、`Currency_Symbol` | 金额类指标 ÷`Currency_ExchangeRate`；Display 拼接 `Currency_Symbol` |
 | 事实表分组字段（platform / shop_info_id） | 表格行直接拉取，模型自动传递筛选                                           | Step1/Step2 均保留自动传递（分组维度）                                 |
@@ -310,8 +317,9 @@ Freq. Display                           ← decimal_1dp 格式 #,##0.0
 
 > 私有度量值（下划线前缀），放 Base Metrics 文件夹，供对外 Value 层调用，避免重复代码。
 > Act = 本期区间，LY = LY 区间。分两类口径（2026-09-12 修订）：4.1.1~4.1.4（Customer 类）为单步 end period 当月口径；4.1.5~4.1.12（SLS / Qty / OrderCnt 类）为 Step1（end period 当月框定 user_id）+ Step2（所选时间范围聚合）分步口径，两步时间范围不同不能合并。
+> 12 个 Base 共 20 处事实表筛选（4 个单步 + 8 个双步）：统一 `is_member = 0`，配合 `KEEPFILTERS(__IsMemberFilter = 0 || register_date <= 对应财月末)`。TTL 不新增注册日期限制，Member 与已有注册日期筛选取交集；Act/LY 各取自身财月末。
 
-#### 4.1.1 _Customer No. Base Act（买家人数本期基础值，单步 end period 口径，不调整）
+#### 4.1.1 _Customer No. Base Act（买家人数本期基础值，单步 end period 口径）
 
 ```dax
 _Customer No. Base Act = 
@@ -319,6 +327,7 @@ _Customer No. Base Act =
 // 度量值: _Customer No. Base Act
 // Display Folder: Base Metrics
 // 用途: Customer No.（买家人数）本期基础值
+// 会员筛选: 两档 is_member=0；Member VIC 用 KEEPFILTERS 追加 register_date<=本度量对应期最后财月末
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min/Max],
 //       Slicer_Is_Employee_Selection[IsEmployee_Code],
@@ -326,7 +335,7 @@ _Customer No. Base Act =
 // 口径来源: 口径文档/VIC Segment.md 指标 1
 // 筛选上下文:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
-//   - is_member = __IsMemberFilter（默认 0 = TTL VIC）
+//   - is_member = 0；Member VIC 追加 register_date <= __PeriodMax（默认 TTL VIC 不追加日期限制）
 //   - is_employee in __IsEmployeeFilter（默认 所有）
 //   - customer_tier 分组由 DIM_Row_VIC_Tier 1:N 模型关系自动传递，DAX 无需显式处理
 // 聚合粒度: DISTINCTCOUNT(user_id)
@@ -339,7 +348,11 @@ _Customer No. Base Act =
     RETURN
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __PeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -354,6 +367,7 @@ _Customer No. Base LY =
 // 度量值: _Customer No. Base LY
 // Display Folder: Base Metrics
 // 用途: Customer No.（买家人数）去年同期基础值，用于 YOY 派生
+// 会员筛选: 两档 is_member=0；Member VIC 用 KEEPFILTERS 追加 register_date<=本度量对应期最后财月末
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY/Max_LY],
 //       Slicer_Is_Employee_Selection[IsEmployee_Code],
@@ -372,7 +386,11 @@ _Customer No. Base LY =
     RETURN
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __LYMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
@@ -387,6 +405,7 @@ _Customer Total Base Act =
 // 度量值: _Customer Total Base Act
 // Display Folder: Base Metrics
 // 用途: Customer% 分母（总买家人数）本期基础值
+// 会员筛选: 两档 is_member=0；Member VIC 用 KEEPFILTERS 追加 register_date<=本度量对应期最后财月末
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min/Max],
 //       Slicer_Is_Employee_Selection[IsEmployee_Code],
@@ -410,7 +429,11 @@ _Customer Total Base Act =
     RETURN
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __PeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax,
@@ -426,6 +449,7 @@ _Customer Total Base LY =
 // 度量值: _Customer Total Base LY
 // Display Folder: Base Metrics
 // 用途: Customer% 分母（总买家人数）去年同期基础值
+// 会员筛选: 两档 is_member=0；Member VIC 用 KEEPFILTERS 追加 register_date<=本度量对应期最后财月末
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY/Max_LY],
 //       Slicer_Is_Employee_Selection[IsEmployee_Code],
@@ -446,7 +470,11 @@ _Customer Total Base LY =
     RETURN
         CALCULATE(
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __LYMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax,
@@ -462,6 +490,7 @@ _SLS Base Act =
 // 度量值: _SLS Base Act
 // Display Folder: Base Metrics
 // 用途: SLS（净销售额）本期基础值（原值，不÷1000，不÷汇率）
+// 会员筛选: 两档 is_member=0；Member VIC 用 KEEPFILTERS 追加 register_date<=本度量对应期最后财月末
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min/Max]（Step1 end period 当月）,
 //       Slicer_Time_Frame_Min[TimeFrame_Min] + Slicer_Time_Frame_Max[TimeFrame_Max]（Step2 所选时间范围）,
@@ -493,7 +522,11 @@ _SLS Base Act =
     VAR __TierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax
@@ -504,30 +537,16 @@ _SLS Base Act =
         CALCULATE(
             SUM('a03_e2e_customer_data_m'[net_pay_amt]),
             TREATAS(__TierUsers, 'a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
 
-/* ── 旧逻辑：Step1+Step2 合并为 end period 当月单步聚合（2026-09-12 弃用，保留备查）──
-   当时口径理解: 经业务确认 Step2 "所选时间范围" = end period 当月（与 Step1 一致），
-   因 customer_tier 分组由模型自动传递，直接在 end period 当月对事实表做 SUM。
-   如需回退: 注释掉上方 Step1/Step2 分步实现（含 VAR 定义与 RETURN 块），取消本块注释即可。
-    VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
-    VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
-    VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
-
-    RETURN
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
-            'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
-        )
-── 旧逻辑结束 ── */
 ```
 
 #### 4.1.6 _SLS Base LY（净销售额去年同期基础值，Step1+Step2 分步）
@@ -538,6 +557,7 @@ _SLS Base LY =
 // 度量值: _SLS Base LY
 // Display Folder: Base Metrics
 // 用途: SLS（净销售额）去年同期基础值（原值，不÷1000，不÷汇率）
+// 会员筛选: 两档 is_member=0；Member VIC 用 KEEPFILTERS 追加 register_date<=本度量对应期最后财月末
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY/Max_LY]（Step1 LY end period 当月）,
 //       Slicer_Time_Frame_Min[TimeFrame_Min_LY] + Slicer_Time_Frame_Max[TimeFrame_Max_LY]（Step2 LY 所选时间范围）,
@@ -567,7 +587,11 @@ _SLS Base LY =
     VAR __TierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax_LY
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax_LY
@@ -578,29 +602,16 @@ _SLS Base LY =
         CALCULATE(
             SUM('a03_e2e_customer_data_m'[net_pay_amt]),
             TREATAS(__TierUsers, 'a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax_LY
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LY
         )
 
-/* ── 旧逻辑：Step1+Step2 合并为 LY end period 当月单步聚合（2026-09-12 弃用，保留备查）──
-   当时口径理解: Step2 时间范围 = LY end period 当月（与 Step1 一致），直接单步 SUM。
-   如需回退: 注释掉上方 Step1/Step2 分步实现（含 VAR 定义与 RETURN 块），取消本块注释即可。
-    VAR __LYMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY])
-    VAR __LYMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY])
-    VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
-
-    RETURN
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_amt]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __LYMin,
-            'a03_e2e_customer_data_m'[data_date] <= __LYMax
-        )
-── 旧逻辑结束 ── */
 ```
 
 #### 4.1.7 _SLS Total Base Act（净销售额占比分母本期基础值，Step1+Step2 分步，customer_tier 全量）
@@ -611,6 +622,7 @@ _SLS Total Base Act =
 // 度量值: _SLS Total Base Act
 // Display Folder: Base Metrics
 // 用途: SLS% 分母（总买家净销售额）本期基础值
+// 会员筛选: 两档 is_member=0；Member VIC 用 KEEPFILTERS 追加 register_date<=本度量对应期最后财月末
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min/Max]（Step1 end period 当月）,
 //       Slicer_Time_Frame_Min[TimeFrame_Min] + Slicer_Time_Frame_Max[TimeFrame_Max]（Step2 所选时间范围）,
@@ -643,7 +655,11 @@ _SLS Total Base Act =
     VAR __AllTierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax,
@@ -655,7 +671,11 @@ _SLS Total Base Act =
         CALCULATE(
             SUM('a03_e2e_customer_data_m'[net_pay_amt]),
             TREATAS(__AllTierUsers, 'a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax,
@@ -671,6 +691,7 @@ _SLS Total Base LY =
 // 度量值: _SLS Total Base LY
 // Display Folder: Base Metrics
 // 用途: SLS% 分母（总买家净销售额）去年同期基础值
+// 会员筛选: 两档 is_member=0；Member VIC 用 KEEPFILTERS 追加 register_date<=本度量对应期最后财月末
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY/Max_LY]（Step1 LY end period 当月）,
 //       Slicer_Time_Frame_Min[TimeFrame_Min_LY] + Slicer_Time_Frame_Max[TimeFrame_Max_LY]（Step2 LY 所选时间范围）,
@@ -699,7 +720,11 @@ _SLS Total Base LY =
     VAR __AllTierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax_LY
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax_LY,
@@ -711,7 +736,11 @@ _SLS Total Base LY =
         CALCULATE(
             SUM('a03_e2e_customer_data_m'[net_pay_amt]),
             TREATAS(__AllTierUsers, 'a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax_LY
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LY,
@@ -727,6 +756,7 @@ _Net Pay Qty Base Act =
 // 度量值: _Net Pay Qty Base Act
 // Display Folder: Base Metrics
 // 用途: 净出库件数本期基础值（用于 AUR 分母 / UPT 分子）
+// 会员筛选: 两档 is_member=0；Member VIC 用 KEEPFILTERS 追加 register_date<=本度量对应期最后财月末
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min/Max]（Step1 end period 当月）,
 //       Slicer_Time_Frame_Min[TimeFrame_Min] + Slicer_Time_Frame_Max[TimeFrame_Max]（Step2 所选时间范围）,
@@ -755,7 +785,11 @@ _Net Pay Qty Base Act =
     VAR __TierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax
@@ -766,29 +800,16 @@ _Net Pay Qty Base Act =
         CALCULATE(
             SUM('a03_e2e_customer_data_m'[net_pay_qty]),
             TREATAS(__TierUsers, 'a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
 
-/* ── 旧逻辑：Step1+Step2 合并为 end period 当月单步聚合（2026-09-12 弃用，保留备查）──
-   当时口径理解: 经业务确认 Step2 "所选时间范围" = end period 当月（与 Step1 一致），直接单步 SUM。
-   如需回退: 注释掉上方 Step1/Step2 分步实现（含 VAR 定义与 RETURN 块），取消本块注释即可。
-    VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
-    VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
-    VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
-
-    RETURN
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_qty]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
-            'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
-        )
-── 旧逻辑结束 ── */
 ```
 
 #### 4.1.10 _Net Pay Qty Base LY（净出库件数去年同期基础值，Step1+Step2 分步）
@@ -799,6 +820,7 @@ _Net Pay Qty Base LY =
 // 度量值: _Net Pay Qty Base LY
 // Display Folder: Base Metrics
 // 用途: 净出库件数去年同期基础值（备用，当前 YOY 指标未直接使用）
+// 会员筛选: 两档 is_member=0；Member VIC 用 KEEPFILTERS 追加 register_date<=本度量对应期最后财月末
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY/Max_LY]（Step1 LY end period 当月）,
 //       Slicer_Time_Frame_Min[TimeFrame_Min_LY] + Slicer_Time_Frame_Max[TimeFrame_Max_LY]（Step2 LY 所选时间范围）,
@@ -826,7 +848,11 @@ _Net Pay Qty Base LY =
     VAR __TierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax_LY
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax_LY
@@ -837,29 +863,16 @@ _Net Pay Qty Base LY =
         CALCULATE(
             SUM('a03_e2e_customer_data_m'[net_pay_qty]),
             TREATAS(__TierUsers, 'a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax_LY
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LY
         )
 
-/* ── 旧逻辑：Step1+Step2 合并为 LY end period 当月单步聚合（2026-09-12 弃用，保留备查）──
-   当时口径理解: Step2 时间范围 = LY end period 当月（与 Step1 一致），直接单步 SUM。
-   如需回退: 注释掉上方 Step1/Step2 分步实现（含 VAR 定义与 RETURN 块），取消本块注释即可。
-    VAR __LYMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY])
-    VAR __LYMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY])
-    VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
-
-    RETURN
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_qty]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __LYMin,
-            'a03_e2e_customer_data_m'[data_date] <= __LYMax
-        )
-── 旧逻辑结束 ── */
 ```
 
 #### 4.1.11 _Net Pay Order Cnt Base Act（净出库订单数本期基础值，Step1+Step2 分步）
@@ -870,6 +883,7 @@ _Net Pay Order Cnt Base Act =
 // 度量值: _Net Pay Order Cnt Base Act
 // Display Folder: Base Metrics
 // 用途: 净出库订单数本期基础值（用于 UPT 分母 / Freq. 分子）
+// 会员筛选: 两档 is_member=0；Member VIC 用 KEEPFILTERS 追加 register_date<=本度量对应期最后财月末
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min/Max]（Step1 end period 当月）,
 //       Slicer_Time_Frame_Min[TimeFrame_Min] + Slicer_Time_Frame_Max[TimeFrame_Max]（Step2 所选时间范围）,
@@ -898,7 +912,11 @@ _Net Pay Order Cnt Base Act =
     VAR __TierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax
@@ -909,29 +927,16 @@ _Net Pay Order Cnt Base Act =
         CALCULATE(
             SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
             TREATAS(__TierUsers, 'a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
 
-/* ── 旧逻辑：Step1+Step2 合并为 end period 当月单步聚合（2026-09-12 弃用，保留备查）──
-   当时口径理解: 经业务确认 Step2 "所选时间范围" = end period 当月（与 Step1 一致），直接单步 SUM。
-   如需回退: 注释掉上方 Step1/Step2 分步实现（含 VAR 定义与 RETURN 块），取消本块注释即可。
-    VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
-    VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
-    VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
-
-    RETURN
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
-            'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
-        )
-── 旧逻辑结束 ── */
 ```
 
 #### 4.1.12 _Net Pay Order Cnt Base LY（净出库订单数去年同期基础值，Step1+Step2 分步）
@@ -942,6 +947,7 @@ _Net Pay Order Cnt Base LY =
 // 度量值: _Net Pay Order Cnt Base LY
 // Display Folder: Base Metrics
 // 用途: 净出库订单数去年同期基础值（备用，当前 YOY 指标未直接使用）
+// 会员筛选: 两档 is_member=0；Member VIC 用 KEEPFILTERS 追加 register_date<=本度量对应期最后财月末
 // 依赖: a03_e2e_customer_data_m,
 //       Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY/Max_LY]（Step1 LY end period 当月）,
 //       Slicer_Time_Frame_Min[TimeFrame_Min_LY] + Slicer_Time_Frame_Max[TimeFrame_Max_LY]（Step2 LY 所选时间范围）,
@@ -969,7 +975,11 @@ _Net Pay Order Cnt Base LY =
     VAR __TierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax_LY
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax_LY
@@ -980,29 +990,16 @@ _Net Pay Order Cnt Base LY =
         CALCULATE(
             SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
             TREATAS(__TierUsers, 'a03_e2e_customer_data_m'[user_id]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            KEEPFILTERS(
+                __IsMemberFilter = 0
+                    || 'a03_e2e_customer_data_m'[register_date] <= __EndPeriodMax_LY
+            ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax_LY
         )
 
-/* ── 旧逻辑：Step1+Step2 合并为 LY end period 当月单步聚合（2026-09-12 弃用，保留备查）──
-   当时口径理解: Step2 时间范围 = LY end period 当月（与 Step1 一致），直接单步 SUM。
-   如需回退: 注释掉上方 Step1/Step2 分步实现（含 VAR 定义与 RETURN 块），取消本块注释即可。
-    VAR __LYMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min_LY])
-    VAR __LYMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY])
-    VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
-
-    RETURN
-        CALCULATE(
-            SUM('a03_e2e_customer_data_m'[net_pay_order_cnt]),
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
-            'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
-            'a03_e2e_customer_data_m'[data_date] >= __LYMin,
-            'a03_e2e_customer_data_m'[data_date] <= __LYMax
-        )
-── 旧逻辑结束 ── */
 ```
 
 ### 4.2 对外 Value 层 — 12 个独立度量值
@@ -1706,7 +1703,7 @@ SLS% vs LY Value Cell SVG Icon =
 │  a03_e2e_customer_data_m（月度事实表）                               │
 │  字段: data_date, platform, shop_info_id, user_id, is_member,       │
 │        is_employee, customer_tier, net_pay_amt, net_pay_qty,        │
-│        net_pay_order_cnt                                            │
+│        net_pay_order_cnt, register_date                             │
 │                                                                     │
 │  DIM_Row_VIC_Tier（1:N 维度表，Row Label 行标签）                │
 │  与 a03_e2e_customer_data_m[customer_tier] 1:N 关系                 │
@@ -1805,14 +1802,14 @@ SLS% vs LY Value Cell SVG Icon =
 ## 7. 注意事项
 
 1. **两套时间范围筛选（关键逻辑，2026-09-12 修订）**：SLS 类指标（指标 5/7/9/10/11/12）分两套时间范围——Step 1 用 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Min]` ~ `[Last_Fiscal_Month_Max]`（end period 当月，框定 user_id），Step 2 用 `Slicer_Time_Frame_Min[TimeFrame_Min]` ~ `Slicer_Time_Frame_Max[TimeFrame_Max]`（所选时间范围，聚合）；LY 版本分别用 `Last_Fiscal_Month_*_LY` 与 `TimeFrame_Min_LY/TimeFrame_Max_LY`。Customer 类指标（指标 1~4、6 及各分母）仍为单步 end period 当月口径。这些字段已由 Slicer_Time_Frame_Min/Max 日期维度表预算，无需在 DAX 中重复实现。
-2. **is_member / is_employee 双重筛选（关键逻辑）**：所有指标均应用 `is_member = SELECTEDVALUE(IsMemberFilter[IsMember], 0)` 和 `is_employee = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])` 筛选。默认值：is_member=0（TTL VIC），is_employee=1（Yes）。
+2. **is_member / is_employee 双重筛选（关键逻辑）**：保留 `SELECTEDVALUE(IsMemberFilter[IsMember], 0)` 作为会员模式开关；事实表两档均筛 `is_member = 0`。TTL VIC 不追加注册日期限制；Member VIC 通过 `KEEPFILTERS` 追加 `register_date <= 对应本期/LY 最后财月末`，单步计算及 Step1/Step2 均生效。员工筛选继续使用 `VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])` 配合 `in`，不改变原行为。
 3. **分组维度自动传递（关键逻辑）**：
 
    - `customer_tier` 通过 DIM_Row_VIC_Tier 与 a03_e2e_customer_data_m 的 1:N 模型关系自动传递筛选，DAX 度量值无需显式处理分组
    - `platform`、`shop_info_id` 直接拉取事实表字段，模型自动传递筛选
    - 三者均为模型自动传递，DAX 无需显式处理
 4. **指标 0 不需要度量值**：Tier 是行维度本身（`DIM_Row_VIC_Tier[Row Label]` 字段直接拉取，图片展示行标签），不需要 Value/Display 度量值。本方案只对指标 1~12 输出度量值。
-5. **SLS 的 Step 1 + Step 2 分步实现（关键逻辑，2026-09-12 修订）**：口径文档指标 5/7/9/10/11/12 均采用 Step1（dt=end period 框定 user_id 范围）+ Step2（该 user_id 在所选时间范围 sum）的口径。两步时间范围不一致（Step1 = end period 当月，Step2 = 所选时间范围 TimeFrame 区间），**不能合并区间计算**，必须分步：Step1 用 `CALCULATETABLE(VALUES(user_id), ...)` 框定当前行 customer_tier 的 user_id 集合；Step2 用 `TREATAS(__TierUsers, a03_e2e_customer_data_m[user_id])` 将集合传递回事实表，在 TimeFrame 区间聚合。Step2 **不移除任何分组维度筛选**——customer_tier / platform / shop_info_id 行上下文由 DIM_Row_VIC_Tier[Row Label] 与事实表的 1:N 模型关系自动传递保留（与 Step1 一致，分组维度无需显式 DAX 处理；若在 Step2 加 REMOVEFILTERS 会破坏行上下文分组传递，各 Tier 行将算出移除分组后的全量值）；仅占比类分母（_Customer Total Base 4.1.3/4.1.4、_SLS Total Base 4.1.7/4.1.8）才用 `ALLSELECTED('DIM_Row_VIC_Tier')` 移除行上下文 tier 筛选。历史"合并实现"口径见 1.4 节备查块与各 Base 度量值块注释。
+5. **SLS 的 Step 1 + Step 2 分步实现（关键逻辑，2026-09-12 修订）**：口径文档指标 5/7/9/10/11/12 均采用 Step1（dt=end period 框定 user_id 范围）+ Step2（该 user_id 在所选时间范围 sum）的口径。两步时间范围不一致（Step1 = end period 当月，Step2 = 所选时间范围 TimeFrame 区间），**不能合并区间计算**，必须分步：Step1 用 `CALCULATETABLE(VALUES(user_id), ...)` 框定当前行 customer_tier 的 user_id 集合；Step2 用 `TREATAS(__TierUsers, a03_e2e_customer_data_m[user_id])` 将集合传递回事实表，在 TimeFrame 区间聚合。Step2 **不移除任何分组维度筛选**——customer_tier / platform / shop_info_id 行上下文由 DIM_Row_VIC_Tier[Row Label] 与事实表的 1:N 模型关系自动传递保留（与 Step1 一致，分组维度无需显式 DAX 处理；若在 Step2 加 REMOVEFILTERS 会破坏行上下文分组传递，各 Tier 行将算出移除分组后的全量值）；仅占比类分母（_Customer Total Base 4.1.3/4.1.4、_SLS Total Base 4.1.7/4.1.8）才用 `ALLSELECTED('DIM_Row_VIC_Tier')` 移除行上下文 tier 筛选。会员筛选在两步中均执行，注册截止日使用对应 end period 财月末，见 1.2 节。
 6. **SLS ÷ 1000（关键逻辑）**：口径文档第 125 行明确"报表上看到的数值 = 实际金额 ÷ 1,000"。SLS Value 度量值中 `DIVIDE(DIVIDE(__Base, __FXRate), 1000)`，先÷汇率再÷1000。Display 格式化为 `#,##0`（不再拼接 "k"），严格遵循口径文档数据格式。
 7. **货币符号与汇率（关键逻辑）**：
 
@@ -1850,3 +1847,20 @@ SLS% vs LY Value Cell SVG Icon =
     - 新增 SLS% 分母的 ALLSELECTED('DIM_Row_VIC_Tier') 机制（移除行上下文 tier 筛选，保留外部切片器影响）
     - 派生指标类型由 VIC Repurchase% / VIC Retention% 简化为 Customer No. vs LY / Customer% vs LY / SLS vs LY / SLS% vs LY
     - 字段筛选由 is_fy_vic / is_fy_retention_vic / last_12m_net_pay_amt 改为无 VIC 标识字段筛选（直接按 customer_tier 分组）
+19. **注册日期类型与空值**：`register_date` 和财月末字段应为 Date，日期切片器需提供有效单值。仓库事实查询包含将 `register_date` 转为 Date 的版本，实际模型仍需核验；本次按口径直接使用 `<=`，未增加 `NOT ISBLANK`，BLANK 日期可能通过比较，其业务处理需另行确认。
+
+---
+
+## 8. 会员筛选验收用例
+
+> 以下为 Power BI 实际验收步骤与预期，非已执行的 DAX 引擎测试；测试时固定相同的员工、Tier、平台、店铺及日期上下文。
+
+| 场景 | 操作与预期 |
+|---|---|
+| TTL VIC（0） | 与调整前 0 档结果一致：只筛事实表 is_member=0，不因 register_date 新增限制 |
+| Member VIC（1） | 只纳入 is_member=0 且注册日期不晚于对应财月末的记录；等于截止日纳入，晚于截止日排除，is_member=1 的事实记录仍排除 |
+| LY 截止日 | 使用注册日期介于 LY 财月末与本期财月末之间的记录：不因满足本期截止日而被误纳入 LY；其他条件满足时可纳入本期 |
+| 已有注册日期筛选 | 在事实表 register_date 上添加范围筛选：0 档保留该范围，1 档与对应财月末上限取交集，不覆盖原范围 |
+| Step1/Step2 双步 | 检查 SLS、SLS Total、Qty、OrderCnt 两步均有会员条件；仅改变起始期时 Step2 区间随之变化，注册截止日不变；不得把 Step2 压缩为 end period 当月 |
+| 占比与派生指标 | Customer% / SLS% 分子分母使用同一会员规则与对应期间截止日，保留原 ALLSELECTED；YOY、ACV、AUR、UPT、Freq. 继续由原基础度量引用计算 |
+| 默认与空值 | 没有唯一会员选值时回退 0；单独检查 register_date 为 BLANK 的数据，不假定 KEEPFILTERS 会自动排除空值 |

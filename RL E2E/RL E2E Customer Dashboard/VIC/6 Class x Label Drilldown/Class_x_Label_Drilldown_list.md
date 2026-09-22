@@ -6,6 +6,7 @@
 > 口径来源: 口径文档/Class x Label Drilldown.md（子模块 Class x Label Drilldown，4 个 VIC No. 指标）
 > 参考实现 1（end period 时间筛选 + is_member/is_employee 双重筛选 + DIM_Row_VIC_Tier 模型自动传递）: VIC/4 VIC Segment/VIC_Segment_Table.md
 > 参考实现 2（dt ∈ [__TimeMin, __TimeMax] 全局时间范围筛选）: Member/Customer_Member_Indicator.md
+> revised: 2026-09-21（is_member 筛选重构：两档事实筛选统一为 a03[is_member]=0、t05[is_member] IN {0,1}；Member VIC 追加 register_date <= end period 末日，采用哨兵日期恒真模式，Step 1/Step 2 均生效；不保留旧逻辑注释）
 
 ---
 
@@ -76,32 +77,30 @@ Step 2 应用全局时间范围筛选到 `t05_customer_order_data_d[dt]`：
 > **is_member 使用**: `VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)`，默认 TTL VIC
 > **is_employee 使用**: `VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])`，默认 Yes
 
-Step 1（a03 表）应用这两个筛选：
+is_member 筛选规则（TTL/Member 两档统一，Member VIC 通过注册日期上限区分人群）：
 
-- `a03[is_member] = __IsMemberFilter`
-- `a03[is_employee] in __IsEmployeeFilter`
+- Step 1（a03 表）：`is_member = 0`（两档均筛 is_member = 0），Member VIC 追加 `register_date <= end_period_date`
+- Step 2（t05 表）：`is_member IN {0, 1}`（两档均取全部会员身份；**is_employee 不涉及，因 t05 表无 is_employee 字段**），Member VIC 追加 `register_date <= end_period_date`
+- `end_period_date` = 所选时间范围最后财月的最后一天，读取 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]`
 
-Step 2（t05 表）同样应用 `is_member` 筛选（**is_employee 不涉及，因 t05 表无 is_employee 字段**），按 `__IsMemberFilter` 值分支处理：
+| `__IsMemberFilter` 值 | 含义       | a03[is_member] | t05[is_member] | register_date 上限（Step 1 + Step 2 均应用） |
+| --------------------- | ---------- | -------------- | -------------- | -------------------------------------------- |
+| 0                     | TTL VIC    | `= 0`          | `IN {0, 1}`    | 不设限（哨兵日期恒真）                       |
+| 1                     | Member VIC | `= 0`          | `IN {0, 1}`    | `<= Last_Fiscal_Month_Max`（end period 末日）|
 
-| `__IsMemberFilter` 值 | 含义       | t05[is_member] 筛选条件 | 说明                                       |
-| --------------------- | ---------- | ----------------------- | ------------------------------------------ |
-| 0                     | TTL VIC    | `t05[is_member] IN {0, 1}` | 全部会员身份（含会员与非会员），等同于无筛选 |
-| 1                     | 会员 VIC   | `t05[is_member] = 1`    | 仅统计会员订单                             |
-
-**Step 2 中 is_member 筛选的 DAX 表达式**：
+**register_date 上限变量化（哨兵日期恒真模式，参考 模版复用/模块关键点提炼.md 第 17 点）**：上限抽象为变量 `__EndPeriodDate`——Member 档取真实期末日，TTL 档取哨兵日期 `DATE(9999,12,31)`，谓词 `register_date <= __EndPeriodDate` 在 TTL 档恒真，等价于"不设限"，两档谓词书写统一：
 
 ```dax
-(
-    __IsMemberFilter = 0
-        && 't05_customer_order_data_d'[is_member] IN { 0, 1 }
-)
-    || (
-        __IsMemberFilter = 1
-            && 't05_customer_order_data_d'[is_member] = 1
+VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+VAR __EndPeriodDate =
+    IF(
+        __IsMemberFilter = 1,
+        SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]),
+        DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
     )
 ```
 
-> 该条件作为 CALCULATE 的筛选参数之一，与其他筛选（dt 时间范围、TREATAS 传递的 user_id 集合）并列叠加。
+> `is_member` 与 `register_date` 谓词作为 CALCULATE 的筛选参数，与其他筛选（dt 时间范围、TREATAS 传递的 user_id 集合、is_employee）并列叠加；Step 1 与 Step 2 共用同一 `__EndPeriodDate`。
 
 ### 1.5 关键特殊逻辑五：分组维度跨表传递（通过共享切片器维度表）
 
@@ -176,9 +175,9 @@ Step 2（t05 表）同样应用 `is_member` 筛选（**is_employee 不涉及，�
 | 对象     | 名称                                                                                              | 出处                   |
 | -------- | ------------------------------------------------------------------------------------------------- | ---------------------- |
 | 事实表 1 | a03_e2e_customer_data_m                                                                           | 口径文档全局逻辑       |
-| 关键字段 1 | data_date, platform, shop_name_en, user_id, is_member, is_employee, customer_tier, is_retention_vic, is_upgrade_vic, is_direct_vic, is_new_vic | 口径文档子模块各指标 |
+| 关键字段 1 | data_date, platform, shop_name_en, user_id, is_member, register_date, is_employee, customer_tier, is_retention_vic, is_upgrade_vic, is_direct_vic, is_new_vic | 口径文档子模块各指标 |
 | 事实表 2 | t05_customer_order_data_d                                                                         | 口径文档子模块各指标   |
-| 关键字段 2 | dt, platform, shop_name, user_id, category_summary, framework, product_id, brand                         | 口径文档子模块各指标   |
+| 关键字段 2 | dt, platform, shop_name, user_id, is_member, register_date, category_summary, framework, product_id, brand                         | 口径文档子模块各指标   |
 
 > `a03_e2e_customer_data_m` 为月度聚合表，`data_date` 为月末日期，用于 Step 1 的 end period 时间筛选。
 > `t05_customer_order_data_d` 为订单明细表，`dt` 为订单日期，用于 Step 2 的全局时间范围筛选。
@@ -270,7 +269,7 @@ VIC No. (Net_New VIC) Display             ← integer 格式 #,##0
 | Slicer_Time_Frame_Min（Step 2 全局下限）  | 断开维度，SELECTEDVALUE 读取 `TimeFrame_Min`                              | `t05[dt] >= __TimeMin`                                          |
 | Slicer_Time_Frame_Max（Step 2 全局上限）  | 断开维度，SELECTEDVALUE 读取 `TimeFrame_Max`                              | `t05[dt] <= __TimeMax`                                          |
 | Slicer_Is_Employee_Selection              | 断开维度，SELECTEDVALUE 读取 `IsEmployee_Code`                            | `a03[is_employee] in __IsEmployeeFilter`（仅 Step 1 应用，t05 表无此字段） |
-| IsMemberFilter                            | 断开维度，SELECTEDVALUE 读取 `IsMember`                                   | Step 1: `a03[is_member] = __IsMemberFilter`；Step 2: 按 `__IsMemberFilter` 分支过滤 `t05[is_member]`（=0 时 IN {0,1}，=1 时 =1） |
+| IsMemberFilter                            | 断开维度，SELECTEDVALUE 读取 `IsMember`                                   | 两档统一：Step 1 `a03[is_member] = 0` + `a03[register_date] <= __EndPeriodDate`；Step 2 `t05[is_member] IN {0,1}` + `t05[register_date] <= __EndPeriodDate`（Member VIC: end period 末日上限；TTL VIC: 哨兵日期恒真） |
 | Slicer_Platform_Selection                 | 1:N 维度，桥接两表 platform 字段                                          | 模型自动传递 platform 筛选到 a03 和 t05                                |
 | Slicer_Store_Name                         | 1:N 维度，桥接两表 shop 字段（a03[shop_name_en] / t05[shop_name]）        | 模型自动传递 shop 筛选到 a03 和 t05                                     |
 | 分组字段（tier / category_summary / framework / product_id/ brand） | 视觉对象轴/行维度直接拉取，仅影响所在事实表聚合                | DAX 无需显式处理（无法跨表传递）                                         |
@@ -278,15 +277,15 @@ VIC No. (Net_New VIC) Display             ← integer 格式 #,##0
 ### 3.4 指标计算公式与数据格式
 
 > **统一筛选规则**（4 个指标共用，仅 Step 1 的 VIC 标识字段不同）：
-> - Step 1（a03 表）：`data_date ∈ end period` + `is_xxx_vic=1` + `is_member=__IsMemberFilter` + `is_employee=__IsEmployeeFilter`
-> - Step 2（t05 表）：`dt ∈ 全局时间范围` + `user_id ∈ Step1`（TREATAS）+ `is_member` 按 `__IsMemberFilter` 分支过滤（=0 时 IN {0,1}，=1 时 =1）
+> - Step 1（a03 表）：`data_date ∈ end period` + `is_xxx_vic=1` + `is_member=0` + `register_date <= __EndPeriodDate` + `is_employee=__IsEmployeeFilter`
+> - Step 2（t05 表）：`dt ∈ 全局时间范围` + `user_id ∈ Step1`（TREATAS）+ `is_member IN {0,1}` + `register_date <= __EndPeriodDate`
 
 | 序号 | 指标名称                          | VIC 标识字段       | 计算公式（两步法）                                                                                                                              | 数据类型 | 数据格式  |
 | ---- | --------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------- |
-| 1    | VIC No.（Net_Retention VIC）     | is_retention_vic=1 | Step1: VALUES(a03[user_id]) where is_retention_vic=1, dt=end period, is_member=__IsMemberFilter, is_employee=__IsEmployeeFilter; Step2: DISTINCTCOUNT(t05[user_id]) where dt=全局时间范围, user_id ∈ Step1, t05[is_member] 按 __IsMemberFilter 分支过滤 | integer  | `#,##0`   |
-| 2    | VIC No.（Net_T4-5 Upgrade）       | is_upgrade_vic=1   | Step1: VALUES(a03[user_id]) where is_upgrade_vic=1, dt=end period, is_member=__IsMemberFilter, is_employee=__IsEmployeeFilter; Step2: DISTINCTCOUNT(t05[user_id]) where dt=全局时间范围, user_id ∈ Step1, t05[is_member] 按 __IsMemberFilter 分支过滤   | integer  | `#,##0`   |
-| 3    | VIC No.（Net_Direct VIC）         | is_direct_vic=1    | Step1: VALUES(a03[user_id]) where is_direct_vic=1, dt=end period, is_member=__IsMemberFilter, is_employee=__IsEmployeeFilter; Step2: DISTINCTCOUNT(t05[user_id]) where dt=全局时间范围, user_id ∈ Step1, t05[is_member] 按 __IsMemberFilter 分支过滤    | integer  | `#,##0`   |
-| 4    | VIC No.（Net_New VIC）            | is_new_vic=1       | Step1: VALUES(a03[user_id]) where is_new_vic=1, dt=end period, is_member=__IsMemberFilter, is_employee=__IsEmployeeFilter; Step2: DISTINCTCOUNT(t05[user_id]) where dt=全局时间范围, user_id ∈ Step1, t05[is_member] 按 __IsMemberFilter 分支过滤       | integer  | `#,##0`   |
+| 1    | VIC No.（Net_Retention VIC）     | is_retention_vic=1 | Step1: VALUES(a03[user_id]) where is_retention_vic=1, dt=end period, is_member=0, register_date<=__EndPeriodDate, is_employee=__IsEmployeeFilter; Step2: DISTINCTCOUNT(t05[user_id]) where dt=全局时间范围, user_id ∈ Step1, t05[is_member] IN {0,1}, t05[register_date]<=__EndPeriodDate | integer  | `#,##0`   |
+| 2    | VIC No.（Net_T4-5 Upgrade）       | is_upgrade_vic=1   | Step1: VALUES(a03[user_id]) where is_upgrade_vic=1, dt=end period, is_member=0, register_date<=__EndPeriodDate, is_employee=__IsEmployeeFilter; Step2: DISTINCTCOUNT(t05[user_id]) where dt=全局时间范围, user_id ∈ Step1, t05[is_member] IN {0,1}, t05[register_date]<=__EndPeriodDate   | integer  | `#,##0`   |
+| 3    | VIC No.（Net_Direct VIC）         | is_direct_vic=1    | Step1: VALUES(a03[user_id]) where is_direct_vic=1, dt=end period, is_member=0, register_date<=__EndPeriodDate, is_employee=__IsEmployeeFilter; Step2: DISTINCTCOUNT(t05[user_id]) where dt=全局时间范围, user_id ∈ Step1, t05[is_member] IN {0,1}, t05[register_date]<=__EndPeriodDate    | integer  | `#,##0`   |
+| 4    | VIC No.（Net_New VIC）            | is_new_vic=1       | Step1: VALUES(a03[user_id]) where is_new_vic=1, dt=end period, is_member=0, register_date<=__EndPeriodDate, is_employee=__IsEmployeeFilter; Step2: DISTINCTCOUNT(t05[user_id]) where dt=全局时间范围, user_id ∈ Step1, t05[is_member] IN {0,1}, t05[register_date]<=__EndPeriodDate       | integer  | `#,##0`   |
 
 ---
 
@@ -317,14 +316,14 @@ VIC No. (Net_Retention VIC) Value =
 //   Step 1:
 //     - a03[data_date] ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //     - a03[is_retention_vic] = 1
-//     - a03[is_member] = __IsMemberFilter（默认 0 = TTL VIC）
+//     - a03[is_member] = 0（TTL/Member 两档均筛 is_member = 0，默认 TTL VIC）
+//     - a03[register_date] <= __EndPeriodDate（Member VIC: end period 末日上限；TTL VIC: 哨兵日期恒真）
 //     - a03[is_employee] in __IsEmployeeFilter（默认 所有）
 //   Step 2:
 //     - t05[dt] ∈ [TimeFrame_Min, TimeFrame_Max]（全局时间范围）
 //     - t05[user_id] ∈ Step 1 框定的 user_id 集合（TREATAS 传递）
-//     - t05[is_member] 按 __IsMemberFilter 分支过滤：
-//         __IsMemberFilter = 0（TTL VIC）→ t05[is_member] IN {0, 1}
-//         __IsMemberFilter = 1（会员 VIC）→ t05[is_member] = 1
+//     - t05[is_member] IN {0, 1}（TTL/Member 两档均取全部会员身份）
+//     - t05[register_date] <= __EndPeriodDate（Member VIC: end period 末日上限；TTL VIC: 哨兵日期恒真）
 //     - is_employee 不涉及（t05 表无 is_employee 字段，仅 Step 1 的 a03 表应用）
 // 聚合粒度: Step1 VALUES(user_id) + Step2 DISTINCTCOUNT(user_id)
 // 分组维度: platform, shop_info_id, tier, category_summary, framework, brand, product_id
@@ -341,22 +340,29 @@ VIC No. (Net_Retention VIC) Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     VAR __VICUserIds =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
 
     // ── Step 2: 在 t05 中按全局时间范围 + user_id 集合做 DISTINCTCOUNT ──
-    // 按 IsMember 对 t05[is_member] 做过滤：
-    //   __IsMemberFilter = 0（TTL VIC）→ t05[is_member] IN {0, 1}（全部会员身份）
-    //   __IsMemberFilter = 1（会员 VIC）→ t05[is_member] = 1（仅会员）
+    // TTL/Member 两档均筛 t05[is_member] IN {0, 1}（全部会员身份）
+    // Member VIC（IsMember=1）追加 register_date <= end period 末日；TTL VIC 哨兵日期恒真
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
 
@@ -367,14 +373,8 @@ VIC No. (Net_Retention VIC) Value =
             't05_customer_order_data_d'[dt] <= __TimeMax,
             't05_customer_order_data_d'[net_pay_amt] > 0,
             TREATAS(__VICUserIds, 't05_customer_order_data_d'[user_id]),
-            (
-                __IsMemberFilter = 0
-                    && 't05_customer_order_data_d'[is_member] IN { 0, 1 }
-            )
-                || (
-                    __IsMemberFilter = 1
-                        && 't05_customer_order_data_d'[is_member] = 1
-                )
+            't05_customer_order_data_d'[is_member] IN { 0, 1 },
+            't05_customer_order_data_d'[register_date] <= __EndPeriodDate
         )
 
     RETURN
@@ -404,11 +404,14 @@ VIC No. (Net_T4-5 Upgrade) Value =
 //   Step 1:
 //     - a03[data_date] ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //     - a03[is_upgrade_vic] = 1
-//     - a03[is_member] = __IsMemberFilter（默认 0 = TTL VIC）
+//     - a03[is_member] = 0（TTL/Member 两档均筛 is_member = 0，默认 TTL VIC）
+//     - a03[register_date] <= __EndPeriodDate（Member VIC: end period 末日上限；TTL VIC: 哨兵日期恒真）
 //     - a03[is_employee] in __IsEmployeeFilter（默认 所有值）
 //   Step 2:
 //     - t05[dt] ∈ [TimeFrame_Min, TimeFrame_Max]（全局时间范围）
 //     - t05[user_id] ∈ Step 1 框定的 user_id 集合（TREATAS 传递）
+//     - t05[is_member] IN {0, 1}（TTL/Member 两档均取全部会员身份）
+//     - t05[register_date] <= __EndPeriodDate（Member VIC: end period 末日上限；TTL VIC: 哨兵日期恒真）
 // 聚合粒度: Step1 VALUES(user_id) + Step2 DISTINCTCOUNT(user_id)
 // 分组维度: platform, shop_info_id, tier, category_summary, framework, brand, product_id
 //          由视觉对象轴/行维度直接拉取对应表字段，模型自动传递筛选，DAX 无需显式处理
@@ -417,22 +420,29 @@ VIC No. (Net_T4-5 Upgrade) Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     VAR __VICUserIds =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
 
     // ── Step 2: 在 t05 中按全局时间范围 + user_id 集合做 DISTINCTCOUNT ──
-    // 按 IsMember 对 t05[is_member] 做过滤：
-    //   __IsMemberFilter = 0（TTL VIC）→ t05[is_member] IN {0, 1}（全部会员身份）
-    //   __IsMemberFilter = 1（会员 VIC）→ t05[is_member] = 1（仅会员）
+    // TTL/Member 两档均筛 t05[is_member] IN {0, 1}（全部会员身份）
+    // Member VIC（IsMember=1）追加 register_date <= end period 末日；TTL VIC 哨兵日期恒真
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
 
@@ -443,14 +453,8 @@ VIC No. (Net_T4-5 Upgrade) Value =
             't05_customer_order_data_d'[dt] <= __TimeMax,
             't05_customer_order_data_d'[net_pay_amt] > 0,
             TREATAS(__VICUserIds, 't05_customer_order_data_d'[user_id]),
-            (
-                __IsMemberFilter = 0
-                    && 't05_customer_order_data_d'[is_member] IN { 0, 1 }
-            )
-                || (
-                    __IsMemberFilter = 1
-                        && 't05_customer_order_data_d'[is_member] = 1
-                )
+            't05_customer_order_data_d'[is_member] IN { 0, 1 },
+            't05_customer_order_data_d'[register_date] <= __EndPeriodDate
         )
 
     RETURN
@@ -480,11 +484,14 @@ VIC No. (Net_Direct VIC) Value =
 //   Step 1:
 //     - a03[data_date] ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //     - a03[is_direct_vic] = 1
-//     - a03[is_member] = __IsMemberFilter（默认 0 = TTL VIC）
+//     - a03[is_member] = 0（TTL/Member 两档均筛 is_member = 0，默认 TTL VIC）
+//     - a03[register_date] <= __EndPeriodDate（Member VIC: end period 末日上限；TTL VIC: 哨兵日期恒真）
 //     - a03[is_employee] in __IsEmployeeFilter（默认 所有）
 //   Step 2:
 //     - t05[dt] ∈ [TimeFrame_Min, TimeFrame_Max]（全局时间范围）
 //     - t05[user_id] ∈ Step 1 框定的 user_id 集合（TREATAS 传递）
+//     - t05[is_member] IN {0, 1}（TTL/Member 两档均取全部会员身份）
+//     - t05[register_date] <= __EndPeriodDate（Member VIC: end period 末日上限；TTL VIC: 哨兵日期恒真）
 // 聚合粒度: Step1 VALUES(user_id) + Step2 DISTINCTCOUNT(user_id)
 // 分组维度: platform, shop_info_id, tier, category_summary, framework, brand, product_id
 //          由视觉对象轴/行维度直接拉取对应表字段，模型自动传递筛选，DAX 无需显式处理
@@ -493,22 +500,29 @@ VIC No. (Net_Direct VIC) Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     VAR __VICUserIds =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
 
     // ── Step 2: 在 t05 中按全局时间范围 + user_id 集合做 DISTINCTCOUNT ──
-    // 按 IsMember 对 t05[is_member] 做过滤：
-    //   __IsMemberFilter = 0（TTL VIC）→ t05[is_member] IN {0, 1}（全部会员身份）
-    //   __IsMemberFilter = 1（会员 VIC）→ t05[is_member] = 1（仅会员）
+    // TTL/Member 两档均筛 t05[is_member] IN {0, 1}（全部会员身份）
+    // Member VIC（IsMember=1）追加 register_date <= end period 末日；TTL VIC 哨兵日期恒真
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
 
@@ -519,14 +533,8 @@ VIC No. (Net_Direct VIC) Value =
             't05_customer_order_data_d'[dt] <= __TimeMax,
             't05_customer_order_data_d'[net_pay_amt] > 0,
             TREATAS(__VICUserIds, 't05_customer_order_data_d'[user_id]),
-            (
-                __IsMemberFilter = 0
-                    && 't05_customer_order_data_d'[is_member] IN { 0, 1 }
-            )
-                || (
-                    __IsMemberFilter = 1
-                        && 't05_customer_order_data_d'[is_member] = 1
-                )
+            't05_customer_order_data_d'[is_member] IN { 0, 1 },
+            't05_customer_order_data_d'[register_date] <= __EndPeriodDate
         )
 
     RETURN
@@ -556,11 +564,14 @@ VIC No. (Net_New VIC) Value =
 //   Step 1:
 //     - a03[data_date] ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
 //     - a03[is_new_vic] = 1
-//     - a03[is_member] = __IsMemberFilter（默认 0 = TTL VIC）
+//     - a03[is_member] = 0（TTL/Member 两档均筛 is_member = 0，默认 TTL VIC）
+//     - a03[register_date] <= __EndPeriodDate（Member VIC: end period 末日上限；TTL VIC: 哨兵日期恒真）
 //     - a03[is_employee] in __IsEmployeeFilter（默认 所有）
 //   Step 2:
 //     - t05[dt] ∈ [TimeFrame_Min, TimeFrame_Max]（全局时间范围）
 //     - t05[user_id] ∈ Step 1 框定的 user_id 集合（TREATAS 传递）
+//     - t05[is_member] IN {0, 1}（TTL/Member 两档均取全部会员身份）
+//     - t05[register_date] <= __EndPeriodDate（Member VIC: end period 末日上限；TTL VIC: 哨兵日期恒真）
 // 聚合粒度: Step1 VALUES(user_id) + Step2 DISTINCTCOUNT(user_id)
 // 分组维度: platform, shop_info_id, tier, category_summary, framework, brand, product_id
 //          由视觉对象轴/行维度直接拉取对应表字段，模型自动传递筛选，DAX 无需显式处理
@@ -569,22 +580,29 @@ VIC No. (Net_New VIC) Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= end period 末日
+    VAR __EndPeriodDate =
+        IF(
+            __IsMemberFilter = 1,
+            SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]),
+            DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
+        )
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
 
     VAR __VICUserIds =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_new_vic] = 1,
-            'a03_e2e_customer_data_m'[is_member] = __IsMemberFilter,
+            'a03_e2e_customer_data_m'[is_member] = 0,
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
         )
 
     // ── Step 2: 在 t05 中按全局时间范围 + user_id 集合做 DISTINCTCOUNT ──
-    // 按 IsMember 对 t05[is_member] 做过滤：
-    //   __IsMemberFilter = 0（TTL VIC）→ t05[is_member] IN {0, 1}（全部会员身份）
-    //   __IsMemberFilter = 1（会员 VIC）→ t05[is_member] = 1（仅会员）
+    // TTL/Member 两档均筛 t05[is_member] IN {0, 1}（全部会员身份）
+    // Member VIC（IsMember=1）追加 register_date <= end period 末日；TTL VIC 哨兵日期恒真
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
 
@@ -595,14 +613,8 @@ VIC No. (Net_New VIC) Value =
             't05_customer_order_data_d'[dt] <= __TimeMax,
             't05_customer_order_data_d'[net_pay_amt] > 0,
             TREATAS(__VICUserIds, 't05_customer_order_data_d'[user_id]),
-            (
-                __IsMemberFilter = 0
-                    && 't05_customer_order_data_d'[is_member] IN { 0, 1 }
-            )
-                || (
-                    __IsMemberFilter = 1
-                        && 't05_customer_order_data_d'[is_member] = 1
-                )
+            't05_customer_order_data_d'[is_member] IN { 0, 1 },
+            't05_customer_order_data_d'[register_date] <= __EndPeriodDate
         )
 
     RETURN
@@ -741,11 +753,11 @@ MAXX Direct VIC = MAXX(ALL(t05_customer_order_data_d[category_summary]),[VIC No.
 │                        数据源层                                      │
 │  a03_e2e_customer_data_m（月度事实表，Step 1）                       │
 │  字段: data_date, platform, shop_info_id, user_id, is_member,       │
-│        is_employee, customer_tier, is_retention_vic,                 │
+│        register_date, is_employee, customer_tier, is_retention_vic,  │
 │        is_upgrade_vic, is_direct_vic, is_new_vic                     │
 │                                                                     │
 │  t05_customer_order_data_d（订单明细表，Step 2）                     │
-│  字段: dt, platform, shop_name, user_id,                             │
+│  字段: dt, platform, shop_name, user_id, is_member, register_date,  │
 │        category_summary, framework, product_id, brand                      │
 │                                                                     │
 │  两表无直接模型关系（user_id 多对多），通过共享切片器维度表桥接：    │
@@ -846,9 +858,10 @@ MAXX Direct VIC = MAXX(ALL(t05_customer_order_data_d[category_summary]),[VIC No.
 ### 8.1 验证 SQL（以指标 1 — 留存VIC数量为例）
 
 ```sql
--- Step 1: 在 a03 中按 end period + is_retention_vic=1 框定 user_id 范围
+-- Step 1: 在 a03 中按 end period + is_retention_vic=1 + is_member=0 框定 user_id 范围
 -- 假设 end period 区间: Last_Fiscal_Month_Min='2026-09-01', Last_Fiscal_Month_Max='2026-09-30'
--- 假设 is_member=0 (TTL VIC), is_employee=1 (Yes)
+-- 假设 is_employee=1 (Yes)；两档均筛 a03[is_member]=0
+-- TTL VIC（IsMember=0）: register_date 不设限；Member VIC（IsMember=1）: register_date <= '2026-09-30'（end period 末日）
 WITH vic_users AS (
     SELECT DISTINCT user_id
     FROM a03_e2e_customer_data_m
@@ -856,21 +869,25 @@ WITH vic_users AS (
       AND is_member = 0
       AND is_employee = 1
       AND data_date BETWEEN '2026-09-01' AND '2026-09-30'
+      AND (
+          ${IsMemberMode} = 0
+          OR CAST(register_date AS DATE) <= CAST('${LastFiscalMonthMax}' AS DATE)
+      )
 )
--- Step 2: 在 t05 中按全局时间范围 + user_id ∈ Step1 范围 + is_member 分支过滤，统计 count(distinct user_id)
+-- Step 2: 在 t05 中按全局时间范围 + user_id ∈ Step1 范围 + is_member IN (0,1) + 注册日期上限，统计 count(distinct user_id)
 -- 假设全局时间范围: TimeFrame_Min='2026-01-01', TimeFrame_Max='2026-09-30'
--- 假设 __IsMemberFilter = 0（TTL VIC）→ t05[is_member] IN (0, 1)
--- 假设 __IsMemberFilter = 1（会员 VIC）→ t05[is_member] = 1
 SELECT COUNT(DISTINCT t.user_id) AS VIC_No_Retention
 FROM t05_customer_order_data_d t
 WHERE t.dt BETWEEN '2026-01-01' AND '2026-09-30'
   AND t.user_id IN (SELECT user_id FROM vic_users)
+  AND t.is_member IN (0, 1)                                        -- 两档均取全部会员身份
   AND (
-      (0 = 0 AND t.is_member IN (0, 1))   -- __IsMemberFilter = 0（TTL VIC）
-      -- (1 = 0 AND t.is_member IN (0, 1)) OR (1 = 1 AND t.is_member = 1)  -- __IsMemberFilter = 1（会员 VIC）取消注释启用
+      ${IsMemberMode} = 0
+      OR CAST(t.register_date AS DATE) <= CAST('${LastFiscalMonthMax}' AS DATE)
   );
 
 -- 指标 2/3/4 同理，仅将 is_retention_vic=1 替换为 is_upgrade_vic=1 / is_direct_vic=1 / is_new_vic=1
+-- 注：a03 的 register_date 源为 String，需 CAST(... AS DATE) 后与日期截止比较；t05 的 register_date 为 date 类型，可直接比较；执行前按实际 SQL 引擎与源字符串格式确认/适配
 ```
 
 ### 8.2 分组维度验证
@@ -884,6 +901,10 @@ WITH vic_users AS (
       AND is_member = 0
       AND is_employee = 1
       AND data_date BETWEEN '2026-09-01' AND '2026-09-30'
+      AND (
+          ${IsMemberMode} = 0
+          OR CAST(register_date AS DATE) <= CAST('${LastFiscalMonthMax}' AS DATE)
+      )
 )
 SELECT
     t.category_summary,
@@ -891,9 +912,10 @@ SELECT
 FROM t05_customer_order_data_d t
 WHERE t.dt BETWEEN '2026-01-01' AND '2026-09-30'
   AND t.user_id IN (SELECT user_id FROM vic_users)
+  AND t.is_member IN (0, 1)                                        -- 两档均取全部会员身份
   AND (
-      (0 = 0 AND t.is_member IN (0, 1))   -- __IsMemberFilter = 0（TTL VIC）
-      -- (1 = 0 AND t.is_member IN (0, 1)) OR (1 = 1 AND t.is_member = 1)  -- __IsMemberFilter = 1（会员 VIC）取消注释启用
+      ${IsMemberMode} = 0
+      OR CAST(t.register_date AS DATE) <= CAST('${LastFiscalMonthMax}' AS DATE)
   )
 GROUP BY t.category_summary
 ORDER BY VIC_No_Retention DESC;
@@ -925,22 +947,21 @@ ORDER BY VIC_No_Retention DESC;
 
 4. **全局时间范围筛选（关键逻辑）**：Step 2 使用 `Slicer_Time_Frame_Min[TimeFrame_Min]` 和 `Slicer_Time_Frame_Max[TimeFrame_Max]` 作为全局时间范围。参考实现：Customer_Member_Indicator.md。
 
-5. **is_member / is_employee 双重筛选（关键逻辑，Step 1 + Step 2 均应用 is_member）**：
-   - Step 1（a03 表）应用两个筛选：`is_member = __IsMemberFilter` 和 `is_employee in __IsEmployeeFilter`
-   - Step 2（t05 表）仅应用 `is_member` 筛选（t05 表无 is_employee 字段），按 `__IsMemberFilter` 值分支过滤：
-     - `__IsMemberFilter = 0`（TTL VIC，默认）→ `t05[is_member] IN {0, 1}`（全部会员身份）
-     - `__IsMemberFilter = 1`（会员 VIC）→ `t05[is_member] = 1`（仅会员）
-   - 实现方式：在 Step 2 的 CALCULATE 中加入布尔分支条件
+5. **is_member / is_employee 双重筛选（关键逻辑，Step 1 + Step 2 均应用，2026-09-21 重构为哨兵日期恒真模式）**：
+   - Step 1（a03 表）应用：`is_member = 0`（两档统一）+ `register_date <= __EndPeriodDate` + `is_employee in __IsEmployeeFilter`
+   - Step 2（t05 表）应用：`is_member IN {0, 1}`（两档统一，t05 表无 is_employee 字段）+ `register_date <= __EndPeriodDate`
+   - 实现方式：register_date 上限变量化（哨兵日期恒真模式，参考 模块关键点提炼.md 第 17 点），Step 1 / Step 2 共用同一变量
      ```dax
-     (
-         __IsMemberFilter = 0
-             && 't05_customer_order_data_d'[is_member] IN { 0, 1 }
-     )
-         || (
-             __IsMemberFilter = 1
-                 && 't05_customer_order_data_d'[is_member] = 1
+     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
+     VAR __EndPeriodDate =
+         IF(
+             __IsMemberFilter = 1,
+             SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]),
+             DATE(9999, 12, 31)   // TTL VIC: register_date 谓词恒真
          )
      ```
+     - `__IsMemberFilter = 0`（TTL VIC，默认）→ `__EndPeriodDate = DATE(9999,12,31)`，register_date 谓词恒真，等价不设限
+     - `__IsMemberFilter = 1`（Member VIC）→ `__EndPeriodDate = Last_Fiscal_Month_Max`（end period 末日），仅保留不晚于期末的注册日期（含期末当天）
    - 默认值：is_member=0（TTL VIC），is_employee=1（Yes）
 
 6. **分组维度跨表传递（关键逻辑，两表无直接模型关系）**：

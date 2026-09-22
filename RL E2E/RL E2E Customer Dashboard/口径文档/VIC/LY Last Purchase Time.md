@@ -3,8 +3,8 @@
 > **Dashboard**: Customer Dashboard  
 > **Tab**: VIC  
 > **数据底表**: `a03_e2e_customer_data_m` / `t05_customer_order_data_d`  
-> **模块全局影响说明**:  人群细分：TTL VIC `is_member = 0` / Member VIC `is_member = 1` / Is Employee `is_employee = 1` or `is_employee = 0`
-> **is_member使用**: VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)，如果没有筛选，则默认TTL VIC。这样过滤事实表a03_e2e_customer_data_m[is_member] = __IsMemberFilter
+> **模块全局影响说明**:  人群细分：切片器 TTL VIC（`IsMember = 0`）→ 事实表 `is_member = 0`；Member VIC（`IsMember = 1`）→ 事实表 `is_member = 0 AND register_date <= end_period_date`；Is Employee `is_employee = 1` or `is_employee = 0`
+> **is_member使用**: `VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)`，默认 TTL VIC。维度表与事实表断开，由 DAX 显式处理：两档均筛选 `a03_e2e_customer_data_m[is_member] = 0`；仅当选择 Member VIC（1）时，追加 `register_date <= end_period_date`。本期截止日取 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]`，LY 截止日取 `Last_Fiscal_Month_Max_LY`；本表格无 LP 指标
 > **is_employee使用**: VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)，如果没有筛选，则默认Yes。这样过滤事实表a03_e2e_customer_data_m[is_employee] = __IsEmployeeFilter
 > **is_member和is_employee维度表路径**:is_member： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\IsMemberFilter；is_employee： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\Slicer_Is_Employee_Selection
 
@@ -20,11 +20,11 @@
 | **货币转换规则** | 数据源默认为 RMB，转化为美元需要除以固定值 7 |
 | **派生指标** | LY（去年同期）、LP（上期）、vs LY（同比）、vs LP（环比）、占比、YOY 等为派生指标，依据基础指标计算生成 |
 | **必须遵守** | 口径文档中定义的所有指标，必须遵守其数据类型和数据格式，如果和解决方案中存在争议的，一切以口径文档为准，必须按照口径文档中的格式进行调整 |
-| **模块全局影响说明** | 人群细分：TTL VIC `is_member = 0` / Member VIC `is_member = 1` / Is Employee `is_employee = 1` or `is_employee = 0`  |
-| **is_member使用** | VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)，如果没有筛选，则默认TTL VIC。这样过滤事实表a03_e2e_customer_data_m[is_member] = __IsMemberFilter |
+| **模块全局影响说明** | 人群细分：切片器 TTL VIC（`IsMember = 0`）→ 事实表 `is_member = 0`；Member VIC（`IsMember = 1`）→ 事实表 `is_member = 0 AND register_date <= end_period_date`；Is Employee `is_employee = 1` or `is_employee = 0` |
+| **is_member使用** | `VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)`，默认 TTL VIC。维度表与事实表断开，由 DAX 显式处理：两档均筛选 `a03_e2e_customer_data_m[is_member] = 0`；仅当选择 Member VIC（1）时，追加 `register_date <= end_period_date`。本期截止日取 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]`，LY 截止日取 `Last_Fiscal_Month_Max_LY`；本表格无 LP 指标 |
 | **is_employee使用** | VAR __IsEmployeeFilter = SELECTEDVALUE(Slicer_Is_Employee_Selection[IsEmployee_Code], 1)，如果没有筛选，则默认Yes。这样过滤事实表a03_e2e_customer_data_m[is_employee] = __IsEmployeeFilter |
 | **is_member和is_employee维度表路径** | is_member： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\IsMemberFilter；is_employee： D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\维度复用\Slicer_Is_Employee_Selection |
-| **end period说明** | 所选时间范围的最后一个财月，只关注Slicer_Time_Frame_Max值,比如2026-09，只关注2023-09；2026 Q2，只关注2026-06；财年2026，对应最后一个财月只关注2026-12； |
+| **end period说明** | 所选时间范围的最后一个财月，只关注 `Slicer_Time_Frame_Max`：本期 `data_date` 筛选 `Last_Fiscal_Month_Min` ~ `Last_Fiscal_Month_Max`，LY 筛选 `Last_Fiscal_Month_Min_LY` ~ `Last_Fiscal_Month_Max_LY`；`end_period_date` 为对应区间的最后一天，不按自然月自行推算 |
 
 ---
 
@@ -138,10 +138,11 @@
 |---|---|
 | **指标名称** | VIC Retention% |
 | **指标名称中文** | 留存VIC占比 |
-| **业务定义** | 该分层下留存 VIC 人数/总 VIC 人数 |
-| **计算公式** | 分子：VIC Retention No.；分母：LY VIC No. |
-| **分子** | VIC Retention No. |
-| **分母** | LY VIC No. |
+| **业务定义** | 该分层下 Retention No. / LY VIC No. |
+| **计算公式** | 分子：Retention No.；分母：LY VIC No. |
+| **分子** | Retention No.（沿用现有指标名称 VIC Retention No.），筛选 `is_fy_retention_vic = 1` 后对 `user_id` 去重计数 |
+| **分母** | LY VIC No.，筛选 `is_fy_vic = 1` 后对 `user_id` 去重计数；分子、分母均取对应 end period 当月，保留当前分层、platform、shop_info_id 和全局人群筛选 |
+| **指标区分** | 本模块业务指标为 Retention%，沿用现有 VIC Retention% 命名，不适用其他模块 VIC Retention% 的分母调整口径 |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
@@ -157,7 +158,9 @@
 | **指标名称** | VIC Retention% YOY |
 | **指标名称中文** | 留存VIC占比YOY |
 | **业务定义** | 该分层下留存率和去年的对比 |
-| **计算公式** | 今年 / 去年 - 1 |
+| **计算公式** | 今年 Retention% / 去年 Retention% - 1；两期分别按指标 7 的 Retention No. / LY VIC No. 计算 |
+| **分母时间与字段** | 今年 Retention% 分母取本期 end period 当月的 LY VIC No.；去年 Retention% 分母取 LY end period 当月的 LY VIC No.，均沿用 `is_fy_vic = 1` 的去重人数口径 |
+| **会员截止日** | Member VIC 模式下，本期分子、分母追加 `register_date <= Last_Fiscal_Month_Max`；LY 分子、分母追加 `register_date <= Last_Fiscal_Month_Max_LY`；两期事实表均筛选 `is_member = 0` |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | `is_member`和`is_employee`筛选 |
 | **聚合粒度** | `dt = 所选时间范围 end period`，`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
@@ -182,3 +185,5 @@
 | **VIC 定义** | 在指定日期范围往前 Rolling 12 个财月，net sales >= 20k 的买家 |
 | **Tier 分层定义** | T1：≧ 200K；T2：80-200K；T3：20-80K；T4：5-20K；T5：< 5K |
 | **Recency 分层定义** | R3：上财年 10-12 月；R4-6：上财年 7-9 月；R7-9：上财年 4-6 月；R10-12：上财年 1-3 月；TTL：全部 |
+| **会员筛选** | 指标 2~8 及其派生计算均采用全局会员规则：TTL VIC 仅筛事实表 `is_member = 0`；Member VIC 在此基础上追加注册日期不晚于对应 end period 最后一天 |
+| **Retention% 口径** | 指标 7 为 Retention No. / LY VIC No.，指标 8 基于两期相同口径计算 YOY；复用既有 LY VIC No. 分母，无独立分母计算 |
