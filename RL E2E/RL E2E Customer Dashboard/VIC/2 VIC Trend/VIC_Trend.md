@@ -2,6 +2,7 @@
 
 > status: ready
 > created: 2026-08-13
+> revised: 2026-09-22（仅本文件：Member VIC（__IsMemberFilter=1）新增 register_date 非空要求，仍须不晚于对应期末日；覆盖 9 个基础度量的 12 处筛选，含 Retention% 分子与分母；TTL VIC 的哨兵日期及原筛选行为不变）
 > revised: 2026-09-21（① is_member 筛选重构：TTL VIC 筛 is_member = 0；Member VIC 筛 is_member = 0 AND register_date <= X 轴 end period 末日（哨兵日期恒真模式，Act/LY/LP 各取对应期末日）；② VIC Retention% 分母改为 X 轴 end period 当月 last_fy_net_pay_amt >= 20000 的 count(distinct user_id)，不再筛 is_vic=1、不再做目标月推导，与 VIC_KPIs_Table.md 口径对齐；旧分母逻辑两代（Rolling 12 / 往前推 12 个月单月）不再以块注释保留）
 > revised: 2026-09-14（VIC Retention% 分母弃用 Rolling 12 区间，改为"X 轴 end period 往前推 12 个月的单月"：Act=-12 / LY=-24 / LP=-13；该口径已于 2026-09-21 再次调整，历史沿革见口径文档 VIC KPI.md §2）
 > type: 度量值开发 + 柱形图视觉对象
@@ -15,18 +16,18 @@
 
 为 VIC Customer Dashboard 的 VIC Trend 柱形图输出 10 个指标的独立 Value + Display 度量对：
 
-| Metric_ID | 指标                   | 类型         | 计算方式                                                  | 原格式        | 新格式      |
-| --------- | ---------------------- | ------------ | --------------------------------------------------------- | ------------- | ----------- |
-| 1         | VIC No.                | Act          | DISTINCTCOUNT(user_id) WHERE is_vic=1                     | integer       | integer     |
-| 2         | VIC No. vs LY          | 数量类 vs LY | Act / LY - 1                                              | delta_pct_1dp | percent_1dp |
-| 3         | VIC No. vs LP          | 数量类 vs LP | Act / LP - 1                                              | delta_pct_1dp | percent_1dp |
+| Metric_ID | 指标                   | 类型         | 计算方式                                                                         | 原格式        | 新格式      |
+| --------- | ---------------------- | ------------ | -------------------------------------------------------------------------------- | ------------- | ----------- |
+| 1         | VIC No.                | Act          | DISTINCTCOUNT(user_id) WHERE is_vic=1                                            | integer       | integer     |
+| 2         | VIC No. vs LY          | 数量类 vs LY | Act / LY - 1                                                                     | delta_pct_1dp | percent_1dp |
+| 3         | VIC No. vs LP          | 数量类 vs LP | Act / LP - 1                                                                     | delta_pct_1dp | percent_1dp |
 | 6         | VIC Retention%         | Act（比率）  | DIVIDE(分子 is_retention_vic=1, 分母 end period 当月 last_fy_net_pay_amt>=20000) | percent_1dp   | percent_1dp |
-| 7         | VIC Retention% vs LY   | 比率类 vs LY | Act - LY（差值）                                          | delta_pts     | integer_pts |
-| 8         | VIC Retention% vs LP   | 比率类 vs LP | Act - LP（差值）                                          | delta_pts     | integer_pts |
-| 10        | T4-5 Upgrade No.       | Act          | DISTINCTCOUNT(user_id) WHERE is_upgrade_vic=1             | integer       | integer     |
-| 11        | T4-5 Upgrade No. vs LY | 数量类 vs LY | Act / LY - 1                                              | delta_pct_1dp | percent_1dp |
-| 12        | T4-5 Upgrade No. vs LP | 数量类 vs LP | Act / LP - 1                                              | delta_pct_1dp | percent_1dp |
-| 14        | T4-5 Upgrade No. Share | Act（比率）  | DIVIDE(分子 is_upgrade_vic=1, 分母 is_vic=1 当月)         | percent_1dp   | percent_1dp |
+| 7         | VIC Retention% vs LY   | 比率类 vs LY | Act - LY（差值）                                                                 | delta_pts     | integer_pts |
+| 8         | VIC Retention% vs LP   | 比率类 vs LP | Act - LP（差值）                                                                 | delta_pts     | integer_pts |
+| 10        | T4-5 Upgrade No.       | Act          | DISTINCTCOUNT(user_id) WHERE is_upgrade_vic=1                                    | integer       | integer     |
+| 11        | T4-5 Upgrade No. vs LY | 数量类 vs LY | Act / LY - 1                                                                     | delta_pct_1dp | percent_1dp |
+| 12        | T4-5 Upgrade No. vs LP | 数量类 vs LP | Act / LP - 1                                                                     | delta_pct_1dp | percent_1dp |
+| 14        | T4-5 Upgrade No. Share | Act（比率）  | DIVIDE(分子 is_upgrade_vic=1, 分母 is_vic=1 当月)                                | percent_1dp   | percent_1dp |
 
 **核心设计原则**：
 
@@ -34,7 +35,7 @@
 - 度量值作用于柱形图（非卡片图/矩阵），X 轴 = Slicer_Time_Frame_VIC_Trend[TimeFrame_Value]
 - 参考 PB_Location_Trend.md 子模块二 Fulfillment% Trend 实现，配置 IsTimeFrameVisible 视觉对象级别筛选器
 - 日期表替换为 VIC Trend 专用版本（Slicer_Time_Frame_VIC_Trend / Slicer_Time_Frame_Max_VIC_Trend / Slicer_Time_Frame_Min_VIC_Trend），避免与其他模块互相筛选影响
-- 保留 VIC 项目口径：end period 当月聚合（Last_Fiscal_Month_Min/Max）、is_member=0 + register_date <= end period 末日（Member VIC）+ is_employee 人群筛选（2026-09-21 重构，与 VIC_KPIs_Table.md 口径对齐）、VIC Retention% 专用 end period 当月 last_fy_net_pay_amt >= 20000 分母（2026-09-21 调整）
+- 保留 VIC 项目口径：end period 当月聚合（Last_Fiscal_Month_Min/Max）、is_member=0 + register_date 非空且 <= end period 末日（仅 Member VIC；TTL VIC 保持原逻辑）+ is_employee 人群筛选（2026-09-21 重构；2026-09-22 仅本文件新增 Member VIC 注册日期非空要求）、VIC Retention% 专用 end period 当月 last_fy_net_pay_amt >= 20000 分母（2026-09-21 调整）
 - 格式调整：所有指标不含正号
 
 ### 1.1 格式调整说明
@@ -64,7 +65,7 @@
 - **LY**：X 轴当前柱 LY end period 当月（data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]）
 - **LP**：X 轴当前柱 LP end period 当月（data_date ∈ [Last_Fiscal_Month_Min_LP, Last_Fiscal_Month_Max_LP]）
 
-**分母计算方式（当月 DISTINCT）**：在上述 end period 当月区间内 `count(distinct user_id) where last_fy_net_pay_amt >= 20000`，与分子同期间、同人群筛选（is_member=0 + register_date <= 对应期末日 + is_employee）。
+**分母计算方式（当月 DISTINCT）**：在上述 end period 当月区间内 `count(distinct user_id) where last_fy_net_pay_amt >= 20000`，与分子同期间、同人群筛选（is_member=0 + 仅 Member VIC 要求 register_date 非空且 <= 对应期末日 + is_employee；TTL VIC 保持原逻辑）。
 
 **柱形图适配（与主表差异）**：主表分母区间基于全局 Slicer_Time_Frame_Max 的 end period；本方案每个柱子基于**该柱子 X 轴自己的 end period**（Slicer_Time_Frame_VIC_Trend 行级 Last_Fiscal_Month_Min/Max 系列），每个柱子独立计算自己的分母（非全局统一区间），无需再做目标月字符串推导。
 
@@ -79,9 +80,9 @@
 
 ### 2.1 数据底表
 
-| 对象     | 名称                                                                                                         | 出处              |
-| -------- | ------------------------------------------------------------------------------------------------------------ | ----------------- |
-| 事实表   | a03_e2e_customer_data_m                                                                                      | 口径文档 全局逻辑 |
+| 对象     | 名称                                                                                                                                             | 出处              |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- |
+| 事实表   | a03_e2e_customer_data_m                                                                                                                          | 口径文档 全局逻辑 |
 | 关键字段 | data_date, platform, shop_info_id, user_id, is_member, register_date, last_fy_net_pay_amt, is_employee, is_vic, is_retention_vic, is_upgrade_vic | 口径文档          |
 
 ### 2.2 维度表清单（VIC Trend 专用日期表，与其他模块隔离）
@@ -102,16 +103,16 @@
 
 ### 3.1 筛选上下文
 
-| 筛选器                                          | 作用方式                                               | DAX 处理                                                                             |
-| ----------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Slicer_Time_Frame_VIC_Trend（X 轴 end period）  | 断开维度，SELECTEDVALUE 读取 Last_Fiscal_Month_Min/Max | `data_date >= __CurrentLFMMin AND data_date <= __CurrentLFMMax`（end period 当月） |
-| Slicer_Time_Frame_VIC_Trend（X 轴 LY）          | SELECTEDVALUE 读取 Last_Fiscal_Month_Min_LY/Max_LY     | `data_date >= __CurrentLFMMin_LY AND data_date <= __CurrentLFMMax_LY`              |
-| Slicer_Time_Frame_VIC_Trend（X 轴 LP）          | SELECTEDVALUE 读取 Last_Fiscal_Month_Min_LP/Max_LP     | `data_date >= __CurrentLFMMin_LP AND data_date <= __CurrentLFMMax_LP`              |
-| Slicer_Time_Frame_Min/Max_VIC_Trend（全局范围） | 冗余保护，防止 X 轴超出全局范围                        | `data_date >= __GlobalMin AND data_date <= __GlobalMax`                            |
-| Slicer_Time_Frame_VIC_Trend（Retention% 分母）  | X 轴当前柱 end period 当月区间（Last_Fiscal_Month_Min/Max 系列）内 `last_fy_net_pay_amt >= 20000` | VIC Retention% Trend Act/LY/LP Value 分母专用（内化于各基础度量值，与分子同期间）              |
-| Slicer_Is_Employee_Selection                    | 断开维度，SELECTEDVALUE 读取 IsEmployee_Code           | `is_employee in __IsEmployeeFilter`（默认 1）                                      |
-| IsMemberFilter                                  | 断开维度，SELECTEDVALUE 读取 IsMember                  | `is_member = 0` + `register_date <= __EndPeriodDate`（Member VIC 时期末日上限，TTL VIC 哨兵日期恒真；默认 0） |
-| 事实表分组字段（platform / shop_info_id）       | 柱形图图例直接拉取，模型自动传递                       | DAX 无需显式处理                                                                     |
+| 筛选器                                          | 作用方式                                                                                           | DAX 处理                                                                                                                                                   |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Slicer_Time_Frame_VIC_Trend（X 轴 end period）  | 断开维度，SELECTEDVALUE 读取 Last_Fiscal_Month_Min/Max                                             | `data_date >= __CurrentLFMMin AND data_date <= __CurrentLFMMax`（end period 当月）                                                                       |
+| Slicer_Time_Frame_VIC_Trend（X 轴 LY）          | SELECTEDVALUE 读取 Last_Fiscal_Month_Min_LY/Max_LY                                                 | `data_date >= __CurrentLFMMin_LY AND data_date <= __CurrentLFMMax_LY`                                                                                    |
+| Slicer_Time_Frame_VIC_Trend（X 轴 LP）          | SELECTEDVALUE 读取 Last_Fiscal_Month_Min_LP/Max_LP                                                 | `data_date >= __CurrentLFMMin_LP AND data_date <= __CurrentLFMMax_LP`                                                                                    |
+| Slicer_Time_Frame_Min/Max_VIC_Trend（全局范围） | 冗余保护，防止 X 轴超出全局范围                                                                    | `data_date >= __GlobalMin AND data_date <= __GlobalMax`                                                                                                  |
+| Slicer_Time_Frame_VIC_Trend（Retention% 分母）  | X 轴当前柱 end period 当月区间（Last_Fiscal_Month_Min/Max 系列）内`last_fy_net_pay_amt >= 20000` | VIC Retention% Trend Act/LY/LP Value 分母专用（内化于各基础度量值，与分子同期间）                                                                          |
+| Slicer_Is_Employee_Selection                    | 断开维度，SELECTEDVALUE 读取 IsEmployee_Code                                                       | `is_employee in __IsEmployeeFilter`（默认 1）                                                                                                            |
+| IsMemberFilter                                  | 断开维度，SELECTEDVALUE 读取 IsMember                                                              | `is_member = 0` + `register_date <= __EndPeriodDate` + 仅 Member VIC 校验 `NOT ISBLANK(register_date)`（TTL VIC 保留哨兵日期及空值放行行为；默认 0） |
+| 事实表分组字段（platform / shop_info_id）       | 柱形图图例直接拉取，模型自动传递                                                                   | DAX 无需显式处理                                                                                                                                           |
 
 ### 3.2 度量值架构
 
@@ -226,7 +227,7 @@ VIC No. Trend Act Value =
 // 筛选条件:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（X 轴 end period 当月）
 //   - 全局范围冗余筛选: data_date ∈ [TimeFrame_Min, TimeFrame_Max]
-//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 end period 末日（哨兵日期恒真模式）
+//   - is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= X 轴 end period 末日（哨兵日期恒真模式）
 //   - is_employee in __IsEmployeeFilter（默认 所有）
 // 数据类型: integer
 // ========================================
@@ -235,7 +236,7 @@ VIC No. Trend Act Value =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 end period 末日
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date 非空且 <= X 轴 end period 末日
     VAR __EndPeriodDate =
         IF(
             __IsMemberFilter = 1,
@@ -248,7 +249,15 @@ VIC No. Trend Act Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -271,14 +280,14 @@ VIC No. Trend LY Value =
 // 时间偏移: 财历映射
 //   全局 LY 范围: Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min_LY] / Slicer_Time_Frame_Max_VIC_Trend[TimeFrame_Max_LY]
 //   X 轴 LY end period: Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY] / [Last_Fiscal_Month_Max_LY]
-// 筛选: is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 LY end period 末日（Last_Fiscal_Month_Max_LY，哨兵日期恒真模式）
+// 筛选: is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= X 轴 LY end period 末日（Last_Fiscal_Month_Max_LY，哨兵日期恒真模式）
 // ========================================
     VAR __GlobalMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min_LY])
     VAR __GlobalMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Trend[TimeFrame_Max_LY])
     VAR __CurrentLFMMin_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY])
     VAR __CurrentLFMMax_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 LY end period 末日
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date 非空且 <= X 轴 LY end period 末日
     VAR __EndPeriodDate =
         IF(
             __IsMemberFilter = 1,
@@ -291,7 +300,15 @@ VIC No. Trend LY Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax_LY,
@@ -313,13 +330,13 @@ VIC No. Trend LP Value =
 // 计算公式: DISTINCTCOUNT(user_id) WHERE is_vic = 1（上期）
 // 时间偏移: 财历映射
 //   X 轴 LP end period: Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP] / [Last_Fiscal_Month_Max_LP]
-// 筛选: is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 LP end period 末日（Last_Fiscal_Month_Max_LP，哨兵日期恒真模式）
+// 筛选: is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= X 轴 LP end period 末日（Last_Fiscal_Month_Max_LP，哨兵日期恒真模式）
 // 注: LP = Last Period（上一期），按所选粒度的上一期
 // ========================================
     VAR __CurrentLFMMin_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP])
     VAR __CurrentLFMMax_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LP])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 LP end period 末日
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date 非空且 <= X 轴 LP end period 末日
     VAR __EndPeriodDate =
         IF(
             __IsMemberFilter = 1,
@@ -332,7 +349,15 @@ VIC No. Trend LP Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LP,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LP
@@ -357,7 +382,7 @@ VIC Retention% Trend Act Value =
 // 筛选条件（分子与分母共用）:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（X 轴 end period 当月）
 //   - 全局范围冗余筛选: data_date ∈ [TimeFrame_Min, TimeFrame_Max]
-//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 end period 末日（哨兵日期恒真模式）
+//   - is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= X 轴 end period 末日（哨兵日期恒真模式）
 //   - is_employee in __IsEmployeeFilter（默认 所有）
 //   （2026-09-12~09-14 的 Rolling 12 区间、往前推 12 个月单月两代分母口径已弃用，历史沿革见口径文档 VIC KPI.md §2；旧 DAX 逻辑不再以块注释保留）
 // 数据类型: percent_1dp（比率，0~1）
@@ -367,7 +392,7 @@ VIC Retention% Trend Act Value =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 end period 末日
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date 非空且 <= X 轴 end period 末日
     VAR __EndPeriodDate =
         IF(
             __IsMemberFilter = 1,
@@ -382,7 +407,15 @@ VIC Retention% Trend Act Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -396,7 +429,15 @@ VIC Retention% Trend Act Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[last_fy_net_pay_amt] >= 20000,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -421,7 +462,7 @@ VIC Retention% Trend LY Value =
 //   分母_LY: DISTINCTCOUNT(user_id) WHERE last_fy_net_pay_amt >= 20000（X 轴 LY end period 当月，与分子同期间同人群）
 // 筛选（分子与分母共用）:
 //   - data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]（X 轴 LY end period 当月）+ 全局 LY 范围冗余筛选
-//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 LY end period 末日（Last_Fiscal_Month_Max_LY，哨兵日期恒真模式）
+//   - is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= X 轴 LY end period 末日（Last_Fiscal_Month_Max_LY，哨兵日期恒真模式）
 //   （2026-09-12~09-14 的 Rolling 12 LY 区间、往前推 24 个月单月两代分母口径已弃用，历史沿革见口径文档 VIC KPI.md §2；旧 DAX 逻辑不再以块注释保留）
 // ========================================
     VAR __GlobalMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min_LY])
@@ -429,7 +470,7 @@ VIC Retention% Trend LY Value =
     VAR __CurrentLFMMin_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY])
     VAR __CurrentLFMMax_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 LY end period 末日
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date 非空且 <= X 轴 LY end period 末日
     VAR __EndPeriodDate =
         IF(
             __IsMemberFilter = 1,
@@ -444,7 +485,15 @@ VIC Retention% Trend LY Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax_LY,
@@ -458,7 +507,15 @@ VIC Retention% Trend LY Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[last_fy_net_pay_amt] >= 20000,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax_LY,
@@ -483,14 +540,14 @@ VIC Retention% Trend LP Value =
 //   分母_LP: DISTINCTCOUNT(user_id) WHERE last_fy_net_pay_amt >= 20000（X 轴 LP end period 当月，与分子同期间同人群）
 // 筛选（分子与分母共用）:
 //   - data_date ∈ [Last_Fiscal_Month_Min_LP, Last_Fiscal_Month_Max_LP]（X 轴 LP end period 当月）
-//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 LP end period 末日（Last_Fiscal_Month_Max_LP，哨兵日期恒真模式）
+//   - is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= X 轴 LP end period 末日（Last_Fiscal_Month_Max_LP，哨兵日期恒真模式）
 //   （2026-09-12~09-14 的 Rolling 12 LP 区间、往前推 13 个月单月两代分母口径已弃用，历史沿革见口径文档 VIC KPI.md §2；旧 DAX 逻辑不再以块注释保留）
 // 注: LP = Last Period（上一期），按所选粒度的上一期
 // ========================================
     VAR __CurrentLFMMin_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP])
     VAR __CurrentLFMMax_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LP])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 LP end period 末日
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date 非空且 <= X 轴 LP end period 末日
     VAR __EndPeriodDate =
         IF(
             __IsMemberFilter = 1,
@@ -505,7 +562,15 @@ VIC Retention% Trend LP Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LP,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LP
@@ -517,7 +582,15 @@ VIC Retention% Trend LP Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[last_fy_net_pay_amt] >= 20000,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LP,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LP
@@ -541,7 +614,7 @@ T4-5 Upgrade No. Trend Act Value =
 // 筛选条件:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（X 轴 end period 当月）
 //   - 全局范围冗余筛选: data_date ∈ [TimeFrame_Min, TimeFrame_Max]
-//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 end period 末日（哨兵日期恒真模式）
+//   - is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= X 轴 end period 末日（哨兵日期恒真模式）
 //   - is_employee in __IsEmployeeFilter（默认 所有）
 // 数据类型: integer
 // ========================================
@@ -550,7 +623,7 @@ T4-5 Upgrade No. Trend Act Value =
     VAR __CurrentLFMMin = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min])
     VAR __CurrentLFMMax = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 end period 末日
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date 非空且 <= X 轴 end period 末日
     VAR __EndPeriodDate =
         IF(
             __IsMemberFilter = 1,
@@ -563,7 +636,15 @@ T4-5 Upgrade No. Trend Act Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax,
@@ -586,14 +667,14 @@ T4-5 Upgrade No. Trend LY Value =
 // 时间偏移: 财历映射
 //   全局 LY 范围: Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min_LY] / Slicer_Time_Frame_Max_VIC_Trend[TimeFrame_Max_LY]
 //   X 轴 LY end period: Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY] / [Last_Fiscal_Month_Max_LY]
-// 筛选: is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 LY end period 末日（Last_Fiscal_Month_Max_LY，哨兵日期恒真模式）
+// 筛选: is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= X 轴 LY end period 末日（Last_Fiscal_Month_Max_LY，哨兵日期恒真模式）
 // ========================================
     VAR __GlobalMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min_LY])
     VAR __GlobalMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_VIC_Trend[TimeFrame_Max_LY])
     VAR __CurrentLFMMin_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LY])
     VAR __CurrentLFMMax_LY = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 LY end period 末日
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date 非空且 <= X 轴 LY end period 末日
     VAR __EndPeriodDate =
         IF(
             __IsMemberFilter = 1,
@@ -606,7 +687,15 @@ T4-5 Upgrade No. Trend LY Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __GlobalMin_LY,
             'a03_e2e_customer_data_m'[data_date] <= __GlobalMax_LY,
@@ -628,12 +717,12 @@ T4-5 Upgrade No. Trend LP Value =
 // 计算公式: DISTINCTCOUNT(user_id) WHERE is_upgrade_vic = 1（上期）
 // 时间偏移: 财历映射
 //   X 轴 LP end period: Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP] / [Last_Fiscal_Month_Max_LP]
-// 筛选: is_member = 0；Member VIC（IsMember=1）时额外 register_date <= X 轴 LP end period 末日（Last_Fiscal_Month_Max_LP，哨兵日期恒真模式）
+// 筛选: is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= X 轴 LP end period 末日（Last_Fiscal_Month_Max_LP，哨兵日期恒真模式）
 // ========================================
     VAR __CurrentLFMMin_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Min_LP])
     VAR __CurrentLFMMax_LP = SELECTEDVALUE(Slicer_Time_Frame_VIC_Trend[Last_Fiscal_Month_Max_LP])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= X 轴 LP end period 末日
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date 非空且 <= X 轴 LP end period 末日
     VAR __EndPeriodDate =
         IF(
             __IsMemberFilter = 1,
@@ -646,7 +735,15 @@ T4-5 Upgrade No. Trend LP Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __CurrentLFMMin_LP,
             'a03_e2e_customer_data_m'[data_date] <= __CurrentLFMMax_LP
@@ -1129,7 +1226,9 @@ T4-5 Upgrade No. Share Trend Display =
 -- VIC No. 本期值（某月，所有 platform 汇总）
 -- 假设 X 轴 TimeFrame = 2026-09, Last_Fiscal_Month_Min='2026-09-01', Last_Fiscal_Month_Max='2026-09-30'
 -- is_member=0 (TTL VIC), is_employee=1 (Yes)
--- TTL VIC 时 register_date 不设限；Member VIC 时增加 register_date <= '2026-09-30'（X 轴 end period 末日）
+-- TTL VIC 时 register_date 不设限（保持原逻辑）；Member VIC 时增加以下两个条件（X 轴 end period 末日）：
+-- AND register_date IS NOT NULL
+-- AND CAST(register_date AS DATE) <= '2026-09-30'
 SELECT COUNT(DISTINCT user_id) AS VIC_No_Trend_Act
 FROM a03_e2e_customer_data_m
 WHERE data_date BETWEEN '2026-09-01' AND '2026-09-30'
@@ -1167,6 +1266,19 @@ SELECT
 FROM numerator n, denominator d;
 ```
 
+### 7.3 Member VIC 注册日期非空与 TTL VIC 回归检查
+
+以下为预期结果，需在 Power BI 中对 Act / LY / LP 分别核对；其他筛选保持一致，截止日取对应期末日。7.1 / 7.2 的 SQL 默认验证 TTL VIC；验证 Member VIC 时，各查询均需增加 `register_date IS NOT NULL` 和 `CAST(register_date AS DATE) <= 对应期末日`，Retention% 的分子、分母须同时增加。
+
+| register_date            | Member VIC（IsMember=1）修改前 | Member VIC 修改后 | TTL VIC（IsMember=0）修改前后      |
+| ------------------------ | ------------------------------ | ----------------- | ---------------------------------- |
+| BLANK()                  | 放行                           | 排除              | 放行，保持不变                     |
+| 早于对应期末日           | 放行                           | 放行              | 放行，保持不变                     |
+| 等于对应期末日           | 放行                           | 放行              | 放行，保持不变                     |
+| 晚于对应期末日的正常日期 | 排除                           | 排除              | 保持原`<= DATE(9999,12,31)` 判断 |
+
+TTL VIC 下，新增条件中的 `__IsMemberFilter <> 1` 为 TRUE，整个注册日期条件仍等价于原来的 `register_date <= __EndPeriodDate`。会员模式没有唯一选值时仍由 `SELECTEDVALUE(..., 0)` 回落为 TTL VIC，不改变默认行为。上述放行仅指注册日期条件，最终仍须满足原有其他筛选。
+
 ---
 
 ## 8. 注意事项
@@ -1185,9 +1297,9 @@ FROM numerator n, denominator d;
    - 原 delta_pct_1dp（+14.5% / -3.2%）→ 新 percent_1dp（14.5% / -3.2%），使用 `FORMAT(__Value, "#,##0.0%")`
    - 原 delta_pts（+120pts / -80pts）→ 新 integer_pts（120pts / -80pts），使用 `FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")`
    - 去掉正号前缀 `IF(__Value>0,"+","")`，直接用 FORMAT 的正负数格式串实现
-6. **is_member / is_employee 双重筛选**：与主表 VIC_KPIs_Table.md 口径一致（2026-09-21 重构）：TTL VIC（IsMember=0）筛 `is_member = 0`（register_date 不设限，哨兵日期 DATE(9999,12,31) 恒真）；Member VIC（IsMember=1）筛 `is_member = 0 AND register_date <= X 轴 end period 末日`（Act/LY/LP 各取对应期末日 Last_Fiscal_Month_Max/_LY/_LP）；默认 is_employee=1（Yes）。
+6. **is_member / is_employee 双重筛选**：2026-09-21 重构，2026-09-22 仅本文件补充 Member VIC 注册日期非空要求：TTL VIC（IsMember=0）仍筛 `is_member = 0`（保留 `register_date <= DATE(9999,12,31)`，空注册日期仍放行）；Member VIC（IsMember=1）筛 `is_member = 0`，且 `register_date` 非空并 `<= X 轴 end period 末日`（Act/LY/LP 各取对应期末日 Last_Fiscal_Month_Max/_LY/_LP）；默认 is_employee=1（Yes）。
 7. **Share 类分母**：Metric_ID=14（T4-5 Upgrade No. Share）的分母使用 X 轴 end period 当月 is_vic=1 的 DISTINCTCOUNT，等价于 [VIC No. Trend Act Value]。与 VIC Retention% 的 end period 当月 last_fy_net_pay_amt 分母不同。
 8. **独立性**：本方案 10 个指标的 Value/Display 度量完全独立，不依赖 Dim_ColMetric_VIC_KPIs 断开维度、Metric_ID 路由体系，与 VIC_KPIs_Table.md 主表解耦。基础度量（Act/LY/LP）在内部复用，但对外暴露的 Value/Display 度量按指标独立命名。
 9. **LP 全局筛选省略**：LP 度量（VIC No. Trend LP Value / T4-5 Upgrade No. Trend LP Value / VIC Retention% Trend LP Value）未应用全局 LP 范围筛选，仅用 X 轴 LP end period 区间（Last_Fiscal_Month_Min_LP/Max_LP）。因为 LP 是"上一期"概念，全局 LP 范围字段在日期表中可能不存在；若日期表有对应字段，可按需补充全局 LP 筛选。
 10. **LY 全局筛选使用 TimeFrame_Min_LY / TimeFrame_Max_LY**：LY 度量应用全局 LY 范围筛选，字段来自 Slicer_Time_Frame_Min_VIC_Trend[TimeFrame_Min_LY] 和 Slicer_Time_Frame_Max_VIC_Trend[TimeFrame_Max_LY]。这假设日期表已预算这些字段（与 PB_Location_Trend.md 范式一致）。
-11. **口径等价性**：本方案基础度量（Act/LY/LP）与 VIC_KPIs_Table.md 主表 Metric_ID=1/6/10/14 的 Act/LY/LP Base Value 口径等价，差异仅在于时间筛选上下文（主表用 Slicer_Time_Frame_Max 全局 end period，本方案用 Slicer_Time_Frame_VIC_Trend X 轴 end period + 全局冗余筛选）。
+11. **口径对照**：本方案基础度量（Act/LY/LP）原与 VIC_KPIs_Table.md 主表 Metric_ID=1/6/10/14 的 Act/LY/LP Base Value 对齐，时间筛选上下文不同（主表用 Slicer_Time_Frame_Max 全局 end period，本方案用 Slicer_Time_Frame_VIC_Trend X 轴 end period + 全局冗余筛选）。2026-09-22 本次仅在本文件新增 Member VIC 注册日期非空要求，未修改主表及其他模块；跨模块对账需另核对该空值口径，TTL VIC 保持原逻辑。

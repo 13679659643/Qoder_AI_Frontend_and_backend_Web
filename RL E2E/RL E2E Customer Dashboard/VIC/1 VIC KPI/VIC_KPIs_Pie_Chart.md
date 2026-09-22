@@ -2,6 +2,7 @@
 
 > status: ready
 > created: 2026-08-13
+> revised: 2026-09-22（Member VIC（__IsMemberFilter=1）新增 register_date 非空要求，仍须不晚于 end period 末日；覆盖三个 Pie Value 度量的 3 处筛选，与 VIC_KPIs_Table.md 同步；TTL VIC 的哨兵日期及原筛选行为不变）
 > revised: 2026-09-21（is_member 筛选重构：TTL VIC 筛 is_member = 0；Member VIC 筛 is_member = 0 AND register_date <= end period 末日（哨兵日期恒真模式），与 VIC_KPIs_Table.md 口径对齐；本方案仅本期 Act 快照、无比率指标，不涉及 VIC Retention% 分母口径调整）
 > type: 度量值开发 + 饼图视觉对象
 > 口径来源: 口径文档/VIC KPI.md - 3. T4-5 Upgrade No. / 4. Retention VIC No. / 5. Direct VIC No.
@@ -14,13 +15,14 @@
 
 为 VIC Customer Dashboard 输出饼图所用的独立度量值（Value + Display），展示三个 VIC 子类型的本期 Act 数量构成：
 
-| 指标 | 中文名 | 分类 | 底表字段 | is_xxx_vic |
-|------|--------|------|---------|------------|
-| T4-5 Upgrade No. | T4-5 升级 VIC 人数 | 数量类 | a03_e2e_customer_data_m | is_upgrade_vic=1 |
-| Retention VIC No. | 留存 VIC 人数 | 数量类 | a03_e2e_customer_data_m | is_retention_vic=1 |
-| Direct VIC No. | 直接 VIC 人数 | 数量类 | a03_e2e_customer_data_m | is_direct_vic=1 |
+| 指标              | 中文名             | 分类   | 底表字段                | is_xxx_vic         |
+| ----------------- | ------------------ | ------ | ----------------------- | ------------------ |
+| T4-5 Upgrade No.  | T4-5 升级 VIC 人数 | 数量类 | a03_e2e_customer_data_m | is_upgrade_vic=1   |
+| Retention VIC No. | 留存 VIC 人数      | 数量类 | a03_e2e_customer_data_m | is_retention_vic=1 |
+| Direct VIC No.    | 直接 VIC 人数      | 数量类 | a03_e2e_customer_data_m | is_direct_vic=1    |
 
 **核心设计原则**：
+
 - 每个指标输出独立 Value + Display 度量对（本期 Act 一对），饼图场景仅展示本期快照，不涉及 LY / vs LY
 - 度量值完全独立，不依赖 Dim_ColMetric_VIC_KPIs 断开维度、Metric_ID 路由体系，与 VIC_KPIs_Table.md 主表解耦
 - 时间范围用 VIC 项目统一的 end period 当月区间（`Slicer_Time_Frame_Max[Last_Fiscal_Month_Min/Max]`），非 PB_Merchandise 的全局 TimeFrame_Min/Max
@@ -34,18 +36,18 @@
 
 ### 2.1 数据底表
 
-| 对象 | 名称 | 出处 |
-|------|------|------|
-| 事实表 | a03_e2e_customer_data_m | 口径文档 全局逻辑 |
-| 关键字段 | data_date, is_vic, is_upgrade_vic, is_retention_vic, is_direct_vic, is_member, register_date, is_employee, user_id, platform, shop_info_id | 口径文档 |
+| 对象     | 名称                                                                                                                                       | 出处              |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- |
+| 事实表   | a03_e2e_customer_data_m                                                                                                                    | 口径文档 全局逻辑 |
+| 关键字段 | data_date, is_vic, is_upgrade_vic, is_retention_vic, is_direct_vic, is_member, register_date, is_employee, user_id, platform, shop_info_id | 口径文档          |
 
 ### 2.2 维度表清单（断开维度，沿用 VIC 项目现有切片器）
 
-| 维度表 | 类型 | 连接方式 |
-|--------|------|---------|
-| Slicer_Time_Frame_Max | 断开维度 | SELECTEDVALUE 读取 `Last_Fiscal_Month_Min`（end period 当月起始日）、`Last_Fiscal_Month_Max`（end period 当月结束日） |
-| Slicer_Is_Employee_Selection | 断开维度 | SELECTEDVALUE 读取 `IsEmployee_Code`（默认 所有） |
-| IsMemberFilter | 断开维度 | SELECTEDVALUE 读取 `IsMember`（默认 0 = TTL VIC） |
+| 维度表                       | 类型     | 连接方式                                                                                                                 |
+| ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Slicer_Time_Frame_Max        | 断开维度 | SELECTEDVALUE 读取`Last_Fiscal_Month_Min`（end period 当月起始日）、`Last_Fiscal_Month_Max`（end period 当月结束日） |
+| Slicer_Is_Employee_Selection | 断开维度 | SELECTEDVALUE 读取`IsEmployee_Code`（默认 所有）                                                                       |
+| IsMemberFilter               | 断开维度 | SELECTEDVALUE 读取`IsMember`（默认 0 = TTL VIC）                                                                       |
 
 > 本方案不使用 Slicer_Time_Frame_Min（VIC 端 end period 当月区间已在 Slicer_Time_Frame_Max 中预算）。
 
@@ -55,12 +57,12 @@
 
 ### 3.1 筛选上下文
 
-| 筛选器 | 作用方式 | DAX 处理 |
-|--------|---------|---------|
-| Slicer_Time_Frame_Max | 断开维度，SELECTEDVALUE 读取 `Last_Fiscal_Month_Min/Max` | `data_date >= __PeriodMin AND data_date <= __PeriodMax` |
-| Slicer_Is_Employee_Selection | 断开维度，SELECTEDVALUE 读取 `IsEmployee_Code` | `is_employee in __IsEmployeeFilter`（默认 1） |
-| IsMemberFilter | 断开维度，SELECTEDVALUE 读取 `IsMember` | `is_member = 0` + `register_date <= __EndPeriodDate`（Member VIC 时期末日上限，TTL VIC 哨兵日期恒真；默认 0） |
-| 事实表分组字段（platform / shop_info_id） | 饼图图例直接拉取，模型自动传递筛选 | DAX 无需显式处理 |
+| 筛选器                                    | 作用方式                                                  | DAX 处理                                                                                                                                                   |
+| ----------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Slicer_Time_Frame_Max                     | 断开维度，SELECTEDVALUE 读取`Last_Fiscal_Month_Min/Max` | `data_date >= __PeriodMin AND data_date <= __PeriodMax`                                                                                                  |
+| Slicer_Is_Employee_Selection              | 断开维度，SELECTEDVALUE 读取`IsEmployee_Code`           | `is_employee in __IsEmployeeFilter`（默认 1）                                                                                                            |
+| IsMemberFilter                            | 断开维度，SELECTEDVALUE 读取`IsMember`                  | `is_member = 0` + `register_date <= __EndPeriodDate` + 仅 Member VIC 校验 `NOT ISBLANK(register_date)`（TTL VIC 保留哨兵日期及空值放行行为；默认 0） |
+| 事实表分组字段（platform / shop_info_id） | 饼图图例直接拉取，模型自动传递筛选                        | DAX 无需显式处理                                                                                                                                           |
 
 ### 3.2 聚合粒度
 
@@ -68,9 +70,9 @@
 
 ### 3.3 格式规范
 
-| 格式类型 | 格式串 | 示例 | 适用度量 |
-|---------|--------|------|---------|
-| integer | `#,##0` | 1,234 | T4-5 Upgrade No. / Retention VIC No. / Direct VIC No. Value & Display |
+| 格式类型 | 格式串    | 示例  | 适用度量                                                              |
+| -------- | --------- | ----- | --------------------------------------------------------------------- |
+| integer  | `#,##0` | 1,234 | T4-5 Upgrade No. / Retention VIC No. / Direct VIC No. Value & Display |
 
 ---
 
@@ -95,7 +97,7 @@ T4-5 Upgrade No. Pie Value =
 // 计算公式: DISTINCTCOUNT(user_id) WHERE is_upgrade_vic = 1
 // 筛选条件:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
-//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= end period 末日（哨兵日期恒真模式）
+//   - is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= end period 末日（哨兵日期恒真模式）
 //   - is_employee in __IsEmployeeFilter（默认 所有）
 //   - 分组维度由饼图图例直接拉取事实表字段自动传递
 // 数据类型: integer → 整数，千分位整数
@@ -104,7 +106,7 @@ T4-5 Upgrade No. Pie Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= end period 末日
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date 非空且 <= end period 末日
     VAR __EndPeriodDate =
         IF(
             __IsMemberFilter = 1,
@@ -117,7 +119,15 @@ T4-5 Upgrade No. Pie Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -160,7 +170,7 @@ Retention VIC No. Pie Value =
 // 计算公式: DISTINCTCOUNT(user_id) WHERE is_retention_vic = 1
 // 筛选条件:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
-//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= end period 末日（哨兵日期恒真模式）
+//   - is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= end period 末日（哨兵日期恒真模式）
 //   - is_employee in __IsEmployeeFilter（默认 所有）
 //   - 分组维度由饼图图例直接拉取事实表字段自动传递
 // 数据类型: integer → 整数，千分位整数
@@ -169,7 +179,7 @@ Retention VIC No. Pie Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= end period 末日
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date 非空且 <= end period 末日
     VAR __EndPeriodDate =
         IF(
             __IsMemberFilter = 1,
@@ -182,7 +192,15 @@ Retention VIC No. Pie Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -225,7 +243,7 @@ Direct VIC No. Pie Value =
 // 计算公式: DISTINCTCOUNT(user_id) WHERE is_direct_vic = 1
 // 筛选条件:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
-//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= end period 末日（哨兵日期恒真模式）
+//   - is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= end period 末日（哨兵日期恒真模式）
 //   - is_employee in __IsEmployeeFilter（默认 所有）
 //   - 分组维度由饼图图例直接拉取事实表字段自动传递
 // 数据类型: integer → 整数，千分位整数
@@ -234,7 +252,7 @@ Direct VIC No. Pie Value =
     VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Min])
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
-    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date <= end period 末日
+    // TTL VIC（IsMember=0）: register_date 不设限；Member VIC: register_date 非空且 <= end period 末日
     VAR __EndPeriodDate =
         IF(
             __IsMemberFilter = 1,
@@ -247,7 +265,15 @@ Direct VIC No. Pie Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -275,14 +301,14 @@ Direct VIC No. Pie Display =
 
 ## 5. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称 | Display Folder | 指标 | 类型 | 格式 |
-|------|-----------|----------------|------|------|------|
-| 1 | T4-5 Upgrade No. Pie Value | VIC Pie Chart | T4-5 Upgrade No. | Value | integer |
-| 2 | T4-5 Upgrade No. Pie Display | VIC Pie Chart | T4-5 Upgrade No. | Display | integer |
-| 3 | Retention VIC No. Pie Value | VIC Pie Chart | Retention VIC No. | Value | integer |
-| 4 | Retention VIC No. Pie Display | VIC Pie Chart | Retention VIC No. | Display | integer |
-| 5 | Direct VIC No. Pie Value | VIC Pie Chart | Direct VIC No. | Value | integer |
-| 6 | Direct VIC No. Pie Display | VIC Pie Chart | Direct VIC No. | Display | integer |
+| 序号 | 度量值名称                    | Display Folder | 指标              | 类型    | 格式    |
+| ---- | ----------------------------- | -------------- | ----------------- | ------- | ------- |
+| 1    | T4-5 Upgrade No. Pie Value    | VIC Pie Chart  | T4-5 Upgrade No.  | Value   | integer |
+| 2    | T4-5 Upgrade No. Pie Display  | VIC Pie Chart  | T4-5 Upgrade No.  | Display | integer |
+| 3    | Retention VIC No. Pie Value   | VIC Pie Chart  | Retention VIC No. | Value   | integer |
+| 4    | Retention VIC No. Pie Display | VIC Pie Chart  | Retention VIC No. | Display | integer |
+| 5    | Direct VIC No. Pie Value      | VIC Pie Chart  | Direct VIC No.    | Value   | integer |
+| 6    | Direct VIC No. Pie Display    | VIC Pie Chart  | Direct VIC No.    | Display | integer |
 
 ---
 
@@ -290,22 +316,22 @@ Direct VIC No. Pie Display =
 
 ### 6.1 饼图（Pie Chart）
 
-| 配置项 | 值 |
-|--------|-----|
+| 配置项       | 值                                                                                                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | 图例（分组） | 可选：a03_e2e_customer_data_m[platform] 或 [shop_info_id]（直接拉取，天然筛选+分组）；不拉分组字段时饼图展示三个指标的整体构成 |
-| 值 | 三个 Value 度量：[T4-5 Upgrade No. Pie Value]、[Retention VIC No. Pie Value]、[Direct VIC No. Pie Value] |
-| 详情 | 可选拉 Display 度量替代 Value，带格式显示 |
-| 全局筛选器 | Slicer_Time_Frame_Max、Slicer_Is_Employee_Selection、IsMemberFilter |
+| 值           | 三个 Value 度量：[T4-5 Upgrade No. Pie Value]、[Retention VIC No. Pie Value]、[Direct VIC No. Pie Value]                       |
+| 详情         | 可选拉 Display 度量替代 Value，带格式显示                                                                                      |
+| 全局筛选器   | Slicer_Time_Frame_Max、Slicer_Is_Employee_Selection、IsMemberFilter                                                            |
 
 > 饼图场景：三个 Value 度量分别对应饼图三块扇区，展示本期 end period 当月三个 VIC 子类型的 DISTINCTCOUNT(user_id) 构成。
 
 ### 6.2 度量值拉取示例
 
-| 场景 | 拉取度量 |
-|------|---------|
-| 饼图 - T4-5 升级 VIC 人数 | [T4-5 Upgrade No. Pie Display] |
-| 饼图 - 留存 VIC 人数 | [Retention VIC No. Pie Display] |
-| 饼图 - 直接 VIC 人数 | [Direct VIC No. Pie Display] |
+| 场景                      | 拉取度量                        |
+| ------------------------- | ------------------------------- |
+| 饼图 - T4-5 升级 VIC 人数 | [T4-5 Upgrade No. Pie Display]  |
+| 饼图 - 留存 VIC 人数      | [Retention VIC No. Pie Display] |
+| 饼图 - 直接 VIC 人数      | [Direct VIC No. Pie Display]    |
 
 ---
 
@@ -317,7 +343,9 @@ Direct VIC No. Pie Display =
 -- 三个 VIC 子类型本期 Act 数量（end period 当月）
 -- 假设 Last_Fiscal_Month_Min='2026-09-01', Last_Fiscal_Month_Max='2026-09-30'
 -- is_member=0 (TTL VIC), is_employee=1 (Yes)
--- TTL VIC 时 register_date 不设限；Member VIC 时增加 register_date <= '2026-09-30'（end period 末日）
+-- TTL VIC 时 register_date 不设限（保持原逻辑）；Member VIC 时增加以下两个条件（end period 末日）：
+-- AND register_date IS NOT NULL
+-- AND CAST(register_date AS DATE) <= '2026-09-30'
 SELECT
     COUNT(DISTINCT CASE WHEN is_upgrade_vic = 1 THEN user_id END) AS T4_5_Upgrade_No,
     COUNT(DISTINCT CASE WHEN is_retention_vic = 1 THEN user_id END) AS Retention_VIC_No,
@@ -328,20 +356,27 @@ WHERE data_date BETWEEN '2026-09-01' AND '2026-09-30'
   AND is_employee = 1;
 ```
 
+### 7.2 Member VIC 注册日期非空与 TTL VIC 回归检查
+
+以下为三个 Pie Value 度量的注册日期条件预期结果，需在 Power BI 中核对；其他筛选保持一致，截止日取 `Last_Fiscal_Month_Max`。
+
+| register_date                  | Member VIC 修改后 | TTL VIC 修改前后                   |
+| ------------------------------ | ----------------- | ---------------------------------- |
+| BLANK()                        | 排除              | 放行，保持不变                     |
+| 早于 end period 末日           | 放行              | 放行，保持不变                     |
+| 等于 end period 末日           | 放行              | 放行，保持不变                     |
+| 晚于 end period 末日的正常日期 | 排除              | 保持原`<= DATE(9999,12,31)` 判断 |
+
+TTL VIC 下新增保护中的 `__IsMemberFilter <> 1` 为 TRUE，复合条件完全等价于原日期条件；未取得唯一模式值时仍由 `SELECTEDVALUE(..., 0)` 回落为 TTL VIC。放行仅指注册日期条件，最终仍须满足其他原有筛选。Member VIC 与主表 Metric_ID=10/17/23 对账时，SQL 不再追加 `OR register_date IS NULL`。
+
 ---
 
 ## 8. 注意事项
 
 1. **独立性**：本方案三个指标完全独立实现，不调用 [VIC KPIs Act Base Value] 或 [VIC KPIs Base Value]，不依赖 Dim_ColMetric_VIC_KPIs / Metric_ID 路由体系。即使主表度量值变更，饼图度量值不受影响。
-
 2. **时间范围**：用 VIC 项目统一的 end period 当月区间（`Last_Fiscal_Month_Min/Max`），非 PB_Merchandise 的全局 `TimeFrame_Min/Max`。若需要切换为 Rolling 12 或其他区间，需调整 `__PeriodMin/Max` 的取值逻辑。
-
-3. **人群筛选保留（2026-09-21 重构，与主表口径一致）**：TTL VIC（IsMember=0）筛 `is_member = 0`（register_date 不设限，哨兵日期 DATE(9999,12,31) 恒真）；Member VIC（IsMember=1）筛 `is_member = 0 AND register_date <= end period 末日`（Last_Fiscal_Month_Max）；is_employee（默认 所有），确保饼图与主表 KPI 矩阵展示同一人群切片。若饼图需要展示不同人群，可通过切片器切换。
-
+3. **人群筛选保留（2026-09-21 重构，2026-09-22 与主表同步补充注册日期非空要求）**：TTL VIC（IsMember=0）仍筛 `is_member = 0`（保留 `register_date <= DATE(9999,12,31)`，空注册日期仍放行）；Member VIC（IsMember=1）筛 `is_member = 0`，且 `register_date` 非空并 `<= end period 末日`（Last_Fiscal_Month_Max）；is_employee（默认 所有），确保饼图与主表 KPI 矩阵展示同一人群切片。若饼图需要展示不同人群，可通过切片器切换。
 4. **分组维度传递**：platform / shop_info_id 等分组字段由饼图图例直接拉取事实表字段，DAX 度量值无需显式处理分组逻辑，模型自动传递筛选。
-
 5. **仅本期 Act**：本方案不输出 LY / vs LY / vs LP / Share 派生度量值，饼图仅展示本期快照。若需要对比派生，参考 VIC_KPIs_Table.md 主表的 Metric_ID=11/18/24（vs LY）、12/19/25（vs LP）、14/20/26（Share）。
-
 6. **口径等价性**：本方案三个 Value 度量与主表 Metric_ID=10/17/23 的 Act 基础聚合（[VIC KPIs Act Base Value] 在对应 Metric_ID 下的返回值）口径完全等价，可用作主表数据的饼图可视化呈现。
-
 7. **Display 命名约定**：遵循 PB_Merchandise_Trend.md 风格，每个指标出 Value + Display 一对，便于饼图按需拉取 Value（用于排序/数据条）或 Display（用于带格式文本）。

@@ -5,6 +5,7 @@
 > revised: 2026-08-13（Rolling 12 分母内化到 Act/LY/LP Base Value 的 Metric_ID=6 分支 + 起始月用财月字段而非天日期 EDATE）
 > revised: 2026-09-12（Metric_ID=6 分母弃用 Rolling 12 区间，改为"end period 往前推 12 个月的单月"：Act=-12 / LY=-24 / LP=-13；旧 Rolling 12 逻辑以块注释保留于各 Base Value 备查）
 > revised: 2026-09-21（is_member 筛选重构：Member VIC（IsMember=1）时事实表筛选由 is_member=1 改为 is_member=0 AND register_date <= end period 末日，Act/LY/LP 各取 Last_Fiscal_Month_Max/_LY/_LP；Metric_ID=6 分母调整为"end period 当月 last_fy_net_pay_amt >= 20000 的 count distinct user_id"，分子不变；旧分母逻辑按用户要求不再保留注释）
+> revised: 2026-09-22（Member VIC（__IsMemberFilter=1）新增 register_date 非空要求，仍须不晚于对应期末日；覆盖 Act/LY/LP 三个基础度量的 15 处筛选，含 Retention% 分子与分母；TTL VIC 的哨兵日期及原筛选行为不变）
 > type: 度量值开发 + 可视化构建
 > 口径来源: 口径文档/VIC KPI.md（子模块一 VIC KPI，5 个 KPI 分组共 28 列指标）
 > 参考实现: PB_Merchandise_Fulfillment_detail_ms.md（总路由 REMOVEFILTERS 范式）
@@ -26,7 +27,7 @@
   - Slicer_Time_Frame_Max（断开维度，读取 `Last_Fiscal_Month_*` 系列字段 → end period 时间范围）
   - Slicer_Time_Frame_Min（断开维度，end period 逻辑只需要 Max；Min 仅用于辅助）
   - Slicer_Is_Employee_Selection（断开维度，筛选 `is_employee`）
-  - IsMemberFilter（断开维度，筛选 is_member；Member VIC 时改用 is_member=0 + register_date <= end period 末日）
+  - IsMemberFilter（断开维度，筛选 is_member；Member VIC 时使用 is_member=0 + register_date 非空且 <= end period 末日；TTL VIC 保持原逻辑）
   - Slicer_Platform_Selection / Slicer_Store_Name（断开维度，行维度直接拉事实表字段实现自动传递）
   - Slicer_Currency_Selection（断开维度，本方案无金额类指标，不参与汇率换算）
 
@@ -50,15 +51,25 @@
 > **is_member 使用**: `VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)`，默认 TTL VIC
 > **is_employee 使用**: `VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])`，默认 Yes
 
-**is_member 筛选规则（2026-09-21 调整）**——维度表与事实表断开，由 DAX 显式处理：
+**is_member 筛选规则（2026-09-21 重构，2026-09-22 补充 Member VIC 注册日期非空要求）**——维度表与事实表断开，由 DAX 显式处理：
 
 | 切片器选择      | __IsMemberFilter | 事实表筛选                                                                                             |
 | --------------- | ---------------- | ------------------------------------------------------------------------------------------------------ |
 | TTL VIC（默认） | 0                | `is_member = 0`（逻辑不变）                                                                          |
-| Member VIC      | 1                | `is_member = 0 AND register_date <= end_period_date`（不再筛 is_member=1，改用注册日期界定会员人群） |
+| Member VIC      | 1                | `is_member = 0`，且 `register_date` 非空并 `<= end_period_date`（不再筛 is_member=1，改用注册日期界定会员人群） |
 
 - `register_date` 为事实表字段；`end_period_date` = 最后财月最后一天，取 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Max]`（LY/LP 分别取 `Last_Fiscal_Month_Max_LY` / `Last_Fiscal_Month_Max_LP`）
-- 实现方式：is_member 谓词统一写 `is_member = 0`；register_date 谓词用 `__EndPeriodDate` 变量承载（Member VIC 取对应期末日，TTL VIC 用哨兵日期 DATE(9999,12,31) 恒真不设限）
+- 实现方式：is_member 谓词统一写 `is_member = 0`；保留 `register_date <= __EndPeriodDate`（Member VIC 取对应期末日，TTL VIC 仍用哨兵日期 DATE(9999,12,31)）；仅 Member VIC 额外要求 `NOT ISBLANK(register_date)`，TTL VIC 保持原空值放行行为。
+- 回归核对（以下为注册日期条件的预期结果，需在 Power BI 中对 Act/LY/LP 分别验证；其他筛选保持一致）：
+
+| register_date | Member VIC 修改后 | TTL VIC 修改前后 |
+| --- | --- | --- |
+| BLANK() | 排除 | 放行，保持不变 |
+| 早于对应期末日 | 放行 | 放行，保持不变 |
+| 等于对应期末日 | 放行 | 放行，保持不变 |
+| 晚于对应期末日的正常日期 | 排除 | 保持原 `<= DATE(9999,12,31)` 判断 |
+
+TTL VIC 下新增保护中的 `__IsMemberFilter <> 1` 为 TRUE，复合条件完全等价于原日期条件；未取得唯一模式值时仍由 `SELECTEDVALUE(..., 0)` 回落为 TTL VIC。Retention% 的分子和分母同步应用上述规则，目标值表的筛选与聚合不变。
 
 所有指标（除特殊说明外）都需要应用这两个筛选到事实表 `a03_e2e_customer_data_m`。
 
@@ -109,7 +120,7 @@
 | Slicer_Time_Frame_Max        | 断开维度 | SELECTEDVALUE 读取`Last_Fiscal_Month_Min/Max`（本期自然日）、`Last_Fiscal_Month_Max`（end period 末日，Member VIC 的 register_date 截止）、`Last_Fiscal_Month_Min_LY/Max_LY/Min_LP/Max_LP`（LY/LP 区间自然日及末日，已预算，基础聚合直接读） |
 | Slicer_Time_Frame_Min        | 断开维度 | 本方案 end period 逻辑不使用（仅 Max 即可）                                                                                                                                                                                                        |
 | Slicer_Is_Employee_Selection | 断开维度 | SELECTEDVALUE 读取`IsEmployee_Code`                                                                                                                                                                                                              |
-| IsMemberFilter               | 断开维度 | SELECTEDVALUE 读取`IsMember`（0=TTL VIC → is_member=0；1=Member VIC → is_member=0 AND register_date <= end period 末日）                                                                                                                       |
+| IsMemberFilter               | 断开维度 | SELECTEDVALUE 读取`IsMember`（0=TTL VIC → is_member=0；1=Member VIC → is_member=0，且 register_date 非空并 <= end period 末日）                                                                                                                       |
 | Slicer_Platform_Selection    | 断开维度 | 行维度直接拉事实表 platform 字段，模型自动传递                                                                                                                                                                                                     |
 | Slicer_Store_Name            | 断开维度 | 行维度直接拉事实表 shop_info_id 字段，模型自动传递                                                                                                                                                                                                 |
 | Slicer_Currency_Selection    | 断开维度 | 本方案无金额类指标，不参与计算                                                                                                                                                                                                                     |
@@ -164,7 +175,7 @@ Dim_ColMetric_VIC_KPIs（断开维度，列头）
 ```
 [VIC KPIs Act Base Value]              ← 本期基础值
                                        ← 按 Metric_ID 路由到对应字段的 DISTINCTCOUNT
-                                       ← 统一应用 is_member（Member VIC: is_member=0 + register_date<=end period 末日）/ is_employee / end period 时间筛选
+                                       ← 统一应用 is_member（Member VIC: is_member=0 + register_date 非空且<=end period 末日）/ is_employee / end period 时间筛选
                                        ← Metric_ID=6 特殊：内化 last_fy_net_pay_amt 分母，返回 VIC Retention% 比率
                                        ←   分母 = end period 当月 last_fy_net_pay_amt >= 20000 DISTINCTCOUNT
 [VIC KPIs LY Base Value]               ← 去年同期基础值（财历映射 Last_Fiscal_Month_Min_LY/Max_LY，直接读取）
@@ -192,7 +203,7 @@ Dim_ColMetric_VIC_KPIs（断开维度，列头）
 | Slicer_Time_Frame_Max（LY）  | SELECTEDVALUE 读取`Last_Fiscal_Month_Min_LY/Max_LY`      | `data_date >= __LYMin AND data_date <= __LYMax`                                                               |
 | Slicer_Time_Frame_Max（LP）  | SELECTEDVALUE 读取`Last_Fiscal_Month_Min_LP/Max_LP`      | `data_date >= __LPMin AND data_date <= __LPMax`                                                               |
 | Slicer_Is_Employee_Selection | 断开维度，SELECTEDVALUE 读取`IsEmployee_Code`            | `a03_e2e_customer_data_m[is_employee] in __IsEmployeeFilter`                                                  |
-| IsMemberFilter               | 断开维度，SELECTEDVALUE 读取`IsMember`（0=TTL/1=Member） | `is_member = 0`；Member VIC 额外 `register_date <= __EndPeriodDate`（对应期 Last_Fiscal_Month_Max/_LY/_LP） |
+| IsMemberFilter               | 断开维度，SELECTEDVALUE 读取`IsMember`（0=TTL/1=Member） | `is_member = 0`；Member VIC 额外要求 `register_date` 非空且 `<= __EndPeriodDate`（对应期 Last_Fiscal_Month_Max/_LY/_LP）；TTL VIC 保持原逻辑 |
 | 事实表分组字段               | 表格行直接拉取，模型自动传递筛选                           | DAX 无需显式处理                                                                                                |
 
 ### 3.4 vs LY / vs LP 时间偏移规则（财历映射）
@@ -336,7 +347,7 @@ VIC KPIs Act Base Value =
 // 口径来源: 口径文档/VIC KPI.md
 // 筛选上下文:
 //   - data_date ∈ [Last_Fiscal_Month_Min, Last_Fiscal_Month_Max]（end period 当月）
-//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= Last_Fiscal_Month_Max（end period 末日）
+//   - is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= Last_Fiscal_Month_Max（end period 末日）
 //   - is_employee in __IsEmployeeFilter（默认 所有）
 //   - 按 Metric_ID 路由到 is_vic / is_retention_vic / is_upgrade_vic / is_direct_vic 字段
 // 聚合粒度: DISTINCTCOUNT(user_id) WHERE 对应 is_xxx_vic = 1
@@ -354,7 +365,7 @@ VIC KPIs Act Base Value =
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     // ── 人群筛选 ──
     // TTL VIC（IsMember=0）: 事实表筛 is_member = 0（逻辑不变）
-    // Member VIC（IsMember=1）: 事实表筛 is_member = 0 AND register_date <= end period 末日
+    // Member VIC（IsMember=1）: 事实表筛 is_member = 0，且 register_date 非空并 <= end period 末日
     //   end period 末日 = 本期 Last_Fiscal_Month_Max；TTL VIC 时 register_date 不设限（哨兵日期恒真）
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __EndPeriodDate =
@@ -374,7 +385,15 @@ VIC KPIs Act Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -384,7 +403,15 @@ VIC KPIs Act Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -394,7 +421,15 @@ VIC KPIs Act Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -404,7 +439,15 @@ VIC KPIs Act Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
             'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -426,7 +469,15 @@ VIC KPIs Act Base Value =
                     DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                     'a03_e2e_customer_data_m'[last_fy_net_pay_amt] >= 20000,
                     'a03_e2e_customer_data_m'[is_member] = 0,
+                    /* 旧逻辑（回退时替换下方复合条件）：
                     'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+                    */
+                    // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+                    'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                        && (
+                            __IsMemberFilter <> 1
+                                || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                        ),
                     'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
                     'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
@@ -474,7 +525,7 @@ VIC KPIs LY Base Value =
 //   - end period 基础聚合（Metric_ID=1/10/14/17/20/23/26）: 直接读取 Slicer_Time_Frame_Max 已预算的 Last_Fiscal_Month_Min_LY/Max_LY
 //   - Metric_ID=6 分母: LY end period 当月 last_fy_net_pay_amt >= 20000 的 DISTINCTCOUNT
 // 筛选上下文:
-//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= Last_Fiscal_Month_Max_LY（LY end period 末日）
+//   - is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= Last_Fiscal_Month_Max_LY（LY end period 末日）
 // 说明:
 //   - Metric_ID=1/10/14/17/20/23/26: 返回 DISTINCTCOUNT（数量类/Share 分子）
 //   - Metric_ID=6 特殊：内化 LY 分母（LY end period 当月 last_fy_net_pay_amt >= 20000），返回 VIC Retention% LY 比率
@@ -485,7 +536,7 @@ VIC KPIs LY Base Value =
     VAR __LYMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY])
     // ── 人群筛选 ──
     // TTL VIC（IsMember=0）: 事实表筛 is_member = 0（逻辑不变）
-    // Member VIC（IsMember=1）: 事实表筛 is_member = 0 AND register_date <= end period 末日
+    // Member VIC（IsMember=1）: 事实表筛 is_member = 0，且 register_date 非空并 <= end period 末日
     //   end period 末日 = LY 期 Last_Fiscal_Month_Max_LY；TTL VIC 时 register_date 不设限（哨兵日期恒真）
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __EndPeriodDate =
@@ -504,7 +555,15 @@ VIC KPIs LY Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
@@ -514,7 +573,15 @@ VIC KPIs LY Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
@@ -524,7 +591,15 @@ VIC KPIs LY Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
@@ -534,7 +609,15 @@ VIC KPIs LY Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
             'a03_e2e_customer_data_m'[data_date] <= __LYMax
@@ -556,7 +639,15 @@ VIC KPIs LY Base Value =
                     DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                     'a03_e2e_customer_data_m'[last_fy_net_pay_amt] >= 20000,
                     'a03_e2e_customer_data_m'[is_member] = 0,
+                    /* 旧逻辑（回退时替换下方复合条件）：
                     'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+                    */
+                    // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+                    'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                        && (
+                            __IsMemberFilter <> 1
+                                || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                        ),
                     'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __LYMin,
                     'a03_e2e_customer_data_m'[data_date] <= __LYMax
@@ -604,7 +695,7 @@ VIC KPIs LP Base Value =
 //   - end period 基础聚合（Metric_ID=1/10/14/17/20/23/26）: 直接读取 Slicer_Time_Frame_Max 已预算的 Last_Fiscal_Month_Min_LP/Max_LP
 //   - Metric_ID=6 分母: LP end period 当月 last_fy_net_pay_amt >= 20000 的 DISTINCTCOUNT
 // 筛选上下文:
-//   - is_member = 0；Member VIC（IsMember=1）时额外 register_date <= Last_Fiscal_Month_Max_LP（LP end period 末日）
+//   - is_member = 0；Member VIC（IsMember=1）时额外要求 register_date 非空且 <= Last_Fiscal_Month_Max_LP（LP end period 末日）
 // 注: LP = Last Period（上一期），按所选粒度（月/季/年）的上一期
 // 说明:
 //   - Metric_ID=1/10/14/17/20/23/26: 返回 DISTINCTCOUNT（数量类/Share 分子）
@@ -616,7 +707,7 @@ VIC KPIs LP Base Value =
     VAR __LPMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LP])
     // ── 人群筛选 ──
     // TTL VIC（IsMember=0）: 事实表筛 is_member = 0（逻辑不变）
-    // Member VIC（IsMember=1）: 事实表筛 is_member = 0 AND register_date <= end period 末日
+    // Member VIC（IsMember=1）: 事实表筛 is_member = 0，且 register_date 非空并 <= end period 末日
     //   end period 末日 = LP 期 Last_Fiscal_Month_Max_LP；TTL VIC 时 register_date 不设限（哨兵日期恒真）
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __EndPeriodDate =
@@ -635,7 +726,15 @@ VIC KPIs LP Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LPMin,
             'a03_e2e_customer_data_m'[data_date] <= __LPMax
@@ -645,7 +744,15 @@ VIC KPIs LP Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_retention_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LPMin,
             'a03_e2e_customer_data_m'[data_date] <= __LPMax
@@ -655,7 +762,15 @@ VIC KPIs LP Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_upgrade_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LPMin,
             'a03_e2e_customer_data_m'[data_date] <= __LPMax
@@ -665,7 +780,15 @@ VIC KPIs LP Base Value =
             DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
             'a03_e2e_customer_data_m'[is_direct_vic] = 1,
             'a03_e2e_customer_data_m'[is_member] = 0,
+            /* 旧逻辑（回退时替换下方复合条件）：
             'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+            */
+            // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+            'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                && (
+                    __IsMemberFilter <> 1
+                        || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LPMin,
             'a03_e2e_customer_data_m'[data_date] <= __LPMax
@@ -687,7 +810,15 @@ VIC KPIs LP Base Value =
                     DISTINCTCOUNT('a03_e2e_customer_data_m'[user_id]),
                     'a03_e2e_customer_data_m'[last_fy_net_pay_amt] >= 20000,
                     'a03_e2e_customer_data_m'[is_member] = 0,
+                    /* 旧逻辑（回退时替换下方复合条件）：
                     'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate,
+                    */
+                    // 仅 Member VIC 排除空注册日期；TTL VIC 仍使用原哨兵日期条件
+                    'a03_e2e_customer_data_m'[register_date] <= __EndPeriodDate
+                        && (
+                            __IsMemberFilter <> 1
+                                || NOT ISBLANK('a03_e2e_customer_data_m'[register_date])
+                        ),
                     'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
                     'a03_e2e_customer_data_m'[data_date] >= __LPMin,
                     'a03_e2e_customer_data_m'[data_date] <= __LPMax
@@ -1448,7 +1579,7 @@ VIC KPIs Cell Background Color =
 ## 7. 注意事项
 
 1. **end period 时间范围（关键逻辑）**：所有指标均使用 `Slicer_Time_Frame_Max[Last_Fiscal_Month_Min]` ~ `[Last_Fiscal_Month_Max]` 作为本期时间范围；LY 使用 `Last_Fiscal_Month_Min_LY` ~ `Last_Fiscal_Month_Max_LY`；LP 使用 `Last_Fiscal_Month_Min_LP` ~ `Last_Fiscal_Month_Max_LP`。这些字段已由 Slicer_Time_Frame_Max 日期维度表通过自关联计算得到，无需在 DAX 中重复实现。
-2. **is_member / is_employee 双重筛选（关键逻辑；is_member 规则 2026-09-21 调整）**：所有指标均应用 `is_member = 0` 谓词（TTL VIC 与 Member VIC 统一），Member VIC（IsMember=1）时额外应用 `register_date <= end period 末日`（Act 取 `Last_Fiscal_Month_Max`、LY 取 `Last_Fiscal_Month_Max_LY`、LP 取 `Last_Fiscal_Month_Max_LP`；TTL VIC 时 register_date 不设限，哨兵日期 DATE(9999,12,31) 恒真）；is_employee 应用 `VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])` 筛选。默认值：is_member=0（TTL VIC），is_employee=1（Yes）。
+2. **is_member / is_employee 双重筛选（关键逻辑；2026-09-21 重构，2026-09-22 补充 Member VIC 注册日期非空要求）**：实际值基础聚合统一应用 `is_member = 0` 谓词，Member VIC（IsMember=1）额外要求 `register_date` 非空且 `<= end period 末日`（Act 取 `Last_Fiscal_Month_Max`、LY 取 `Last_Fiscal_Month_Max_LY`、LP 取 `Last_Fiscal_Month_Max_LP`）；TTL VIC 保留原 `register_date <= DATE(9999,12,31)`，空注册日期仍放行；is_employee 应用 `VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])` 筛选。默认值：is_member=0（TTL VIC），is_employee=1（Yes）。目标值表不新增人群筛选。
 3. **REMOVEFILTERS 机制**：派生指标（vs LY / vs LP / Share / Share vs LY / Share vs LP）的取值必须先 `REMOVEFILTERS('Dim_ColMetric_VIC_KPIs')` 再应用目标 Metric_ID，否则矩阵行标题保留的筛选器会导致冲突返回 BLANK。这与 PB_Merchandise_Fulfillment_detail_ms.md 的总路由范式完全一致。
 4. **VIC Retention% 的"end period 当月 last_fy_net_pay_amt >= 20000"分母（关键逻辑，仅此指标使用；2026-09-21 由"往前推 12 个月单月"调整而来，旧口径见 1.4 节历史口径块）**：分母为"所选时间范围 end period 当月 `last_fy_net_pay_amt >= 20000` 的 count(distinct user_id)"。
 
@@ -1456,7 +1587,7 @@ VIC KPIs Cell Background Color =
    - LY：LY end period 当月区间（`data_date ∈ [Last_Fiscal_Month_Min_LY, Last_Fiscal_Month_Max_LY]`）
    - LP：LP end period 当月区间（`data_date ∈ [Last_Fiscal_Month_Min_LP, Last_Fiscal_Month_Max_LP]`）
    - 聚合方式：单月区间 DISTINCT（同一用户只计一次）；不再筛 is_vic=1，不再做财月字符串偏移推导目标月
-   - 分母人群筛选：与其他指标一致（is_member = 0 + register_date <= __EndPeriodDate + is_employee）
+   - 分母人群筛选：与分子及其他实际值基础聚合一致（is_member = 0 + 仅 Member VIC 要求 register_date 非空且 <= 对应期末日 + is_employee；TTL VIC 保持原逻辑）
    - 分子不变：is_retention_vic=1 在 end period 当月（Act/LY/LP 对应期）的 DISTINCTCOUNT
    - **内化实现**：分母逻辑已内化于 `[VIC KPIs Act Base Value]` / `[VIC KPIs LY Base Value]` / `[VIC KPIs LP Base Value]` 的 `Metric_ID=6` 分支，返回 VIC Retention% 比率（DIVIDE(分子, 分母)），不再单列分母度量值；旧分母逻辑（2026-09-12 单月偏移版、更早 Rolling 12 区间版）已按用户要求不再以块注释保留
    - 总路由 `[VIC KPIs Base Value]` 的 VIC Retention% vs LY / vs LP 派生：直接取 Act Base Value(Metric_ID=6) - LY/LP Base Value(Metric_ID=6) 做比率差值
@@ -1509,7 +1640,7 @@ VIC KPIs Cell Background Color =
     - 列指标维度表替换为 Dim_ColMetric_VIC_KPIs（28 行 vs 36 行）
     - 数据底表由 a02_e2e_boss_performance_summary_d / a02_e2e_boss_fulfillment_request_data_d 改为 a03_e2e_customer_data_m（单一事实表）
     - 时间逻辑由"区间 SUM"改为"end period 当月 DISTINCTCOUNT"
-    - 新增 is_member / is_employee 双重人群筛选（is_member 规则 2026-09-21 调整：统一 is_member=0，Member VIC 额外 register_date <= end period 末日）
+    - 新增 is_member / is_employee 双重人群筛选（2026-09-21 重构，2026-09-22 补充非空要求：统一 is_member=0，Member VIC 额外要求 register_date 非空且 <= end period 末日；TTL VIC 保持原逻辑）
     - 新增 VIC Retention% 专用分母（end period 当月 last_fy_net_pay_amt >= 20000；旧口径沿革见 1.4 节历史口径块；内化于 Act/LY/LP Base Value 的 Metric_ID=6 分支，非独立度量值）
     - 派生指标新增 vs LP / Share / Share vs LY / Share vs LP / TAR ACH% 等类型
     - 颜色规则由"按 ColType 判断"改为"按 Metric_ColorRule 字段三值标识统一调度"
