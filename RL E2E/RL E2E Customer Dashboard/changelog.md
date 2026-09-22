@@ -511,3 +511,20 @@
   - 口径文档 VIC KPI.md 无需同步：is_member 使用说明已覆盖"本期取 Last_Fiscal_Month_Max"，本方案与主表 Act 同源；§4 Retention VIC No.（人数）定义不涉及分母
   - 静态核验：旧谓词 0 残留；新谓词 3+3 处一一配对；未运行 Power BI DAX 引擎
 ---
+
+## [2026-09-22 17:27] DAX 修改 — VIC Segment SUM 类按 end period Tier 归属
+
+- **模块**: VIC（4 VIC Segment）
+- **任务**: 对齐用户提供的 SQL：期末按 customer_tier 圈定 user_id，再汇总所选区间，不限制历史 Tier
+- **操作**: 修改
+- **变更内容**:
+  - `_SLS Base Act/LY`、`_Net Pay Qty Base Act/LY`、`_Net Pay Order Cnt Base Act/LY`：Step1 保持期末 Tier 圈人；Step2 外层 CALCULATE 移除维度表及事实表 customer_tier 筛选，内层应用原日期、人群条件和 TREATAS 聚合，避免历史 Tier 限制及同层筛选参数提前求值影响。
+  - `_SLS Total Base Act/LY`：SUMX 遍历 ALLSELECTED 保留的非空 Tier，逐行复用对应 SLS Base 后加总，保持 Total = 选中 Tier 行金额之和。
+  - Customer No./Customer Total Act/LY 不变；SLS、ACV、AUR、UPT、Freq.、SLS% 及相关同比通过基础度量自动继承。会员、员工、注册日期、平台、门店、日期与 Value/Display 公式保留。
+  - 同步现有口径文档、分组说明、必要注释及简要核对要点；直接更新新逻辑，不保留旧 DAX 块注释。
+- **关联文件**:
+  - `VIC/4 VIC Segment/VIC_Segment_Table.md`
+  - `口径文档/VIC/VIC Segment.md`
+- **备注**: 按用户要求简化验证，仅作必要文本核对；未在 Power BI 模型中实测，实际数值需在相同筛选下与 SQL 对照。
+
+---

@@ -10,6 +10,7 @@
 > **口径修订**: 2026-09-12 — 澄清 Step 1 + Step 2 分步口径（两步时间范围不同不能合并，Step 2 = 切片器所选完整时间范围，见子模块四说明）；修正指标 6 聚合粒度（继承指标 5 分步口径）；补充指标 3 分母移除 customer_tier 说明（ALLSELECTED，与指标 7 分母对齐）；修正全局逻辑 end period 说明示例笔误
 > **口径修订**: 2026-09-14 — 调整指标 3 / 指标 7 占比类分母口径：分母与分子完全对称（指标 3 分母去掉 net_pay_amt > 0 条件；指标 7 分母由"所选时间范围单步全量"改为与分子同结构 Step1+Step2 分步），customer_tier 均扩为全部 T1/T2/T3/T4/T5（ALLSELECTED），Total = T1+T2+T3+T4+T5 加总
 > **口径修订**: 2026-09-21 — 所有指标及其分子、分母统一调整会员筛选：两档事实表均为 is_member=0，Member VIC 追加 register_date 不晚于对应期间最后财月末；Step 1 / Step 2 均应用该规则。原有分步区间、分组、聚合及派生公式不变，本模块不涉及 VIC Retention%。
+> **口径修订**: 2026-09-22 — 按 SQL 的 end period Tier 归属：SUM 类指标 Step1 按期末 Tier 框定用户，Step2 移除历史 customer_tier 限制，在完整所选区间聚合这些用户；Act/LY 各按自身期末归属。SLS 占比分母逐个外部选中 Tier 复用分子并加总；Customer 人数及人数分母不变，会员、员工、平台、门店、日期和格式规则不变。
 
 ---
 
@@ -33,11 +34,12 @@
 
 ## 子模块四：VIC Segment
 
-> **分组维度**: 按 `customer_tier`（T1/T2/T3/T4/T5）分组，固定值：T1：≧ 200K；T2：80-200K；T3：20-80K；T4：5-20K；T5：< 5K;已有DIM_Row_VIC_Tier行维度字段，参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\4 VIC Segment\DIM_Row_VIC_Tier.md，DIM_Row_VIC_Tier和a03_e2e_customer_data_m表，模型关系为1:N，所以分组维度由模型自动传递，DAX 无需显式处理分组；
+> **分组维度**: 按 `customer_tier`（T1/T2/T3/T4/T5）分组，固定值：T1：≧ 200K；T2：80-200K；T3：20-80K；T4：5-20K；T5：< 5K;已有DIM_Row_VIC_Tier行维度字段，参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\VIC\4 VIC Segment\DIM_Row_VIC_Tier.md，DIM_Row_VIC_Tier和a03_e2e_customer_data_m表，模型关系为1:N，Customer 人数和 SUM 类 Step1 通过关系自动按期末 Tier 分组；SUM 类 Step2 显式移除 Tier 筛选，仅按 Step1 已框定的用户集合聚合历史记录；
 > **行维度列职责**: 表格行维度实际承载列为 DIM_Row_VIC_Tier[Row Label]（图片展示行标签，如 "T1 (≧ 200K)"）；Tier ID 为与事实表 customer_tier 的 1:N 关系关联列；
-> **Step 1 + Step 2 分步口径（2026-09-12 澄清，2026-09-14 修订占比类分母）**: 指标 5（SLS）、指标 7（% of Total 净销售额占比分子与分母）、指标 9（ACV 分子）、指标 10（AUR 分子/分母）、指标 11（UPT 分子/分母）、指标 12（Freq. 分子）均采用 Step 1 + Step 2 两步口径——**Step 1**：在 dt = 所选时间范围 end period（end period 当月单月），筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；**Step 2**：再看该 user_id 在所选时间范围（切片器所选完整时间范围）对应的 sum(net_pay_amt) / sum(net_pay_qty) / sum(net_pay_order_cnt)。两步时间范围不一致（Step 1 = end period 当月，Step 2 = 所选时间范围完整区间），**不能直接合并区间计算**，必须分步实现；Step 1 / Step 2 均不移除 customer_tier / platform / shop_info_id 分组维度（由模型 1:N 关系自动传递保留，与行上下文一致，DAX 无需显式处理）；占比类分母（指标 3 分母、指标 7 分母）customer_tier 扩为全部 T1/T2/T3/T4/T5（移除行上下文 customer_tier 影响但保留外部切片器影响，ALLSELECTED；2026-09-14 修订：指标 3 分母与分子完全对称、无 net_pay_amt > 0 条件；指标 7 分母与分子同结构 Step1+Step2 分步，Total = T1+T2+T3+T4+T5 加总）；LY 派生版本：Step 1 用 LY end period 当月，Step 2 用 LY 所选时间范围完整区间；
+> **Step 1 + Step 2 分步口径（2026-09-22：以 end period Tier 为准）**: 指标 5（SLS）、指标 7（SLS 占比）、指标 9（ACV 分子）、指标 10（AUR 分子/分母）、指标 11（UPT 分子/分母）、指标 12（Freq. 分子）的 SUM 聚合均分两步：**Step1** 在 end period 当月按当前行 customer_tier 框定 user_id；**Step2** 将已固定的用户集合通过 TREATAS 传回事实表，移除 DIM_Row_VIC_Tier 及事实表 customer_tier 的筛选，在完整所选时间范围聚合 sum(net_pay_amt) / sum(net_pay_qty) / sum(net_pay_order_cnt)。历史记录即使属于其他 Tier 或 Tier 为空，也归入该用户的期末 Tier；两步时间不同，不能合并。平台、门店、员工、会员及已有注册日期筛选仍按原规则执行。LY 独立按 LY end period 圈人并汇总 LY 区间，不复用本期用户集合。
+> **占比类分母**: Customer Total 保持原 end period 单步 DISTINCTCOUNT + ALLSELECTED；SLS Total 用 SUMX 遍历 ALLSELECTED(DIM_Row_VIC_Tier) 中非空 Tier，每个 Tier 重新计算对应 Act/LY 的 SLS 基础度量，再加总。每个 Tier 内部仍执行 Step1+Step2，外部 Tier 筛选仅限定期末人群，不限制这些用户的历史 Tier。无外部 Tier 限制时 Total = T1+T2+T3+T4+T5；有外部筛选时为选中 Tier 加总。即使同一用户在期末存在多个 Tier，各行也与 SQL 的 DISTINCT(customer_tier,user_id) 对齐，SLS Total 按行加总而非先合并用户去重。
 
-> **会员筛选适用范围**: 指标 1~12 的基础值及其分子、分母均执行全局会员规则；指标 0 为行维度，不新增度量值。Customer 类单步计算使用对应本期/LY 财月末；SLS / SLS Total / Net Pay Qty / Net Pay Order Cnt 的 Step 1 和 Step 2 均使用对应本期/LY 财月末作为注册日期上限，不能改用 Step 2 的 TimeFrame_Max，也不增加注册日期下限。员工、customer_tier / platform / shop_info_id 筛选及占比类分母的 ALLSELECTED 机制保持不变。
+> **会员筛选适用范围**: 指标 1~12 的基础值及其分子、分母均执行全局会员规则；指标 0 为行维度，不新增度量值。Customer 类单步计算使用对应本期/LY 财月末；SLS / SLS Total / Net Pay Qty / Net Pay Order Cnt 的 Step 1 和 Step 2 均使用对应本期/LY 财月末作为注册日期上限，不能改用 Step 2 的 TimeFrame_Max，也不增加注册日期下限。员工、platform / shop_info_id 和现有会员筛选不变；customer_tier 仅用于期末圈人，SUM 类 Step2 移除 Tier 限制；占比类分母通过 ALLSELECTED 保留外部 Tier 选择。
 > **日期前提**: register_date 与财月末字段需为可比较的 Date 类型，日期切片器需提供有效单值；直接使用 <=，未追加非空筛选，BLANK 日期的业务处理需另行确认。
 
 ### 0. Tier — 买家分层
@@ -127,11 +129,11 @@
 | **指标名称** | SLS (in K) |
 | **指标名称中文** | 净销售额 |
 | **业务定义** | 该分层下买家净销售额 |
-| **计算公式** | Step 1：在 dt = 所选时间范围 end period（end period 当月单月），筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2：再看该 user_id 在所选时间范围（切片器所选完整时间范围）对应的 sum(net_pay_amt)。两步时间范围不同，不能合并区间计算，必须分步 |
+| **计算公式** | Step 1：在 dt = 所选时间范围 end period（end period 当月单月），筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2：移除历史 customer_tier 限制，汇总该 user_id 在所选时间范围（切片器所选完整时间范围）的 sum(net_pay_amt)，全部归入期末 Tier。两步时间范围不同，不能合并区间计算，必须分步 |
 | **统计字段** | `net_pay_amt` |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | 报表上看到的数值 = 实际金额 ÷ 1,000，所以得到的值需要÷1000；执行全局会员筛选规则（两档 is_member=0，Member VIC 追加注册截止条件）及原 is_employee 筛选 |
-| **聚合粒度** | Step 1：end period 当月单月；Step 2：所选时间范围完整区间；`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理（Step 1 / Step 2 均保留分组维度自动传递） |
+| **聚合粒度** | Step 1：end period 当月单月；Step 2：所选时间范围完整区间；`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理（两步保留 platform / shop_info_id；customer_tier 仅在 Step1 圈人时生效） |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
 
@@ -160,9 +162,9 @@
 | **指标名称** | % of Total |
 | **指标名称中文** | 净销售额占比 |
 | **业务定义** | 该分层下买家净销售额/总买家净销售额 |
-| **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period（end period 当月单月），筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围（切片器所选完整时间范围）对应的 sum(net_pay_amt)，两步不能合并区间计算。分母：Step 1 在 end period 当月框定全部 customer_tier（T1/T2/T3/T4/T5）的 user_id 范围，Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_amt)——与分子完全同结构分步，仅 customer_tier 为全部，Total = T1+T2+T3+T4+T5 加总 |
+| **计算公式** | 分子：同指标 5，Step1 按 end period Tier 框定用户，Step2 移除历史 Tier 限制后聚合所选区间销售额。分母：逐个外部选中 Tier 复用该分子并加总（SUMX + ALLSELECTED），各 Tier 内部独立执行 Step1+Step2；无外部 Tier 限制时 Total = T1+T2+T3+T4+T5 |
 | **分子** | `net_pay_amt` |
-| **分母** | `net_pay_amt`（全部 customer_tier in T1/T2/T3/T4/T5，Step1+Step2 与分子完全同结构分步，移除行上下文 customer_tier 影响但保留外部切片器影响，ALLSELECTED；Total = T1+T2+T3+T4+T5 加总） |
+| **分母** | `net_pay_amt`（SUMX 遍历 ALLSELECTED 保留的非空 Tier，逐 Tier 计算期末人群的区间销售额后加总；不先合并不同 Tier 的 user_id 去重，历史 Tier 不限制） |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | 执行全局会员筛选规则（两档 is_member=0，Member VIC 追加注册截止条件）及原 is_employee 筛选 |
 | **聚合粒度** | `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
@@ -181,7 +183,7 @@
 | **计算公式** | 今年 - 去年（差值，展示时 ×100 转 pts） |
 | **数据底表** | `a03_e2e_customer_data_m` |
 | **筛选条件** | 执行全局会员筛选规则（两档 is_member=0，Member VIC 追加注册截止条件）及原 is_employee 筛选 |
-| **聚合粒度** | 同指标 7 口径（分子 Step 1 + Step 2 分步，分母与分子同结构分步仅 customer_tier 全部；今年 SLS% 与去年 SLS% 均按指标 7 计算，LY 版本：Step 1 = LY end period 当月，Step 2 = LY 所选时间范围完整区间），`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
+| **聚合粒度** | 同指标 7 口径（分子按对应期末 Tier 圈人后跨历史 Tier 聚合，分母逐个外部选中 Tier 复用分子并加总；今年 SLS% 与去年 SLS% 均按指标 7 计算，LY 版本：Step 1 = LY end period 当月，Step 2 = LY 所选时间范围完整区间），`platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理 |
 | **数据类型** | integer_pts → 整数，千分位整数pts, 不含正号，例如：120pts / -80pts,直接使用FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")，算同比LY：当期值 − 同期值（差值，pts 指标，展示时 ×100 转 pts） |        
 | **数据格式** | `#,##0pts;-#,##0pts;0pts` |
 
@@ -194,7 +196,7 @@
 | **指标名称** | ACV |
 | **指标名称中文** | 客单价 |
 | **业务定义** | 该分层下净销售金额/净购买买家人数 |
-| **计算公式** | 分子：SLS（Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_amt)）；分母：dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，count(distinct user_id) |
+| **计算公式** | 分子：SLS（Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 移除历史 customer_tier 限制，再看该 user_id 在所选时间范围对应的 sum(net_pay_amt)）；分母：dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，count(distinct user_id) |
 | **分子** | `net_pay_amt`、 sum(net_pay_amt)|
 | **分母** | `user_id` 、count(distinct user_id)|
 | **数据底表** | `a03_e2e_customer_data_m` |
@@ -212,7 +214,7 @@
 | **指标名称** | AUR |
 | **指标名称中文** | 件单价 |
 | **业务定义** | 该分层下净销售金额/商品净出库件数 |
-| **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_amt)。分母：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_qty) |
+| **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 移除历史 customer_tier 限制，再看该 user_id 在所选时间范围对应的 sum(net_pay_amt)。分母：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 移除历史 customer_tier 限制，再看该 user_id 在所选时间范围对应的 sum(net_pay_qty) |
 | **分子** | `net_pay_amt`、sum(net_pay_amt) |
 | **分母** | `net_pay_qty`、sum(net_pay_qty) |
 | **数据底表** | `a03_e2e_customer_data_m` |
@@ -230,7 +232,7 @@
 | **指标名称** | UPT |
 | **指标名称中文** | 客单件 |
 | **业务定义** | 该分层下商品净出库件数/净出库订单数 |
-| **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_qty)。分母：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_order_cnt) |
+| **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 移除历史 customer_tier 限制，再看该 user_id 在所选时间范围对应的 sum(net_pay_qty)。分母：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 移除历史 customer_tier 限制，再看该 user_id 在所选时间范围对应的 sum(net_pay_order_cnt) |
 | **分子** | `net_pay_qty`、sum(net_pay_qty) |
 | **分母** | `net_pay_order_cnt`、sum(net_pay_order_cnt) |
 | **数据底表** | `a03_e2e_customer_data_m` |
@@ -248,7 +250,7 @@
 | **指标名称** | Freq. |
 | **指标名称中文** | 购买频次 |
 | **业务定义** | 该分层下净订单数/净购买买家人数 |
-| **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 再看该 user_id 在所选时间范围对应的 sum(net_pay_order_cnt)。分母：dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，count(distinct user_id) |
+| **计算公式** | 分子：Step 1 在 dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，框定 user_id 范围；Step 2 移除历史 customer_tier 限制，再看该 user_id 在所选时间范围对应的 sum(net_pay_order_cnt)。分母：dt = 所选时间范围 end period，筛选 customer_tier = T1/T2/T3/T4/T5，count(distinct user_id) |
 | **分子** | `net_pay_order_cnt`、sum(net_pay_order_cnt) |
 | **分母** | `user_id`、count(distinct user_id) |
 | **数据底表** | `a03_e2e_customer_data_m` |
@@ -269,7 +271,7 @@
 | **货币转换规则** | 数据源默认为 RMB，转化为美元需要除以固定值 7 |
 | **派生指标** | LY（去年同期）、LP（上期）、vs LY（同比）、vs LP（环比）、占比、YOY、vs Store 等为派生指标，依据基础指标计算生成 |
 | **分组维度** | 根据 `platform, shop_info_id`分组维度由表字段自动传递，DAX 无需显式处理、`timeframe`（Month/Quarter/Year）、`customer_tier`（T1/T2/T3/T4/T5）、`last_fy_last_order_month_type`（R3/R4-6/R7-9/R10-12/TTL）、VIC 类型（New VIC/Retention VIC/Direct VIC/T4-5 Upgrade）分组 |
-| **Step1+Step2 分步口径** | 指标 5/7/9/10/11/12：Step 1 在 end period 当月框定分层 user_id；Step 2 该 user_id 在所选时间范围完整区间聚合；两步时间范围不同，不能合并区间计算；Step 1 / Step 2 均不移除分组维度（模型 1:N 关系自动传递）；LY 版本 Step 1 / Step 2 分别用 LY end period 当月 / LY 所选时间范围；占比类分母（指标 3 / 指标 7）customer_tier 扩为全部 T1-T5（ALLSELECTED 保留外部切片器），指标 3 分母与分子对称（无 net_pay_amt>0），指标 7 分母与分子同结构 Step1+Step2 分步（2026-09-14 修订），Total = 五行加总 |
+| **Step1+Step2 分步口径** | 指标 5/7/9/10/11/12：Step1 按 end period Tier 框定用户，Step2 移除维度表与事实表 Tier 筛选，聚合这些用户在完整所选区间的记录，保留其他原有筛选；LY 使用自身期末 Tier 与 LY 区间。Customer 人数及分母保持单步 end period 口径；SLS 分母逐个 ALLSELECTED 保留的非空 Tier 复用分子后加总，不限制历史 Tier、不合并不同 Tier 的用户集合 |
 | **必须遵守** | 口径文档中定义的所有指标，必须遵守其数据类型和数据格式，如果和解决方案中存在争议的，一切以口径文档为准，必须按照口径文档中的格式进行调整 |
 | **DAX 语法规范** | 文本常量必须使用双引号 `" "`，禁止使用单引号；单引号 `' '` 仅用于表名，列名使用方括号 `[ ]`，例如：`[is_vic] = 1` |
 | **pts 与 bp 区别** | pts 指标：值×100 转 pts（基点，含正负号），数据格式 `+#,##0pts;-#,##0pts;0pts`；bp 指标：值×10000 转 bp，数据格式 `+#,##0bp;-#,##0bp;0bp` |
