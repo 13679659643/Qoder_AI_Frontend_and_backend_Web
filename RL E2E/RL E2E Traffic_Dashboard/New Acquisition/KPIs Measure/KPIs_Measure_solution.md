@@ -445,43 +445,40 @@ Cost 直通车 快车占比 Display =
 ### 2.8 Cost% — 直通车（#12）
 
 ```dax
-Cost% 直通车 Value = 
+Cost% 直通车 Value =
 // ========================================
 // 度量值: Cost% 直通车 Value
+// 中文名: 直通车／快车各行层级花费占比
 // Display Folder: KPIs Measure
-// 用途: 直通车关键词/计划层级花费占比（卡片图）
-// 口径来源: New Acquisition实际使用版本.md 子模块五 §12
-// 计算公式: 关键词/计划层级 Cost / TTL Cost
-//   分子: cost_amt（该关键词/计划层级，受行维度筛选）
-//   分母: cost_amt（该广告点位合计，移除所有行维度）
+// 用途: 当前行 Cost / 整个矩阵入选明细的 Cost 总额
 // 数据底表: a05_e2e_paid_media_keyword_data_d
-// 筛选条件: channel in {"直通车","快车"}
-// 数据类型: percent_1dp → 百分比一位小数，不含正号
-// 说明: 分母用 REMOVEFILTERS 移除行维度（customer_type/category/plan_name/keyword_name）
-//       卡片图场景下无行维度，REMOVEFILTERS 不影响结果，但保证矩阵场景兼容
+// 筛选条件: channel IN {"直通车", "快车"}；本期日期范围
+// 行层级: TTL / customer_type / category / keyword_type / keyword_name
+// 口径说明: ALLSELECTED 恢复视觉外层选择，所有父组共用一个分母
+// 数据类型: percent_1dp；分子分母均用人民币原值，比值不需要汇率转换
 // ========================================
     // ── 时间筛选：本期 ──
     VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
     VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
-    // ── 分子：该关键词/计划层级直通车 Cost（受行维度筛选）──
+    // ── 分子：当前行层级直通车／快车 Cost ──
     VAR __Numerator =
         CALCULATE(
             SUM('a05_e2e_paid_media_keyword_data_d'[cost_amt]),
-            'a05_e2e_paid_media_keyword_data_d'[channel] in {"直通车","快车"},
+            'a05_e2e_paid_media_keyword_data_d'[channel] IN {"直通车", "快车"},
             'a05_e2e_paid_media_keyword_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_keyword_data_d'[data_date] <= __TimeMax
         )
-    // ── 分母：该广告点位合计（移除所有行维度）──
+    // ── 分母：解除当前行定位，保留视觉外层入选组合及切片器筛选 ──
     VAR __Denominator =
         CALCULATE(
             SUM('a05_e2e_paid_media_keyword_data_d'[cost_amt]),
-            'a05_e2e_paid_media_keyword_data_d'[channel] in {"直通车","快车"},
+            'a05_e2e_paid_media_keyword_data_d'[channel] IN {"直通车", "快车"},
             'a05_e2e_paid_media_keyword_data_d'[data_date] >= __TimeMin,
             'a05_e2e_paid_media_keyword_data_d'[data_date] <= __TimeMax,
-            REMOVEFILTERS(
+            ALLSELECTED(
                 'a05_e2e_paid_media_keyword_data_d'[customer_type],
                 'a05_e2e_paid_media_keyword_data_d'[category],
-                'a05_e2e_paid_media_keyword_data_d'[plan_name],
+                'a05_e2e_paid_media_keyword_data_d'[keyword_type],
                 'a05_e2e_paid_media_keyword_data_d'[keyword_name]
             )
         )
@@ -624,32 +621,36 @@ RETURN
 ```
 
 ```dax
-IsAnyKeywordNotEmpty = 
-/*
-功能：实现跨字段并集（OR）筛选
-逻辑：四个字段中任一字段"不为空"（既非 BLANK 也非空字符串 ""）即显示
-返回：1（显示）或 0（隐藏）
-*/
-
-// 步骤1：获取当前上下文中各字段的值（行粒度下 MAX 即当前行的值）
-VAR CustomerTypeValue = MAX('a05_e2e_paid_media_keyword_data_d'[customer_type])
-VAR CategoryValue     = MAX('a05_e2e_paid_media_keyword_data_d'[category])
-VAR PlanNameValue     = MAX('a05_e2e_paid_media_keyword_data_d'[plan_name])
-VAR KeywordNameValue  = MAX('a05_e2e_paid_media_keyword_data_d'[keyword_name])
-
-// 步骤2：逐字段判断"有效"= 不为 BLANK 且 不为空字符串
-VAR IsCustomerTypeValid = NOT ISBLANK(CustomerTypeValue) && CustomerTypeValue <> ""
-VAR IsCategoryValid     = NOT ISBLANK(CategoryValue)     && CategoryValue     <> ""
-VAR IsPlanNameValid     = NOT ISBLANK(PlanNameValue)     && PlanNameValue     <> ""
-VAR IsKeywordNameValid  = NOT ISBLANK(KeywordNameValue)  && TRIM(KeywordNameValue)  <> "" && TRIM(KeywordNameValue)  <> " "
-
-// 步骤3：并集（OR）—— 任一字段有效即显示
-RETURN
-    IF(
-        IsCustomerTypeValid || IsCategoryValid || IsPlanNameValid || IsKeywordNameValid,
-        1,  // 任一不为空：显示
-        0   // 全为空：隐藏
-    )
+IsAnyKeywordNotEmpty =
+// ========================================
+// 度量值: IsAnyKeywordNotEmpty
+// 中文名: 直通车／快车行字段有效性筛选
+// Display Folder: KPIs Measure
+// 用途: 四个行字段中任一字段有效即显示，返回 1 或 0
+// 口径说明: 四个行字段采用 OR 判断；keyword_name 使用 TRIM 排除空白字符串
+// ========================================
+    // ── 获取当前行上下文中的字段值 ──
+    VAR CustomerTypeValue = MAX('a05_e2e_paid_media_keyword_data_d'[customer_type])
+    VAR CategoryValue = MAX('a05_e2e_paid_media_keyword_data_d'[category])
+    VAR KeywordTypeValue = MAX('a05_e2e_paid_media_keyword_data_d'[keyword_type])
+    VAR KeywordNameValue = MAX('a05_e2e_paid_media_keyword_data_d'[keyword_name])
+    // ── 判断各字段有效性 ──
+    VAR IsCustomerTypeValid = NOT ISBLANK(CustomerTypeValue) && CustomerTypeValue <> ""
+    VAR IsCategoryValid = NOT ISBLANK(CategoryValue) && CategoryValue <> ""
+    VAR IsKeywordTypeValid = NOT ISBLANK(KeywordTypeValue) && KeywordTypeValue <> ""
+    VAR IsKeywordNameValid =
+        NOT ISBLANK(KeywordNameValue)
+            && TRIM(KeywordNameValue) <> ""
+            && TRIM(KeywordNameValue) <> " "
+    // ── 并集（OR）：任一字段有效即显示 ──
+    RETURN
+        IF(
+            IsCustomerTypeValid || IsCategoryValid || IsKeywordTypeValid || IsKeywordNameValid,
+            1,
+            0
+        )
+// 核对点：仅 keyword_type 非空时返回 1；四个行字段全部无效时返回 0。
+// 本度量只负责字段有效性，不承担 Top10 筛选。
 
 ```
 
@@ -673,6 +674,215 @@ VAR _Total =
     COALESCE([ROI 直通车 Value], 0)
 RETURN
     IF(_Total = 0, 0, 1)
+```
+
+### 2.13 Cost 排名与 Top10 显示筛选 — 引力魔方／触点
+
+```dax
+Cost 引力魔方 Rank =
+// ========================================
+// 度量值: Cost 引力魔方 Rank
+// 中文名: 引力魔方／触点人群名称花费排名
+// Display Folder: KPIs Measure
+// 用途: 固定 customer_type + crowed_layer，在该组内排名各 crowed_type
+// 依赖: [Cost 引力魔方 Value]
+// 行层级: customer_type / crowed_layer / crowed_type
+// 口径说明: 每个父组独立按 Cost 降序、SKIP 排名，不计算全矩阵统一排名
+// 计算方式: 显式匹配父组，按候选完整组合逐项计算 Cost
+// 外部筛选: 保留平台、店铺、日期、转化周期及行字段的外部选择
+// ========================================
+    // ── 识别末级，并确保能唯一确定当前父组 ──
+    VAR __IsDetail = ISINSCOPE('a05_e2e_paid_media_crowed_data_d'[crowed_type])
+    VAR __HasParentGroup =
+        HASONEVALUE('a05_e2e_paid_media_crowed_data_d'[customer_type])
+            && HASONEVALUE('a05_e2e_paid_media_crowed_data_d'[crowed_layer])
+    VAR __CustomerType = SELECTEDVALUE('a05_e2e_paid_media_crowed_data_d'[customer_type])
+    VAR __CrowedLayer = SELECTEDVALUE('a05_e2e_paid_media_crowed_data_d'[crowed_layer])
+    RETURN
+        IF(
+            __IsDetail && __HasParentGroup,
+            VAR __CurrentCost = [Cost 引力魔方 Value]
+            // ── 第一步：恢复外部选择范围内的行组合，再显式限定当前父组 ──
+            VAR __GroupRows =
+                FILTER(
+                    ALLSELECTED(
+                        'a05_e2e_paid_media_crowed_data_d'[customer_type],
+                        'a05_e2e_paid_media_crowed_data_d'[crowed_layer],
+                        'a05_e2e_paid_media_crowed_data_d'[crowed_type]
+                    ),
+                    'a05_e2e_paid_media_crowed_data_d'[customer_type] == __CustomerType
+                        && 'a05_e2e_paid_media_crowed_data_d'[crowed_layer] == __CrowedLayer
+                )
+            // ── 第二步：清除当前明细行筛选，以候选完整组合逐行重新计算 Cost ──
+            // __GroupRows 已在外部上下文中确定，不会因下方 REMOVEFILTERS 变成全表。
+            // 完整列血缘 + 度量上下文转换也会覆盖同列筛选；清理步骤的作用详见第 3 节。
+            VAR __RankTable =
+                CALCULATETABLE(
+                    FILTER(
+                        ADDCOLUMNS(
+                            __GroupRows,
+                            "@RankCost", [Cost 引力魔方 Value]
+                        ),
+                        NOT ISBLANK([@RankCost])
+                    ),
+                    REMOVEFILTERS(
+                        'a05_e2e_paid_media_crowed_data_d'[customer_type],
+                        'a05_e2e_paid_media_crowed_data_d'[crowed_layer],
+                        'a05_e2e_paid_media_crowed_data_d'[crowed_type]
+                    )
+                )
+            // ── 第三步：RANKX 的候选表仅包含当前组，不会与其他父组竞争 ──
+            RETURN
+                IF(
+                    NOT ISBLANK(__CurrentCost),
+                    RANKX(__RankTable, [@RankCost], __CurrentCost, DESC, SKIP),
+                    BLANK()
+                ),
+            BLANK()
+        )
+// 层级判断：crowed_type 明细且父组唯一 → 组内排名；父级／TTL → BLANK()。
+// 严格相等 == 区分 BLANK() 和空字符串；不能用“父组值为空”判断是否处于父级。
+// 候选表保留三列数据血缘，度量引用自动上下文转换，按完整组合计算 Cost。
+// 验证：New/OA、New/I、Old/OA 各有 12 个不并列明细 → 各留 10 个，共 30 个明细。
+// 同名 crowed_type 在不同父组分别排名；各组均从 1 重新开始。
+// 空 Cost 不参与排名；0、负值及名称空值不额外剔除，沿用现有过滤配置。
+// 单组示例：Cost=100,100,90,80,80,70 → Rank=1,1,3,4,4,6。
+// 排名依据未格式化的 Cost；显示整数相同不代表实际 Cost 完全相等。
+```
+
+```dax
+引力魔方 Top10 Show Row =
+// ========================================
+// 度量值: 引力魔方 Top10 Show Row
+// 中文名: 引力魔方／触点 Top10 行显示筛选
+// Display Folder: KPIs Measure
+// 用途: 每个 customer_type + crowed_layer 组各留排名 ≤10 的 crowed_type；非末级返回 1
+// 依赖: [Cost 引力魔方 Rank]
+// 配置类型: 视觉对象级度量筛选，不作为基础 Cost 的计算条件
+// 使用: 加到引力魔方／触点矩阵的“此视觉对象上的筛选器”，设置等于 1
+// ========================================
+    VAR __IsDetail = ISINSCOPE('a05_e2e_paid_media_crowed_data_d'[crowed_type])
+    RETURN
+        IF(
+            NOT __IsDetail,
+            1,
+            VAR __Rank = [Cost 引力魔方 Rank]
+            RETURN
+                IF(NOT ISBLANK(__Rank) && __Rank <= 10, 1, 0)
+        )
+// 返回对照：父级／TTL=1；末级 Rank≤10=1；末级 Rank>10 或 BLANK()=0。
+// 不直接用“Rank≤10”过滤，避免空排名在比较时被当作 0，以及父级空排名的歧义。
+// 可与字段有效性及零值筛选共同使用；本度量不负责排序，请按数值 Cost 降序排序。
+// 三个行层级必须使用上方事实表字段；若改用独立维表，需同步改写排名和层级判定。
+// 必须保留 customer_type、crowed_layer 父组上下文；使用展开层级，不把所有父组混成单层。
+// 移除 crowed_type 上额外配置的原生 Top N 筛选，仅以本度量 = 1 实施分组 Top10。
+```
+
+### 2.14 Cost 排名与 Top10 显示筛选 — 直通车／快车
+
+```dax
+Cost 直通车 Rank =
+// ========================================
+// 度量值: Cost 直通车 Rank
+// 中文名: 直通车／快车关键词花费排名
+// Display Folder: KPIs Measure
+// 用途: 在每个 customer_type / category / keyword_type 组内排名 keyword_name
+// 依赖: [Cost 直通车 Value]
+// 行层级: TTL / customer_type / category / keyword_type / keyword_name
+// 口径说明: 每个父组独立按 Cost 降序、SKIP 排名，保留全部边界并列
+// 计算方式: 显式匹配 customer_type、category、keyword_type 三个父组字段
+//           按候选完整组合计算 Cost，平台等非行筛选不移除
+// ========================================
+    VAR __IsDetail = ISINSCOPE('a05_e2e_paid_media_keyword_data_d'[keyword_name])
+    VAR __HasParentGroup =
+        HASONEVALUE('a05_e2e_paid_media_keyword_data_d'[customer_type])
+            && HASONEVALUE('a05_e2e_paid_media_keyword_data_d'[category])
+            && HASONEVALUE('a05_e2e_paid_media_keyword_data_d'[keyword_type])
+    VAR __CustomerType = SELECTEDVALUE('a05_e2e_paid_media_keyword_data_d'[customer_type])
+    VAR __Category = SELECTEDVALUE('a05_e2e_paid_media_keyword_data_d'[category])
+    VAR __KeywordType = SELECTEDVALUE('a05_e2e_paid_media_keyword_data_d'[keyword_type])
+    RETURN
+        IF(
+            __IsDetail && __HasParentGroup,
+            VAR __CurrentCost = [Cost 直通车 Value]
+            // ── 第一步：只选出当前三个父级字段组合下的关键词候选行 ──
+            VAR __GroupRows =
+                FILTER(
+                    ALLSELECTED(
+                        'a05_e2e_paid_media_keyword_data_d'[customer_type],
+                        'a05_e2e_paid_media_keyword_data_d'[category],
+                        'a05_e2e_paid_media_keyword_data_d'[keyword_type],
+                        'a05_e2e_paid_media_keyword_data_d'[keyword_name]
+                    ),
+                    'a05_e2e_paid_media_keyword_data_d'[customer_type] == __CustomerType
+                        && 'a05_e2e_paid_media_keyword_data_d'[category] == __Category
+                        && 'a05_e2e_paid_media_keyword_data_d'[keyword_type] == __KeywordType
+                )
+            // ── 第二步：清理行字段上下文，再逐候选调用基础 Cost 度量 ──
+            // 完整列血缘 + 度量上下文转换也会覆盖同列筛选；清理步骤的作用详见第 3 节。
+            VAR __RankTable =
+                CALCULATETABLE(
+                    FILTER(
+                        ADDCOLUMNS(
+                            __GroupRows,
+                            "@RankCost", [Cost 直通车 Value]
+                        ),
+                        NOT ISBLANK([@RankCost])
+                    ),
+                    REMOVEFILTERS(
+                        'a05_e2e_paid_media_keyword_data_d'[customer_type],
+                        'a05_e2e_paid_media_keyword_data_d'[category],
+                        'a05_e2e_paid_media_keyword_data_d'[keyword_type],
+                        'a05_e2e_paid_media_keyword_data_d'[keyword_name]
+                    )
+                )
+            // ── 第三步：只在当前父组候选表中排名 ──
+            RETURN
+                IF(
+                    NOT ISBLANK(__CurrentCost),
+                    RANKX(__RankTable, [@RankCost], __CurrentCost, DESC, SKIP),
+                    BLANK()
+                ),
+            BLANK()
+        )
+// 层级判断：keyword_name 明细且父组唯一 → 组内排名；其余层级 → BLANK()。
+// 同名关键词在不同父组分别排名；同父组内跨 plan_name 的同名关键词合并计算 Cost。
+// 候选表保存外部行字段选择；仅剔除空 Cost，不新增名称或零值过滤规则。
+// 验证：同一 customer_type/category 下两个 keyword_type 各 12 项 → 各取 10 项，共 20 项。
+// 排名使用未格式化 Cost；若数据库浮点精度造成“看似相等但排名不同”，需先确认金额精度口径。
+// 单组示例：Cost=100,100,90,80,80,70,60,50,40,30 → Rank=1,1,3,4,4,6,7,8,9,10。
+```
+
+```dax
+直通车 Top10 Show Row =
+// ========================================
+// 度量值: 直通车 Top10 Show Row
+// 中文名: 直通车／快车 Top10 关键词行显示筛选
+// Display Folder: KPIs Measure
+// 用途: 仅限制 keyword_name 末级；前三层和 TTL 不按自身 Cost 排名截断
+// 依赖: [Cost 直通车 Rank]
+// 配置类型: 视觉对象级度量筛选，末级为 keyword_name
+// 使用: 加到直通车／快车矩阵的“此视觉对象上的筛选器”，设置等于 1
+// ========================================
+    VAR __IsDetail = ISINSCOPE('a05_e2e_paid_media_keyword_data_d'[keyword_name])
+    RETURN
+        IF(
+            NOT __IsDetail,
+            1,
+            VAR __Rank = [Cost 直通车 Rank]
+            RETURN
+                IF(NOT ISBLANK(__Rank) && __Rank <= 10, 1, 0)
+        )
+// 返回对照：父级／TTL=1；末级 Rank≤10=1；末级 Rank>10 或 BLANK()=0。
+// 可与 [IsAnyKeywordNotEmpty]、[直通车 IsZero] 共同筛选。
+// 视觉配置：四个行字段均使用关键词事实表，第三层为 keyword_type；按数值 Cost 降序排序。
+// 保留全部三个父组字段上下文；移除 keyword_name 上额外的原生 Top N 筛选。
+// 用例：父组 A 的第 1 名不与父组 B 竞争；多个组可同时展示各自的第 1～10 名。
+// 两组 Top10 Show Row 各用于对应矩阵，不同时配置到同一个矩阵或页面级筛选器。
+// 两组排名共同边界：前 9 行花费较高，第 10～12 行花费相同，则 12 行全部保留。
+// 验收：逐级展开、切换父组和日期、测试第 10 名并列／全空／不足 10 项；关闭“显示无数据的项”。
+// 注意：非末级返回 1 仅表示不按父级排名过滤；小计/TTL 仍受视觉对象入选集合影响。
+// Cost% 使用矩阵视觉总额作分母；部署后按第 3 节验证小计、总计及筛选器的共同作用。
 ```
 
 ---
