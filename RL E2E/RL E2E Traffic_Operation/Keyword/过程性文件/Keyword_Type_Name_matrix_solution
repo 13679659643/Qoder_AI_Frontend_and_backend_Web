@@ -1,0 +1,851 @@
+# Keyword 两级矩阵解决方案
+
+## 1. 功能与计算口径
+
+- 行维度：`keyword_type → keyword_name`，直接使用事实表字段。
+- 视觉对象：Matrix，支持关键词类型小计、关键词明细与总计。
+- 指标列：Cost、Cost%、ROI、Click、CPC、CTR、CVR、Add to Cart、CPATC。
+- 度量值：9 个核心数值度量值、9 个 Display 度量值、2 个条件格式度量值，共 20 个。
+- 命名与文件夹：`Keyword`、`Keyword > Display`、`Keyword > Formatting`。
+- 日期：本期日期筛选通过活动关系传递，不包含同比或环比计算。
+- 固定渠道范围：`引力魔方 / 直通车 / 触点 / 快车 / 全站推 / RTB`，与外部渠道筛选取交集。
+
+### 1.1 行粒度
+
+| 层级 | 字段 | 聚合含义 |
+|---|---|---|
+| 第 1 级 | a05_e2e_paid_media_keyword_data_d[keyword_type] | 当前关键词类型下的汇总 |
+| 第 2 级 | a05_e2e_paid_media_keyword_data_d[keyword_name] | 当前关键词类型下，同名关键词的汇总 |
+| 总计 | 无行字段筛选 | 当前页面筛选范围内的汇总 |
+
+同一 `keyword_type + keyword_name` 对应多个品类、计划或渠道时，按当前筛选范围汇总这些记录。
+不同 `keyword_type` 下的同名关键词分别显示。数值指标先聚合原始字段，再计算比率；不对明细比率求和或取简单平均。
+
+### 1.2 指标定义
+
+以下 SUM 均在平台、转化周期、日期、固定渠道范围及当前行筛选下计算。
+
+| 指标 | 数值口径 | 展示格式 |
+|---|---|---|
+| Cost | SUM(cost_amt) ÷ Currency_ExchangeRate | 币种符号 + 千分位整数 |
+| Cost% | 当前行 SUM(cost_amt) ÷ 清除两个行字段筛选后的 SUM(cost_amt) | 百分比，一位小数 |
+| ROI | SUM(media_sales_amt) ÷ SUM(cost_amt) | 数值，一位小数 |
+| Click | SUM(click) | 千分位整数 |
+| CPC | SUM(cost_amt) ÷ SUM(click) | 币种符号 + 一位小数 |
+| CTR | SUM(click) ÷ SUM(pv) | 百分比，一位小数 |
+| CVR | SUM(media_sales_order_cnt) ÷ SUM(click) | 百分比，一位小数 |
+| Add to Cart | SUM(add_cart_num) | 千分位整数 |
+| CPATC | SUM(cost_amt) ÷ SUM(add_cart_num) | 币种符号 + 一位小数 |
+
+币种规则：Cost 按选定汇率换算；Cost%、ROI、CTR、CVR、Click、Add to Cart 不受币种影响。
+CPC、CPATC 的数值使用源币种花费计算，Display 读取币种符号但不换算数值。
+CPC、CPATC 是有货币单位的单次成本，切换符号不代表完成换汇；需要按选定币种解读全部货币列的报表，应先确认这两项的换汇口径。
+
+## 2. 数据模型与筛选配置
+
+### 2.1 必需表与字段
+
+| 表 | 必需字段 | 用途 |
+|---|---|---|
+| a05_e2e_paid_media_keyword_data_d | keyword_type、keyword_name | 两级行维度 |
+| a05_e2e_paid_media_keyword_data_d | platform、channel、trans_cycle、data_date | 平台、渠道、周期、日期筛选 |
+| a05_e2e_paid_media_keyword_data_d | cost_amt、media_sales_amt、media_sales_order_cnt、click、pv、add_cart_num | 原始指标 |
+| Dim_Date_Current | 数据日期 | 本期日期筛选 |
+| Slicer_Platform_Selection | Platform_ID、Platform_Label | 断开平台参数表 |
+| Slicer_DataCaliber_Selection | DataCaliber_ID、DataCaliber_Label | 断开转化周期参数表 |
+| Slicer_Currency_Selection | Currency_Label、Currency_Symbol、Currency_ExchangeRate | 断开币种参数表 |
+
+事实表和公共参数表使用模型中对应对象；本方案不创建行维度参数表或列指标路由表。
+事实表加载范围须覆盖上述六个渠道，DAX 无法恢复加载阶段已排除的数据。
+
+### 2.2 关系配置
+
+```text
+Dim_Date_Current[数据日期]
+    └── 1:*，单向，活动 ──→ a05_e2e_paid_media_keyword_data_d[data_date]
+
+Slicer_Platform_Selection     ── 无关系，由 SELECTEDVALUE 读取
+Slicer_DataCaliber_Selection  ── 无关系，由 SELECTEDVALUE 读取
+Slicer_Currency_Selection     ── 无关系，由 SELECTEDVALUE 读取
+```
+
+- 日期关系两端均使用 Date 类型，日期维度键须唯一且覆盖事实表日期。
+- 店铺、品类、计划等其他筛选，须通过事实表列或有效模型关系传递到事实表。
+- 本方案不读取 `Dim_Crowd_Season_C_Label`；断开表中的 Super Season、Category、Label 选择不会自行传递到这些度量值。
+
+### 2.3 切片器
+
+| 切片器 | 绑定字段 | 设置 | 计算默认值 |
+|---|---|---|---|
+| 本期日期 | Dim_Date_Current[数据日期] | Between | 当前日期筛选范围 |
+| 平台 | Slicer_Platform_Selection[Platform_Label] | 单选 | Platform_ID = ALL，统计 TM + JD |
+| 数据口径 | Slicer_DataCaliber_Selection[DataCaliber_Label] | 单选 | DataCaliber_ID = T+1 |
+| 币种 | Slicer_Currency_Selection[Currency_Label] | 单选 | 汇率 1、符号 ¥ |
+| 渠道（按需） | a05_e2e_paid_media_keyword_data_d[channel] | 多选 | 未限制时统计固定渠道范围 |
+
+`SELECTEDVALUE` 的默认值是无单一选值时的计算回退，不会自动选中切片器。
+平台参数使用 `ALL / TM / JD`，转化周期参数使用 `T+1 / T+15`；币种表中的汇率必须为有效正数。
+
+### 2.4 Cost% 分母
+
+分母仅移除：
+
+```text
+keyword_type
+keyword_name
+```
+
+- `category`、`plan_name` 不是行维度，不清除它们的外部筛选。
+- 日期、店铺及其他非行字段筛选继续生效；平台和转化周期由对应参数表控制。
+- 渠道范围使用 `ALLSELECTED(channel)` 与六个固定渠道取交集。
+- 先清除两个行字段，再在该上下文中计算分母的平台和渠道筛选，避免把当前关键词下的渠道集合固化为分母范围。
+- `REMOVEFILTERS` 会清除这两个事实表列上的筛选，不区分矩阵行筛选和同列切片器筛选。
+- 关键词明细的 Cost% 是占整个统计范围花费的比例，不是占所属关键词类型花费的比例。
+- 未限制这两个行字段且分母非零时，总计 Cost% 为 100%。使用同列切片器时，总计分子受选择限制，分母不受该同列筛选限制，因此不一定为 100%。
+
+## 3. 核心数值度量值
+
+每个代码块分别创建一个度量值，Display Folder 设置为 `Keyword`。
+
+### 3.1 Keyword Cost
+
+```dax
+Keyword Cost =
+// ========================================
+// 度量值: Keyword Cost
+// 中文名: 花费
+// Display Folder: Keyword
+// 用途: 当前筛选范围内花费，按选定汇率换算
+// 口径: SUM(cost_amt) / Currency_ExchangeRate
+// 依赖: 平台、转化周期、币种参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
+    // ── 平台参数与渠道交集 ──
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 当前行花费 ──
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+    RETURN
+        DIVIDE(__CostAmt, __ExchangeRate)
+```
+
+### 3.2 Keyword Cost%
+
+```dax
+Keyword Cost% =
+// ========================================
+// 度量值: Keyword Cost%
+// 中文名: 花费占比
+// Display Folder: Keyword
+// 用途: 当前行花费占统计范围花费的比例
+// 行维度: keyword_type → keyword_name
+// 口径: 分母仅清除 keyword_type、keyword_name，保留其他业务筛选
+// 依赖: 平台、转化周期参数表与活动日期关系；不使用汇率
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __PlatformID)
+        )
+    // ── 分子：保留当前关键词类型与关键词名称筛选 ──
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
+            __PlatformFilter,
+            FILTER(
+                VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
+                a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+            ),
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+    // ── 分母：外层清除行字段，内层在清除后的上下文中读取平台与渠道 ──
+    VAR __TotalCostAmt =
+        CALCULATE(
+            CALCULATE(
+                SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
+                FILTER(
+                    ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+                    IF(__PlatformID = "ALL",
+                        a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                        a05_e2e_paid_media_keyword_data_d[platform] = __PlatformID)
+                ),
+                FILTER(
+                    ALLSELECTED(a05_e2e_paid_media_keyword_data_d[channel]),
+                    a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+                ),
+                a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+            ),
+            REMOVEFILTERS(
+                a05_e2e_paid_media_keyword_data_d[keyword_type],
+                a05_e2e_paid_media_keyword_data_d[keyword_name]
+            )
+        )
+    RETURN
+        DIVIDE(__CostAmt, __TotalCostAmt)
+```
+
+### 3.3 Keyword ROI
+
+```dax
+Keyword ROI =
+// ========================================
+// 度量值: Keyword ROI
+// 中文名: 媒体投资回报率
+// Display Folder: Keyword
+// 用途: 当前行成交金额与花费之比
+// 口径: SUM(media_sales_amt) / SUM(cost_amt)
+// 依赖: 平台、转化周期参数表与活动日期关系；不使用汇率
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 分子与分母使用相同筛选 ──
+    VAR __SalesAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[media_sales_amt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+    RETURN
+        DIVIDE(__SalesAmt, __CostAmt)
+```
+
+### 3.4 Keyword Click
+
+```dax
+Keyword Click =
+// ========================================
+// 度量值: Keyword Click
+// 中文名: 点击量
+// Display Folder: Keyword
+// 用途: 当前行点击次数汇总
+// 口径: SUM(click)
+// 依赖: 平台、转化周期参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 点击量聚合 ──
+    RETURN
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[click]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+```
+
+### 3.5 Keyword CPC
+
+```dax
+Keyword CPC =
+// ========================================
+// 度量值: Keyword CPC
+// 中文名: 平均点击花费
+// Display Folder: Keyword
+// 用途: 当前行每次点击对应的源币种花费
+// 口径: SUM(cost_amt) / SUM(click)，数值不应用币种汇率
+// 依赖: 平台、转化周期参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 分子与分母使用相同筛选 ──
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+    VAR __Click =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[click]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+    RETURN
+        DIVIDE(__CostAmt, __Click)
+```
+
+### 3.6 Keyword CTR
+
+```dax
+Keyword CTR =
+// ========================================
+// 度量值: Keyword CTR
+// 中文名: 点击率
+// Display Folder: Keyword
+// 用途: 当前行点击量占展现量的比例
+// 口径: SUM(click) / SUM(pv)
+// 依赖: 平台、转化周期参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 分子与分母使用相同筛选 ──
+    VAR __Click =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[click]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+    VAR __PV =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[pv]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+    RETURN
+        DIVIDE(__Click, __PV)
+```
+
+### 3.7 Keyword CVR
+
+```dax
+Keyword CVR =
+// ========================================
+// 度量值: Keyword CVR
+// 中文名: 点击转化率
+// Display Folder: Keyword
+// 用途: 当前行成交订单数与点击量之比
+// 口径: SUM(media_sales_order_cnt) / SUM(click)
+// 依赖: 平台、转化周期参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 分子与分母使用相同筛选 ──
+    VAR __Orders =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[media_sales_order_cnt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+    VAR __Click =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[click]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+    RETURN
+        DIVIDE(__Orders, __Click)
+```
+
+### 3.8 Keyword Add to Cart
+
+```dax
+Keyword Add to Cart =
+// ========================================
+// 度量值: Keyword Add to Cart
+// 中文名: 加购数
+// Display Folder: Keyword
+// 用途: 当前行加购次数汇总
+// 口径: SUM(add_cart_num)
+// 依赖: 平台、转化周期参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 加购数聚合 ──
+    RETURN
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[add_cart_num]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+```
+
+### 3.9 Keyword CPATC
+
+```dax
+Keyword CPATC =
+// ========================================
+// 度量值: Keyword CPATC
+// 中文名: 加购成本
+// Display Folder: Keyword
+// 用途: 当前行每次加购对应的源币种花费
+// 口径: SUM(cost_amt) / SUM(add_cart_num)，数值不应用币种汇率
+// 依赖: 平台、转化周期参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_keyword_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 分子与分母使用相同筛选 ──
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+    VAR __AddToCart =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_keyword_data_d[add_cart_num]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+        )
+    RETURN
+        DIVIDE(__CostAmt, __AddToCart)
+```
+
+## 4. Display 度量值
+
+Display Folder 设置为 `Keyword > Display`，在 Power BI 文件夹属性中填写 `Keyword\Display`。
+这些度量值返回文本，仅用于展示；排序、筛选及其他计算使用核心数值度量值。
+空值返回 `BLANK()`，真实零值按格式显示，不强制把无数据转换为零。
+
+### 4.1 Keyword Cost Display
+
+```dax
+Keyword Cost Display =
+// ========================================
+// 度量值: Keyword Cost Display
+// 中文名: 花费（格式化）
+// Display Folder: Keyword > Display
+// 用途: 币种符号 + 千分位整数，空值不显示
+// 依赖: [Keyword Cost]、Slicer_Currency_Selection
+// ========================================
+    VAR __Value = [Keyword Cost]
+    VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), __CurrencySymbol & FORMAT(__Value, "#,##0"))
+```
+
+### 4.2 Keyword Cost% Display
+
+```dax
+Keyword Cost% Display =
+// ========================================
+// 度量值: Keyword Cost% Display
+// 中文名: 花费占比（格式化）
+// Display Folder: Keyword > Display
+// 用途: 百分比一位小数，负数带负号，空值不显示
+// 依赖: [Keyword Cost%]
+// ========================================
+    VAR __Value = [Keyword Cost%]
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), FORMAT(__Value, "0.0%;-0.0%;0.0%"))
+```
+
+### 4.3 Keyword ROI Display
+
+```dax
+Keyword ROI Display =
+// ========================================
+// 度量值: Keyword ROI Display
+// 中文名: 媒体投资回报率（格式化）
+// Display Folder: Keyword > Display
+// 用途: 千分位一位小数，空值不显示
+// 依赖: [Keyword ROI]
+// ========================================
+    VAR __Value = [Keyword ROI]
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), FORMAT(__Value, "#,##0.0"))
+```
+
+### 4.4 Keyword Click Display
+
+```dax
+Keyword Click Display =
+// ========================================
+// 度量值: Keyword Click Display
+// 中文名: 点击量（格式化）
+// Display Folder: Keyword > Display
+// 用途: 千分位整数，空值不显示
+// 依赖: [Keyword Click]
+// ========================================
+    VAR __Value = [Keyword Click]
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), FORMAT(__Value, "#,##0"))
+```
+
+### 4.5 Keyword CPC Display
+
+```dax
+Keyword CPC Display =
+// ========================================
+// 度量值: Keyword CPC Display
+// 中文名: 平均点击花费（格式化）
+// Display Folder: Keyword > Display
+// 用途: 币种符号 + 千分位一位小数，空值不显示
+// 依赖: [Keyword CPC]、Slicer_Currency_Selection
+// 注意: 符号随币种选择，数值仍为源币种单次成本
+// ========================================
+    VAR __Value = [Keyword CPC]
+    VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), __CurrencySymbol & FORMAT(__Value, "#,##0.0"))
+```
+
+### 4.6 Keyword CTR Display
+
+```dax
+Keyword CTR Display =
+// ========================================
+// 度量值: Keyword CTR Display
+// 中文名: 点击率（格式化）
+// Display Folder: Keyword > Display
+// 用途: 百分比一位小数，空值不显示
+// 依赖: [Keyword CTR]
+// ========================================
+    VAR __Value = [Keyword CTR]
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%"))
+```
+
+### 4.7 Keyword CVR Display
+
+```dax
+Keyword CVR Display =
+// ========================================
+// 度量值: Keyword CVR Display
+// 中文名: 点击转化率（格式化）
+// Display Folder: Keyword > Display
+// 用途: 百分比一位小数，空值不显示
+// 依赖: [Keyword CVR]
+// ========================================
+    VAR __Value = [Keyword CVR]
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%"))
+```
+
+### 4.8 Keyword Add to Cart Display
+
+```dax
+Keyword Add to Cart Display =
+// ========================================
+// 度量值: Keyword Add to Cart Display
+// 中文名: 加购数（格式化）
+// Display Folder: Keyword > Display
+// 用途: 千分位整数，空值不显示
+// 依赖: [Keyword Add to Cart]
+// ========================================
+    VAR __Value = [Keyword Add to Cart]
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), FORMAT(__Value, "#,##0"))
+```
+
+### 4.9 Keyword CPATC Display
+
+```dax
+Keyword CPATC Display =
+// ========================================
+// 度量值: Keyword CPATC Display
+// 中文名: 加购成本（格式化）
+// Display Folder: Keyword > Display
+// 用途: 币种符号 + 千分位一位小数，空值不显示
+// 依赖: [Keyword CPATC]、Slicer_Currency_Selection
+// 注意: 符号随币种选择，数值仍为源币种单次成本
+// ========================================
+    VAR __Value = [Keyword CPATC]
+    VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), __CurrencySymbol & FORMAT(__Value, "#,##0.0"))
+```
+
+## 5. 两级条件格式
+
+Display Folder 设置为 `Keyword > Formatting`，在 Power BI 文件夹属性中填写 `Keyword\Formatting`。
+
+### 5.1 Keyword Cell Font Color
+
+```dax
+Keyword Cell Font Color =
+// ========================================
+// 度量值: Keyword Cell Font Color
+// 中文名: 关键词单元格字体颜色
+// Display Folder: Keyword > Formatting
+// 用途: 总计使用近黑色，关键词类型与关键词明细使用深灰色
+// 行维度: keyword_type → keyword_name
+// 依赖: 两个事实表行字段的 ISINSCOPE 状态
+// ========================================
+    VAR __IsKWName = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[keyword_name])
+    VAR __IsKWType = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[keyword_type])
+    RETURN
+        IF(
+            NOT(__IsKWType) && NOT(__IsKWName),
+            "#252423",  // 总计
+            "#5F6165"   // 关键词类型与关键词明细
+        )
+```
+
+### 5.2 Keyword Cell Background Color
+
+```dax
+Keyword Cell Background Color =
+// ========================================
+// 度量值: Keyword Cell Background Color
+// 中文名: 关键词单元格背景色
+// Display Folder: Keyword > Formatting
+// 用途: 根据关键词类型、关键词明细、总计返回背景色
+// 行维度: keyword_type → keyword_name
+// 依赖: 两个事实表行字段的 ISINSCOPE 状态
+// ========================================
+    VAR __IsKWName = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[keyword_name])
+    VAR __IsKWType = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[keyword_type])
+    RETURN
+        SWITCH(
+            TRUE(),
+            // ── 明细层级优先判断 ──
+            __IsKWName, "#FFFFFF",
+            __IsKWType, "#E6D9C7",
+            "#DBC6A8"   // 总计
+        )
+```
+
+### 5.3 层级判断表
+
+以下对应按两级行字段逐级展开的矩阵：
+
+| 当前行 | ISINSCOPE(keyword_type) | ISINSCOPE(keyword_name) | 字体 | 背景 |
+|---|---|---|---|---|
+| 总计 | FALSE | FALSE | #252423 | #DBC6A8 |
+| 关键词类型汇总／小计 | TRUE | FALSE | #5F6165 | #E6D9C7 |
+| 关键词明细 | TRUE | TRUE | #5F6165 | #FFFFFF |
+
+判断优先级为 `keyword_name → keyword_type → 总计`。
+`ISINSCOPE` 判断视觉查询中的分组层级，不按当前字段有几个值判定；某类型只有一个关键词时，不据此推断已经处于明细层。
+使用“转到下一层级”仅显示关键词名称时，可能为 `FALSE / TRUE`，仍按关键词明细着色。
+
+## 6. 矩阵搭建步骤
+
+### 6.1 字段布局
+
+1. 添加 Matrix 视觉对象。
+2. Rows 按顺序放入：
+   - `a05_e2e_paid_media_keyword_data_d[keyword_type]`
+   - `a05_e2e_paid_media_keyword_data_d[keyword_name]`
+3. Columns 不放字段。
+4. Values 按以下顺序放入 Display 度量值，将“在行上显示值”关闭。
+
+| 顺序 | Values 字段 | 视觉对象显示名称 |
+|---|---|---|
+| 1 | Keyword Cost Display | Cost |
+| 2 | Keyword Cost% Display | Cost% |
+| 3 | Keyword ROI Display | ROI |
+| 4 | Keyword Click Display | Click |
+| 5 | Keyword CPC Display | CPC |
+| 6 | Keyword CTR Display | CTR |
+| 7 | Keyword CVR Display | CVR |
+| 8 | Keyword Add to Cart Display | Add to Cart |
+| 9 | Keyword CPATC Display | CPATC |
+
+- 开启行标题展开／折叠按钮，逐级展开至 `keyword_name`。
+- 开启 `keyword_type` 行小计和行总计。
+- 默认按 `keyword_type`、`keyword_name` 升序组织，避免按 Display 文本进行数值排序。
+- 如需按花费等指标排序，使用相应核心数值度量值配置数值视觉与格式，不按格式化字符串的字典序排序。
+- 关闭“显示无数据的项”。没有数据时 Display 返回空值；真实零值继续显示。
+- 本方案不配置 Top N 或零值行过滤。
+
+### 6.2 条件格式
+
+对九个值列分别配置：
+
+| 设置 | 格式样式 | 基于字段 |
+|---|---|---|
+| 字体颜色 | 字段值 | Keyword Cell Font Color |
+| 背景颜色 | 字段值 | Keyword Cell Background Color |
+
+启用适用于值及总计／小计的选项，并分别验证明细、小计、总计效果。
+以上度量值用于值单元格；行标题区域使用矩阵的行标题／小计样式设置。
+
+### 6.3 度量值目录
+
+```text
+Keyword
+├── Keyword Cost
+├── Keyword Cost%
+├── Keyword ROI
+├── Keyword Click
+├── Keyword CPC
+├── Keyword CTR
+├── Keyword CVR
+├── Keyword Add to Cart
+├── Keyword CPATC
+├── Display
+│   ├── Keyword Cost Display
+│   ├── Keyword Cost% Display
+│   ├── Keyword ROI Display
+│   ├── Keyword Click Display
+│   ├── Keyword CPC Display
+│   ├── Keyword CTR Display
+│   ├── Keyword CVR Display
+│   ├── Keyword Add to Cart Display
+│   └── Keyword CPATC Display
+└── Formatting
+    ├── Keyword Cell Font Color
+    └── Keyword Cell Background Color
+```
+
+## 7. 验证方法
+
+### 7.1 两级聚合与花费占比
+
+以下为手工验算示例，不代表真实业务数据。假设日期、平台、转化周期、渠道筛选一致，汇率为 1，未对两个行字段额外筛选：
+
+| keyword_type | keyword_name | cost_amt |
+|---|---|---:|
+| 类型 A | 关键词甲 | 100 |
+| 类型 A | 关键词乙 | 200 |
+| 类型 B | 关键词甲 | 700 |
+
+期望结果：
+
+| 矩阵行 | Cost | Cost% | 背景 |
+|---|---:|---:|---|
+| 类型 A | 300 | 30.0% | #E6D9C7 |
+| 类型 A → 关键词甲 | 100 | 10.0% | #FFFFFF |
+| 类型 A → 关键词乙 | 200 | 20.0% | #FFFFFF |
+| 类型 B | 700 | 70.0% | #E6D9C7 |
+| 类型 B → 关键词甲 | 700 | 70.0% | #FFFFFF |
+| 总计 | 1,000 | 100.0% | #DBC6A8 |
+
+- 两个类型的同名关键词分别归属各自父级。
+- 类型 A 下关键词甲为 10.0%，不使用 100 ÷ 300 作为分母口径。
+- 用同列切片器只选择类型 A 时，总计分子为 300；没有其他筛选联动时，分母仍为 1,000，总计占比为 30.0%。
+- 为三个关键词分别分配不同的渠道和平台，再检查相同统计范围内的分母是否一致，避免分母被当前关键词的渠道／平台成员限制。
+
+### 7.2 检查清单
+
+- [ ] 两个行字段均来自 `a05_e2e_paid_media_keyword_data_d`，顺序为 `keyword_type → keyword_name`。
+- [ ] 20 个度量值均已建立，Display 仅引用本文件定义的对应核心度量值。
+- [ ] 日期关系活动且日期键唯一；改变日期范围后所有指标同步变化。
+- [ ] 平台 ALL 统计 TM + JD；单选平台只计算对应平台。
+- [ ] T+1、T+15 分别验证，未选出单一周期时按 T+1 计算。
+- [ ] 固定范围外的渠道不参与指标；渠道切片器在范围内正确取交集。
+- [ ] Cost% 仅清除两个行字段；选择 category 或 plan_name 后，分子与分母均受其约束。
+- [ ] 单独测试关键词类型和名称切片器，并测试它们与渠道、品类、计划多选组合。
+- [ ] 对事实表多列同时筛选时检查 auto-exist 的成员合并影响；按实际保留的筛选组合核对分母。
+- [ ] 没有关键词字段额外筛选且分母非零时，总计 Cost% 为 100%。
+- [ ] 多计划下相同类型、相同关键词的数据正确聚合，没有重复累计同一来源记录。
+- [ ] ROI 分子为 `media_sales_amt`，CVR 分子为 `media_sales_order_cnt`。
+- [ ] CPC 分母为 `click`，CTR 分母为 `pv`，CPATC 分母为 `add_cart_num`。
+- [ ] 各比率的分母为零或空时返回 BLANK；零分子、非零分母时返回 0。
+- [ ] 小计与总计的比率使用聚合后的分子除以分母，不对明细比率求和。
+- [ ] 汇率为 1 时 Cost 为源金额；汇率为 7 时 Cost 为源金额 ÷ 7。
+- [ ] CPC、CPATC 数值不随币种改变；确认源币种数值与动态符号的展示约定适用于使用场景。
+- [ ] 三类行颜色符合第 5.3 节；只含一个关键词的类型仍按实际 ISINSCOPE 状态着色。
+- [ ] 无数据不显示孤立币种符号；零值可显示为 0、0.0 或 0.0%。
+
+### 7.3 执行与性能
+
+- 用同一日期、平台、渠道和周期范围，对类型小计、关键词明细、总计分别核对源字段聚合值。
+- DAX 不使用事实表逐行迭代；核心计算为 SUM、CALCULATE 与列级筛选。
+- 大量关键词场景下使用 Performance Analyzer 检查矩阵查询时间，并分别评估全量展开及折叠状态。
+- `FORMAT` 只在 Display 层使用，数值计算不引用 Display 度量值。
+- 上述表格是验证期望；实际数值、筛选联动与条件格式须在 Power BI 模型中执行验证。

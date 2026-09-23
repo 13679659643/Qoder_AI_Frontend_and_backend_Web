@@ -1,0 +1,885 @@
+# Crowd TA 三级矩阵解决方案
+
+## 1. 功能与计算口径
+
+- 行维度：`crowed_layer → crowed_type → crowed_name`，直接使用事实表字段。
+- 视觉对象：Matrix，支持人群分层小计、人群类型小计、人群名称明细与总计。
+- 指标列：Cost、Cost%、ROI、Click、CPC、CTR、CVR、Add to Cart、CPATC。
+- 度量值：9 个核心数值度量值、9 个 Display 度量值、2 个条件格式度量值，共 20 个。
+- 命名前缀与文件夹：`Crowd TA`、`Crowd TA > Display`、`Crowd TA > Formatting`。
+- 日期：本期日期筛选通过活动关系传递，不包含同比或环比计算。
+- 固定渠道范围：`引力魔方 / 直通车 / 触点 / 快车 / 全站推 / RTB`，与外部渠道筛选取交集。
+
+### 1.1 行粒度
+
+| 层级 | 字段 | 聚合含义 |
+|---|---|---|
+| 第 1 级 | a05_e2e_paid_media_crowed_data_d[crowed_layer] | 当前人群分层下的汇总 |
+| 第 2 级 | a05_e2e_paid_media_crowed_data_d[crowed_type] | 当前人群分层下，指定人群类型的汇总 |
+| 第 3 级 | a05_e2e_paid_media_crowed_data_d[crowed_name] | 当前人群分层、类型下，同名人群的汇总 |
+| 总计 | 无矩阵行字段分组限制 | 当前页面筛选范围内的汇总 |
+
+同一 `crowed_layer + crowed_type + crowed_name` 对应多个品类、渠道或其他维度成员时，按当前筛选范围汇总这些记录。
+不同分层或类型下的同名人群分别显示，不根据名称跨父级合并。
+指标基于事实记录聚合，不对人群覆盖用户做跨人群去重；`Add to Cart` 统计加购数，不是去重人数。
+
+### 1.2 指标定义
+
+以下 SUM 均在平台、转化周期、日期、固定渠道范围及当前行筛选下计算。
+
+| 指标 | 数值口径 | 展示格式 |
+|---|---|---|
+| Cost | SUM(cost_amt) ÷ Currency_ExchangeRate | 币种符号 + 千分位整数 |
+| Cost% | 当前行 SUM(cost_amt) ÷ 清除三个行字段筛选后的 SUM(cost_amt) | 百分比，一位小数 |
+| ROI | SUM(media_sales_amt) ÷ SUM(cost_amt) | 数值，一位小数 |
+| Click | SUM(click) | 千分位整数 |
+| CPC | SUM(cost_amt) ÷ SUM(click) | 币种符号 + 一位小数 |
+| CTR | SUM(click) ÷ SUM(pv) | 百分比，一位小数 |
+| CVR | SUM(media_sales_order_cnt) ÷ SUM(click) | 百分比，一位小数 |
+| Add to Cart | SUM(add_cart_num) | 千分位整数 |
+| CPATC | SUM(cost_amt) ÷ SUM(add_cart_num) | 币种符号 + 一位小数 |
+
+各级小计与总计均先聚合原始字段，再计算比率，不对明细比率求和或取简单平均。
+Cost 按选定汇率换算；Cost%、ROI、CTR、CVR、Click、Add to Cart 不受币种影响。
+CPC、CPATC 的数值使用源币种花费计算，Display 读取币种符号但不换算数值。
+这两项是有货币单位的单次成本，切换符号不代表完成换汇；需要按选定币种解读全部货币列时，应先确认 CPC、CPATC 的换汇口径。
+
+## 2. 数据模型与筛选配置
+
+### 2.1 必需表与字段
+
+| 表 | 必需字段 | 用途 |
+|---|---|---|
+| a05_e2e_paid_media_crowed_data_d | crowed_layer、crowed_type、crowed_name | 三级行维度 |
+| a05_e2e_paid_media_crowed_data_d | platform、channel、trans_cycle、data_date | 平台、渠道、周期、日期筛选 |
+| a05_e2e_paid_media_crowed_data_d | cost_amt、media_sales_amt、media_sales_order_cnt、click、pv、add_cart_num | 原始指标 |
+| Dim_Date_Current | 数据日期 | 本期日期筛选 |
+| Slicer_Platform_Selection | Platform_ID、Platform_Label | 断开平台参数表 |
+| Slicer_DataCaliber_Selection | DataCaliber_ID、DataCaliber_Label | 断开转化周期参数表 |
+| Slicer_Currency_Selection | Currency_Label、Currency_Symbol、Currency_ExchangeRate | 断开币种参数表 |
+
+事实表和公共参数表使用模型中对应对象。本方案不创建断开的行维度表，也不需要列指标路由表。
+源表及字段保留实际拼写 `crowed`，不要替换为 `crowd`。
+事实表加载范围须覆盖上述六个渠道；DAX 无法恢复加载阶段已排除的数据。
+
+### 2.2 关系配置
+
+```text
+Dim_Date_Current[数据日期]
+    └── 1:*，单向，活动 ──→ a05_e2e_paid_media_crowed_data_d[data_date]
+
+Slicer_Platform_Selection     ── 无关系，由 SELECTEDVALUE 读取
+Slicer_DataCaliber_Selection  ── 无关系，由 SELECTEDVALUE 读取
+Slicer_Currency_Selection     ── 无关系，由 SELECTEDVALUE 读取
+```
+
+- 日期关系两端使用 Date 类型；日期维度键须唯一，日期范围覆盖事实表。
+- 上图为搭建要求，需在模型视图确认实际关系、基数和筛选方向。
+- 店铺、品类、品牌、季节等其他筛选，须通过事实表列或有效模型关系传递到事实表。
+- 本方案不显式读取 `Dim_Crowd_Season_C_Label`。该表若为断开表，Super Season、Category、Label 选择不会自行传递到这些度量值；实际页面是否受其影响需结合模型关系检查。
+- 指标按当前可见事实记录求和，不附加快照去重或“取最新记录”逻辑；加载数据的业务粒度须适合这些聚合公式。
+
+### 2.3 切片器
+
+| 切片器 | 绑定字段 | 设置 | 计算默认值 |
+|---|---|---|---|
+| 本期日期 | Dim_Date_Current[数据日期] | Between | 当前日期筛选范围 |
+| 平台 | Slicer_Platform_Selection[Platform_Label] | 单选 | Platform_ID = ALL，统计 TM + JD |
+| 数据口径 | Slicer_DataCaliber_Selection[DataCaliber_Label] | 单选 | DataCaliber_ID = T+1 |
+| 币种 | Slicer_Currency_Selection[Currency_Label] | 单选 | 汇率 1、符号 ¥ |
+| 渠道（按需） | a05_e2e_paid_media_crowed_data_d[channel] | 多选 | 未限制时统计固定渠道范围 |
+| 品类（按需） | a05_e2e_paid_media_crowed_data_d[category] | 多选 | 当前品类筛选范围 |
+
+`SELECTEDVALUE` 的默认值是没有单一选值时的计算回退，不会自动选中切片器。
+平台参数使用 `ALL / TM / JD`，转化周期参数使用 `T+1 / T+15`；币种表中的汇率须为有效正数。
+
+### 2.4 Cost% 分母
+
+分母仅移除以下三个事实表字段的筛选：
+
+```text
+crowed_layer
+crowed_type
+crowed_name
+```
+
+- `category` 不参与行分组，保留其外部筛选；品牌、季节等非行字段筛选也不主动清除。
+- 日期、店铺及其他非行字段筛选继续生效；平台和转化周期由对应参数表控制。
+- 渠道范围使用 `ALLSELECTED(channel)` 与六个固定渠道取交集。
+- 先清除三个行字段，再计算分母的平台和渠道筛选，避免把当前人群下的平台或渠道集合固化为分母范围。
+- `REMOVEFILTERS` 不区分矩阵行筛选和同列切片器筛选；这三个事实表列上的切片器限制也会被清除。
+- 三个层级都除以同一个统计范围花费，不按“人群名称 ÷ 人群类型”或“人群类型 ÷ 人群分层”计算父级占比。
+- 未额外限制三个行字段且分母非零时，总计 Cost% 为 100%。若用同列切片器限制人群范围，总计分子受选择限制，分母不受该同列筛选限制，总计占比可能小于 100%。
+
+## 3. 核心数值度量值
+
+每个代码块分别创建一个度量值，Display Folder 设置为 `Crowd TA`。
+
+### 3.1 Crowd TA Cost
+
+```dax
+Crowd TA Cost =
+// ========================================
+// 度量值: Crowd TA Cost
+// 中文名: 人群花费
+// Display Folder: Crowd TA
+// 用途: 当前筛选范围内花费，按选定汇率换算
+// 口径: SUM(cost_amt) / Currency_ExchangeRate
+// 依赖: 平台、转化周期、币种参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
+    // ── 平台参数与渠道交集 ──
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_crowed_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_crowed_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 当前行花费 ──
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[cost_amt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+    RETURN
+        DIVIDE(__CostAmt, __ExchangeRate)
+```
+
+### 3.2 Crowd TA Cost%
+
+```dax
+Crowd TA Cost% =
+// ========================================
+// 度量值: Crowd TA Cost%
+// 中文名: 人群花费占比
+// Display Folder: Crowd TA
+// 用途: 当前行花费占统计范围花费的比例
+// 行维度: crowed_layer → crowed_type → crowed_name
+// 口径: 分母仅清除三个行字段，保留 category 等非行字段筛选
+// 依赖: 平台、转化周期参数表与活动日期关系；不使用汇率
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_crowed_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_crowed_data_d[platform] = __PlatformID)
+        )
+    // ── 分子：保留当前分层、类型与人群名称筛选 ──
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[cost_amt]),
+            __PlatformFilter,
+            FILTER(
+                VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
+                a05_e2e_paid_media_crowed_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+            ),
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+    // ── 分母：外层清除行字段，内层在清除后的上下文中读取平台与渠道 ──
+    VAR __TotalCostAmt =
+        CALCULATE(
+            CALCULATE(
+                SUM(a05_e2e_paid_media_crowed_data_d[cost_amt]),
+                FILTER(
+                    ALL(a05_e2e_paid_media_crowed_data_d[platform]),
+                    IF(__PlatformID = "ALL",
+                        a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
+                        a05_e2e_paid_media_crowed_data_d[platform] = __PlatformID)
+                ),
+                FILTER(
+                    ALLSELECTED(a05_e2e_paid_media_crowed_data_d[channel]),
+                    a05_e2e_paid_media_crowed_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+                ),
+                a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+            ),
+            REMOVEFILTERS(
+                a05_e2e_paid_media_crowed_data_d[crowed_layer],
+                a05_e2e_paid_media_crowed_data_d[crowed_type],
+                a05_e2e_paid_media_crowed_data_d[crowed_name]
+            )
+        )
+    RETURN
+        DIVIDE(__CostAmt, __TotalCostAmt)
+```
+
+### 3.3 Crowd TA ROI
+
+```dax
+Crowd TA ROI =
+// ========================================
+// 度量值: Crowd TA ROI
+// 中文名: 人群媒体投资回报率
+// Display Folder: Crowd TA
+// 用途: 当前行成交金额与花费之比
+// 口径: SUM(media_sales_amt) / SUM(cost_amt)
+// 依赖: 平台、转化周期参数表与活动日期关系；不使用汇率
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_crowed_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_crowed_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 分子与分母使用相同筛选 ──
+    VAR __SalesAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[media_sales_amt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[cost_amt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+    RETURN
+        DIVIDE(__SalesAmt, __CostAmt)
+```
+
+### 3.4 Crowd TA Click
+
+```dax
+Crowd TA Click =
+// ========================================
+// 度量值: Crowd TA Click
+// 中文名: 人群点击量
+// Display Folder: Crowd TA
+// 用途: 当前行点击次数汇总
+// 口径: SUM(click)
+// 依赖: 平台、转化周期参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_crowed_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_crowed_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 点击量聚合 ──
+    RETURN
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[click]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+```
+
+### 3.5 Crowd TA CPC
+
+```dax
+Crowd TA CPC =
+// ========================================
+// 度量值: Crowd TA CPC
+// 中文名: 人群平均点击花费
+// Display Folder: Crowd TA
+// 用途: 当前行每次点击对应的源币种花费
+// 口径: SUM(cost_amt) / SUM(click)，数值不应用币种汇率
+// 依赖: 平台、转化周期参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_crowed_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_crowed_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 分子与分母使用相同筛选 ──
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[cost_amt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+    VAR __Click =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[click]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+    RETURN
+        DIVIDE(__CostAmt, __Click)
+```
+
+### 3.6 Crowd TA CTR
+
+```dax
+Crowd TA CTR =
+// ========================================
+// 度量值: Crowd TA CTR
+// 中文名: 人群点击率
+// Display Folder: Crowd TA
+// 用途: 当前行点击量占展现量的比例
+// 口径: SUM(click) / SUM(pv)
+// 依赖: 平台、转化周期参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_crowed_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_crowed_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 分子与分母使用相同筛选 ──
+    VAR __Click =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[click]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+    VAR __PV =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[pv]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+    RETURN
+        DIVIDE(__Click, __PV)
+```
+
+### 3.7 Crowd TA CVR
+
+```dax
+Crowd TA CVR =
+// ========================================
+// 度量值: Crowd TA CVR
+// 中文名: 人群点击转化率
+// Display Folder: Crowd TA
+// 用途: 当前行成交订单数与点击量之比
+// 口径: SUM(media_sales_order_cnt) / SUM(click)
+// 依赖: 平台、转化周期参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_crowed_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_crowed_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 分子与分母使用相同筛选 ──
+    VAR __Orders =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[media_sales_order_cnt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+    VAR __Click =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[click]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+    RETURN
+        DIVIDE(__Orders, __Click)
+```
+
+### 3.8 Crowd TA Add to Cart
+
+```dax
+Crowd TA Add to Cart =
+// ========================================
+// 度量值: Crowd TA Add to Cart
+// 中文名: 人群加购数
+// Display Folder: Crowd TA
+// 用途: 当前行加购次数汇总
+// 口径: SUM(add_cart_num)
+// 依赖: 平台、转化周期参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_crowed_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_crowed_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 加购数聚合 ──
+    RETURN
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[add_cart_num]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+```
+
+### 3.9 Crowd TA CPATC
+
+```dax
+Crowd TA CPATC =
+// ========================================
+// 度量值: Crowd TA CPATC
+// 中文名: 人群加购成本
+// Display Folder: Crowd TA
+// 用途: 当前行每次加购对应的源币种花费
+// 口径: SUM(cost_amt) / SUM(add_cart_num)，数值不应用币种汇率
+// 依赖: 平台、转化周期参数表与活动日期关系
+// ========================================
+    VAR __PlatformID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
+    VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __PlatformFilter =
+        FILTER(
+            ALL(a05_e2e_paid_media_crowed_data_d[platform]),
+            IF(__PlatformID = "ALL",
+                a05_e2e_paid_media_crowed_data_d[platform] IN {"TM", "JD"},
+                a05_e2e_paid_media_crowed_data_d[platform] = __PlatformID)
+        )
+    VAR __ChannelScopeFilter =
+        FILTER(
+            VALUES(a05_e2e_paid_media_crowed_data_d[channel]),
+            a05_e2e_paid_media_crowed_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
+    // ── 分子与分母使用相同筛选 ──
+    VAR __CostAmt =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[cost_amt]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+    VAR __AddToCart =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_crowed_data_d[add_cart_num]),
+            __PlatformFilter,
+            __ChannelScopeFilter,
+            a05_e2e_paid_media_crowed_data_d[trans_cycle] = __TransCycle
+        )
+    RETURN
+        DIVIDE(__CostAmt, __AddToCart)
+```
+
+## 4. Display 度量值
+
+Display Folder 设置为 `Crowd TA > Display`，在 Power BI 文件夹属性中填写 `Crowd TA\Display`。
+这些度量值返回文本，仅用于展示；排序、筛选及其他计算使用核心数值度量值。
+空值返回 `BLANK()`，真实零值按格式显示，不强制把无数据转换为零。
+
+### 4.1 Crowd TA Cost Display
+
+```dax
+Crowd TA Cost Display =
+// ========================================
+// 度量值: Crowd TA Cost Display
+// 中文名: 人群花费（格式化）
+// Display Folder: Crowd TA > Display
+// 用途: 币种符号 + 千分位整数，空值不显示
+// 依赖: [Crowd TA Cost]、Slicer_Currency_Selection
+// ========================================
+    VAR __Value = [Crowd TA Cost]
+    VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), __CurrencySymbol & FORMAT(__Value, "#,##0"))
+```
+
+### 4.2 Crowd TA Cost% Display
+
+```dax
+Crowd TA Cost% Display =
+// ========================================
+// 度量值: Crowd TA Cost% Display
+// 中文名: 人群花费占比（格式化）
+// Display Folder: Crowd TA > Display
+// 用途: 百分比一位小数，负数带负号，空值不显示
+// 依赖: [Crowd TA Cost%]
+// ========================================
+    VAR __Value = [Crowd TA Cost%]
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), FORMAT(__Value, "0.0%;-0.0%;0.0%"))
+```
+
+### 4.3 Crowd TA ROI Display
+
+```dax
+Crowd TA ROI Display =
+// ========================================
+// 度量值: Crowd TA ROI Display
+// 中文名: 人群媒体投资回报率（格式化）
+// Display Folder: Crowd TA > Display
+// 用途: 千分位一位小数，空值不显示
+// 依赖: [Crowd TA ROI]
+// ========================================
+    VAR __Value = [Crowd TA ROI]
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), FORMAT(__Value, "#,##0.0"))
+```
+
+### 4.4 Crowd TA Click Display
+
+```dax
+Crowd TA Click Display =
+// ========================================
+// 度量值: Crowd TA Click Display
+// 中文名: 人群点击量（格式化）
+// Display Folder: Crowd TA > Display
+// 用途: 千分位整数，空值不显示
+// 依赖: [Crowd TA Click]
+// ========================================
+    VAR __Value = [Crowd TA Click]
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), FORMAT(__Value, "#,##0"))
+```
+
+### 4.5 Crowd TA CPC Display
+
+```dax
+Crowd TA CPC Display =
+// ========================================
+// 度量值: Crowd TA CPC Display
+// 中文名: 人群平均点击花费（格式化）
+// Display Folder: Crowd TA > Display
+// 用途: 币种符号 + 千分位一位小数，空值不显示
+// 依赖: [Crowd TA CPC]、Slicer_Currency_Selection
+// 注意: 符号随币种选择，数值仍为源币种单次成本
+// ========================================
+    VAR __Value = [Crowd TA CPC]
+    VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), __CurrencySymbol & FORMAT(__Value, "#,##0.0"))
+```
+
+### 4.6 Crowd TA CTR Display
+
+```dax
+Crowd TA CTR Display =
+// ========================================
+// 度量值: Crowd TA CTR Display
+// 中文名: 人群点击率（格式化）
+// Display Folder: Crowd TA > Display
+// 用途: 百分比一位小数，空值不显示
+// 依赖: [Crowd TA CTR]
+// ========================================
+    VAR __Value = [Crowd TA CTR]
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%"))
+```
+
+### 4.7 Crowd TA CVR Display
+
+```dax
+Crowd TA CVR Display =
+// ========================================
+// 度量值: Crowd TA CVR Display
+// 中文名: 人群点击转化率（格式化）
+// Display Folder: Crowd TA > Display
+// 用途: 百分比一位小数，空值不显示
+// 依赖: [Crowd TA CVR]
+// ========================================
+    VAR __Value = [Crowd TA CVR]
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), FORMAT(__Value, "#,##0.0%;#,##0.0%;0.0%"))
+```
+
+### 4.8 Crowd TA Add to Cart Display
+
+```dax
+Crowd TA Add to Cart Display =
+// ========================================
+// 度量值: Crowd TA Add to Cart Display
+// 中文名: 人群加购数（格式化）
+// Display Folder: Crowd TA > Display
+// 用途: 千分位整数，空值不显示
+// 依赖: [Crowd TA Add to Cart]
+// ========================================
+    VAR __Value = [Crowd TA Add to Cart]
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), FORMAT(__Value, "#,##0"))
+```
+
+### 4.9 Crowd TA CPATC Display
+
+```dax
+Crowd TA CPATC Display =
+// ========================================
+// 度量值: Crowd TA CPATC Display
+// 中文名: 人群加购成本（格式化）
+// Display Folder: Crowd TA > Display
+// 用途: 币种符号 + 千分位一位小数，空值不显示
+// 依赖: [Crowd TA CPATC]、Slicer_Currency_Selection
+// 注意: 符号随币种选择，数值仍为源币种单次成本
+// ========================================
+    VAR __Value = [Crowd TA CPATC]
+    VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        IF(ISBLANK(__Value), BLANK(), __CurrencySymbol & FORMAT(__Value, "#,##0.0"))
+```
+
+## 5. 三级条件格式
+
+Display Folder 设置为 `Crowd TA > Formatting`，在 Power BI 文件夹属性中填写 `Crowd TA\Formatting`。
+
+### 5.1 Crowd TA Cell Font Color
+
+```dax
+Crowd TA Cell Font Color =
+// ========================================
+// 度量值: Crowd TA Cell Font Color
+// 中文名: 人群单元格字体颜色
+// Display Folder: Crowd TA > Formatting
+// 用途: 总计使用近黑色，其余各层级使用深灰色
+// 行维度: crowed_layer → crowed_type → crowed_name
+// 依赖: 三个事实表行字段的 ISINSCOPE 状态
+// ========================================
+    VAR __IsCrowdName = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[crowed_name])
+    VAR __IsCrowdType = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[crowed_type])
+    VAR __IsCrowdLayer = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[crowed_layer])
+    RETURN
+        IF(
+            NOT(__IsCrowdLayer) && NOT(__IsCrowdType) && NOT(__IsCrowdName),
+            "#252423",  // 总计
+            "#5F6165"   // 人群分层、类型与名称
+        )
+```
+
+### 5.2 Crowd TA Cell Background Color
+
+```dax
+Crowd TA Cell Background Color =
+// ========================================
+// 度量值: Crowd TA Cell Background Color
+// 中文名: 人群单元格背景色
+// Display Folder: Crowd TA > Formatting
+// 用途: 根据人群分层、类型、名称及总计返回背景色
+// 行维度: crowed_layer → crowed_type → crowed_name
+// 依赖: 三个事实表行字段的 ISINSCOPE 状态
+// ========================================
+    VAR __IsCrowdName = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[crowed_name])
+    VAR __IsCrowdType = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[crowed_type])
+    VAR __IsCrowdLayer = ISINSCOPE(a05_e2e_paid_media_crowed_data_d[crowed_layer])
+    RETURN
+        SWITCH(
+            TRUE(),
+            // ── 从最深层级开始判断 ──
+            __IsCrowdName, "#FFFFFF",   // 第 3 级：人群名称明细
+            __IsCrowdType, "#E6D9C7",   // 第 2 级：人群类型
+            __IsCrowdLayer, "#DBC6A8",  // 第 1 级：人群分层
+            "#DBC6A8"                  // 总计
+        )
+```
+
+### 5.3 层级判断表
+
+以下对应按三级行字段逐级展开的矩阵：
+
+| 当前行 | ISINSCOPE(crowed_layer) | ISINSCOPE(crowed_type) | ISINSCOPE(crowed_name) | 字体 | 背景 |
+|---|---|---|---|---|---|
+| 总计 | FALSE | FALSE | FALSE | #252423 | #DBC6A8 |
+| 人群分层汇总／小计 | TRUE | FALSE | FALSE | #5F6165 | #DBC6A8 |
+| 人群类型汇总／小计 | TRUE | TRUE | FALSE | #5F6165 | #E6D9C7 |
+| 人群名称明细 | TRUE | TRUE | TRUE | #5F6165 | #FFFFFF |
+
+判断优先级为 `crowed_name → crowed_type → crowed_layer → 总计`。
+`ISINSCOPE` 判断视觉查询中的分组层级，不按当前字段有几个值判定；某类型只有一个人群名称时，不据此推断已经处于明细层。
+使用“转到下一层级”时，父字段可能不在作用域内，颜色仍按当前最深的可见字段判定；需要保留完整父子分组时使用逐级展开。
+
+## 6. 矩阵搭建步骤
+
+### 6.1 字段布局
+
+1. 添加 Matrix 视觉对象。
+2. Rows 按顺序放入：
+   - `a05_e2e_paid_media_crowed_data_d[crowed_layer]`
+   - `a05_e2e_paid_media_crowed_data_d[crowed_type]`
+   - `a05_e2e_paid_media_crowed_data_d[crowed_name]`
+3. Columns 不放字段。
+4. Values 按以下顺序放入 Display 度量值，将“在行上显示值”关闭。
+
+| 顺序 | Values 字段 | 视觉对象显示名称 |
+|---|---|---|
+| 1 | Crowd TA Cost Display | Cost |
+| 2 | Crowd TA Cost% Display | Cost% |
+| 3 | Crowd TA ROI Display | ROI |
+| 4 | Crowd TA Click Display | Click |
+| 5 | Crowd TA CPC Display | CPC |
+| 6 | Crowd TA CTR Display | CTR |
+| 7 | Crowd TA CVR Display | CVR |
+| 8 | Crowd TA Add to Cart Display | Add to Cart |
+| 9 | Crowd TA CPATC Display | CPATC |
+
+- 开启行标题展开／折叠按钮，逐级展开至 `crowed_name`。
+- 开启 `crowed_layer`、`crowed_type` 行小计和行总计。
+- 默认按行字段升序组织，不按 Display 文本进行数值排序。
+- 如需按花费等指标排序，使用对应核心数值度量值配置数值视觉与格式，避免按格式化字符串的字典序排序。
+- 关闭“显示无数据的项”。没有数据时 Display 返回空值；真实零值继续显示。
+- 本方案不配置 Top N 或零值行过滤。
+
+### 6.2 条件格式
+
+对九个值列分别配置：
+
+| 设置 | 格式样式 | 基于字段 |
+|---|---|---|
+| 字体颜色 | 字段值 | Crowd TA Cell Font Color |
+| 背景颜色 | 字段值 | Crowd TA Cell Background Color |
+
+启用适用于值及总计／小计的选项，并验证两级小计、明细及总计效果。
+以上度量值用于值单元格；行标题区域使用矩阵的行标题／小计样式设置。
+
+### 6.3 度量值目录
+
+```text
+Crowd TA
+├── Crowd TA Cost
+├── Crowd TA Cost%
+├── Crowd TA ROI
+├── Crowd TA Click
+├── Crowd TA CPC
+├── Crowd TA CTR
+├── Crowd TA CVR
+├── Crowd TA Add to Cart
+├── Crowd TA CPATC
+├── Display
+│   ├── Crowd TA Cost Display
+│   ├── Crowd TA Cost% Display
+│   ├── Crowd TA ROI Display
+│   ├── Crowd TA Click Display
+│   ├── Crowd TA CPC Display
+│   ├── Crowd TA CTR Display
+│   ├── Crowd TA CVR Display
+│   ├── Crowd TA Add to Cart Display
+│   └── Crowd TA CPATC Display
+└── Formatting
+    ├── Crowd TA Cell Font Color
+    └── Crowd TA Cell Background Color
+```
+
+## 7. 验证方法
+
+### 7.1 三级聚合与花费占比
+
+以下为手工验算示例，不代表真实业务数据。假设日期、平台、转化周期、渠道筛选一致，汇率为 1，未对三个行字段额外筛选：
+
+| crowed_layer | crowed_type | crowed_name | cost_amt |
+|---|---|---|---:|
+| 分层 A | 类型甲 | 人群一 | 100 |
+| 分层 A | 类型甲 | 人群二 | 200 |
+| 分层 A | 类型乙 | 人群一 | 300 |
+| 分层 B | 类型甲 | 人群一 | 400 |
+
+期望结果：
+
+| 矩阵行 | Cost | Cost% | 背景 |
+|---|---:|---:|---|
+| 分层 A | 600 | 60.0% | #DBC6A8 |
+| 分层 A → 类型甲 | 300 | 30.0% | #E6D9C7 |
+| 分层 A → 类型甲 → 人群一 | 100 | 10.0% | #FFFFFF |
+| 分层 A → 类型甲 → 人群二 | 200 | 20.0% | #FFFFFF |
+| 分层 A → 类型乙 | 300 | 30.0% | #E6D9C7 |
+| 分层 A → 类型乙 → 人群一 | 300 | 30.0% | #FFFFFF |
+| 分层 B | 400 | 40.0% | #DBC6A8 |
+| 分层 B → 类型甲 | 400 | 40.0% | #E6D9C7 |
+| 分层 B → 类型甲 → 人群一 | 400 | 40.0% | #FFFFFF |
+| 总计 | 1,000 | 100.0% | #DBC6A8 |
+
+- 三处同名“人群一”分别归属各自分层和类型。
+- 分层 A → 类型甲 → 人群一的占比为 100 ÷ 1,000 = 10.0%，不是 100 ÷ 300。
+- 用事实表同列切片器只选择分层 A 时，没有其他筛选联动的情况下，总计分子为 600、分母为 1,000，总计占比为 60.0%。
+- 为人群分配不同渠道与平台，检查同一统计范围内各行分母是否一致。
+
+### 7.2 品类筛选验证
+
+在上述四条示例记录上增加品类：前两条为品类 P，后两条为品类 Q。
+
+| 操作 | 期望分母 | 期望结果 |
+|---|---:|---|
+| 不限制品类 | 1,000 | 四条明细均参与计算 |
+| 选择 category = P | 300 | 人群一 33.3%，人群二 66.7%，分层 A 总计范围占比 100.0% |
+| 选择 category = Q | 700 | 分层 A → 类型乙占比 42.9%，分层 B → 类型甲占比 57.1% |
+
+品类筛选同时约束分子和分母，不因清除人群行字段而被清除。
+
+### 7.3 检查清单
+
+- [ ] 三个行字段均来自 `a05_e2e_paid_media_crowed_data_d`，顺序为 `crowed_layer → crowed_type → crowed_name`。
+- [ ] `category` 不在 Rows 中，仍可用作外部筛选。
+- [ ] 20 个度量值均已建立；全部 Display 引用本文件定义的 `Crowd TA` 核心度量值。
+- [ ] 日期关系活动且日期键唯一；改变日期范围后所有指标同步变化。
+- [ ] 平台 ALL 统计 TM + JD；单选平台只计算对应平台。
+- [ ] T+1、T+15 分别验证，未选出单一周期时按 T+1 计算。
+- [ ] 固定范围外的渠道不参与指标；渠道切片器在范围内正确取交集。
+- [ ] Cost% 仅清除三个人群行字段；选择 category 后分子与分母均受其约束。
+- [ ] 单独测试三个行字段的同列切片器，并测试其与渠道、品类多选组合。
+- [ ] 对事实表多列同时筛选时检查 auto-exist 的成员合并影响；按实际保留的筛选组合核对分母。
+- [ ] 没有额外的人群行字段筛选且分母非零时，总计 Cost% 为 100%。
+- [ ] 跨品类、渠道的相同三元组正确聚合；源数据不存在导致重复累计的快照或重复记录。
+- [ ] 同名人群在不同分层、类型下分别显示，层级小计按各自范围计算。
+- [ ] ROI 分子为 `media_sales_amt`，CVR 分子为 `media_sales_order_cnt`。
+- [ ] CPC 分母为 `click`，CTR 分母为 `pv`，CPATC 分母为 `add_cart_num`。
+- [ ] 各比率的分母为零或空时返回 BLANK；零分子、非零分母时返回 0。
+- [ ] 小计与总计使用聚合后的分子除以分母，不对明细比率求和。
+- [ ] 汇率为 1 时 Cost 为源金额；汇率为 7 时 Cost 为源金额 ÷ 7。
+- [ ] CPC、CPATC 数值不随币种改变；源币种数值与动态符号的展示约定已确认。
+- [ ] 人群分层、人群类型、人群名称、总计颜色与第 5.3 节一致。
+- [ ] 单一子项场景仍按实际 ISINSCOPE 状态着色，不使用 HASONEVALUE 代替层级判断。
+- [ ] 无数据不显示孤立币种符号；零值可显示为 0、0.0 或 0.0%。
+
+### 7.4 执行与性能
+
+- 在同一日期、平台、渠道和周期范围内，分别核对人群分层小计、类型小计、名称明细与总计的原始字段聚合值。
+- 核心 DAX 使用 SUM、CALCULATE 与列级筛选，不进行事实表逐行迭代。
+- 使用 Performance Analyzer 检查全量展开和折叠状态的矩阵查询时间。
+- `FORMAT` 只在 Display 层使用，数值计算不引用 Display 度量值。
+- 上述表格是验证期望；实际数值、筛选联动与条件格式须在 Power BI 模型中执行验证。
