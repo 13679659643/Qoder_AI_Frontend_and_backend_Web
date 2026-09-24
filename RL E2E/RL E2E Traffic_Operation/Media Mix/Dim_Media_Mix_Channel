@@ -174,12 +174,12 @@
 	    Platform_Sort,
 	    Channel,
 	     IF(Platform = 'TM',Channel_Sort,Channel_Sort*10) AS Channel_Sort,
-	    IF(Platform = 'TM',Channel_Label,CONCAT(Channel_Label,'.')) AS Channel_Label,
+		--  Channel_Label,
+	    IF(Platform = 'TM',Channel_Label,CONCAT(Channel_Label,CHAR(8203))) AS Channel_Label,
 	    Channel_Description,
 	    Channel_Type,
 	    Channel_ID,
 	    Summary_Scope,
-		-- 分母默认为 TM_Total 或 JD_Total，根据平台不同而变化
 	    IF(Platform = 'TM','TM_Total','JD_Total') AS Parent_Channel_ID
 	FROM (
 	    SELECT * FROM detail_data
