@@ -6,20 +6,21 @@ Keyword_matrix_solution — 基于 Keyword_X_matrix_solution 的 DAX 差异补�
 > Display Folder 统一：Keyword / Keyword > Display / Keyword > Formatting
 
 ================================================================================
-变更 1：行维度 5→4 + 重排序
+变更 1：行维度 4→2
 ================================================================================
 
-原：channel x brand x framework x category x season（5 级）
-新：category  x keyword_type x plan_name x keyword_name（4 级）
+原：category x keyword_type x plan_name x keyword_name（4 级）
+新：keyword_type x keyword_name（2 级）
 
-Table 视觉对象行配置：
-  * a05_e2e_paid_media_keyword_data_d[category]
+Matrix 视觉对象行配置（按顺序）：
   * a05_e2e_paid_media_keyword_data_d[keyword_type]
-  * a05_e2e_paid_media_keyword_data_d[plan_name]
   * a05_e2e_paid_media_keyword_data_d[keyword_name]
 
+同一 keyword_type + keyword_name 下的多个 category、plan_name 按当前筛选范围汇总。
+不同 keyword_type 下的同名 keyword_name 分别显示；保留类型小计与总计。
+
 ================================================================================
-变更 2：Keyword Cost%（REMOVEFILTERS 4 字段）
+变更 2：Keyword Cost%（REMOVEFILTERS 2 字段）
 ================================================================================
 
 Keyword Cost% = 
@@ -29,78 +30,72 @@ Keyword Cost% =
 // Display Folder: Keyword
 // 用途: 每行花费占总计花费的百分比
 // 口径: DIVIDE(当前行 cost_amt, 总计 cost_amt)
-//       分母不受行维度（category / keyword_type / plan_name / keyword_name）筛选上下文影响
-//       分母使用 REMOVEFILTERS 移除全部 4 个行维度 + FILTER(ALL()) 仅保留切片器筛选
-//       注意：分母不能用 FILTER(VALUES()) 因为 VALUES 在行上下文中求值后
-//             会固化当前行的值，导致 REMOVEFILTERS 被抵消，Cost% 始终为 1
+//       分母仅移除行维度（keyword_type / keyword_name）筛选，保留 category / plan_name 等外部筛选
+//       分子使用当前行上下文中的平台、渠道筛选变量
+//       分母先清除两个行字段，再在该上下文内定义并使用独立的平台、渠道筛选变量
+//       注意：两个行字段上的同列切片器筛选也会被清除；明细占总计，不是占所属类型小计
 // 类型: 比率类，不乘汇率
 // 数据字典: cost_amt = 花费
-// 与原方案差异: REMOVEFILTERS 从 5 字段减为 4 字段（移除 brand / framework / customer_type），
-//              新增 keyword_type / keyword_name 行维度，维度顺序调整为 category → keyword_type → plan_name
+// 本次调整: REMOVEFILTERS 从 4 字段减为 2 字段，不再清除 category / plan_name
+// 参考: Keyword_Type_Name_matrix_solution 的两级行维度与分母上下文处理
 // ========================================
     VAR __ChannelID = SELECTEDVALUE(Slicer_Platform_Selection[Platform_ID], "ALL")
     VAR __TransCycle = SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
 
-//    VAR __SuperSeasonVals = VALUES(Dim_Crowd_Season_C_Label[Super Season])
-//    VAR __CategoryVals = VALUES(Dim_Crowd_Season_C_Label[Category])
-//    VAR __LabelVals = VALUES(Dim_Crowd_Season_C_Label[Label])
-
+    // ── 分子筛选：保留当前关键词行上下文 ──
     VAR __PlatformFilter =
         FILTER(
             ALL(a05_e2e_paid_media_keyword_data_d[platform]),
             IF(__ChannelID = "ALL",
                 a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
-                a05_e2e_paid_media_keyword_data_d[platform] = __ChannelID))
+                a05_e2e_paid_media_keyword_data_d[platform] = __ChannelID)
+        )
     VAR __ChannelScopeFilter =
         FILTER(
             VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
+            a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+        )
     VAR __CostAmt =
         CALCULATE(
             SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
             __PlatformFilter,
-            // ── Channel 固定范围（分子用 FILTER(VALUES()) 交集模式，保留行维度）──
-            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[channel]),
-                a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}),
+            __ChannelScopeFilter,
             a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
-//            ,
-//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[season]),
-//                a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[category]),
-//                a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-//            FILTER(VALUES(a05_e2e_paid_media_keyword_data_d[brand]),
-//                a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
         )
 
+    // ── 分母筛选：变量定义在清除行字段后的上下文内，不能直接复用分子表变量 ──
     VAR __TotalCostAmt =
         CALCULATE(
-            SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
-            // ── 分母：移除全部 4 个行维度筛选（category / keyword_type / plan_name / keyword_name）──
-            REMOVEFILTERS(a05_e2e_paid_media_keyword_data_d[category]),
-            REMOVEFILTERS(a05_e2e_paid_media_keyword_data_d[keyword_type]),
-            REMOVEFILTERS(a05_e2e_paid_media_keyword_data_d[plan_name]),
-            REMOVEFILTERS(a05_e2e_paid_media_keyword_data_d[keyword_name]),
-            __PlatformFilter,
-            a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle,
-            // ── Channel 固定范围（分母用 FILTER(ALL()) 仅保留范围筛选，不依赖行维度）──
-            // 移除维度表的行级筛选，但保留切片器筛选
-            FILTER(ALLSELECTED(a05_e2e_paid_media_keyword_data_d[channel]),
-                a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"})
-            //    ,
-            //// ── 分母用 FILTER(ALL()) 仅保留切片器筛选（不用 FILTER(VALUES())）──
-            //FILTER(ALL(a05_e2e_paid_media_keyword_data_d[season]),
-            //    a05_e2e_paid_media_keyword_data_d[season] IN __SuperSeasonVals),
-            //FILTER(ALL(a05_e2e_paid_media_keyword_data_d[category]),
-            //    a05_e2e_paid_media_keyword_data_d[category] IN __CategoryVals),
-            //FILTER(ALL(a05_e2e_paid_media_keyword_data_d[brand]),
-            //    a05_e2e_paid_media_keyword_data_d[brand] IN __LabelVals)
+            VAR __TotalPlatformFilter =
+                FILTER(
+                    ALL(a05_e2e_paid_media_keyword_data_d[platform]),
+                    IF(__ChannelID = "ALL",
+                        a05_e2e_paid_media_keyword_data_d[platform] IN {"TM", "JD"},
+                        a05_e2e_paid_media_keyword_data_d[platform] = __ChannelID)
+                )
+            VAR __TotalChannelScopeFilter =
+                FILTER(
+                    ALLSELECTED(a05_e2e_paid_media_keyword_data_d[channel]),
+                    a05_e2e_paid_media_keyword_data_d[channel] IN {"引力魔方", "直通车", "触点", "快车", "全站推", "RTB"}
+                )
+            RETURN
+                CALCULATE(
+                    SUM(a05_e2e_paid_media_keyword_data_d[cost_amt]),
+                    __TotalPlatformFilter,
+                    __TotalChannelScopeFilter,
+                    a05_e2e_paid_media_keyword_data_d[trans_cycle] = __TransCycle
+                ),
+            REMOVEFILTERS(
+                a05_e2e_paid_media_keyword_data_d[keyword_type],
+                a05_e2e_paid_media_keyword_data_d[keyword_name]
+            )
         )
 
     RETURN
         DIVIDE(__CostAmt, __TotalCostAmt)
 
 ================================================================================
-变更 3：Keyword Cell Font Color（ISINSCOPE 4 级）
+变更 3：Keyword Cell Font Color（ISINSCOPE 2 级）
 ================================================================================
 
 Keyword Cell Font Color =
@@ -110,30 +105,27 @@ Keyword Cell Font Color =
 // Display Folder: Keyword > Formatting
 // 用途: 根据矩阵视觉层级返回字体颜色
 //       用于条件格式 → 字体颜色
-// 矩阵结构: 行维度 = category -> keyword_type -> plan_name -> keyword_name (四级)
+// 矩阵结构: 行维度 = keyword_type -> keyword_name（两级）
 // 颜色规则:
 //   - 总计行 (Grand Total) -> #252423 (近黑，强调)
 //   - 所有小计行和明细行     -> #5F6165 (深灰)
-// 与原方案差异: ISINSCOPE 从 5 级减为 4 级（移除 __IsCustomerType / __IsFramework / __IsBrand），
-//              新增 __IsKWType / __IsKWName，维度判断顺序调整为 __IsCategory 在最外层
+// 本次调整: ISINSCOPE 从 4 级减为 2 级，仅保留 __IsKWType / __IsKWName
 // ========================================
     VAR __IsKWName = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[keyword_name])
-    VAR __IsChannel = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[plan_name])
     VAR __IsKWType = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[keyword_type])
-    VAR __IsCategory = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[category])
 
     RETURN
         SWITCH(
             TRUE(),
             // ── 总计行：全部 ISINSCOPE = FALSE ──
-            NOT(__IsCategory) && NOT(__IsKWType) && NOT(__IsChannel) && NOT(__IsKWName),
+            NOT(__IsKWType) && NOT(__IsKWName),
                 "#252423",
-            // ── 其余所有行（category / keyword_type / plan_name / keyword_name）──
+            // ── 其余所有行（keyword_type / keyword_name）──
             "#5F6165"
         )
 
 ================================================================================
-变更 4：Keyword Cell Background Color（4 级层次）
+变更 4：Keyword Cell Background Color（2 级层次）
 ================================================================================
 
 Keyword Cell Background Color =
@@ -141,41 +133,34 @@ Keyword Cell Background Color =
 // 度量值: Keyword Cell Background Color
 // 中文名: 关键词单元格行背景色
 // Display Folder: Keyword > Formatting
-// 用途: 根据矩阵行层级返回背景色（4 级层次）
-// 矩阵结构: category -> keyword_type -> plan_name -> keyword_name
+// 用途: 根据矩阵行层级返回背景色（2 级层次）
+// 矩阵结构: keyword_type -> keyword_name
 // 颜色规则:
-//   - category 行 + 总计行  -> #DBC6A8 (深米色)
-//   - keyword_type 行       -> #E6D9C7 (中米色)
-//   - plan_name 行            -> #F4ECE4 (浅米色)
-//   - keyword_name 明细行   -> #FAF6F1 (淡米色)
-// 与原方案差异: 从 5 级减为 4 级（保留 customer_type #FFFFFF 白色层），
-//              SWITCH 层级映射调整为 category=顶层 / keyword_type=二层
+//   - 总计行               -> #DBC6A8（深米色）
+//   - keyword_type 行      -> #E6D9C7（中米色）
+//   - keyword_name 明细行  -> #FFFFFF（白色）
+// 本次调整: 移除 category / plan_name 层级，保留类型、明细和总计的原有配色
 // ========================================
     VAR __IsKWName = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[keyword_name])
-    VAR __IsChannel = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[plan_name])
     VAR __IsKWType = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[keyword_type])
-    VAR __IsCategory = ISINSCOPE(a05_e2e_paid_media_keyword_data_d[category])
 
     RETURN
         SWITCH(
             TRUE(),
-            // ── 第4层：keyword_name 明细行（最深，优先判断）──
+            // ── 第2层：keyword_name 明细行（最深，优先判断）──
             __IsKWName, "#FFFFFF",
-            // ── 第3层：channel 行 ──
-            __IsChannel, "#F4ECE4",
-            // ── 第2层：keyword_type 行 ──
+            // ── 第1层：keyword_type 行 ──
             __IsKWType, "#E6D9C7",
-            // ── 第1层：category 行 + 总计行（default）──
+            // ── 总计行（default）──
             "#DBC6A8"
         )
 
-// ISINSCOPE 层级判断（自底向上）：
-//   keyword_name 明细行：全部 4 个 ISINSCOPE = TRUE
-//   plan_name 行：__IsCategory + __IsKWType + __IsChannel = TRUE
-//   keyword_type 行：__IsCategory + __IsKWType = TRUE
-//   category 行：仅 __IsCategory = TRUE
-//   总计行：全部 = FALSE
-//   SWITCH 从最深层级开始判断（自底向上），保证匹配到最具体层级
+// ISINSCOPE 层级判断（按两级逐级展开，自底向上）：
+//   keyword_name 明细行：__IsKWType = TRUE，__IsKWName = TRUE
+//   keyword_type 小计行：__IsKWType = TRUE，__IsKWName = FALSE
+//   总计行：两个 ISINSCOPE 均为 FALSE
+//   SWITCH 优先判断 keyword_name，再判断 keyword_type，最后返回总计颜色
+//   仅钻取显示 keyword_name 时，即使 __IsKWType = FALSE，仍按明细行着色
 
 ================================================================================
 变更 5：Keyword Cost% Display（引用名 [Keyword X Cost%] → [Keyword Cost%]）

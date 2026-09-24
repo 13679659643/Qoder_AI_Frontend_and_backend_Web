@@ -791,6 +791,35 @@
 
 ---
 
+## [2026-09-24 15:34] 修改 — Keyword Cost% 筛选变量明确化与旧代码清理
+
+- **模块**: Keyword / DAX
+- **任务**: 明确使用筛选变量，并按用户要求删除旧逻辑注释
+- **操作**: 修改
+- **变更内容**:
+  - `Keyword Cost%` 分子引用 `__PlatformFilter`、`__ChannelScopeFilter`。
+  - 分母在外层 `REMOVEFILTERS` 生效后的表达式中定义并引用 `__TotalPlatformFilter`、`__TotalChannelScopeFilter`，避免复用分子上下文中的表变量。
+  - 删除旧四级分母块、回退说明及已停用的切片器筛选代码注释；仅保留当前两级实现，不新增度量值。
+- **关联文件**: `Keyword/Keyword_matrix_solution`
+- **备注**: 静态核对变量均有引用，分母仍仅清除两个关键词行字段；尚未在 Power BI 模型中运行验证。
+
+---
+
+## [2026-09-24 15:29] 修改 — Keyword 矩阵行维度从四级调整为两级
+
+- **模块**: Keyword / DAX / 可视化
+- **任务**: 参考 `Keyword_Type_Name_matrix_solution`，将 `Keyword_matrix_solution` 行维度调整为 `keyword_type → keyword_name`，不新增度量值
+- **操作**: 修改
+- **变更内容**:
+  - 行配置移除 `category`、`plan_name`，同一类型下同名关键词按当前筛选范围汇总。
+  - `Keyword Cost%` 分母仅清除 `keyword_type`、`keyword_name`；在清除后的上下文中计算平台与渠道筛选，保留品类、计划等非行字段筛选。旧四级分母以块注释保留。
+  - `Keyword Cell Font Color`、`Keyword Cell Background Color` 仅判断两个关键词行字段；保留总计、类型小计与关键词明细配色。
+  - `Keyword Cost% Display` 及其他复用度量值保持不变；目标文件仍为原有 4 个度量值定义。
+- **关联文件**: `Keyword/Keyword_matrix_solution`
+- **备注**: 已静态核对参考实现、行配置与层级判断；尚未在 Power BI 模型中运行验证。
+
+---
+
 ## [2026-07-06 01:00] 新建 — Keyword YOY 矩阵解决方案（当期/上期/同比三行路由 + 9 指标 SWITCH 分发）
 
 - **模块**: Keyword
@@ -1357,5 +1386,20 @@
 - **备注**:
   - Display 度量值返回文本类型，用于需要格式化文本输出的场景；Table 视觉对象中可直接在度量值属性设置格式字符串
   - CPC 不乘汇率的理由：分子分母同币种，比值无币种维度，除完再乘汇率会改变比率数值
+
+---
+
+## [2026-09-24 15:40] 修改 — Crowd TA 矩阵行维度调整为分层、类型、名称三级
+
+- **模块**: Crowd / DAX / 可视化
+- **任务**: 参考 `Crowd_TA_Layer_Type_Name_matrix_solution`，将 `Crowd_matrix_TA_solution` 行维度调整为 `crowed_layer → crowed_type → crowed_name`，不新增度量值
+- **操作**: 修改
+- **变更内容**:
+  - 行配置移除 `category`，将 `crowed_type` 调整为第二层、`crowed_name` 调整为明细层。
+  - `Crowd TA Cost%` 分母仅清除三个行字段，保留 `category` 等外部筛选；分子使用已有筛选变量，分母在清除行字段后的上下文内定义并引用独立筛选变量。
+  - `Crowd TA Cell Font Color`、`Crowd TA Cell Background Color` 同步三级层级判断；分层及总计背景为 `#DBC6A8`、类型为 `#E6D9C7`、名称明细为 `#FFFFFF`。
+  - 清理停用筛选代码注释，不保留旧逻辑块；`Crowd TA Cost% Display` 与其余复用指标保持不变，目标文件仍为原有 4 个度量值定义。
+- **关联文件**: `Crowd/Crowd_matrix_TA_solution`
+- **备注**: 已静态核对参考实现、变量引用、行字段顺序、颜色层级及度量值数量，`git diff --check` 通过；尚未在 Power BI 模型中运行验证。
 
 ---
