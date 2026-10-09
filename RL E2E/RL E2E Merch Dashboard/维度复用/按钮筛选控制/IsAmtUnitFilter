@@ -1,0 +1,14 @@
+IsAmtUnitFilter =
+// 用途：按钮切换「金额 Amt / 数量 Unit」两种度量值
+// 使用方式：作为按钮切片器的字段来源；选中行通过 SELECTEDVALUE('IsAmtUnitFilter'[Sort])
+// 在度量值中用 SWITCH 判断，如 SELECTEDVALUE(...)=10 时返回 [Amt]，=20 时返回 [Unit]
+// 说明：原数据模型中没有对应字段，纯计算表；Sort 列用于保证切片器排序稳定，
+//      当前步长为 10（10、20），后续新增选项（如 Ctn、Turnover）按 30、40 顺延
+DATATABLE(
+    "Label", STRING,
+    "Sort", INTEGER,
+    {
+        {"Amt", 10},
+        {"Unit", 20}
+    }
+)

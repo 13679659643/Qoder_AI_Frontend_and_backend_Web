@@ -1,0 +1,18 @@
+IsProductTagFilter =
+// 用途：按钮筛选器控制「产品类型」过滤：ALL / Hero Model / Slow Mover / Normal
+// 使用方式：作为按钮切片器的字段来源；选中行的 computed_product_tag 值用于判断过滤逻辑：
+//      - 选中 "ALL"：computed_product_tag 则 in ("hero model", "slow mover", "normal")
+//        对事实表 computed_product_tag 做 IN 多值过滤（即选中全部三个类型）
+//      - 其余行：computed_product_tag 为单一真实值，直接匹配事实表 computed_product_tag 字段
+// 说明：值取自事实表字段 computed_product_tag 的真实值（全小写），
+//      避免大小写不一致导致匹配失败；判断时如需可用 UPPER() 归一化
+DATATABLE(
+    "Label", STRING,
+    "computed_product_tag", STRING,
+    {
+        {"ALL", "ALL"},
+        {"Hero Model", "hero model"},
+        {"Slow Mover", "slow mover"},
+        {"Normal", "normal"}
+    }
+)
