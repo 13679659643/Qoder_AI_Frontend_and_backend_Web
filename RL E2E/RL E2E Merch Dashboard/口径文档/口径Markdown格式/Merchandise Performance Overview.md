@@ -21,7 +21,7 @@
 | **时间口径（区间类）** | SLS、AUR、Inbound、Outbound 及 ST% 分子等：看所选时间范围（区间汇总） |
 | **时间口径（期末时点类）** | EOH、In-Transit、O2O 及 ST% 分母等：看所选时间范围 end period 最后一天（时点数） |
 | **vs LY 附属指标（变化率）** | SLS、AUR、EOH、Inbound、Outbound 等：`this period / last period - 1` |
-| **vs LY 附属指标（差值 bp）** | ST%、AVG MD、Fullprice% 等比率类：`this period - last period`（差值，bp 指标，展示时 ×100 转 bp） |
+| **vs LY 附属指标（差值 bp）** | ST%、AVG MD、Fullprice% 等比率类：`this period - last period`（差值，bp 指标，展示时 ×10000 转 bp） |
 | **TAR ACH% 附属指标** | 仅 SLS Amt、SLS Unit 附属 TAR ACH% |
 | **数据类型/数据格式** | 原始口径未定义数据类型与数据格式，DAX 实现时展示格式待业务确认 |
 | **必须遵守** | 口径文档中定义的所有指标，必须遵守其数据类型和数据格式，如果和解决方案中存在争议的，一切以口径文档为准，必须按照口径文档中的格式进行调整 |
@@ -34,7 +34,7 @@
 > **商品维度切换**: ALL / Hero Model：`computed_product_tag = "hero model"` / Slow Mover：`computed_product_tag = "slow mover"` / Normal：`computed_product_tag = "normal"`
 > **支持筛选维度**: 渠道：platform，shop_name；商品：label，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy
 
-### 1. SLS Amt — DCom净销售额
+### 1. SLS Amt — DCom净销售额，这个附属指标有三个
 
 | 项目 | 内容 |
 |---|---|
@@ -42,7 +42,10 @@
 | **业务定义** | 统计周期内DCom净销售额 = DCom销售订单总销售额 - 退货额 |
 | **计算公式** | `sum(net_sales_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
-| **附属指标** | vs LY：this period / last period - 1；TAR ACH% |
+| **附属指标** | vs LY：this period / last period - 1；TAR ACH%进度达成；TAR ACH%目标达成； |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
+| **附属指标类型** | vs LY:delta_pct_0dp、TAR ACH%进度达成:delta_pct_0dp、TAR ACH%目标达成:delta_pct_0dp |
 
 ---
 
@@ -54,11 +57,14 @@
 | **业务定义** | 统计周期内销售金额 /（销售金额 + 期末库存金额）× 100% |
 | **计算公式** | 销售金额：看所选时间范围销售金额之和；期末库存金额：看所选时间范围 end period 最后一天；`sales.net_sales_amt / (sales.net_sales_amt + inv.msrp_inv_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d`（sales）；`indep_rl_ads.a02_e2e_product_performance_inv_summary_d`（inv） |
-| **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×100 转 bp） |
+| **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%` |
+| **附属指标类型** | vs LY:delta_bp |
 
 ---
 
-### 3. AVG MD — 平均折扣
+### 3. AVG MD — 平均折扣(【Amt】和【Unit】的是同一套逻辑可直接复用，不用重复计算)
 
 | 项目 | 内容 |
 |---|---|
@@ -66,7 +72,10 @@
 | **业务定义** | 1 - 折扣价 / 原价 × 100% |
 | **计算公式** | `1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
-| **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×100 转 bp） |
+| **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%` |
+| **附属指标类型** | vs LY:delta_bp |
 
 ---
 
@@ -78,11 +87,14 @@
 | **业务定义** | 全价商品销售额 / 总销售额 × 100% |
 | **计算公式** | `sum(case when md_type = 'FP' then net_sales_amt else 0 end) / sum(net_sales_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
-| **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×100 转 bp） |
+| **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%` |
+| **附属指标类型** | vs LY:delta_bp |
 
 ---
 
-### 5. AUR — 件单价
+### 5. AUR — 件单价(【Amt】和【Unit】的是同一套逻辑可直接复用，不用重复计算)
 
 | 项目 | 内容 |
 |---|---|
@@ -91,6 +103,9 @@
 | **计算公式** | `sum(net_sales_amt) / sum(net_sales_qty)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
 | **附属指标** | vs LY：this period / last period - 1 |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
+| **附属指标类型** | vs LY:delta_pct_0dp |
 
 ---
 
@@ -103,10 +118,13 @@
 | **计算公式** | 看所选时间范围 end period 最后一天；`sum(msrp_inv_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_inv_summary_d` |
 | **附属指标** | vs LY：this period / last period - 1 |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
+| **附属指标类型** | vs LY:delta_pct_0dp |
 
 ---
 
-### 7. In-Transit Inventory Amt — 在途库存金额
+### 7. In-Transit Inventory Amt — 在途库存金额，这个没有附属指标。
 
 | 项目 | 内容 |
 |---|---|
@@ -114,10 +132,12 @@
 | **业务定义** | In-Transit Inventory Unit × msrp |
 | **计算公式** | 看所选时间范围 end period 最后一天；`sum(msrp_in_trans_inv_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_inv_summary_d` |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
 
 ---
 
-### 8. O2O Inventory Amt — O2O库存金额
+### 8. O2O Inventory Amt — O2O，这个没有附属指标。
 
 | 项目 | 内容 |
 |---|---|
@@ -125,6 +145,8 @@
 | **业务定义** | O2O Inventory Unit × msrp |
 | **计算公式** | 看所选时间范围 end period 最后一天；`sum(msrp_o2o_inv_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_inv_summary_d` |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
 
 ---
 
@@ -137,6 +159,9 @@
 | **计算公式** | `sum(msrp_inbound_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
 | **附属指标** | vs LY：this period / last period - 1 |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
+| **附属指标类型** | vs LY:delta_pct_0dp |
 
 ---
 
@@ -149,6 +174,9 @@
 | **计算公式** | `sum(md_outbound_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
 | **附属指标** | vs LY：this period / last period - 1 |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
+| **附属指标类型** | vs LY:delta_pct_0dp |
 
 ---
 
@@ -157,7 +185,7 @@
 > **商品维度切换**: ALL / Hero Model：`computed_product_tag = "hero model"` / Slow Mover：`computed_product_tag = "slow mover"` / Normal：`computed_product_tag = "normal"`
 > **支持筛选维度**: 渠道：platform，shop_name；商品：label，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy
 
-### 11. SLS Unit — DCom净销售数量
+### 11. SLS Unit — DCom净销售数量，这个附属指标有三个。
 
 | 项目 | 内容 |
 |---|---|
@@ -166,7 +194,9 @@
 | **计算公式** | `sum(net_sales_qty)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
 | **附属指标** | vs LY：this period / last period - 1；TAR ACH% |
-
+| **数据类型** | integer → 整数，千分位整数 |
+| **数据格式** | `#,##0` |
+| **附属指标类型** | vs LY:delta_pct_0dp、TAR ACH%进度达成:delta_pct_0dp、TAR ACH%目标达成:delta_pct_0dp |
 ---
 
 ### 12. ST% — 售罄率%（数量）
@@ -177,11 +207,13 @@
 | **业务定义** | 统计周期内销售数量 /（销售数量 + 期末库存数量）× 100% |
 | **计算公式** | 销售数量：看所选时间范围销售数量之和；期末库存数量：看所选时间范围 end period 最后一天；`sales.net_sales_qty / (sales.net_sales_qty + inv.inv_qty)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d`（sales）；`indep_rl_ads.a02_e2e_product_performance_inv_summary_d`（inv） |
-| **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×100 转 bp） |
-
+| **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%` |
+| **附属指标类型** | vs LY:delta_bp |
 ---
 
-### 13. AVG MD — 平均折扣
+### 13. AVG MD — 平均折扣(【Amt】和【Unit】的是同一套逻辑可直接复用，不用重复计算)
 
 | 项目 | 内容 |
 |---|---|
@@ -189,8 +221,10 @@
 | **业务定义** | 1 - 折扣价 / 原价 × 100% |
 | **计算公式** | `1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
-| **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×100 转 bp） |
-
+| **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%` |
+| **附属指标类型** | vs LY:delta_bp |
 ---
 
 ### 14. Fullprice% — 全价率
@@ -201,12 +235,14 @@
 | **业务定义** | 全价商品销售额 / 总销售额 × 100% |
 | **计算公式** | `sum(msrp_net_sales_amt) / sum(net_sales_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
-| **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×100 转 bp） |
-| **注意** | 原始口径该行公式与子模块一 Fullprice%（`md_type = 'FP'` 口径）不同，DAX 实现时需与业务确认 |
-
+| **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
+| **注意** | 原始口径该行公式与子模块一 Fullprice%（`md_type = 'FP'` 口径）不同，DAX 实现时需与业务确认：已确认，此处直接sum(msrp_net_sales_amt) |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%` |
+| **附属指标类型** | vs LY:delta_bp |
 ---
 
-### 15. AUR — 件单价
+### 15. AUR — 件单价(【Amt】和【Unit】的是同一套逻辑可直接复用，不用重复计算)
 
 | 项目 | 内容 |
 |---|---|
@@ -215,7 +251,9 @@
 | **计算公式** | `sum(net_sales_amt) / sum(net_sales_qty)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
 | **附属指标** | vs LY：this period / last period - 1 |
-
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
+| **附属指标类型** | vs LY:delta_pct_0dp |
 ---
 
 ### 16. EOH Unit — 期末库存数量
@@ -227,10 +265,12 @@
 | **计算公式** | 看所选时间范围 end period 最后一天；`sum(inv_qty)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_inv_summary_d` |
 | **附属指标** | vs LY：this period / last period - 1 |
-
+| **数据类型** | integer → 整数，千分位整数 |
+| **数据格式** | `#,##0` |
+| **附属指标类型** | vs LY:delta_pct_0dp |
 ---
 
-### 17. In-Transit Inventory Unit — 在途库存数量
+### 17. In-Transit Inventory Unit — 在途库存数量，这个没有附属指标。
 
 | 项目 | 内容 |
 |---|---|
@@ -238,10 +278,11 @@
 | **业务定义** | 已出库尚未入库到仓的货品总件数 |
 | **计算公式** | 看所选时间范围 end period 最后一天；`sum(in_trans_inv_qty)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_inv_summary_d` |
-
+| **数据类型** | integer → 整数，千分位整数 |
+| **数据格式** | `#,##0` |
 ---
 
-### 18. O2O Inventory Unit — O2O库存数量
+### 18. O2O Inventory Unit — O2O库存数量，这个没有附属指标。
 
 | 项目 | 内容 |
 |---|---|
@@ -249,6 +290,8 @@
 | **业务定义** | 支持线上线下履约调拨的可用于 O2O 渠道发货的库存总件数 |
 | **计算公式** | 看所选时间范围 end period 最后一天；`sum(o2o_inv_qty)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_inv_summary_d` |
+| **数据类型** | integer → 整数，千分位整数 |
+| **数据格式** | `#,##0` |
 
 ---
 
@@ -261,7 +304,9 @@
 | **计算公式** | `sum(inbound_qty)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
 | **附属指标** | vs LY：this period / last period - 1 |
-
+| **数据类型** | integer → 整数，千分位整数 |
+| **数据格式** | `#,##0` |
+| **附属指标类型** | vs LY:delta_pct_0dp |
 ---
 
 ### 20. Outbound Unit — 出库数量
@@ -273,7 +318,9 @@
 | **计算公式** | `sum(outbound_qty)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
 | **附属指标** | vs LY：this period / last period - 1 |
-
+| **数据类型** | integer → 整数，千分位整数 |
+| **数据格式** | `#,##0` |
+| **附属指标类型** | vs LY:delta_pct_0dp |
 ---
 
 ## 子模块三：Sales & Inventory Penetration Trend【Sales】
@@ -542,7 +589,7 @@
 | **全局支持筛选维度** | 渠道：platform、shop_name；商品：label，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy |
 | **商品维度切换** | Core KPI 板块：ALL / Hero Model / Slow Mover / Normal（`computed_product_tag`）；Trend 及明细板块：label / super_season / product_type / category / md_type / division |
 | **时间口径** | 区间类指标：看所选时间范围汇总；期末库存类指标（EOH / In-Transit / O2O / ST% 分母）：看所选时间范围 end period 最后一天；LY 库存列：看所选时间范围去年同期 end period 最后一天 |
-| **vs LY 规则** | 常规指标：this period / last period - 1（变化率）；ST% / AVG MD / Fullprice% 等比率类：this period - last period（差值，bp 指标，展示时 ×100 转 bp） |
+| **vs LY 规则** | 常规指标：this period / last period - 1（变化率）；ST% / AVG MD / Fullprice% 等比率类：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
 | **TAR ACH%** | 仅 SLS Amt、SLS Unit 附属 TAR ACH% |
 | **YOY 口径差异** | Sales & Inventory Penetration Trend 明细表：YOY 固定对比上个财年同期，不受 last period 时间筛选器影响；Sales Performance Details by Channel：YOY 是 this period 和 last period 对比 |
 | **LTD ST% 特殊区间** | 销售部分固定 2024-01-01 起算（原始口径标注待定），库存部分取所选时间范围 end period 最后一天 |
