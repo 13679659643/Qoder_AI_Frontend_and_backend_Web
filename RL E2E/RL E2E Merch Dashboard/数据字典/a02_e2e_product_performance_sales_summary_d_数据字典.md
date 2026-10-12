@@ -37,7 +37,7 @@
 | category_summary | Nullable(String) | category_summary | 是 | 品类汇总/归纳层级 |  |  |
 | special_supply | Nullable(String) | special_supply | 是 | 特供标识，具体业务含义待确认 |  |  |
 | predictive_buy | Nullable(Int32) | predictive_buy | 是 | 是否 predictive buy：1 表示是，0 表示否 | 1 |  |
-| label | Nullable(String) | label | 是 | 品牌标签 |  |  |
+| brand | Nullable(String) | brand | 是 | 品牌标签 |  |  |
 | super_season | Nullable(String) | super_season | 是 | 超级季节/大季维度，具体业务含义待确认 |  | season_final |
 | md_type | Nullable(String) | md_type | 是 | 折扣类型 |  |  |
 | computed_product_tag | Nullable(String) | computed_product_tag | 是 | 商品分层标签，例如：hero model、slow mover、normal | hero model |  |
@@ -57,7 +57,7 @@
 
 主键字段及排序字段均按以下顺序定义：
 
-`data_date, shop_info_id, division, product_type, framework, category, ax_class, category_summary, special_supply, predictive_buy, label, super_season, md_type, computed_product_tag`
+`data_date, shop_info_id, division, product_type, framework, category, ax_class, category_summary, special_supply, predictive_buy, brand, super_season, md_type, computed_product_tag`
 
 ## 说明
 

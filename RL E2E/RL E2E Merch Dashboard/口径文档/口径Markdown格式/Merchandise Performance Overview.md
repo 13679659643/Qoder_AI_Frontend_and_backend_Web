@@ -15,9 +15,9 @@
 | **数据底表（销售类）** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d`：SLS、AVG MD、Fullprice%、AUR、Inbound、Outbound 及 ST% 分子等区间汇总指标 |
 | **数据底表（库存类）** | `indep_rl_ads.a02_e2e_product_performance_inv_summary_d`：EOH、In-Transit、O2O 等期末库存指标及 ST% 分母 |
 | **全局支持筛选维度（渠道）** | 渠道：platform（取值 `platform`）、store name（取值 `shop_name`） |
-| **全局支持筛选维度（商品）** | 商品：label（取值 `label`）、division（取值 `division`）、product type（取值 `product_type`）、framework（取值 `framework`）、category（取值 `category`）、ax class（取值 `ax_class`）、category summary（取值 `category_summary`）、special supply（取值 `special_supply`）、predictive buy（取值 `predictive_buy`）；取值清单见文末附录 |
+| **全局支持筛选维度（商品）** | 商品：Brand（取值 `Brand`）、division（取值 `division`）、product type（取值 `product_type`）、framework（取值 `framework`）、category（取值 `category`）、ax class（取值 `ax_class`）、category summary（取值 `category_summary`）、special supply（取值 `special_supply`）、predictive buy（取值 `predictive_buy`）；取值清单见文末附录 |
 | **商品维度切换（Core KPI 板块）** | ALL / Hero Model：`computed_product_tag = "hero model"` / Slow Mover：`computed_product_tag = "slow mover"` / Normal：`computed_product_tag = "normal"` |
-| **商品维度切换（Trend 及明细板块）** | Label：`label` / Super Season：`super_season` / Product type：`product_type` / Category：`category` / MD type：`md_type` / Division：`division` |
+| **商品维度切换（Trend 及明细板块）** | Brand：`Brand` / Super Season：`super_season` / Product type：`product_type` / Category：`category` / MD type：`md_type` / Division：`division` |
 | **时间口径（区间类）** | SLS、AUR、Inbound、Outbound 及 ST% 分子等：看所选时间范围（区间汇总） |
 | **时间口径（期末时点类）** | EOH、In-Transit、O2O 及 ST% 分母等：看所选时间范围 end period 最后一天（时点数） |
 | **vs LY 附属指标（变化率）** | SLS、AUR、EOH、Inbound、Outbound 等：`this period / last period - 1` |
@@ -32,7 +32,7 @@
 ## 子模块一：Merchandising Core KPI【Amt】
 
 > **商品维度切换**: ALL / Hero Model：`computed_product_tag = "hero model"` / Slow Mover：`computed_product_tag = "slow mover"` / Normal：`computed_product_tag = "normal"`
-> **支持筛选维度**: 渠道：platform，shop_name；商品：label，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy
+> **支持筛选维度**: 渠道：platform，shop_name；商品：Brand，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy
 
 ### 1. SLS Amt — DCom净销售额，这个附属指标有三个
 
@@ -183,7 +183,7 @@
 ## 子模块二：Merchandising Core KPI【Unit】
 
 > **商品维度切换**: ALL / Hero Model：`computed_product_tag = "hero model"` / Slow Mover：`computed_product_tag = "slow mover"` / Normal：`computed_product_tag = "normal"`
-> **支持筛选维度**: 渠道：platform，shop_name；商品：label，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy
+> **支持筛选维度**: 渠道：platform，shop_name；商品：Brand，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy
 
 ### 11. SLS Unit — DCom净销售数量，这个附属指标有三个。
 
@@ -325,8 +325,8 @@
 
 ## 子模块三：Sales & Inventory Penetration Trend【Sales】
 
-> **商品维度切换**: Label：`label` / Super Season：`super_season` / Product type：`product_type` / Category：`category` / MD type：`md_type` / Division：`division`
-> **支持筛选维度**: 渠道：platform，shop_name；商品：label，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy
+> **商品维度切换**: Brand：`Brand` / Super Season：`super_season` / Product type：`product_type` / Category：`category` / MD type：`md_type` / Division：`division`
+> **支持筛选维度**: 渠道：platform，shop_name；商品：Brand，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy
 
 ### 21. SLS Amt% — 销售金额占比
 
@@ -334,7 +334,7 @@
 |---|---|
 | **指标名称** | SLS Amt% / 销售金额占比 |
 | **业务定义** | 单品类占总品类的比例 |
-| **计算公式** | 分子：各 label / super_season / product_type / category / md_type / division 下 `sum(net_sales_amt)`；分母：`sum(net_sales_amt)` |
+| **计算公式** | 分子：各 Brand / super_season / product_type / category / md_type / division 下 `sum(net_sales_amt)`；分母：`sum(net_sales_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
 | **特殊说明** | Week / Month / Year 和全局时间筛选器的关系（原始口径问题列待确认项） |
 
@@ -342,7 +342,7 @@
 
 ## 子模块四：Sales & Inventory Penetration Trend【Inventory】
 
-> **商品维度切换**: Label：`label` / Super Season：`super_season` / Product type：`product_type` / Category：`category` / MD type：`md_type` / Division：`division`
+> **商品维度切换**: Brand：`Brand` / Super Season：`super_season` / Product type：`product_type` / Category：`category` / MD type：`md_type` / Division：`division`
 
 ### 22. EOH Amt% — 期末库存金额占比
 
@@ -350,7 +350,7 @@
 |---|---|
 | **指标名称** | EOH Amt% / 期末库存金额占比 |
 | **业务定义** | 根据所筛选维度统计对应 EOH amt 占比 |
-| **计算公式** | 分子：各 label / super_season / product_type / category / md_type / division 下，看所选时间范围 end period 最后一天，`sum(msrp_inv_amt)`；分母：看所选时间范围 end period 最后一天，`sum(msrp_inv_amt)` |
+| **计算公式** | 分子：各 Brand / super_season / product_type / category / md_type / division 下，看所选时间范围 end period 最后一天，`sum(msrp_inv_amt)`；分母：看所选时间范围 end period 最后一天，`sum(msrp_inv_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_inv_summary_d` |
 
 ---
@@ -358,8 +358,8 @@
 ## 子模块五：Sales & Inventory Penetration Trend【Sales/Inventory 展示一样】
 
 > **表格列受左边柱状图影响**；这里的 YOY 是固定对比上个财年同期，不受 last period 时间筛选器影响
-> **商品维度切换**: Label：`label` / Super Season：`super_season` / Product type：`product_type` / Category：`category` / MD type：`md_type` / Division：`division`
-> **支持筛选维度**: 渠道：platform，shop_name；商品：label，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy
+> **商品维度切换**: Brand：`Brand` / Super Season：`super_season` / Product type：`product_type` / Category：`category` / MD type：`md_type` / Division：`division`
+> **支持筛选维度**: 渠道：platform，shop_name；商品：Brand，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy
 
 ### 23. EOH Unit（TY）— 期末库存数量
 
@@ -477,7 +477,7 @@
 ## 子模块六：Sales Performance Details by Channel
 
 > **YOY 口径**: YOY 是 this period 和 last period 对比
-> **商品维度切换**: Label：`label` / Super Season：`super_season` / Product type：`product_type` / Category：`category` / MD type：`md_type` / Division：`division`（同 Trend 板块，依据占比指标公式中的维度）
+> **商品维度切换**: Brand：`Brand` / Super Season：`super_season` / Product type：`product_type` / Category：`category` / MD type：`md_type` / Division：`division`（同 Trend 板块，依据占比指标公式中的维度）
 
 ### 33. SLS Unit — DCom净销售数量
 
@@ -487,6 +487,8 @@
 | **业务定义** | 统计周期内DCom净销售数量 = DCom销售订单总销售数量 - 退货数量 |
 | **计算公式** | `sum(net_sales_qty)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
+| **数据类型** | integer → 整数，千分位整数 |
+| **数据格式** | `#,##0` |
 
 ---
 
@@ -498,6 +500,8 @@
 | **业务定义** | 统计周期内DCom净销售额 = DCom销售订单总销售额 - 退货额 |
 | **计算公式** | `sum(net_sales_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
 
 ---
 
@@ -510,17 +514,22 @@
 | **计算公式** | `sum(net_sales_amt)`，this period / last period - 1 |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
 | **特殊说明** | YOY 是 this period 和 last period 对比（受 last period 时间筛选器影响） |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%` |
 
 ---
 
-### 36. SLS Amt% — 销售金额占比
+### 36. SLS Amt% — 销售金额占比(和Vert. Amt% — 纵向金额占比类似，只是命名不一样，这里是用于TTL列指标分组使用的)
 
 | 项目 | 内容 |
 |---|---|
 | **指标名称** | SLS Amt% / 销售金额占比 |
 | **业务定义** | 单品类占总品类的比例 |
-| **计算公式** | 分子：各 label / super_season / product_type / category / md_type / division 下 `sum(net_sales_amt)`；分母：`sum(net_sales_amt)` |
+| **计算公式** | 分子：各 Brand / super_season / product_type / category / md_type / division 下 `sum(net_sales_amt)`；分母：`sum(net_sales_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
+| **注意** | 行维度分组由以下六个表字段拉到矩阵中，`Brand` / `super_season` / `product_type` / `category` / `md_type` / `division`，这里的分母使用ALLSELECTED函数移除视觉对象内部的筛选，但保留外部切片器的筛选，由于一次只使用一个字段，我们可以同时ALLSELECTED这六个字段，实现对所有商品维度的统计。 |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%` |
 
 ---
 
@@ -532,6 +541,9 @@
 | **业务定义** | 当前单元格 SLS Amt / 该列渠道 Total SLS Amt |
 | **计算公式** | 分子：各 platform / shop_name × 商品维度下 `sum(net_sales_amt)`；分母：各 platform / shop_name 下 `sum(net_sales_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
+| **注意** | 行维度分组由以下六个表字段拉到矩阵中，`Brand` / `super_season` / `product_type` / `category` / `md_type` / `division`，这里的分母使用ALLSELECTED函数移除视觉对象内部的筛选，但保留外部切片器的筛选，由于一次只使用一个字段，我们可以同时ALLSELECTED这六个字段，实现对所有商品维度的统计。 |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%` |
 
 ---
 
@@ -543,6 +555,9 @@
 | **业务定义** | 当前单元格 SLS Amt / 该行商品维度 Total SLS Amt |
 | **计算公式** | 分子：各 platform / shop_name × 商品维度下 `sum(net_sales_amt)`；分母：各商品维度下 `sum(net_sales_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
+| **注意** | 列指标分为了Platform、Store两种分组，这里的分母使用ALLSELECTED函数移除视觉对象内部的筛选，但保留外部切片器的筛选。 |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%` |
 
 ---
 
@@ -551,10 +566,12 @@
 | 项目 | 内容 |
 |---|---|
 | **指标名称** | LTD ST% / LTD售罄率%（金额） |
-| **业务定义** | 开店以来销售数量 /（销售数量 + 期末库存数量）× 100% |
-| **计算公式** | 销售金额：2024-01-01 至今销售金额之和（待定）；期末库存金额：看所选时间范围 end period 最后一天；`sales.net_sales_amt / (sales.net_sales_amt + inv.msrp_inv_amt)` |
+| **业务定义** | 开店以来销售金额 /（销售金额 + 期末库存金额）× 100% |
+| **计算公式** | 开店以来销售金额、销售金额：2024-01-01 至今销售金额之和（待定）；期末库存金额：看所选时间范围 end period 最后一天；`sales.net_sales_amt / (sales.net_sales_amt + inv.msrp_inv_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d`（sales）；`indep_rl_ads.a02_e2e_product_performance_inv_summary_d`（inv） |
-| **特殊说明** | 销售区间为 2024 年至筛选器所选 end period（原始口径标注「待定」） |
+| **特殊说明** | 销售区间为 2024 年至今，和this period / last period无关； 期末库存金额和end period有关 |
+| **数据类型** | percent_0dp → 百分比整数，不含正号 |
+| **数据格式** | `#,##0%` |
 
 ---
 
@@ -564,9 +581,11 @@
 |---|---|
 | **指标名称** | EOH Unit / 期末库存数量 |
 | **业务定义** | 选定日期业务周期结束时点的期末库存总数量 |
-| **计算公式** | 看所选时间范围 end period 最后一天；`sum(msrp_inv_amt)` |
+| **计算公式** | 看所选时间范围 end period 最后一天；`sum(inv_qty)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_inv_summary_d` |
-| **注意** | 原始口径该行计算指标写作 `sum(msrp_inv_amt)`（金额字段），与「期末库存数量」定义存在差异（子模块二 EOH Unit 为 `sum(inv_qty)`），DAX 实现时需与业务确认 |
+| **注意** | `sum(inv_qty)` |
+| **数据类型** | integer → 整数，千分位整数 |
+| **数据格式** | `#,##0` |
 
 ---
 
@@ -578,6 +597,8 @@
 | **业务定义** | 净销售金额 / 商品净出库件数 |
 | **计算公式** | `sum(net_sales_amt) / sum(net_sales_qty)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
+| **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
+| **数据格式** | `#,##0` |
 
 ---
 
@@ -586,8 +607,8 @@
 | 规则项 | 说明 |
 |---|---|
 | **数据底表** | 销售类指标用 `indep_rl_ads.a02_e2e_product_performance_sales_summary_d`；库存类指标用 `indep_rl_ads.a02_e2e_product_performance_inv_summary_d`；ST% / LTD ST% 跨双表（sales + inv） |
-| **全局支持筛选维度** | 渠道：platform、shop_name；商品：label，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy |
-| **商品维度切换** | Core KPI 板块：ALL / Hero Model / Slow Mover / Normal（`computed_product_tag`）；Trend 及明细板块：label / super_season / product_type / category / md_type / division |
+| **全局支持筛选维度** | 渠道：platform、shop_name；商品：Brand，division，product_type，framework，category，ax_class，category_summary，special_supply，predictive_buy |
+| **商品维度切换** | Core KPI 板块：ALL / Hero Model / Slow Mover / Normal（`computed_product_tag`）；Trend 及明细板块：Brand / super_season / product_type / category / md_type / division |
 | **时间口径** | 区间类指标：看所选时间范围汇总；期末库存类指标（EOH / In-Transit / O2O / ST% 分母）：看所选时间范围 end period 最后一天；LY 库存列：看所选时间范围去年同期 end period 最后一天 |
 | **vs LY 规则** | 常规指标：this period / last period - 1（变化率）；ST% / AVG MD / Fullprice% 等比率类：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
 | **TAR ACH%** | 仅 SLS Amt、SLS Unit 附属 TAR ACH% |
@@ -605,7 +626,7 @@
 
 | 筛选维度 | 取值字段 | 取值清单（原始口径） |
 |---|---|---|
-| label | `label` | W Polo、FJ、CL、PL、CW、M Polo、RRL、HM、Lauren |
+| Brand | `Brand` | W Polo、FJ、CL、PL、CW、M Polo、RRL、HM、Lauren |
 | division | `division` | WM、FJ、CW、HM、MN |
 | product type | `product_type` | 618 Commercial、BSR、CYO/DTG、Carryover、Commercial、D11 Commercial、Excess、FA23、FA24、FA25、FA26、GWP、HO23、HO24、HO25、HO26、PF23、PF24、PF25、PF26、PS23、PS24、PS25、PS26、PSR、SP23、SP24、SP25、SP26、SP27、SU23、SU24、SU25、SU26、SU27 |
 | framework | `framework` | Acceleration、Complementary、Foundation、Secondary、Primary |

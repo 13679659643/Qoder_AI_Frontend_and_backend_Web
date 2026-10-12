@@ -30,5 +30,33 @@ IsProductTagFilter：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\R
 7、列指标维度表：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Merchandising Core KPI\Dim_ColMetric_Merchandising_Core_KPI.md
 综合上述信息，结合D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Customer Breakdown\Customer_Breakdown_ms.md文件内容，输出Merchandising_Core_KPI解决方案在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Merchandising Core KPI目录下，我要用于Powerbi卡片图的开发。Customer_Breakdown_ms.md文件内容和目前做的肯定是有差异的，只做参考，具体实施内容以1~7点为准。不懂就问。
 
+# MPO第三轮提示词:
+参考格式文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Merchandising Core KPI\Dim_ColMetric_Merchandising_Core_KPI.md
+
+结合图片，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales Performance Details by Channel目录下生成维度表：Dim_ColMetric_Sales_Performance_Details.md
+目前方案没有双模态，只需要一个Metric_Format就行了。
+
+此列指标维度表有三层，
+第一层：Platform、Store
+第二层：页面显示Label-->Platform包括：TTL、Tmall、JD、RLE、DY;Store包括：TTL、Tmall、JD、RLE、DY_Family、DY_W、DY_MN;
+Platform事实表实际值：TLL的时候需要ALLSELECTED函数移除视觉对象内部Platform和Store的筛选，但保留外部切片器的筛选；Tmall对应事实表中的TM、JD-->JD、RLE-->RLE、DY-->DY;
+Store事实表实际值：TLL的时候需要ALLSELECTED函数移除视觉对象内部Platform和Store的筛选，但保留外部切片器的筛选；Tmall对应事实表中的TM、JD-->JD、RLE-->RLE_CN、DY_Family-->DY_Family、DY_W-->DY_W、DY_MN-->DY_M;
+具体对应关系可以查看D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\维度复用\筛选器\固定值筛选器\Slicer_Platform_Selection和D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\维度复用\筛选器\固定值筛选器\Slicer_Store_Name文件，所以这里的列指标维度表字段需要多一个Label字段。
+第三层：如图所示：TTL之下是：SLS Unit、SLS Amt、YOY、SLS Amt%、LTD ST%、EOH Unit、AUR;
+其余每个Platform或者Store之下都是：SLS Unit、SLS Amt、YOY、Vert.‌ Amt% 、Horiz.‌ Amt%、AUR;
+
+综合以上信息，输出维度表：Dim_ColMetric_Sales_Performance_Details.md
+
+# MPO第四轮提示词:
+结合口径文档中的## 子模块六：Sales Performance Details by Channel：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\口径文档\口径Markdown格式\Merchandise Performance Overview.md
+在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales Performance Details by Channel目录下输出矩阵的完整解决方案；
+列指标维度：Dim_ColMetric_Sales_Performance_Details.md
+行指标维度：行维度分组分别由以下六个表字段其中一个拉到矩阵中，`Brand` / `super_season` / `product_type` / `category` / `md_type` / `division`，如果存在计算分母类别总计的，使用ALLSELECTED函数移除视觉对象内部的筛选，但保留外部切片器的筛选，由于一次只使用一个字段，我们可以同时ALLSELECTED这六个字段，实现对所有商品维度的统计。
+
+可供参考解决方案格式：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Merchandising Core KPI\Merchandising_Core_KPI_ms.md
+
+我们做的是一个独立的解决方案，不要出现AI语境类的口语化文本，以及对比某某方案的话术，需要保留必要的dax注释信息。
+综合以上信息，不懂就问，输出Sales_Performance_Details_ms.md的完整解决方案。
+
 
 
