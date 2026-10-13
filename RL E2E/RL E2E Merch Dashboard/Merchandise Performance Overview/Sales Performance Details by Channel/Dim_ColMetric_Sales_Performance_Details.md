@@ -7,7 +7,7 @@ Dim_ColMetric_Sales_Performance_Details =
 //       三层结构: ChannelGroup（Platform / Store）> Label（页面显示标签）> ColName（指标列）
 // 范围: 口径文档/口径Markdown格式/Merchandise Performance Overview.md
 //       - 子模块六：Sales Performance Details by Channel（§33-§41）+ 页面设计截图
-// 数据底表（销售类）: a02_e2e_product_performance_sales_summary_d（SLS / YOY / 占比 / AUR / LTD ST% 分子）
+// 数据底表（销售类）: a02_e2e_product_performance_sales_summary_d（SLS / vs LP / 占比 / AUR / LTD ST% 分子）
 // 数据底表（库存类）: a02_e2e_product_performance_inv_summary_d（EOH Unit / LTD ST% 分母）
 // 规模: 74 行 = Platform 组 31 行（TTL 7 列 + 4 渠道 × 6 列）
 //              + Store 组 43 行（TTL 7 列 + 6 店铺 × 6 列）
@@ -27,15 +27,15 @@ Dim_ColMetric_Sales_Performance_Details =
 //      + 模版复用/数据类型和格式总览.md 推定默认，业务确认后可调整）:
 //      integer       → `#,##0` 整数千分位（SLS Unit / EOH Unit）
 //      currency      → `#,##0` + 币种符号（SLS Amt / AUR，金额类，Display 中汇率换算 + 符号拼接）
-//      percent_0dp → IF(__Value>0,"+","") & FORMAT(__Value,"#,##0%") 百分比整数变化，含正号（YOY）
+//      percent_0dp → IF(__Value>0,"+","") & FORMAT(__Value,"#,##0%") 百分比整数变化，含正号（vs LP）
 //      percent_0dp   → `#,##0%` 百分比整数，不含正号（SLS Amt% / Vert. Amt% / Horiz. Amt% / LTD ST%）
 //   3. Metric_IsCurrencyAmount（BOOLEAN）:
 //      TRUE  → SLS Amt / AUR（金额类，涉及汇率换算与币种符号拼接）
-//      FALSE → 其余（SLS Unit / EOH Unit 为数量类；占比 / LTD ST% 为比率类；YOY 为派生比率）
+//      FALSE → 其余（SLS Unit / EOH Unit 为数量类；占比 / LTD ST% 为比率类；vs LP 为派生比率）
 //   4. 颜色规则通过 Metric_ColorRule 字段标识，由 Cell Font Color 度量值统一调度:
 //      fixed_black  → 全部基础指标列（SLS Unit / SLS Amt / SLS Amt% / Vert. Amt% / Horiz. Amt%
 //                      / LTD ST% / EOH Unit / AUR）
-//      pos_neg_zero → YOY（按值正/负/零三色）
+//      pos_neg_zero → vs LP（按值正/负/零三色）
 //
 // 字段说明:
 //   Metric_ID             主键（全局唯一 1-74）
@@ -47,7 +47,7 @@ Dim_ColMetric_Sales_Performance_Details =
 //   ChannelGroup_Sort     Level 1 排序（Platform=10, Store=20）
 //   Label_Sort            Level 2 排序（TTL=10 首列；Tmall=20, JD=30, RLE=40, DY=50；
 //                         Store 组 DY_Family=50, DY_W=60, DY_MN=70）
-//   ColName_Sort          Level 3 排序（SLS Unit=100, SLS Amt=200, YOY=300, SLS Amt%=400,
+//   ColName_Sort          Level 3 排序（SLS Unit=100, SLS Amt=200, vs LP=300, SLS Amt%=400,
 //                         Vert. Amt%=410, Horiz. Amt%=420, LTD ST%=430, EOH Unit=440, AUR=500）
 //   ColType               列类型标识（即指标路由键，详见上方 ColType 口径）
 //   Metric_Format         单一格式字段（integer / currency / percent_0dp / percent_0dp）
@@ -91,11 +91,11 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         // Level 1 = Platform（ChannelGroup_Sort=10，过滤事实表 [platform] 字段）
         // TTL（Label_Sort=10，特殊标记：ALLSELECTED 全渠道合计，7 列）
-        // 颜色规则: 基础指标=固定黑；YOY=正负零三色
+        // 颜色规则: 基础指标=固定黑；vs LP=正负零三色
         // ════════════════════════════════════════════════════════════════
         { 1,  "Platform", "TTL", "TTL", "1-SLS Unit",    10, 10, 100, "SLS Unit",    "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 2,  "Platform", "TTL", "TTL", "2-SLS Amt",     10, 10, 200, "SLS Amt",      "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 3,  "Platform", "TTL", "TTL", "3-YOY",         10, 10, 300, "YOY",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 3,  "Platform", "TTL", "TTL", "3-vs LP",         10, 10, 300, "vs LP",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 4,  "Platform", "TTL", "TTL", "4-SLS Amt%",    10, 10, 400, "SLS Amt%",     "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 5,  "Platform", "TTL", "TTL", "5-LTD ST%",     10, 10, 430, "LTD ST%",      "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 6,  "Platform", "TTL", "TTL", "6-EOH Unit",    10, 10, 440, "EOH Unit",     "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
@@ -106,7 +106,7 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 8,  "Platform", "Tmall", "TM", "8-SLS Unit",     10, 20, 100, "SLS Unit",    "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 9,  "Platform", "Tmall", "TM", "9-SLS Amt",      10, 20, 200, "SLS Amt",      "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 10, "Platform", "Tmall", "TM", "10-YOY",         10, 20, 300, "YOY",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 10, "Platform", "Tmall", "TM", "10-vs LP",         10, 20, 300, "vs LP",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 11, "Platform", "Tmall", "TM", "11-Vert. Amt%",  10, 20, 410, "Vert. Amt%",   "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 12, "Platform", "Tmall", "TM", "12-Horiz. Amt%", 10, 20, 420, "Horiz. Amt%",  "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 13, "Platform", "Tmall", "TM", "13-AUR",         10, 20, 500, "AUR",          "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
@@ -116,7 +116,7 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 14, "Platform", "JD", "JD", "14-SLS Unit",     10, 30, 100, "SLS Unit",    "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 15, "Platform", "JD", "JD", "15-SLS Amt",      10, 30, 200, "SLS Amt",      "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 16, "Platform", "JD", "JD", "16-YOY",          10, 30, 300, "YOY",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 16, "Platform", "JD", "JD", "16-vs LP",          10, 30, 300, "vs LP",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 17, "Platform", "JD", "JD", "17-Vert. Amt%",   10, 30, 410, "Vert. Amt%",   "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 18, "Platform", "JD", "JD", "18-Horiz. Amt%",  10, 30, 420, "Horiz. Amt%",  "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 19, "Platform", "JD", "JD", "19-AUR",          10, 30, 500, "AUR",          "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
@@ -126,7 +126,7 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 20, "Platform", "RLE", "RLE", "20-SLS Unit",     10, 40, 100, "SLS Unit",    "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 21, "Platform", "RLE", "RLE", "21-SLS Amt",      10, 40, 200, "SLS Amt",      "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 22, "Platform", "RLE", "RLE", "22-YOY",          10, 40, 300, "YOY",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 22, "Platform", "RLE", "RLE", "22-vs LP",          10, 40, 300, "vs LP",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 23, "Platform", "RLE", "RLE", "23-Vert. Amt%",   10, 40, 410, "Vert. Amt%",   "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 24, "Platform", "RLE", "RLE", "24-Horiz. Amt%",  10, 40, 420, "Horiz. Amt%",  "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 25, "Platform", "RLE", "RLE", "25-AUR",          10, 40, 500, "AUR",          "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
@@ -136,7 +136,7 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 26, "Platform", "DY", "DY", "26-SLS Unit",     10, 50, 100, "SLS Unit",    "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 27, "Platform", "DY", "DY", "27-SLS Amt",      10, 50, 200, "SLS Amt",      "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 28, "Platform", "DY", "DY", "28-YOY",          10, 50, 300, "YOY",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 28, "Platform", "DY", "DY", "28-vs LP",          10, 50, 300, "vs LP",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 29, "Platform", "DY", "DY", "29-Vert. Amt%",   10, 50, 410, "Vert. Amt%",   "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 30, "Platform", "DY", "DY", "30-Horiz. Amt%",  10, 50, 420, "Horiz. Amt%",  "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 31, "Platform", "DY", "DY", "31-AUR",          10, 50, 500, "AUR",          "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
@@ -147,7 +147,7 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 32, "Store", "TTL", "TTL", "32-SLS Unit",    20, 10, 100, "SLS Unit",    "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 33, "Store", "TTL", "TTL", "33-SLS Amt",     20, 10, 200, "SLS Amt",      "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 34, "Store", "TTL", "TTL", "34-YOY",         20, 10, 300, "YOY",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 34, "Store", "TTL", "TTL", "34-vs LP",         20, 10, 300, "vs LP",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 35, "Store", "TTL", "TTL", "35-SLS Amt%",    20, 10, 400, "SLS Amt%",     "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 36, "Store", "TTL", "TTL", "36-LTD ST%",     20, 10, 430, "LTD ST%",      "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 37, "Store", "TTL", "TTL", "37-EOH Unit",    20, 10, 440, "EOH Unit",     "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
@@ -158,7 +158,7 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 39, "Store", "Tmall", "TM", "39-SLS Unit",     20, 20, 100, "SLS Unit",    "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 40, "Store", "Tmall", "TM", "40-SLS Amt",      20, 20, 200, "SLS Amt",      "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 41, "Store", "Tmall", "TM", "41-YOY",          20, 20, 300, "YOY",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 41, "Store", "Tmall", "TM", "41-vs LP",          20, 20, 300, "vs LP",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 42, "Store", "Tmall", "TM", "42-Vert. Amt%",   20, 20, 410, "Vert. Amt%",   "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 43, "Store", "Tmall", "TM", "43-Horiz. Amt%",  20, 20, 420, "Horiz. Amt%",  "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 44, "Store", "Tmall", "TM", "44-AUR",          20, 20, 500, "AUR",          "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
@@ -168,7 +168,7 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 45, "Store", "JD", "JD", "45-SLS Unit",     20, 30, 100, "SLS Unit",    "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 46, "Store", "JD", "JD", "46-SLS Amt",      20, 30, 200, "SLS Amt",      "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 47, "Store", "JD", "JD", "47-YOY",          20, 30, 300, "YOY",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 47, "Store", "JD", "JD", "47-vs LP",          20, 30, 300, "vs LP",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 48, "Store", "JD", "JD", "48-Vert. Amt%",   20, 30, 410, "Vert. Amt%",   "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 49, "Store", "JD", "JD", "49-Horiz. Amt%",  20, 30, 420, "Horiz. Amt%",  "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 50, "Store", "JD", "JD", "50-AUR",          20, 30, 500, "AUR",          "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
@@ -179,7 +179,7 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 51, "Store", "RLE", "RLE_CN", "51-SLS Unit",     20, 40, 100, "SLS Unit",    "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 52, "Store", "RLE", "RLE_CN", "52-SLS Amt",      20, 40, 200, "SLS Amt",      "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 53, "Store", "RLE", "RLE_CN", "53-YOY",          20, 40, 300, "YOY",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 53, "Store", "RLE", "RLE_CN", "53-vs LP",          20, 40, 300, "vs LP",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 54, "Store", "RLE", "RLE_CN", "54-Vert. Amt%",   20, 40, 410, "Vert. Amt%",   "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 55, "Store", "RLE", "RLE_CN", "55-Horiz. Amt%",  20, 40, 420, "Horiz. Amt%",  "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 56, "Store", "RLE", "RLE_CN", "56-AUR",          20, 40, 500, "AUR",          "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
@@ -189,7 +189,7 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 57, "Store", "DY_Family", "DY_Family", "57-SLS Unit",     20, 50, 100, "SLS Unit",    "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 58, "Store", "DY_Family", "DY_Family", "58-SLS Amt",      20, 50, 200, "SLS Amt",      "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 59, "Store", "DY_Family", "DY_Family", "59-YOY",          20, 50, 300, "YOY",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 59, "Store", "DY_Family", "DY_Family", "59-vs LP",          20, 50, 300, "vs LP",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 60, "Store", "DY_Family", "DY_Family", "60-Vert. Amt%",   20, 50, 410, "Vert. Amt%",   "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 61, "Store", "DY_Family", "DY_Family", "61-Horiz. Amt%",  20, 50, 420, "Horiz. Amt%",  "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 62, "Store", "DY_Family", "DY_Family", "62-AUR",          20, 50, 500, "AUR",          "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
@@ -199,7 +199,7 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 63, "Store", "DY_W", "DY_W", "63-SLS Unit",     20, 60, 100, "SLS Unit",    "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 64, "Store", "DY_W", "DY_W", "64-SLS Amt",      20, 60, 200, "SLS Amt",      "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 65, "Store", "DY_W", "DY_W", "65-YOY",          20, 60, 300, "YOY",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 65, "Store", "DY_W", "DY_W", "65-vs LP",          20, 60, 300, "vs LP",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 66, "Store", "DY_W", "DY_W", "66-Vert. Amt%",   20, 60, 410, "Vert. Amt%",   "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 67, "Store", "DY_W", "DY_W", "67-Horiz. Amt%",  20, 60, 420, "Horiz. Amt%",  "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 68, "Store", "DY_W", "DY_W", "68-AUR",          20, 60, 500, "AUR",          "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
@@ -210,7 +210,7 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 69, "Store", "DY_MN", "DY_M", "69-SLS Unit",     20, 70, 100, "SLS Unit",    "integer",       FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 70, "Store", "DY_MN", "DY_M", "70-SLS Amt",      20, 70, 200, "SLS Amt",      "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 71, "Store", "DY_MN", "DY_M", "71-YOY",          20, 70, 300, "YOY",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 71, "Store", "DY_MN", "DY_M", "71-vs LP",          20, 70, 300, "vs LP",          "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 72, "Store", "DY_MN", "DY_M", "72-Vert. Amt%",   20, 70, 410, "Vert. Amt%",   "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 73, "Store", "DY_MN", "DY_M", "73-Horiz. Amt%",  20, 70, 420, "Horiz. Amt%",  "percent_0dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 74, "Store", "DY_MN", "DY_M", "74-AUR",          20, 70, 500, "AUR",          "currency",      TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" }
