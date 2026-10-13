@@ -28,3 +28,17 @@
 
 ## [SKU Sales Tracking] 模块
 
+## [2026-10-13 10:30] DAX 新建 — Top Size Sales Performance 表格解决方案
+
+- **模块**: SKU Sales Tracking - Top Size Sales Performance
+- **任务**: Sales / Inventory 双视图 Top4 category 尺码结构占比表格（SLS Amt% / LP SLS Amt% / vs LP；EOH Amt% / LP EOH Amt% / vs LP）
+- **操作**: 新建
+- **变更内容**:
+  - 新建解决方案文档 `SKU Sales Tracking/1 Top Size Sales Performance/Top_Size_Sales Performance_table.md`（14 个度量值 + 表格视觉对象配置）
+  - Rank 度量值 2 个：`Top Size Sales Category Rank`（This Period sum(net_sales_amt) 降序）、`Top Size Inventory Category Rank`（This Period 最后一天 sum(msrp_inv_amt) 降序），用于表格视觉级筛选器固定 Top1~Top4 category
+  - Sales 三指标 Value + Display：SLS Amt% / LP SLS Amt%（分母 category + size category 层级，REMOVEFILTERS(sku_size)）、vs LP（差值 bp，×10000 在 Display 层）
+  - Inventory 三指标 Value + Display：EOH Amt% / LP EOH Amt%（期末快照日单日时点，end period 范围内最后一天回退保护）、vs LP
+  - 表格行筛选机制：视觉级筛选器 Rank = N 且 Value 不为空，仅显示本期有数据的 category + size category + size 组合
+- **关联文件**: SKU Sales Tracking/1 Top Size Sales Performance/Top_Size_Sales Performance_table.md
+- **备注**: net_sales_amt 为取数新增列（ROUND(product_qty × sales_price, 6)，业务确认）；inv 表无 platform / shop_name 字段，Inventory 指标不受渠道筛选影响（业务确认接受）；Sales/Inventory 视图切换由页面按钮 + 书签实现，不在度量值范围内
+

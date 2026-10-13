@@ -13,17 +13,20 @@
 ## 1. 需求理解
 
 ### 1.1 模块定位
+
 Merchandising Core KPI 是 Merchandise Performance Overview Tab 的核心 KPI 矩阵，覆盖 10 个 KPI 分组（SLS / ST% / AVG MD / Fullprice% / AUR / EOH / In-Transit Inventory / O2O Inventory / Inbound / Outbound）× 主指标 + 附属指标 = 20 列。
 【Amt】与【Unit】指标数量、结构完全一致，共用单套 20 列，由 Amt/Unit 按钮切换计算逻辑。
 
 ### 1.2 路由维度
-| 路由维度 | 来源表 | 类型 | 说明 |
-| --- | --- | --- | --- |
-| Amt / Unit | IsAmtUnitFilter | 断开按钮维度 | SELECTEDVALUE([Sort])：=10 → Amt 逻辑；=20 → Unit 逻辑；默认 Amt（未选时取 10） |
-| ALL / Hero Model / Slow Mover / Normal | IsProductTagFilter | 断开按钮维度 | computed_product_tag 过滤：选中 "ALL" → IN {"hero model", "slow mover", "normal"}；其余 → 单值匹配；默认 ALL |
-| Metric_ID（10 组 20 列） | Dim_ColMetric_Merchandising_Core_KPI | 断开列维度 | Act / vs LY / TAR ACH% Progress / TAR ACH% Target 列路由 |
+
+| 路由维度                               | 来源表                               | 类型         | 说明                                                                                                           |
+| -------------------------------------- | ------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------- |
+| Amt / Unit                             | IsAmtUnitFilter                      | 断开按钮维度 | SELECTEDVALUE([Sort])：=10 → Amt 逻辑；=20 → Unit 逻辑；默认 Amt（未选时取 10）                              |
+| ALL / Hero Model / Slow Mover / Normal | IsProductTagFilter                   | 断开按钮维度 | computed_product_tag 过滤：选中 "ALL" → IN {"hero model", "slow mover", "normal"}；其余 → 单值匹配；默认 ALL |
+| Metric_ID（10 组 20 列）               | Dim_ColMetric_Merchandising_Core_KPI | 断开列维度   | Act / vs LY / TAR ACH% Progress / TAR ACH% Target 列路由                                                       |
 
 **与 Customer Breakdown 方案的关键差异**：
+
 1. 行路由从 Net/Demand（Dim_RowMetric）改为 **Amt/Unit 按钮 + 商品标签按钮**（两个断开按钮维度）
 2. LY 不再使用 _LY 字段对称映射，改为**直接读 Last Period 筛选器**（Min_Last / Max_Last 表的 TimeFrame_Min / TimeFrame_Max）
 3. 新增**期末时点口径**（EOH / In-Transit / O2O / ST% 分母）：end period 范围内最后一个快照日
@@ -31,14 +34,16 @@ Merchandising Core KPI 是 Merchandise Performance Overview Tab 的核心 KPI �
 5. TAR ACH% Progress / Target 为占位符（返回 1 和 2），公式待业务确认后实现
 
 ### 1.3 时间口径
-| 口径 | 时间范围 | 适用指标 |
-| --- | --- | --- |
-| This Period（区间类） | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] | SLS、AVG MD、Fullprice%、AUR、Inbound、Outbound、ST% 分子 |
-| Last Period（LY 对比） | data_date ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] | 上述全部指标的 LY 基线 |
-| End Period（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个快照日** | EOH、In-Transit、O2O、ST% 分母 |
-| End Period LY | end period 范围 [Slicer_Time_Frame_Max_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] 内**最后一个快照日** | 上述期末类指标的 LY 基线 |
+
+| 口径                     | 时间范围                                                                                                                          | 适用指标                                                  |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| This Period（区间类）    | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                               | SLS、AVG MD、Fullprice%、AUR、Inbound、Outbound、ST% 分子 |
+| Last Period（LY 对比）   | data_date ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]]                               | 上述全部指标的 LY 基线                                    |
+| End Period（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个快照日** | EOH、In-Transit、O2O、ST% 分母                            |
+| End Period LY            | end period 范围 [Slicer_Time_Frame_Max_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] 内**最后一个快照日** | 上述期末类指标的 LY 基线                                  |
 
 说明：
+
 - 没有特殊说明的情况下，计算 LY 时使用 Last Period 特定筛选器的结果作为上期时间范围对比
 - ST% 这类跨双表指标需留意：sales 部分（分子）是整个 This Period 的区间汇总，inv 部分（分母）只看 end period 范围的最后一天，不能混用
 - 期末时点类实现为「end period 范围内最后一个有数据的快照日」：口径定义为 end period 最后一天，快照缺数时自动回退到范围内最近一天，避免整段空值
@@ -59,6 +64,7 @@ Merchandising Core KPI 是 Merchandise Performance Overview Tab 的核心 KPI �
 ## 3. 方案设计
 
 ### 3.1 度量值分层
+
 ```
 Act Base Value / LY Base Value
     ←  Amt/Unit 路由 + 商品标签路由 + Metric_ID 路由，保留 RMB 原值
@@ -77,54 +83,58 @@ Cell Font Color / Cell Background Color
 ```
 
 ### 3.2 字段路由（Amt / Unit）
-| KPI | Amt 逻辑 | Unit 逻辑 | 是否共享 |
-| --- | --- | --- | --- |
-| SLS | sum(net_sales_amt) | sum(net_sales_qty) | 否 |
-| ST% | net_sales_amt / (net_sales_amt + msrp_inv_amt) | net_sales_qty / (net_sales_qty + inv_qty) | 结构一致（复用模式路由后的 SLS 与 EOH 结果） |
-| AVG MD | 1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt) | 同左 | 是（口径明确可直接复用） |
-| Fullprice% | sum(net_sales_amt where md_type="FP") / sum(net_sales_amt) | sum(msrp_net_sales_amt) / sum(net_sales_amt) | 否（口径已确认两套公式） |
-| AUR | sum(net_sales_amt) / sum(net_sales_qty) | 同左 | 是（口径明确可直接复用） |
-| EOH | sum(msrp_inv_amt) | sum(inv_qty) | 否 |
-| In-Transit Inventory | sum(msrp_in_trans_inv_amt) | sum(in_trans_inv_qty) | 否 |
-| O2O Inventory | sum(msrp_o2o_inv_amt) | sum(o2o_inv_qty) | 否 |
-| Inbound | sum(msrp_inbound_amt) | sum(inbound_qty) | 否 |
-| Outbound | sum(md_outbound_amt) | sum(outbound_qty) | 否 |
+
+| KPI                  | Amt 逻辑                                                   | Unit 逻辑                                    | 是否共享                                     |
+| -------------------- | ---------------------------------------------------------- | -------------------------------------------- | -------------------------------------------- |
+| SLS                  | sum(net_sales_amt)                                         | sum(net_sales_qty)                           | 否                                           |
+| ST%                  | net_sales_amt / (net_sales_amt + msrp_inv_amt)             | net_sales_qty / (net_sales_qty + inv_qty)    | 结构一致（复用模式路由后的 SLS 与 EOH 结果） |
+| AVG MD               | 1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)        | 同左                                         | 是（口径明确可直接复用）                     |
+| Fullprice%           | sum(net_sales_amt where md_type="FP") / sum(net_sales_amt) | sum(msrp_net_sales_amt) / sum(net_sales_amt) | 否（口径已确认两套公式）                     |
+| AUR                  | sum(net_sales_amt) / sum(net_sales_qty)                    | 同左                                         | 是（口径明确可直接复用）                     |
+| EOH                  | sum(msrp_inv_amt)                                          | sum(inv_qty)                                 | 否                                           |
+| In-Transit Inventory | sum(msrp_in_trans_inv_amt)                                 | sum(in_trans_inv_qty)                        | 否                                           |
+| O2O Inventory        | sum(msrp_o2o_inv_amt)                                      | sum(o2o_inv_qty)                             | 否                                           |
+| Inbound              | sum(msrp_inbound_amt)                                      | sum(inbound_qty)                             | 否                                           |
+| Outbound             | sum(md_outbound_amt)                                       | sum(outbound_qty)                            | 否                                           |
 
 ### 3.3 主指标口径（This Period）
-| Metric_ID | KPI | 数据底表 | 时间口径 | 说明 |
-| --- | --- | --- | --- | --- |
-| 1 | SLS | sales | 区间 | DCom 净销售额 / 净销售数量 |
-| 5 | ST% | sales + inv | 分子区间 / 分母期末 | 售罄率，分子看整个 This Period，分母看 end period 最后快照日 |
-| 7 | AVG MD | sales | 区间 | 平均折扣，Amt/Unit 共享 |
-| 9 | Fullprice% | sales | 区间 | 全价率，Amt/Unit 公式不同 |
-| 11 | AUR | sales | 区间 | 件单价（金额类，双模式均需汇率换算），Amt/Unit 共享 |
-| 13 | EOH | inv | 期末 | 期末库存 |
-| 15 | In-Transit Inventory | inv | 期末 | 在途库存，无附属指标 |
-| 16 | O2O Inventory | inv | 期末 | O2O 库存，无附属指标 |
-| 17 | Inbound | sales | 区间 | 入库 |
-| 19 | Outbound | sales | 区间 | 出库 |
+
+| Metric_ID | KPI                  | 数据底表    | 时间口径            | 说明                                                         |
+| --------- | -------------------- | ----------- | ------------------- | ------------------------------------------------------------ |
+| 1         | SLS                  | sales       | 区间                | DCom 净销售额 / 净销售数量                                   |
+| 5         | ST%                  | sales + inv | 分子区间 / 分母期末 | 售罄率，分子看整个 This Period，分母看 end period 最后快照日 |
+| 7         | AVG MD               | sales       | 区间                | 平均折扣，Amt/Unit 共享                                      |
+| 9         | Fullprice%           | sales       | 区间                | 全价率，Amt/Unit 公式不同                                    |
+| 11        | AUR                  | sales       | 区间                | 件单价（金额类，双模式均需汇率换算），Amt/Unit 共享          |
+| 13        | EOH                  | inv         | 期末                | 期末库存                                                     |
+| 15        | In-Transit Inventory | inv         | 期末                | 在途库存，无附属指标                                         |
+| 16        | O2O Inventory        | inv         | 期末                | O2O 库存，无附属指标                                         |
+| 17        | Inbound              | sales       | 区间                | 入库                                                         |
+| 19        | Outbound             | sales       | 区间                | 出库                                                         |
 
 ### 3.4 派生指标
-| Metric_ID | 派生类型 | 目标 Act Metric_ID | 公式 | 格式 |
-| --- | --- | --- | --- | --- |
-| 2 | vs LY 变化率 | 1（SLS） | Act / LY - 1 | delta_pct_0dp |
-| 6 | vs LY 差值 bp | 5（ST%） | Act - LY（×10000 转 bp 在 Cell Display 实现） | delta_bp |
-| 8 | vs LY 差值 bp | 7（AVG MD） | 同上 | delta_bp |
-| 10 | vs LY 差值 bp | 9（Fullprice%） | 同上 | delta_bp |
-| 12 | vs LY 变化率 | 11（AUR） | Act / LY - 1 | delta_pct_0dp |
-| 14 | vs LY 变化率 | 13（EOH） | Act / LY - 1 | delta_pct_0dp |
-| 18 | vs LY 变化率 | 17（Inbound） | Act / LY - 1 | delta_pct_0dp |
-| 20 | vs LY 变化率 | 19（Outbound） | Act / LY - 1 | delta_pct_0dp |
-| 3 | TAR ACH% Progress | — | 占位符，返回 1（公式待业务确认） | delta_pct_0dp |
-| 4 | TAR ACH% Target | — | 占位符，返回 2（公式待业务确认） | delta_pct_0dp |
+
+| Metric_ID | 派生类型          | 目标 Act Metric_ID | 公式                                           | 格式          |
+| --------- | ----------------- | ------------------ | ---------------------------------------------- | ------------- |
+| 2         | vs LY 变化率      | 1（SLS）           | Act / LY - 1                                   | delta_pct_0dp |
+| 6         | vs LY 差值 bp     | 5（ST%）           | Act - LY（×10000 转 bp 在 Cell Display 实现） | delta_bp      |
+| 8         | vs LY 差值 bp     | 7（AVG MD）        | 同上                                           | delta_bp      |
+| 10        | vs LY 差值 bp     | 9（Fullprice%）    | 同上                                           | delta_bp      |
+| 12        | vs LY 变化率      | 11（AUR）          | Act / LY - 1                                   | delta_pct_0dp |
+| 14        | vs LY 变化率      | 13（EOH）          | Act / LY - 1                                   | delta_pct_0dp |
+| 18        | vs LY 变化率      | 17（Inbound）      | Act / LY - 1                                   | delta_pct_0dp |
+| 20        | vs LY 变化率      | 19（Outbound）     | Act / LY - 1                                   | delta_pct_0dp |
+| 3         | TAR ACH% Progress | —                 | 占位符，返回 1（公式待业务确认）               | delta_pct_0dp |
+| 4         | TAR ACH% Target   | —                 | 占位符，返回 2（公式待业务确认）               | delta_pct_0dp |
 
 ### 3.5 金额类汇率换算（模式相关）
-| 指标 | Amt 模式 | Unit 模式 |
-| --- | --- | --- |
+
+| 指标                                                     | Amt 模式         | Unit 模式         |
+| -------------------------------------------------------- | ---------------- | ----------------- |
 | SLS / EOH / In-Transit / O2O / Inbound / Outbound 的 Act | currency → 换算 | integer → 不换算 |
-| AUR 的 Act | currency → 换算 | currency → 换算 |
-| ST% / AVG MD / Fullprice% 的 Act | 比率，不换算 | 比率，不换算 |
-| 全部 vs LY / TAR ACH% | 派生比率，不换算 | 派生比率，不换算 |
+| AUR 的 Act                                               | currency → 换算 | currency → 换算  |
+| ST% / AVG MD / Fullprice% 的 Act                         | 比率，不换算     | 比率，不换算      |
+| 全部 vs LY / TAR ACH%                                    | 派生比率，不换算 | 派生比率，不换算  |
 
 判定方式（Dim 表设计原则第 4 条）：`IF(__IsAmt, Metric_Format_Amt = "currency", Metric_Format_Unit = "currency")`。
 说明：Metric_IsCurrencyAmount 为按【Amt】口径的静态标记，Unit 模式下 6 组金额/数量类指标为 integer，故不能直接用该标记判断当前模式是否换算，统一用模式相关格式列等价判断。
@@ -957,15 +967,15 @@ Merchandising Core KPI Cell Background Color =
 
 ## 5. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称 | Display Folder | 用途 |
-| --- | --- | --- | --- |
-| 1 | Merchandising Core KPI Act Base Value | Base Metrics | This Period 基础值（区间类 + 期末时点类）；Amt/Unit + 商品标签 + Metric_ID 三重路由；RMB 原值 |
-| 2 | Merchandising Core KPI LY Base Value | Base Metrics | Last Period 基础值（vs LY 对比基线，读 Min_Last / Max_Last 筛选器） |
-| 3 | Merchandising Core KPI Base Value | Base Metrics | 总路由（Act + vs LY 变化率 / 差值 bp + TAR ACH% 占位 + REMOVEFILTERS）；20 列全覆盖 |
-| 4 | Merchandising Core KPI Cell Value | Cell Values | 对外值：当前模式金额类触发汇率换算（÷ Currency_ExchangeRate），其余直接返回 |
-| 5 | Merchandising Core KPI Cell Display | Formatting | 格式化显示文本（模式相关 Metric_Format；delta_bp ×10000 转 bp；币种符号拼接） |
-| 6 | Merchandising Core KPI Cell Font Color | Formatting | 字体颜色（Act=fixed_black；vs LY / TAR ACH%=pos_neg_zero 三色） |
-| 7 | Merchandising Core KPI Cell Background Color | Formatting | 背景色（KPIGroup 层 #E6D9C7 vs ColName 层 #FFFFFF） |
+| 序号 | 度量值名称                                   | Display Folder | 用途                                                                                          |
+| ---- | -------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------- |
+| 1    | Merchandising Core KPI Act Base Value        | Base Metrics   | This Period 基础值（区间类 + 期末时点类）；Amt/Unit + 商品标签 + Metric_ID 三重路由；RMB 原值 |
+| 2    | Merchandising Core KPI LY Base Value         | Base Metrics   | Last Period 基础值（vs LY 对比基线，读 Min_Last / Max_Last 筛选器）                           |
+| 3    | Merchandising Core KPI Base Value            | Base Metrics   | 总路由（Act + vs LY 变化率 / 差值 bp + TAR ACH% 占位 + REMOVEFILTERS）；20 列全覆盖           |
+| 4    | Merchandising Core KPI Cell Value            | Cell Values    | 对外值：当前模式金额类触发汇率换算（÷ Currency_ExchangeRate），其余直接返回                  |
+| 5    | Merchandising Core KPI Cell Display          | Formatting     | 格式化显示文本（模式相关 Metric_Format；delta_bp ×10000 转 bp；币种符号拼接）                |
+| 6    | Merchandising Core KPI Cell Font Color       | Formatting     | 字体颜色（Act=fixed_black；vs LY / TAR ACH%=pos_neg_zero 三色）                               |
+| 7    | Merchandising Core KPI Cell Background Color | Formatting     | 背景色（KPIGroup 层#E6D9C7 vs ColName 层 #FFFFFF）                                            |
 
 ---
 
@@ -1052,35 +1062,19 @@ Merchandising Core KPI Cell Background Color =
 ## 7. 注意事项
 
 1. **TAR ACH% 占位符**：Metric_ID=3（Progress）返回 1、Metric_ID=4（Target）返回 2，口径文档未给出具体计算公式，待业务确认后在 Base Value 总路由中替换占位分支；实现时可参考 Slicer_Time_Frame[TimeFrame_ID] 做触发条件判定（如 Customer 模块的 Month/Year 单选条件）。占位值经 delta_pct_0dp 格式化显示为 "+100%" / "+200%"。
-
 2. **LY = Last Period 筛选器**：本方案 LY 直接读 Slicer_Time_Frame_Min_Last[TimeFrame_Min] / Slicer_Time_Frame_Max_Last[TimeFrame_Max]（非 _LY 字段对称映射，与 Customer 模块不同）；期末时点类 LY 读 Max_Last 表的 TimeFrame_Min / TimeFrame_Max 范围。依赖模型中 Last 表与主时间筛选器的既有关系配置。
-
 3. **期末时点口径**：EOH / In-Transit / O2O / ST% 分母取 end period 范围 [Max_This[TimeFrame_Min], Max_This[TimeFrame_Max]] 内**最后一个快照日**（快照缺数时自动回退到范围内最近一天）；快照表按日存储，只取单日，对整段区间求和会重复计数库存。__EndPeriodDate 用 REMOVEFILTERS(inv) 计算，保证快照日不随商品切片器或矩阵上下文漂移。
-
 4. **ST% 跨双表口径**：分子（sales）为整个 This Period 区间汇总，分母（inv）为期末快照日单日值，两者时间口径不同，不可混用（提示词第 4 点）。
-
 5. **inv 表无渠道字段**：a02_e2e_product_performance_inv_summary_d 无 platform / shop_name 字段，渠道筛选（Slicer_Platform_Selection / Slicer_Store_Name）不影响 EOH / In-Transit / O2O 及 ST% 分母；ST% 分子（sales 侧）受渠道筛选影响，分母不受影响，需业务知悉该口径影响。
-
 6. **Fullprice% 双公式**：Amt = sum(case when md_type = "FP" then net_sales_amt else 0 end) / sum(net_sales_amt)；Unit = sum(msrp_net_sales_amt) / sum(net_sales_amt)（口径已确认，Unit 版分子分母均为金额字段）。
-
 7. **AVG MD 与 AUR 双模式共享**：口径标注【Amt】【Unit】同一套逻辑，DAX 中不重复计算（同一组聚合变量两个模式复用）。
-
 8. **商品标签过滤**：UNION+FILTER 构造表类型稳定的过滤器（避免 IF 退化表变量）；ALL(computed_product_tag) 全量替换该列筛选（该列不是切片器字段，筛选仅来自 IsProductTagFilter 按钮）。选中 "ALL" → IN {"hero model", "slow mover", "normal"} 三值；未选或多选时默认 "ALL"。IsProductTagFilter 作矩阵行或按钮切片器均兼容（SELECTEDVALUE 逐行取值，汇总行回退 ALL）。
-
 9. **Amt/Unit 默认值**：SELECTEDVALUE('IsAmtUnitFilter'[Sort], 10)，未选择时默认 Amt 逻辑。
-
 10. **REMOVEFILTERS 机制**：派生列（vs LY / TAR ACH%）取值必须先 REMOVEFILTERS('Dim_ColMetric_Merchandising_Core_KPI') 再应用目标 Metric_ID，否则矩阵行/列标题保留的筛选器会导致冲突返回 BLANK。
-
 11. **Metric_ID 路由生效前提**：SELECTEDVALUE(Dim[Metric_ID]) 依赖矩阵列（KPIGroup > ColName）将 Dim 表筛选到单行；ColName 带 Metric_ID 前缀全局唯一是前提（同名区分机制）。KPIGroup 层汇总单元格无唯一 ColName → BLANK → 显示 "-"。
-
 12. **汇率换算分层**：Base Value 层始终保留 RMB 原始值（Act / LY 派生计算口径一致）；换算集中在展示层 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1）；Cell Display 只拼接 Currency_Symbol。金额类判定为模式相关：IF(__IsAmt, Metric_Format_Amt = "currency", Metric_Format_Unit = "currency")，Unit 模式下仅 AUR 换算。
-
 13. **delta_bp 转换位置**：Base Value 返回原始差值（如 0.04），Cell Display 中 ×10000 转 bp（+400bp），乘法不落在 Base 层，保证派生值可复用。
-
 14. **vs LY 派生空值规则**：变化率在 LY 空或 0 时返回 BLANK；差值 bp 在 Act 或 LY 任一为空时返回 BLANK。
-
 15. **AVG MD 空值保护**：分母（msrp_net_sales_amt）空或 0 时返回 BLANK，避免 1 - BLANK() = 1（即 100% 折扣）的失真。
-
 16. **字段名已核对数据字典**：net_sales_amt / net_sales_qty / md_net_sales_amt / msrp_net_sales_amt / msrp_inbound_amt / inbound_qty / md_outbound_amt / outbound_qty（sales 表）；msrp_inv_amt / inv_qty / msrp_in_trans_inv_amt / in_trans_inv_qty / msrp_o2o_inv_amt / o2o_inv_qty（inv 表）；日期字段统一为 data_date（date 类型）。
-
 17. **DAX 语法规范**：文本常量使用双引号（如 [md_type] = "FP"），单引号仅用于表名，列名使用方括号；与解决方案存在争议时一切以口径文档为准。

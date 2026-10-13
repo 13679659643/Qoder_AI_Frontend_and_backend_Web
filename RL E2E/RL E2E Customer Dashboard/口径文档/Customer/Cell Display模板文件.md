@@ -21,7 +21,7 @@ xxx Cell Display =
 //   delta_pct_1dp         → 百分比一位小数变化，含正号：+14.5% / -3.2%
 //   delta_pct_2dp         → 百分比两位小数变化，含正号：+14.50%
 //   delta_pts             → 增减基点整数（小数×100 转 pts）：+120pts / -80pts / 0pts
-//   integer_pts           → 基点整数（小数×100 转 pts）：120pts / 80pts / 0pts
+//   integer_pts           → 基点整数（小数×100 转 pts）：120pts / -80pts / 0pts
 //   delta_bp              → 增减基点整数（小数×10000 转 bp）：+120bp / -80bp
 //   delta_bp_1dp          → 增减基点一位小数（值本身已是基点）：+120.5bp / -80.0bp
 // 说明:
