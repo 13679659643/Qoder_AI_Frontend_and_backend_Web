@@ -22,11 +22,11 @@ Top Size Sales Performance 是 SKU Sales Tracking Tab 的第一个子模块，�
 
 ### 1.2 行维度与 Top4 机制
 
-| 层级 | 字段 | Sales 表格来源 | Inventory 表格来源 |
-|---|---|---|---|
-| 1 | Category | s02_trade_sku_data_d[category] | s02_inventory_stock_sales_detail_d[category] |
-| 2 | Size Category | s02_trade_sku_data_d[sku_size_category] | s02_inventory_stock_sales_detail_d[sku_size_category] |
-| 3 | Size | s02_trade_sku_data_d[sku_size] | s02_inventory_stock_sales_detail_d[sku_size] |
+| 层级 | 字段          | Sales 表格来源                          | Inventory 表格来源                                    |
+| ---- | ------------- | --------------------------------------- | ----------------------------------------------------- |
+| 1    | Category      | s02_trade_sku_data_d[category]          | s02_inventory_stock_sales_detail_d[category]          |
+| 2    | Size Category | s02_trade_sku_data_d[sku_size_category] | s02_inventory_stock_sales_detail_d[sku_size_category] |
+| 3    | Size          | s02_trade_sku_data_d[sku_size]          | s02_inventory_stock_sales_detail_d[sku_size]          |
 
 - **Sales Top4**：date + Platform + Store Name + Division 筛选组合下，按 category 粒度 This Period `sum(net_sales_amt)` 降序取前 4
 - **Inventory Top4**：date + Division 筛选组合下，按 category 粒度 This Period 最后一天 `sum(msrp_inv_amt)` 降序取前 4
@@ -34,23 +34,23 @@ Top Size Sales Performance 是 SKU Sales Tracking Tab 的第一个子模块，�
 
 ### 1.3 指标清单
 
-| 视图 | 指标 | 计算公式 | 时间口径 | 数据类型 / 格式 |
-|---|---|---|---|---|
-| Sales | SLS Amt% | 分子：该 category + size category + size 下 `sum(net_sales_amt)`；分母：该 category + size category 下 `sum(net_sales_amt)` | This Period（区间） | percent_0dp → `#,##0%` |
-| Sales | LP SLS Amt% | 分子分母同 SLS Amt%（last period 口径） | Last Period（区间） | percent_0dp → `#,##0%` |
-| Sales | vs LP | SLS Amt% - LP SLS Amt%（差值，展示时 ×10000 转 bp） | — | integer_bp → `#,##0bp;-#,##0bp;0bp` |
-| Inventory | EOH Amt% | 分子：该 category + size category + size 下 `sum(msrp_inv_amt)`；分母：该 category + size category 下 `sum(msrp_inv_amt)` | This Period 最后一天（时点） | percent_0dp → `#,##0%` |
-| Inventory | LP EOH Amt% | 分子分母同 EOH Amt%（last period 口径） | Last Period 最后一天（时点） | percent_0dp → `#,##0%` |
-| Inventory | vs LP | EOH Amt% - LP EOH Amt%（差值，展示时 ×10000 转 bp） | — | integer_bp → `#,##0bp;-#,##0bp;0bp` |
+| 视图      | 指标        | 计算公式                                                                                                                       | 时间口径                     | 数据类型 / 格式                       |
+| --------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- | ------------------------------------- |
+| Sales     | SLS Amt%    | 分子：该 category + size category + size 下`sum(net_sales_amt)`；分母：该 category + size category 下 `sum(net_sales_amt)` | This Period（区间）          | percent_0dp →`#,##0%`              |
+| Sales     | LP SLS Amt% | 分子分母同 SLS Amt%（last period 口径）                                                                                        | Last Period（区间）          | percent_0dp →`#,##0%`              |
+| Sales     | vs LP       | SLS Amt% - LP SLS Amt%（差值，展示时 ×10000 转 bp）                                                                           | —                           | integer_bp →`#,##0bp;-#,##0bp;0bp` |
+| Inventory | EOH Amt%    | 分子：该 category + size category + size 下`sum(msrp_inv_amt)`；分母：该 category + size category 下 `sum(msrp_inv_amt)`   | This Period 最后一天（时点） | percent_0dp →`#,##0%`              |
+| Inventory | LP EOH Amt% | 分子分母同 EOH Amt%（last period 口径）                                                                                        | Last Period 最后一天（时点） | percent_0dp →`#,##0%`              |
+| Inventory | vs LP       | EOH Amt% - LP EOH Amt%（差值，展示时 ×10000 转 bp）                                                                           | —                           | integer_bp →`#,##0bp;-#,##0bp;0bp` |
 
 ### 1.4 时间口径
 
-| 口径 | 时间范围 | 适用指标 |
-|---|---|---|
-| This Period（区间类） | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] | SLS Amt% 分子分母、Sales Top4 排序 |
-| Last Period（区间类） | dt ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] | LP SLS Amt% 分子分母 |
-| End Period（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个快照日** | EOH Amt% 分子分母、Inventory Top4 排序 |
-| End Period LP（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] 内**最后一个快照日** | LP EOH Amt% 分子分母 |
+| 口径                        | 时间范围                                                                                                                          | 适用指标                               |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| This Period（区间类）       | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                                      | SLS Amt% 分子分母、Sales Top4 排序     |
+| Last Period（区间类）       | dt ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]]                                      | LP SLS Amt% 分子分母                   |
+| End Period（期末时点类）    | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个快照日** | EOH Amt% 分子分母、Inventory Top4 排序 |
+| End Period LP（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] 内**最后一个快照日** | LP EOH Amt% 分子分母                   |
 
 说明：
 
@@ -89,9 +89,9 @@ Display（格式化显示）
 
 每个表格视觉对象配置两条视觉级筛选器（以 Sales 表格 1 为例）：
 
-| 筛选器 | 条件 | 作用 |
-|---|---|---|
-| Top Size Sales Category Rank | 为 1 | 固定显示 Top1 category 的行（表格 2 为 2，依次类推） |
+| 筛选器                        | 条件   | 作用                                                                 |
+| ----------------------------- | ------ | -------------------------------------------------------------------- |
+| Top Size Sales Category Rank  | 为 1   | 固定显示 Top1 category 的行（表格 2 为 2，依次类推）                 |
 | Top Size Sales SLS Amt% Value | 不为空 | 仅显示 This Period 有销售数据的 category + size category + size 组合 |
 
 （Inventory 表格对应使用 Top Size Inventory Category Rank 与 Top Size Inventory EOH Amt% Value）
@@ -107,6 +107,37 @@ Rank 度量值在 category / size category / size 任意层级行均返回所属
 - 命名规则：模块前缀 `Top Size` + 视图（Sales / Inventory）+ 指标名 + 层次后缀（Rank / Value / Display）
 - Display Folder：`Top Size Sales Performance\Rank`、`Top Size Sales Performance\Base Metrics`、`Top Size Sales Performance\Formatting`
 - 度量值统一存放于 `_Measures` 隐藏表（与看板既有组织方式一致）
+
+### 3.5 行排序机制（排序键编码）
+
+表格视觉对象仅支持单键排序（点击列标题按该列升/降序），四级行排序规则通过排序键度量编码为一个整数，表格按该键升序排序：
+
+| 层级          | 规则                                                                                              | 编码贡献                        |
+| ------------- | ------------------------------------------------------------------------------------------------- | ------------------------------- |
+| L1 分组优先级 | sku_size_category 含"字母尺码" > 含"数字尺码" > 其余                                              | 优先级（0/1/2）× 1,000,000,000 |
+| L2 分组顺序   | 同优先级内按分组当期金额（SLS Amt Value / EOH Amt Value 上卷至分组粒度）降序                      | 分组排名 × 1,000,000           |
+| L3 组内顺序   | 分组内按占比值（SLS Amt% Value / EOH Amt% Value）升序；同一分组内分母相同，占比升序与金额升序等价 | 组内排名 × 1,000               |
+| L4 决胜顺序   | 按 sku_size 名称字典序升序（仅 L3 占比精确相等并列时生效，保证排序键全局唯一、行序确定）          | 决胜排名 × 1                   |
+
+排序键 = L1 + L2 + L3 + L4，升序排序后行序为：字母尺码分组 → 数字尺码分组 → 其余分组（按分组当期金额降序），每个分组组内占比升序；占比精确相等并列的行按 sku_size 名称字典序升序决胜，行序确定。
+
+**并列语义**：L3 为 RANKX 竞争排名（SKIP）——占比**精确相等**的行共享名次，其后名次跳号（并列第 3 则无第 4、直接第 5）；同分组分母相同，占比相等 ⟺ 当期金额分毫不差。占比展示值经四舍五入，肉眼相同不代表底层并列，判断是否真并列需查看未舍入的底层值。
+
+**候选上下文净化（L2/L3）**：视觉级度量筛选器（Rank = N）生效后落地为对行组合的跨列组合筛选，单列 ALL/REMOVEFILTERS 无法清除，会污染候选迭代——曾致当前行自身的 size 候选在 RANKX 迭代阶段取 BLANK（FILTER 物化阶段非空、两阶段不一致），升序下被计入“小于当前值”使名次虚增 1（实证：XXL 行 PctRank 2→3、Sort Key 1002→1003，取消筛选器后恢复）。修复模式：候选值用 REMOVEFILTERS(三列组合) 清除行筛选与复合筛选（保留 Division/Platform/Store 外部筛选）+ TREATAS 重建候选三元组，一次计算物化为 [@Pct]/[@GroupValue] 列，FILTER 与 RANKX 共用物化值，消除两阶段不一致。
+
+**L2 分组排名说明**（分组金额 = SLS Amt Value / EOH Amt Value 上卷至 category + sku_size_category 粒度，同分组所有行共享）。
+示例（金额故意与优先级错开，展示各层分工）：
+
+| 分组 (sku_size_category) | 分组当期金额 | L1 优先级 | L2 分组排名（金额降序） | 排序键区间       |
+| ------------------------ | ------------ | --------- | ----------------------- | ---------------- |
+| 字母尺码 (XS-XXL)        | ¥800,000    | 0         | 2                       | 2,001,001 起     |
+| 数字尺码 (00-18)         | ¥150,000    | 1         | 3                       | 1,003,001,001 起 |
+| Knit                     | ¥900,000    | 2         | 1                       | 2,001,001,001 起 |
+
+- L1 定层：Knit 金额最大（L2 排名 1）但属其余层（优先级 2），×1,000,000,000 权重使排序键必然最后 —— 跨优先级顺序由 L1 主导，L2 排名值大小不改变跨层顺序
+- L2 定同层内先后：同优先级存在多个分组时（如多个其余分组 Knit / 其他），金额大的分组排前
+- L3 定组内行序：分组定了之后，组内 size 行按占比升序
+- __GroupRank 对当前 category 内全部分组统一排名（不按优先级分层各自排），同层内相对顺序依然正确，分层排名逻辑更简
 
 ---
 
@@ -126,8 +157,10 @@ Top Size Sales Category Rank =
 // 口径: date + Platform + Store Name + Division 筛选组合下，
 //       按 category 粒度 This Period sum(net_sales_amt) 降序排名
 // 说明: 排名基于 category 粒度金额（非当前行金额），size category / size 层级行
-//       返回所属 category 的排名；category 为空或本期无销售的组合排名靠后，
-//       由视觉级筛选器（=1~4 且 Value 不为空）排除
+//       返回所属 category 的排名；空白/空字符/本期无销售的 category 不参与排名
+// 空白/空字符排除: category 同时存在 NULL 与空字符 ""，空字符非 BLANK、金额最大，
+//       NOT ISBLANK 无法排除（会占据排名 1）；视觉级 category 筛选器会被候选集的
+//       ALL(category) 移除而失效，故必须在度量值内部用 LEN(TRIM()) > 0 排除
 // ========================================
 
 // ── This Period 时间区间 ──
@@ -137,17 +170,23 @@ VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 当前行所属 category（层级展开下 category 筛选在任意层级行均存在）──
 VAR __CurrentCategory = SELECTEDVALUE('s02_trade_sku_data_d'[category])
 
-// ── 排名表：全部非空 category 及其 This Period 销售金额 ──
+// ── 排名表：全部有效 category 及其 This Period 销售金额（category 粒度）──
+// 有效 = 非空白且非空字符（LEN(TRIM()) > 0 同时排除 NULL、""、纯空格）
 // ALL(category) 仅移除 category 列筛选；Platform / Store Name / Division 等外部筛选保留
+// 关键：ALL(sku_size_category, sku_size) 必须显式移除表格行残留的尺码筛选，
+//       否则每个候选 category 的金额被限制在当前行尺码内，与 __CurrentCategoryAmt
+//       （category 粒度真实金额）口径不一致，RANKX 将恒返回 1
 VAR __Ranking =
     ADDCOLUMNS(
         FILTER(
             ALL('s02_trade_sku_data_d'[category]),
             NOT ISBLANK('s02_trade_sku_data_d'[category])
+                && LEN(TRIM('s02_trade_sku_data_d'[category])) > 0
         ),
         "@Amt",
             CALCULATE(
                 SUM('s02_trade_sku_data_d'[net_sales_amt]),
+                ALL('s02_trade_sku_data_d'[sku_size_category], 's02_trade_sku_data_d'[sku_size]),  // 收敛到 category 粒度，与 __CurrentCategoryAmt 同口径
                 's02_trade_sku_data_d'[dt] >= __PeriodMin,
                 's02_trade_sku_data_d'[dt] <= __PeriodMax
             )
@@ -163,9 +202,11 @@ VAR __CurrentCategoryAmt =
         's02_trade_sku_data_d'[dt] <= __PeriodMax
     )
 
+// 空白/空字符 category 行返回 BLANK（被 Rank = N 视觉级筛选器排除），真实 category 排名从 1 起
 RETURN
     IF(
-        NOT ISBLANK(__CurrentCategory),
+        NOT ISBLANK(__CurrentCategory)
+            && LEN(TRIM(__CurrentCategory)) > 0,
         RANKX(__Ranking, [@Amt], __CurrentCategoryAmt, DESC)
     )
 ```
@@ -184,6 +225,7 @@ Top Size Inventory Category Rank =
 // 口径: date + Division 筛选组合下，按 category 粒度 This Period 最后一天
 //       sum(msrp_inv_amt) 降序排名（期末时点数）
 // 说明: inv 表无 platform / shop_name 字段，排名不受渠道筛选影响（口径限制见注意事项 1）
+//       空白/空字符 category 在度量值内部排除（LEN(TRIM()) > 0，机制同 Sales Rank）
 // ========================================
 
 // ── End Period 时间范围（期末时点类）──
@@ -203,16 +245,21 @@ VAR __EndPeriodDate =
 // ── 当前行所属 category ──
 VAR __CurrentCategory = SELECTEDVALUE('s02_inventory_stock_sales_detail_d'[category])
 
-// ── 排名表：全部非空 category 及其期末快照日库存金额 ──
+// ── 排名表：全部有效 category 及其期末快照日库存金额（category 粒度）──
+// 有效 = 非空白且非空字符（LEN(TRIM()) > 0；视觉级 category 筛选器会被 ALL(category) 移除而无效）
+// 关键：ALL(sku_size_category, sku_size) 移除表格行残留的尺码筛选，保证候选金额
+//       与 __CurrentCategoryAmt 同为 category 粒度（否则 RANKX 恒返回 1）
 VAR __Ranking =
     ADDCOLUMNS(
         FILTER(
             ALL('s02_inventory_stock_sales_detail_d'[category]),
             NOT ISBLANK('s02_inventory_stock_sales_detail_d'[category])
+                && LEN(TRIM('s02_inventory_stock_sales_detail_d'[category])) > 0
         ),
         "@Amt",
             CALCULATE(
                 SUM('s02_inventory_stock_sales_detail_d'[msrp_inv_amt]),
+                ALL('s02_inventory_stock_sales_detail_d'[sku_size_category], 's02_inventory_stock_sales_detail_d'[sku_size]),  // 收敛到 category 粒度，与 __CurrentCategoryAmt 同口径
                 's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
             )
     )
@@ -226,9 +273,11 @@ VAR __CurrentCategoryAmt =
         's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
     )
 
+// 空白/空字符 category 行返回 BLANK（被 Rank = N 视觉级筛选器排除），真实 category 排名从 1 起
 RETURN
     IF(
-        NOT ISBLANK(__CurrentCategory),
+        NOT ISBLANK(__CurrentCategory)
+            && LEN(TRIM(__CurrentCategory)) > 0,
         RANKX(__Ranking, [@Amt], __CurrentCategoryAmt, DESC)
     )
 ```
@@ -580,26 +629,404 @@ Top Size Inventory EOH Amt% vs LP Display =
         )
 ```
 
+### 4.15 Top Size Sales SLS Amt Value（当期净销售金额）
+
+```dax
+Top Size Sales SLS Amt Value =
+// ========================================
+// 度量值: Top Size Sales SLS Amt Value
+// 中文名: 当期净销售金额
+// Display Folder: Top Size Sales Performance\Base Metrics
+// 用途: 当前行（category + size category + size）This Period 净销售金额具体值，
+//       用于行排序键的分组金额计算与交叉验证（如需表格展示可另配 Display 度量）
+// 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
+// 口径: This Period 区间 sum(net_sales_amt)
+// 数据底表: s02_trade_sku_data_d
+// ========================================
+
+// ── This Period 时间区间 ──
+VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
+VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+
+RETURN
+    CALCULATE(
+        SUM('s02_trade_sku_data_d'[net_sales_amt]),
+        's02_trade_sku_data_d'[dt] >= __PeriodMin,
+        's02_trade_sku_data_d'[dt] <= __PeriodMax
+    )
+```
+
+### 4.16 Top Size Inventory EOH Amt Value（当期期末库存金额）
+
+```dax
+Top Size Inventory EOH Amt Value =
+// ========================================
+// 度量值: Top Size Inventory EOH Amt Value
+// 中文名: 当期期末库存金额
+// Display Folder: Top Size Sales Performance\Base Metrics
+// 用途: 当前行（category + size category + size）This Period 最后一天期末库存金额具体值
+//       （时点数），用于行排序键的分组金额计算与交叉验证
+// 依赖: Slicer_Time_Frame_Max_This[TimeFrame_Min] / [TimeFrame_Max]
+// 口径: 时间范围看 this period 最后一天；sum(msrp_inv_amt)
+// 数据底表: s02_inventory_stock_sales_detail_d
+// 说明: inv 表无 platform / shop_name 字段，不受渠道筛选影响（口径限制见注意事项 1）
+// ========================================
+
+// ── End Period 时间范围（期末时点类）──
+VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
+VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+
+// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
+VAR __EndPeriodDate =
+    CALCULATE(
+        MAX('s02_inventory_stock_sales_detail_d'[dt]),
+        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
+        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
+        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
+    )
+
+RETURN
+    CALCULATE(
+        SUM('s02_inventory_stock_sales_detail_d'[msrp_inv_amt]),
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+    )
+```
+
+### 4.17 Top Size Sales Sort Key（Sales 表格行排序键）
+
+```dax
+Top Size Sales Sort Key =
+// ========================================
+// 度量值: Top Size Sales Sort Key
+// 中文名: Sales 表格行排序键
+// Display Folder: Top Size Sales Performance\Rank
+// 用途: Sales 表格行排序键（升序），表格视觉对象仅支持单键排序，
+//       将四级排序规则编码为一个整数键：
+//   L1 分组优先级：sku_size_category 含"字母尺码" → 0、含"数字尺码" → 1、其余 → 2
+//   L2 分组顺序：同优先级内按分组当期销售金额（SLS Amt Value 上卷分组粒度）降序
+//   L3 组内顺序：按 SLS Amt% Value 升序（同一分组内分母相同，占比升序与金额升序等价）
+//   L4 决胜顺序：按 sku_size 名称字典序升序（仅 L3 并列时生效，保证排序键全局唯一）
+// 依赖: [Top Size Sales SLS Amt Value], [Top Size Sales SLS Amt% Value]
+// 使用: 拖入表格值区域，点击该列标题按升序排序（配置见 §7.1）
+// 编码: Key = 优先级 × 1,000,000,000 + 分组排名 × 1,000,000 + 组内排名 × 1,000 + 决胜排名
+//       （单表格内分组数 / 单分组内 size 数需 < 1,000，超出需调大系数）
+// 并列语义: L3 为 RANKX 竞争排名（SKIP），占比精确相等的行共享名次、下一名次跳号；
+//       同分组分母相同，占比相等 ⟺ 当期金额分毫不差（展示值舍入后肉眼不可辨）
+// 上下文净化: L2/L3 候选值用 REMOVEFILTERS(三列组合) + TREATAS 重建候选三元组后一次计算物化为列
+//       （视觉级度量筛选器落地为跨列组合筛选，单列 ALL/REMOVEFILTERS 清不掉，
+//       曾致当前行 size 候选在 RANKX 迭代阶段取 BLANK、L3 名次虚增 1，见注意事项 16）
+// ========================================
+
+// ── L1 分组优先级：字母尺码 > 数字尺码 > 其余 ──
+VAR __SizeCategory = SELECTEDVALUE('s02_trade_sku_data_d'[sku_size_category])
+VAR __GroupPriority =
+    SWITCH(
+        TRUE(),
+        CONTAINSSTRING(__SizeCategory, "字母尺码"), 0,   // 字母尺码分组固定最前
+        CONTAINSSTRING(__SizeCategory, "数字尺码"), 1,   // 数字尺码分组第二
+        2                                                 // 其余分组
+    )
+
+// ── 分组锚点：候选上下文重建所需（行上下文取值）──
+VAR __Category = SELECTEDVALUE('s02_trade_sku_data_d'[category])
+
+// ── L2 分组金额：当前分组（category + size category 粒度）当期销售金额 ──
+// REMOVEFILTERS(三列组合) 清除行筛选与视觉级复合组合筛选，保留 Division/Platform/Store 外部筛选；
+// TREATAS 重建 (category, 分组) 后计算，与候选 @GroupValue 同口径
+VAR __GroupValue =
+    CALCULATE(
+        [Top Size Sales SLS Amt Value],
+        REMOVEFILTERS(
+            's02_trade_sku_data_d'[category],
+            's02_trade_sku_data_d'[sku_size_category],
+            's02_trade_sku_data_d'[sku_size]
+        ),
+        TREATAS(
+            ROW(
+                "Category", __Category,
+                "SizeCategory", __SizeCategory
+            ),
+            's02_trade_sku_data_d'[category],
+            's02_trade_sku_data_d'[sku_size_category]
+        )
+    )
+
+// ── L2 分组候选：当前 category 内全部有效 sku_size_category 及其分组金额 ──
+// 逐候选 REMOVEFILTERS(三列组合) + TREATAS 重建 (category, 候选分组)，不依赖上下文转换，
+// 候选值一次计算物化为 [@GroupValue] 列，消除 FILTER 与 RANKX 两阶段取值不一致
+VAR __GroupCandidates =
+    ADDCOLUMNS(
+        FILTER(
+            ALL('s02_trade_sku_data_d'[sku_size_category]),
+            NOT ISBLANK('s02_trade_sku_data_d'[sku_size_category])
+                && LEN(TRIM('s02_trade_sku_data_d'[sku_size_category])) > 0
+        ),
+        "@GroupValue",
+            CALCULATE(
+                [Top Size Sales SLS Amt Value],
+                REMOVEFILTERS(
+                    's02_trade_sku_data_d'[category],
+                    's02_trade_sku_data_d'[sku_size_category],
+                    's02_trade_sku_data_d'[sku_size]
+                ),
+                TREATAS(
+                    ROW(
+                        "Category", __Category,
+                        "SizeCategory", 's02_trade_sku_data_d'[sku_size_category]   // 行上下文候选分组
+                    ),
+                    's02_trade_sku_data_d'[category],
+                    's02_trade_sku_data_d'[sku_size_category]
+                )
+            )
+    )
+
+// ── L2 分组排名：按分组金额降序（优先级在 Key 的 L1 主导，跨优先级排名也正确）──
+VAR __GroupRank =
+    RANKX(__GroupCandidates, [@GroupValue], __GroupValue, DESC)
+
+// ── L3 组内排名：按 SLS Amt% Value 升序（同分组内分母相同，占比升序 = 金额升序）──
+// 逐候选 REMOVEFILTERS(三列组合) + TREATAS 重建 (category, 分组, 候选 size)，一次计算物化为 [@Pct]；
+// 组内无数据的 size 候选 @Pct 为 BLANK，升序 RANKX 中 BLANK 计为更小值，必须 FILTER 排除；
+// value 参数保留行上下文直接计算（实证不受复合筛选污染）
+VAR __PctRank =
+    RANKX(
+        FILTER(
+            ADDCOLUMNS(
+                FILTER(
+                    ALL('s02_trade_sku_data_d'[sku_size]),
+                    NOT ISBLANK('s02_trade_sku_data_d'[sku_size])
+                        && LEN(TRIM('s02_trade_sku_data_d'[sku_size])) > 0
+                ),
+                "@Pct",
+                    CALCULATE(
+                        [Top Size Sales SLS Amt% Value],
+                        REMOVEFILTERS(
+                            's02_trade_sku_data_d'[category],
+                            's02_trade_sku_data_d'[sku_size_category],
+                            's02_trade_sku_data_d'[sku_size]
+                        ),
+                        TREATAS(
+                            ROW(
+                                "Category", __Category,
+                                "SizeCategory", __SizeCategory,
+                                "Size", 's02_trade_sku_data_d'[sku_size]   // 行上下文候选尺码
+                            ),
+                            's02_trade_sku_data_d'[category],
+                            's02_trade_sku_data_d'[sku_size_category],
+                            's02_trade_sku_data_d'[sku_size]
+                        )
+                    )
+            ),
+            NOT ISBLANK([@Pct])
+        ),
+        [@Pct],
+        [Top Size Sales SLS Amt% Value],
+        ASC
+    )
+
+// ── L4 决胜排名：按 sku_size 名称字典序升序（L3 并列时保证排序键全局唯一、行序确定）──
+// 对全部 distinct sku_size 计数，名称序为确定性规则（非尺码业务序）
+VAR __TieRank =
+    COUNTROWS(                          -- ④ 数一数：过滤后剩了几行
+        FILTER(                         -- ② 对这张表逐行过滤
+            ALL('s02_trade_sku_data_d'[sku_size]),    -- ① 拿到所有不重复的尺码值（无视外部筛选）
+            's02_trade_sku_data_d'[sku_size]          -- ③ 当前迭代的尺码
+            <                                   
+            SELECTEDVALUE('s02_trade_sku_data_d'[sku_size])  -- ③ 表格当前行的尺码
+        )
+    ) + 1                               -- ⑤ 加 1：排名从 1 开始
+
+RETURN
+    __GroupPriority * 1000000000 + __GroupRank * 1000000 + __PctRank * 1000 + __TieRank
+```
+
+### 4.18 Top Size Inventory Sort Key（Inventory 表格行排序键）
+
+```dax
+Top Size Inventory Sort Key =
+// ========================================
+// 度量值: Top Size Inventory Sort Key
+// 中文名: Inventory 表格行排序键
+// Display Folder: Top Size Sales Performance\Rank
+// 用途: Inventory 表格行排序键（升序），编码规则与 Sales 排序键一致：
+//   L1 分组优先级：sku_size_category 含"字母尺码" → 0、含"数字尺码" → 1、其余 → 2
+//   L2 分组顺序：同优先级内按分组当期期末库存金额（EOH Amt Value 上卷分组粒度）降序
+//   L3 组内顺序：按 EOH Amt% Value 升序（同一分组内分母相同，占比升序与金额升序等价）
+//   L4 决胜顺序：按 sku_size 名称字典序升序（仅 L3 并列时生效，保证排序键全局唯一）
+// 依赖: [Top Size Inventory EOH Amt Value], [Top Size Inventory EOH Amt% Value]
+// 使用: 拖入表格值区域，点击该列标题按升序排序（配置见 §7.2）
+// 编码: Key = 优先级 × 1,000,000,000 + 分组排名 × 1,000,000 + 组内排名 × 1,000 + 决胜排名
+// 并列语义: 同 Sales 排序键（占比精确相等 ⟺ 期末库存金额分毫不差）
+// 上下文净化: 同 Sales 排序键（REMOVEFILTERS(三列组合) + TREATAS 重建候选三元组，见注意事项 16）
+// ========================================
+
+// ── L1 分组优先级：字母尺码 > 数字尺码 > 其余 ──
+VAR __SizeCategory = SELECTEDVALUE('s02_inventory_stock_sales_detail_d'[sku_size_category])
+VAR __GroupPriority =
+    SWITCH(
+        TRUE(),
+        CONTAINSSTRING(__SizeCategory, "字母尺码"), 0,   // 字母尺码分组固定最前
+        CONTAINSSTRING(__SizeCategory, "数字尺码"), 1,   // 数字尺码分组第二
+        2                                                 // 其余分组
+    )
+
+// ── 分组锚点：候选上下文重建所需（行上下文取值）──
+VAR __Category = SELECTEDVALUE('s02_inventory_stock_sales_detail_d'[category])
+
+// ── L2 分组金额：当前分组（category + size category 粒度）期末库存金额（时点数）──
+// REMOVEFILTERS(三列组合) 清除行筛选与视觉级复合组合筛选，保留 Division 外部筛选
+VAR __GroupValue =
+    CALCULATE(
+        [Top Size Inventory EOH Amt Value],
+        REMOVEFILTERS(
+            's02_inventory_stock_sales_detail_d'[category],
+            's02_inventory_stock_sales_detail_d'[sku_size_category],
+            's02_inventory_stock_sales_detail_d'[sku_size]
+        ),
+        TREATAS(
+            ROW(
+                "Category", __Category,
+                "SizeCategory", __SizeCategory
+            ),
+            's02_inventory_stock_sales_detail_d'[category],
+            's02_inventory_stock_sales_detail_d'[sku_size_category]
+        )
+    )
+
+// ── L2 分组候选：当前 category 内全部有效 sku_size_category 及其分组金额 ──
+// 逐候选 REMOVEFILTERS(三列组合) + TREATAS 重建 (category, 候选分组)，一次计算物化为 [@GroupValue]
+VAR __GroupCandidates =
+    ADDCOLUMNS(
+        FILTER(
+            ALL('s02_inventory_stock_sales_detail_d'[sku_size_category]),
+            NOT ISBLANK('s02_inventory_stock_sales_detail_d'[sku_size_category])
+                && LEN(TRIM('s02_inventory_stock_sales_detail_d'[sku_size_category])) > 0
+        ),
+        "@GroupValue",
+            CALCULATE(
+                [Top Size Inventory EOH Amt Value],
+                REMOVEFILTERS(
+                    's02_inventory_stock_sales_detail_d'[category],
+                    's02_inventory_stock_sales_detail_d'[sku_size_category],
+                    's02_inventory_stock_sales_detail_d'[sku_size]
+                ),
+                TREATAS(
+                    ROW(
+                        "Category", __Category,
+                        "SizeCategory", 's02_inventory_stock_sales_detail_d'[sku_size_category]   // 行上下文候选分组
+                    ),
+                    's02_inventory_stock_sales_detail_d'[category],
+                    's02_inventory_stock_sales_detail_d'[sku_size_category]
+                )
+            )
+    )
+
+// ── L2 分组排名：按分组金额降序 ──
+VAR __GroupRank =
+    RANKX(__GroupCandidates, [@GroupValue], __GroupValue, DESC)
+
+// ── L3 组内排名：按 EOH Amt% Value 升序（机制同 Sales：TREATAS 重建三元组 + @Pct 物化 + FILTER 排 BLANK）──
+VAR __PctRank =
+    RANKX(
+        FILTER(
+            ADDCOLUMNS(
+                FILTER(
+                    ALL('s02_inventory_stock_sales_detail_d'[sku_size]),
+                    NOT ISBLANK('s02_inventory_stock_sales_detail_d'[sku_size])
+                        && LEN(TRIM('s02_inventory_stock_sales_detail_d'[sku_size])) > 0
+                ),
+                "@Pct",
+                    CALCULATE(
+                        [Top Size Inventory EOH Amt% Value],
+                        REMOVEFILTERS(
+                            's02_inventory_stock_sales_detail_d'[category],
+                            's02_inventory_stock_sales_detail_d'[sku_size_category],
+                            's02_inventory_stock_sales_detail_d'[sku_size]
+                        ),
+                        TREATAS(
+                            ROW(
+                                "Category", __Category,
+                                "SizeCategory", __SizeCategory,
+                                "Size", 's02_inventory_stock_sales_detail_d'[sku_size]   // 行上下文候选尺码
+                            ),
+                            's02_inventory_stock_sales_detail_d'[category],
+                            's02_inventory_stock_sales_detail_d'[sku_size_category],
+                            's02_inventory_stock_sales_detail_d'[sku_size]
+                        )
+                    )
+            ),
+            NOT ISBLANK([@Pct])
+        ),
+        [@Pct],
+        [Top Size Inventory EOH Amt% Value],
+        ASC
+    )
+
+// ── L4 决胜排名：按 sku_size 名称字典序升序（机制同 Sales 排序键）──
+VAR __TieRank =
+    COUNTROWS(                          -- ④ 数一数：过滤后剩了几行
+        FILTER(                         -- ② 对这张表逐行过滤
+            ALL('s02_inventory_stock_sales_detail_d'[sku_size]),    -- ① 拿到所有不重复的尺码值（无视外部筛选）
+            's02_inventory_stock_sales_detail_d'[sku_size]          -- ③ 当前迭代的尺码
+            <                                   
+            SELECTEDVALUE('s02_inventory_stock_sales_detail_d'[sku_size])  -- ③ 表格当前行的尺码
+        )
+    ) + 1                               -- ⑤ 加 1：排名从 1 开始
+
+RETURN
+    __GroupPriority * 1000000000 + __GroupRank * 1000000 + __PctRank * 1000 + __TieRank
+```
+
+### 4.19 Top Size Sales IsEmpty（过滤整行为空值）
+
+```dax
+Top Size Sales IsEmpty = 
+    IF(
+        ISBLANK([Top Size Sales SLS Amt% Value]) &&
+        ISBLANK([Top Size Sales LP SLS Amt% Value]) &&
+        ISBLANK([Top Size Sales SLS Amt% vs LP Value]),
+        0,
+        1
+    )
+```
+
+### 4.20 Top Size Inventory IsEmpty（过滤整行为空值）
+
+```dax
+Top Size Inventory IsEmpty = 
+    IF(
+        ISBLANK([Top Size Inventory EOH Amt% Value]) &&
+        ISBLANK([Top Size Inventory LP EOH Amt% Value]) &&
+        ISBLANK([Top Size Inventory EOH Amt% vs LP Value]),
+        0,
+        1
+    )
+```
+
 ---
 
 ## 5. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称 | Display Folder | 模型格式 | 用途 |
-|---|---|---|---|---|
-| 1 | Top Size Sales Category Rank | Rank | 整数 | Sales Top4 category 排名（视觉级筛选器） |
-| 2 | Top Size Inventory Category Rank | Rank | 整数 | Inventory Top4 category 排名（视觉级筛选器） |
-| 3 | Top Size Sales SLS Amt% Value | Base Metrics | 百分比 #,##0% | This Period 销售金额占比 |
-| 4 | Top Size Sales LP SLS Amt% Value | Base Metrics | 百分比 #,##0% | Last Period 销售金额占比 |
-| 5 | Top Size Sales SLS Amt% vs LP Value | Base Metrics | 小数 | 占比差值（bp 原值） |
-| 6 | Top Size Inventory EOH Amt% Value | Base Metrics | 百分比 #,##0% | This Period 期末库存金额占比 |
-| 7 | Top Size Inventory LP EOH Amt% Value | Base Metrics | 百分比 #,##0% | Last Period 期末库存金额占比 |
-| 8 | Top Size Inventory EOH Amt% vs LP Value | Base Metrics | 小数 | 占比差值（bp 原值） |
-| 9 | Top Size Sales SLS Amt% Display | Formatting | 文本 | SLS Amt% 格式化显示 |
-| 10 | Top Size Sales LP SLS Amt% Display | Formatting | 文本 | LP SLS Amt% 格式化显示 |
-| 11 | Top Size Sales SLS Amt% vs LP Display | Formatting | 文本 | vs LP 转 bp 显示（26bp / -80bp / 0bp） |
-| 12 | Top Size Inventory EOH Amt% Display | Formatting | 文本 | EOH Amt% 格式化显示 |
-| 13 | Top Size Inventory LP EOH Amt% Display | Formatting | 文本 | LP EOH Amt% 格式化显示 |
-| 14 | Top Size Inventory EOH Amt% vs LP Display | Formatting | 文本 | vs LP 转 bp 显示（26bp / -80bp / 0bp） |
+| 序号 | 度量值名称                                | Display Folder | 模型格式      | 用途                                                                             |
+| ---- | ----------------------------------------- | -------------- | ------------- | -------------------------------------------------------------------------------- |
+| 1    | Top Size Sales Category Rank              | Rank           | 整数          | Sales Top4 category 排名（视觉级筛选器）                                         |
+| 2    | Top Size Inventory Category Rank          | Rank           | 整数          | Inventory Top4 category 排名（视觉级筛选器）                                     |
+| 3    | Top Size Sales SLS Amt% Value             | Base Metrics   | 百分比 #,##0% | This Period 销售金额占比                                                         |
+| 4    | Top Size Sales LP SLS Amt% Value          | Base Metrics   | 百分比 #,##0% | Last Period 销售金额占比                                                         |
+| 5    | Top Size Sales SLS Amt% vs LP Value       | Base Metrics   | 小数          | 占比差值（bp 原值）                                                              |
+| 6    | Top Size Inventory EOH Amt% Value         | Base Metrics   | 百分比 #,##0% | This Period 期末库存金额占比                                                     |
+| 7    | Top Size Inventory LP EOH Amt% Value      | Base Metrics   | 百分比 #,##0% | Last Period 期末库存金额占比                                                     |
+| 8    | Top Size Inventory EOH Amt% vs LP Value   | Base Metrics   | 小数          | 占比差值（bp 原值）                                                              |
+| 9    | Top Size Sales SLS Amt% Display           | Formatting     | 文本          | SLS Amt% 格式化显示                                                              |
+| 10   | Top Size Sales LP SLS Amt% Display        | Formatting     | 文本          | LP SLS Amt% 格式化显示                                                           |
+| 11   | Top Size Sales SLS Amt% vs LP Display     | Formatting     | 文本          | vs LP 转 bp 显示（26bp / -80bp / 0bp）                                           |
+| 12   | Top Size Inventory EOH Amt% Display       | Formatting     | 文本          | EOH Amt% 格式化显示                                                              |
+| 13   | Top Size Inventory LP EOH Amt% Display    | Formatting     | 文本          | LP EOH Amt% 格式化显示                                                           |
+| 14   | Top Size Inventory EOH Amt% vs LP Display | Formatting     | 文本          | vs LP 转 bp 显示（26bp / -80bp / 0bp）                                           |
+| 15   | Top Size Sales SLS Amt Value              | Base Metrics   | 数值          | 当期净销售金额具体值（排序键分组金额 / 验证用）                                  |
+| 16   | Top Size Inventory EOH Amt Value          | Base Metrics   | 数值          | 当期期末库存金额具体值（时点数，排序键分组金额 / 验证用）                        |
+| 17   | Top Size Sales Sort Key                   | Rank           | 整数          | Sales 表格行排序键（字母尺码 > 数字尺码 > 其余，组内占比升序，并列按尺码名决胜） |
+| 18   | Top Size Inventory Sort Key               | Rank           | 整数          | Inventory 表格行排序键（规则同 Sales，并列按尺码名决胜）                         |
 
 > 表格视觉对象值区域的绑定选择见 §7：占比两列绑定 Value（数值格式 + 数据条），vs LP 列绑定 Display（文本 bp 后缀）；Display 层全部输出，占比列如无需数据条可整体改绑 Display。
 
@@ -635,6 +1062,7 @@ Top Size Inventory EOH Amt% vs LP Display =
 │  │ SLS Amt% Value              │  │ EOH Amt% Value              │   │
 │  │ LP SLS Amt% Value           │  │ LP EOH Amt% Value           │   │
 │  │ SLS Amt% vs LP Value        │  │ EOH Amt% vs LP Value        │   │
+│  │ SLS Amt Value / Sort Key    │  │ EOH Amt Value / Sort Key    │   │
 │  │ (分子分母 + REMOVEFILTERS)   │  │ (期末快照日单日时点)         │   │
 │  └──────────────┬──────────────┘  └──────────────┬──────────────┘   │
 │                 ▼                                 ▼                  │
@@ -654,13 +1082,13 @@ Top Size Inventory EOH Amt% vs LP Display =
 │    列: s02_trade_sku_data_d[category] > [sku_size_category] >        │
 │        [sku_size]                                                    │
 │    值: SLS Amt% Value / LP SLS Amt% Value /                          │
-│        SLS Amt% vs LP Display                                        │
+│        SLS Amt% vs LP Display / Sales Sort Key（升序排序）           │
 │    视觉级筛选: Sales Category Rank = N 且 SLS Amt% Value 不为空       │
 │  Inventory 表格 1~4:                                                 │
 │    列: s02_inventory_stock_sales_detail_d[category] >                 │
 │        [sku_size_category] > [sku_size]                              │
 │    值: EOH Amt% Value / LP EOH Amt% Value /                          │
-│        EOH Amt% vs LP Display                                        │
+│        EOH Amt% vs LP Display / Inventory Sort Key（升序排序）       │
 │    视觉级筛选: Inventory Category Rank = N 且 EOH Amt% Value 不为空   │
 │  Sales / Inventory 视图切换: 按钮 + 书签控制两组表格显示 / 隐藏        │
 └─────────────────────────────────────────────────────────────────────┘
@@ -672,27 +1100,32 @@ Top Size Inventory EOH Amt% vs LP Display =
 
 ### 7.1 Sales 表格（4 个并排）
 
-| 配置项 | 内容 |
-|---|---|
-| 列字段 | s02_trade_sku_data_d[category] → [sku_size_category] → [sku_size]（三列并列，行粒度为 size） |
-| 值 1 | [Top Size Sales SLS Amt% Value]（列格式 #,##0%，绑定数据条深蓝 #1F4E79） |
-| 值 2 | [Top Size Sales LP SLS Amt% Value]（列格式 #,##0%，绑定数据条中蓝 #5B9BD5） |
-| 值 3 | [Top Size Sales SLS Amt% vs LP Display]（文本 bp 后缀，如 26bp / -80bp / 0bp） |
-| 视觉级筛选器 | [Top Size Sales Category Rank] 为 N（表格 1→1，表格 2→2，表格 3→3，表格 4→4） |
-| 视觉级筛选器 | [Top Size Sales SLS Amt% Value] 不为空 |
-| 显示元素 | 关闭总计；数据条最小值固定 0、最大值自动（保证不同表格间条长可比） |
+| 配置项       | 内容                                                                                                                                               |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 列字段       | s02_trade_sku_data_d[category] → [sku_size_category] → [sku_size]（三列并列，行粒度为 size）                                                     |
+| 值 1         | [Top Size Sales SLS Amt% Value]（列格式 #,##0%，绑定数据条深蓝#1F4E79）                                                                            |
+| 值 2         | [Top Size Sales LP SLS Amt% Value]（列格式 #,##0%，绑定数据条中蓝#5B9BD5）                                                                         |
+| 值 3         | [Top Size Sales SLS Amt% vs LP Display]（文本 bp 后缀，如 26bp / -80bp / 0bp）                                                                     |
+| 值 4         | [Top Size Sales Sort Key]（排序辅助列，置于最后一列并收窄列宽）                                                                                    |
+| 排序         | 点击 Sort Key 列标题按升序排序：字母尺码分组 → 数字尺码分组 → 其余分组（按分组当期金额降序），组内按 SLS Amt% 升序（占比并列时按尺码名升序决胜） |
+| 视觉级筛选器 | [Top Size Sales Category Rank] 为 N（表格 1→1，表格 2→2，表格 3→3，表格 4→4）                                                                  |
+| 视觉级筛选器 | [Top Size Sales SLS Amt% Value] 不为空                                                                                                             |
+| 视觉级筛选器 | 无需为 category 添加空白/空字符筛选：Rank 度量值内部已排除，且该列视觉级筛选会被候选集 ALL(category) 移除、对排名无效                              |
+| 显示元素     | 关闭总计；数据条最小值固定 0、最大值自动（保证不同表格间条长可比）                                                                                 |
 
 ### 7.2 Inventory 表格（4 个并排）
 
-| 配置项 | 内容 |
-|---|---|
-| 列字段 | s02_inventory_stock_sales_detail_d[category] → [sku_size_category] → [sku_size] |
-| 值 1 | [Top Size Inventory EOH Amt% Value]（列格式 #,##0%，数据条深蓝 #1F4E79） |
-| 值 2 | [Top Size Inventory LP EOH Amt% Value]（列格式 #,##0%，数据条中蓝 #5B9BD5） |
-| 值 3 | [Top Size Inventory EOH Amt% vs LP Display]（文本 bp 后缀） |
-| 视觉级筛选器 | [Top Size Inventory Category Rank] 为 N |
-| 视觉级筛选器 | [Top Size Inventory EOH Amt% Value] 不为空 |
-| 显示元素 | 关闭总计；数据条最小值固定 0、最大值自动 |
+| 配置项       | 内容                                                                                                                         |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| 列字段       | s02_inventory_stock_sales_detail_d[category] → [sku_size_category] → [sku_size]                                            |
+| 值 1         | [Top Size Inventory EOH Amt% Value]（列格式 #,##0%，数据条深蓝#1F4E79）                                                      |
+| 值 2         | [Top Size Inventory LP EOH Amt% Value]（列格式 #,##0%，数据条中蓝#5B9BD5）                                                   |
+| 值 3         | [Top Size Inventory EOH Amt% vs LP Display]（文本 bp 后缀）                                                                  |
+| 值 4         | [Top Size Inventory Sort Key]（排序辅助列，置于最后一列并收窄列宽）                                                          |
+| 排序         | 点击 Sort Key 列标题按升序排序（规则同 Sales：分组金额为当期期末库存金额，组内按 EOH Amt% 升序，占比并列时按尺码名升序决胜） |
+| 视觉级筛选器 | [Top Size Inventory Category Rank] 为 N                                                                                      |
+| 视觉级筛选器 | [Top Size Inventory EOH Amt% Value] 不为空                                                                                   |
+| 显示元素     | 关闭总计；数据条最小值固定 0、最大值自动                                                                                     |
 
 ### 7.3 数据条说明
 
@@ -713,11 +1146,16 @@ Top Size Inventory EOH Amt% vs LP Display =
 1. **inv 表无渠道字段**：s02_inventory_stock_sales_detail_d 无 platform / shop_name 字段，Inventory 全部指标（EOH Amt% / LP EOH Amt% / vs LP）与 Inventory Top4 排名不受 Platform / Store Name 筛选影响，仅受 date + Division 影响；Sales 全部指标受 date + Platform + Store Name + Division 四组筛选影响。该口径限制已与业务确认。
 2. **期末时点只取单日**：EOH 系列分子分母取 end period 范围内最后一个快照日的单日值；快照表按日存储，对整段区间求和会把库存重复计数。快照缺数时在 end period 窗口内自动回退到最近一天（口径定义为 this period / last period 最后一天，两者最后一个自然日一致）。
 3. **快照日 REMOVEFILTERS 机制**：__EndPeriodDate 用 REMOVEFILTERS(整表) 计算，保证快照日不随 Division / category / size 行上下文或切片器漂移，全表确定性取值。
-4. **Top4 排名的筛选范围**：Rank 度量值中 ALL(category) 仅移除 category 列筛选，Platform / Store Name（Sales 侧）/ Division 筛选保留，排名是当前筛选组合下的排名；category 为空的组合不参与排名。
+4. **Top4 排名的筛选范围**：Rank 度量值中 ALL(category) 仅移除 category 列筛选，Platform / Store Name（Sales 侧）/ Division 筛选保留，排名是当前筛选组合下的排名；空白与空字符 category（数据中 NULL 与 "" 并存，空字符金额最大）在度量值内部用 LEN(TRIM()) > 0 排除，不参与排名。注意：视觉级 category 筛选器会被候选集的 ALL(category) 移除而无法影响排名，空白排除必须在度量值内部实现。
 5. **并列排名**：RANKX 默认竞争排名（如 1、1、3），若第 4 名金额并列，rank = 4 的 category 可能多于一个，对应表格会同时显示并列 category 的行；口径未定义并列处理规则，按默认竞争排名实现。
 6. **行显示范围**：「Value 不为空」视觉级筛选器保证表格只显示 This Period 有数据（Sales 有销售 / Inventory 有库存快照）的 category + size category + size 组合；This Period 无数据但 Last Period 有数据的组合不显示（vs LP 相应显示 "-" 的场景仅出现在分子分母单侧为空的行内）。
-7. **行排序**：sku_size_category / sku_size 无业务排序字段，表格默认按字段名升序；如需业务尺码序（XXS → XS → S → M、0 → 1 → 2 …），需在 Power Query 为两列生成排序列并按排序列排序（口径未定义，默认字母序）。
+7. **行排序（排序键）**：表格行序由 Sort Key 度量值控制（点击该列升序排序，机制见 §3.5）：L1 字母尺码分组 > 数字尺码分组 > 其余（同优先级按分组当期金额降序），L3 组内按占比值升序（同一分组内分母相同，占比升序与金额升序等价），L4 并列决胜按 sku_size 名称字典序升序保证排序键全局唯一。如需改为业务尺码序（XXS → XS → S → M、0 → 1 → 2 …），需在 Power Query 为 sku_size 生成排序列并调整排序键 L3 编码（口径未定义，暂按占比升序）。
 8. **日期筛选器依赖**：SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min]) 等依赖日期切片器保持单选且必选；切片器未选或多选时时间边界为 BLANK，指标不可用（与看板既有日期筛选器使用方式一致）。
 9. **vs LP 边界规则**：this period 与 last period 任一期占比为 BLANK 时，差值返回 BLANK（显示 "-"），避免单侧缺失产生失真差值；差值 bp 的 ×10000 转换只在 Display 层实现，Value 层保留原始小数可复用。
 10. **DIVIDE 空值保护**：占比分母（该 category + size category 层级金额）为空或 0 时 DIVIDE 返回 BLANK，显示 "-"。
 11. **DAX 语法规范**：文本常量使用双引号，单引号仅用于表名，列名使用方括号；与口径文档存在争议时一切以口径文档为准。
+12. **排名候选集口径一致**：Rank 度量值中 __Ranking 候选集的 @Amt 与 __CurrentCategoryAmt 必须同为 category 粒度（CALCULATE 内显式 ALL(sku_size_category, sku_size) 移除表格行残留的尺码筛选）。上下文转换只添加候选 category 筛选、不清除行残留的 sku_size_category / sku_size 筛选，若候选金额被限制在当前行尺码内而对比值为 category 全尺码金额，RANKX 将恒返回 1，导致视觉级筛选器 Rank = 1 放行全部行。
+13. **Rank 显示值的上下文差异（验证现象）**：视觉级筛选器对 Rank 的取值发生在筛选生效前（筛选器不对自身生效），Top1~Top4 表格按真实排名 1~4 保留行；筛选生效后视觉内仅剩单个 category，此时拖入表格验证的 Rank 显示值在筛选后上下文中重新评估——__Ranking 候选中其余 category 与视觉级组合筛选（category + sku_size_category + sku_size）冲突取 BLANK，唯一保留的 category 在剩余候选中排名第一，故四个表格拖入 Rank 均显示 1。该现象不影响筛选正确性；验证真实排名需临时移除该视觉级筛选器。Rank 为视觉级筛选辅助度量，不建议作为列展示给最终用户。
+14. **排序键使用限制**：排序键度量必须位于表格值区域才能作为排序依据（无法隐藏，建议置于最后一列并收窄列宽）；编码系数（1e9 / 1e6 / 1e3 / 1）要求单表格内分组数与单分组内 size 数均 < 1,000，超出时需按 10 倍调大系数；升序 RANKX 中 BLANK 候选会被计为更小值（BLANK < 任意正数），L3 组内排名候选必须 FILTER 排除 BLANK（组外 size / 无值 size），否则组内排名被虚增。
+15. **组内排名并列语义与决胜**：L3 为 RANKX 竞争排名（SKIP），占比精确相等的行共享名次且下一有效名次跳号（并列第 3 则无第 4），属预期行为而非计算错误；同分组分母相同，占比相等 ⟺ 当期金额分毫不差，占比列展示值经四舍五入、需以未舍入值判断是否真并列。L4 按 sku_size 名称字典序决胜保证排序键全局唯一、行序确定；若不同尺码当期金额分毫不差，建议同步核查源数据是否存在尺码标签错位或重复行（真实数据中精确到分相同的概率极低）。
+16. **视觉级度量筛选器污染候选迭代（已修复）**：Rank = N 视觉级筛选器落地为对 (category, sku_size_category, sku_size) 的跨列组合筛选，度量值内部候选迭代（RANKX/ADDCOLUMNS 的上下文转换）与该组合筛选取交集时，**当前行自身的 size 候选会在 RANKX 迭代阶段取 BLANK**，升序排名中被计入“小于当前值”，导致该行名次虚增 1（实证：XXL 行 PctRank 2→3、Sort Key 1002→1003，仅受影响行出错、其余行全对，取消筛选器后恢复正确——与注意事项 13 的 Rank 显示恒 1 同源）。修复：候选值计算用 REMOVEFILTERS(三列组合) 清除复合筛选（不能只 ALL/REMOVEFILTERS 单列，也不能 REMOVEFILTERS 整表否则连外部筛选一并丢失）+ TREATAS 重建候选三元组，一次计算物化为列后 FILTER 与 RANKX 共用，消除两阶段不一致。注意事项 13 的 Rank 恒 1 现象不受此修复影响（Rank 仅作筛选、显示值无需准确）。
