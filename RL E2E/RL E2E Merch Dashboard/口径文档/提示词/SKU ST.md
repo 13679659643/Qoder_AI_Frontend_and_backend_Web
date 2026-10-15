@@ -32,5 +32,14 @@ vs LP：this period - last period（差值，bp 指标，展示时×10000 转 bp
 3、s02_inventory_stock_sales_detail_d 无 platform / shop_name 字段，Inventory 指标（EOH Amt% 系列）将不受 Platform / Store Name 筛选影响（只受 date + Division 影响），与 Merchandising Core KPI 中 inv 表的处理一致。
 
 # MPO第二轮提示词:
+参考文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\SKU Sales Tracking\1 Top Size Sales Performance\Top_Size_Sales Performance_table.md
+参考SQL测试：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\SKU Sales Tracking\1 Top Size Sales Performance\test_Top_Size_Sales_Performance_table.sql
+口径文档：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\口径文档\口径Markdown格式\SKU Sales Tracking.md;只关注子模块三：Top Color Sales Performance【Sales】和子模块四：Top Color Sales Performance【Inventory】；
 
-
+如图所示，现在我们做另外一部分的表格，只有一个行维度Color，分别对应Sales表：s02_trade_sku_data_d[color_name]、Inventory表：s02_inventory_stock_sales_detail_d[color_name];
+SLS Amt、SLS Amt%、EOH Amt、EOH Amt%这个四个我理解是可以直接复用参考文件Top_Size_Sales Performance_table.md中的相关指标的。
+SLS Unit、SLS Unit%、EOH Unit、EOH Unit%这四个根据口径文档中的逻辑编写Dax。
+由于我们这个场景不是做矩阵，是表格，所以只需要独立输出每个指标的Value和Display度量；
+我们做的是一个独立的解决方案，不要出现AI语境类的口语化文本，以及对比某某方案的话术，需要保留必要的dax注释信息。
+综合以上信息，不懂就问；

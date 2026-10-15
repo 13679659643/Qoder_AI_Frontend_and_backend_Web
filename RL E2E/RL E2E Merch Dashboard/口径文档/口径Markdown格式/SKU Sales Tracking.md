@@ -111,10 +111,10 @@
 | 项目 | 内容 |
 |---|---|
 | **指标名称** | SLS Unit / DCom净销售数量 |
-| **业务定义** | 统计周期内该 color 下 DCom 销售数量（`sales_qty`）之和 |
-| **计算公式** | 时间范围看 this period；该 color 下 `sum(sales_qty)` |
+| **业务定义** | 统计周期内该 color 下 DCom 销售数量（`product_qty`）之和 |
+| **计算公式** | 时间范围看 this period；该 color 下 `sum(product_qty)` |
 | **数据底表** | `s02_trade_sku_data_d` |
-| **注意** | 原始口径 Definition"统计周期内DCom净销售数量=DCom销售订单总销售数量-退货数量"已确认为笔误，字段口径以计算指标列 `sum(sales_qty)` 为准 |
+| **注意** | 原始口径 Definition"统计周期内DCom净销售数量=DCom销售订单总销售数量-退货数量"已确认为笔误，字段口径以计算指标列 `sum(product_qty)` 为准 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 
@@ -126,9 +126,9 @@
 |---|---|
 | **指标名称** | SLS Unit% / DCom净销售数量占比 |
 | **业务定义** | 该 color 占 total 的比例 |
-| **计算公式** | 时间范围看 this period；分子：该 color 下 `sum(sales_qty)`；分母：`sum(sales_qty)` |
+| **计算公式** | 时间范围看 this period；分子：该 color 下 `sum(product_qty)`；分母：`sum(sales_qty)` |
 | **数据底表** | `s02_trade_sku_data_d` |
-| **注意** | 同 SLS Unit：原始口径 Definition 等式已确认为笔误，字段口径以计算指标列 `sum(sales_qty)` 为准 |
+| **注意** | 同 SLS Unit：原始口径 Definition 等式已确认为笔误，字段口径以计算指标列 `sum(product_qty)` 为准 |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
 

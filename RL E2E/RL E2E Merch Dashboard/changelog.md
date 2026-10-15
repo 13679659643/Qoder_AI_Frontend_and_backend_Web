@@ -28,6 +28,36 @@
 
 ## [SKU Sales Tracking] 模块
 
+## [2026-10-15 16:30] DAX 重构 — Color Rank 改用新版 RANK 窗口函数（名称决胜唯一名次）
+
+- **模块**: SKU Sales Tracking - Top Color Sales Performance
+- **任务**: ① 解答 color_name 空值行排名显示（BLANK 空单元格，被「介于 1 与 10」区间筛选排除，候选集不占名次）；② 两个 Color Rank 度量由 RANKX Dense 改写为新版 RANK 窗口函数，排名语义从「金额并列共享名次」改为「金额降序 + color_name 字母序决胜的严格唯一名次」（经业务确认）
+- **操作**: 修改
+- **变更内容**:
+  - `Top Color Sales Color Rank` / `Top Color Inventory Color Rank`：RANKX(候选集, value 参数, Dense) 重构为 RANK(DENSE, relation, ORDERBY(金额 CALCULATE, DESC, color_name, ASC))——无 value 参数，当前行经 ORDERBY 中的 relation 列（color_name）与 relation 行匹配确定名次；relation = FILTER(ALL(color_name)) 同时排除空白/空字符与当期无金额候选（无金额候选不占名次，避免 BLANK 排序位置使有效 color 名次整体偏移导致区间筛选误排）
+  - 排名语义变更：金额相同的 color 按 color_name 字母序分先后（名次相邻不并列，1,2,3,4 严格连续），「Rank 介于 1 与 10」恒放行恰好 10 行（原 Dense 共享名次语义下并列可能超过 10 行）
+  - 行排序依据由 SLS Amt Value / EOH Amt Value 列降序改为 Color Rank 列升序（名次唯一 → 行序 = 金额降序 + 名称字母序决胜，金额并列行序确定）
+  - 方案文档同步：§1.2 / §3.1 / §3.2 / §3.5 / §4.1 / §4.2 / §5 / §6 / §7 / §8 注意事项 5、8 重写 + 新增注意事项 15（RANK 版本要求 2022 年 9 月+、无金额候选排除机制）/ §9 并列描述修正
+  - 测试 SQL 同步：DENSE_RANK 双列 ORDER BY（金额 DESC, color_name ASC）还原名称决胜，恰好 10 行，行序注释更新
+- **关联文件**: SKU Sales Tracking/2 Top Color Sales Performance/Top_Color_Sales_Performance_table.md、SKU Sales Tracking/2 Top Color Sales Performance/test_Top_Color_Sales_Performance_table.sql
+- **备注**: ORDERBY 金额方向为 DESC（金额最大 = 名次 1，Top10 降序）；relation 用 ALL(color_name) 而非 ALLSELECTED（候选需不受视觉级筛选器落地筛选影响，行为更确定）；金额列绑定 Display（文本含动态币种符号）无法数值排序，Rank 列兼任行排序依据
+
+## [2026-10-15 15:30] 方案新建 — Top Color Sales Performance 双表格解决方案（Top10 密集排名）
+
+- **模块**: SKU Sales Tracking - Top Color Sales Performance
+- **任务**: 依据口径文档子模块三【Sales】+ 子模块四【Inventory】，产出 Color 行维度双表格（Sales / Inventory 并排）完整解决方案，每表 4 列指标（SLS Amt / SLS Amt% / SLS Unit / SLS Unit%；EOH Amt / EOH Amt% / EOH Unit / EOH Unit%）
+- **操作**: 新建
+- **变更内容**:
+  - 新建 `SKU Sales Tracking/2 Top Color Sales Performance/Top_Color_Sales_Performance_table.md`（18 个度量值 = 2 个 Color Rank + 8 个指标 Value + 8 个指标 Display）
+  - Color Rank 为 DENSE 密集排名（金额并列共享名次、下一名次不跳号，RANKX(..., DESC, Dense)），视觉级筛选器「介于 1 与 10」固定 Top10 行；空白/空字符/当期无金额 color 返回 BLANK 被区间筛选排除（仅配「≤ 10」会放行 BLANK，已标注）；行排序按 SLS Amt Value / EOH Amt Value 降序（Value 列拖入值区域收窄列宽作排序依据）
+  - 占比类分母为全量 color（REMOVEFILTERS(color_name) 上卷，含 Top10 之外颜色与空白 color_name 金额），Top10 行占比加总 < 100%；§9 标注拓展为 Top10 color 集合分母的修改方式（__Top10Colors CALCULATETABLE 限定，Rank 判定与视觉级筛选器同源）
+  - 金额类（SLS Amt / EOH Amt Value）Value 层完成币种汇率换算（原始 RMB ÷ Currency_ExchangeRate），Display 层拼接币种符号（Slicer_Currency_Selection）
+  - SLS Unit% 分母口径修正：口径文档原文 sum(sales_qty) 字段在 s02_trade_sku_data_d 数据字典与取数 SQL 中均不存在，经业务确认修正为 sum(product_qty)（与分子同字段）
+  - EOH 系列期末单日时点 + end period 快照回退（快照日 REMOVEFILTERS(整表) 全表确定性取值）；Inventory 侧不受渠道筛选（inv 表无 platform / shop_name）
+  - 新建配套测试 SQL `test_Top_Color_Sales_Performance_table.sql`（Sales / Inventory 两段：row_agg → color_rank(DENSE_RANK + 空白排除) → total(全量分母) → Top10 输出）
+- **关联文件**: SKU Sales Tracking/2 Top Color Sales Performance/Top_Color_Sales_Performance_table.md、SKU Sales Tracking/2 Top Color Sales Performance/test_Top_Color_Sales_Performance_table.sql
+- **备注**: Sales Top10 排名受 date + Platform + Store Name + Division 影响，Inventory Top10 仅受 date + Division 影响（口径限制同 Top Size 板块，已与业务确认）；DENSE 并列时排名 ≤ 10 的行数可能超过 10 行（密集名次共享，已在注意事项 5 标注）
+
 ## [2026-10-15 10:30] 文档补充 — LP 占比分母的上卷语义澄清
 
 - **模块**: SKU Sales Tracking - Top Size Sales Performance
