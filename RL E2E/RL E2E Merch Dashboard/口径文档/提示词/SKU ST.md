@@ -43,3 +43,19 @@ SLS Unit、SLS Unit%、EOH Unit、EOH Unit%这四个根据口径文档中的逻�
 由于我们这个场景不是做矩阵，是表格，所以只需要独立输出每个指标的Value和Display度量；
 我们做的是一个独立的解决方案，不要出现AI语境类的口语化文本，以及对比某某方案的话术，需要保留必要的dax注释信息。
 综合以上信息，不懂就问；
+
+
+# MPO第三轮提示词:
+口径文档：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\口径文档\口径Markdown格式\SKU Sales Tracking.md;只关注子模块五：Emerging Style Identification【Sales】和子模块六：Emerging Style Identification【Inventory】；
+Sales：
+矩阵行：color_name
+矩阵列：sku_size
+值：SLS Amt%
+Inventory：
+矩阵行：color_name
+矩阵列：sku_size
+值：EOH Amt%
+
+我们做的是一个独立的解决方案，不要出现AI语境类的口语化文本，以及对比某某方案的话术，需要保留必要的dax注释信息。
+综合以上信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\SKU Sales Tracking\3 Emerging Style Identification目录下生成解决方案，命名为3 Emerging_Style_ms,不懂就问；

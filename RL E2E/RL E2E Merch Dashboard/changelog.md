@@ -28,6 +28,35 @@
 
 ## [SKU Sales Tracking] 模块
 
+## [2026-10-15 18:30] 方案重构 — Emerging Style 行列维度表化 + 热力 SVG（v2.0）
+
+- **模块**: SKU Sales Tracking - Emerging Style Identification
+- **任务**: 矩阵行列改为从四张维度表获取（用户已建：Dim_Sales_color_name / Dim_Sales_sku_size / Dim_Inventory_color_name / Dim_Inventory_sku_size，distinct + 非空白过滤），占比分母限定维度表字段值（整行相加 100%），新增行/列可见性与 SVG 热力度量
+- **操作**: 重构
+- **变更内容**:
+  - `3 Emerging_Style_ms.md` 升级 v2.0（度量值 4 → 10 个）：每视图新增 Is_Matrix_Row / Is_Matrix_Col（MAXX 遍历 ALLSELECTED(对侧维度表) 逐候选复刻单元格 Value，CALCULATE 上下文转换使 Value 内 SELECTEDVALUE 读到候选值）+ SVG（背景/字体四点三段插值，双 ISINSCOPE 明细判定，空值三段 RETURN：总计 BLANK / 空值且行列均有效才返回灰色占位 SVG、否则 BLANK / 有值直接 SVG）
+  - Value 重构：行列值经 SELECTEDVALUE 从维度表读取 + 显式等值桥接事实表；分母 `事实表[color_name] = 当前行值 + TREATAS(ALLSELECTED(Dim_xxx_sku_size), 事实表[sku_size])` 限定维度表 size 值范围——空白 sku_size 金额不进分母，同一 color 行全部 size 列占比相加 = 100%（用户明确口径）
+  - 矩阵配置：值字段绑 Value + 条件格式图像 URL 绑 SVG；关闭小计/总计与「显示无数据的项」；可见性度量不配视觉级筛选器（视觉筛选器按行字段定粒度、列向无法对称过滤，行列双向抑制统一在 SVG 内调用）
+  - 测试 SQL 同步：WHERE 增 color_name / sku_size 非空白过滤（对应维度表限定），新增整行加总 = 100% 验证说明
+- **关联文件**: SKU Sales Tracking/3 Emerging Style Identification/3 Emerging_Style_ms.md、test_3 Emerging_Style_ms.sql
+- **备注**: 维度表与事实表建不建一对多关系均可（显式等值桥接两种建模行为一致）；SVG 插值色标与 Co-Purchase 热力矩阵同款（0%→#d8dee5→30%→#95afcf→50%→#0c2340→100%→#000000，字体白色提前到 35%）；Value 按明细单元格设计，汇总位置 SELECTEDVALUE=BLANK 不可用（小计/总计已关闭 + SVG 层 ISINSCOPE 排除）
+
+## [2026-10-15 17:30] 方案新建 — Emerging Style Identification 双矩阵解决方案
+
+- **模块**: SKU Sales Tracking - Emerging Style Identification
+- **任务**: 依据口径文档子模块五【Sales】（§11）+ 子模块六【Inventory】（§12），产出 color × size 交叉矩阵（行 color_name、列 sku_size）双矩阵（Sales / Inventory 并排）解决方案，每矩阵单一占比指标
+- **操作**: 新建
+- **变更内容**:
+  - 新建 `SKU Sales Tracking/3 Emerging Style Identification/3 Emerging_Style_ms.md`（4 个度量值 = 2 个指标 Value + 2 个指标 Display）
+  - SLS Amt%：分子 = 该 color + sku_size This Period sum(net_sales_amt)（矩阵单元格上下文）；分母 REMOVEFILTERS(sku_size) 保留行 color 筛选 → 该 color 层级全 size 汇总（口径「该 color + size 占该 color」）
+  - EOH Amt%：期末快照日单日时点（REMOVEFILTERS(整表) 取 end period 最后一个有数据快照日 + 回退），分母同构收敛到该 color 层级
+  - 矩阵行列均为原始字段（color_name / sku_size），非自定义行列路由，无需断开维度表；行显示范围口径未定义 TopN，默认全部行 + 「Value 不为空」视觉级筛选
+  - 汇总单元格行为（§3.4）：行小计/总计恒 100%（分子 = 分母）、列总计 = 该 size 占 total（分母层级不同），建议关闭全部小计/总计
+  - 值绑定：默认绑 Value（列格式 #,##0%，支持热力图背景色/数据条条件格式）；Display 文本备用（不支持条件格式）
+  - 新建配套测试 SQL `test_3 Emerging_Style_ms.sql`（Sales / Inventory 两段：GROUP BY (color_name, sku_size) + SUM(SUM()) OVER (PARTITION BY color_name) 窗口还原 color 级分母，对应 REMOVEFILTERS(sku_size)）
+- **关联文件**: SKU Sales Tracking/3 Emerging Style Identification/3 Emerging_Style_ms.md、SKU Sales Tracking/3 Emerging Style Identification/test_3 Emerging_Style_ms.sql
+- **备注**: 占比分母为 color 级全量（含矩阵未显示/被筛选排除的 size 与空白 sku_size 金额）→ 可见列占比加总可能 < 100%；空白行/(Blank) 列建议视觉级筛选排除（排除后加总仍 < 100%，分母含空白 size 金额）；inv 表无渠道字段，Inventory 矩阵仅受 date + Division 影响
+
 ## [2026-10-15 16:30] DAX 重构 — Color Rank 改用新版 RANK 窗口函数（名称决胜唯一名次）
 
 - **模块**: SKU Sales Tracking - Top Color Sales Performance
