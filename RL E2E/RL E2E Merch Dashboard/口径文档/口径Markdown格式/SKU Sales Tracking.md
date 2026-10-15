@@ -44,7 +44,7 @@
 | **业务定义** | 该 size 占所属 size category 的比例 |
 | **计算公式** | 时间范围看 this period；分子：该 category + size category + size 下 `sum(net_sales_amt)`；分母：该 category + size category 下 `sum(net_sales_amt)` |
 | **数据底表** | `s02_trade_sku_data_d` |
-| **附属指标** | LP SLS Amt%：时间范围看 last period，分子分母同本指标（last period 口径）；vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
+| **附属指标** | LP SLS Amt%：时间范围看 last period，分子同本指标（last period 口径）；分母为该 category + size category 层级 last period 汇总，且仅含 This Period 有销售金额的 size（可见 size 集合，2026-10-15 业务确认）；vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
 | **附属指标类型** | LP SLS Amt%:percent_0dp、vs LP:integer_bp |
@@ -66,7 +66,7 @@
 | **业务定义** | 该 size 占所属 size category 的比例 |
 | **计算公式** | 时间范围看 this period 最后一天；分子：该 category + size category + size 下 `sum(msrp_inv_amt)`；分母：该 category + size category 下 `sum(msrp_inv_amt)` |
 | **数据底表** | `s02_inventory_stock_sales_detail_d` |
-| **附属指标** | LP EOH Amt%：时间范围看 last period 最后一天，分子分母同本指标（last period 口径）；vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
+| **附属指标** | LP EOH Amt%：时间范围看 last period 最后一天，分子同本指标（last period 口径）；分母为该 category + size category 层级 last period 最后一天汇总，且仅含 This Period 有库存金额的 size（可见 size 集合，2026-10-15 业务确认）；vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
 | **附属指标类型** | LP EOH Amt%:percent_0dp、vs LP:integer_bp |
@@ -443,7 +443,7 @@
 | **商品维度切换** | Division = MN / WM / CW / HM（页面级，取值 `division`） |
 | **数量/金额口径判定** | 以 Name_EN 为准：Unit = 数量口径，Amt = 金额口径；计算字段以原始口径计算指标列为准，Definition 列等式不作为字段依据 |
 | **时间口径** | 区间类指标（SLS / AUR / MD / 占比类）：看所选时间范围 this period 汇总；期末库存类指标（EOH / ST% 库存分母）：看所选时间范围 end period 最后一天 |
-| **LP 口径** | LP SLS Amt%：last period 区间汇总；LP EOH Amt%：last period 最后一天（时点数） |
+| **LP 口径** | LP SLS Amt%：last period 区间汇总；LP EOH Amt%：last period 最后一天（时点数）；LP 分母均限定「This Period 有金额的 size」（可见 size 集合，与当期占比的显示行基数对齐，2026-10-15 业务确认） |
 | **vs LP 规则** | this period - last period（差值，bp 指标，展示时 ×10000 转 bp）；仅 Top Size Sales Performance【Sales】/【Inventory】主指标附属 |
 | **YTD / LTD 口径** | YTD：this period 所在财年第一天至 this period 最后一天；LTD：开店以来（≤ this period 最后一天，无固定起始日）；二者均与 last period 无关 |
 | **占比分母层级** | Top Size：分母为该 category + size category 层级；Top Color：分母为 total；Emerging Style：分母为该 color 层级；Series：分母为 special_series 有值范围内的 total |

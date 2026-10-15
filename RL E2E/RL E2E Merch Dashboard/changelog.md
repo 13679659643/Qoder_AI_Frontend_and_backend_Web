@@ -28,6 +28,27 @@
 
 ## [SKU Sales Tracking] 模块
 
+## [2026-10-15 10:30] 文档补充 — LP 占比分母的上卷语义澄清
+
+- **模块**: SKU Sales Tracking - Top Size Sales Performance
+- **任务**: 澄清「过滤当期空值行后，LP 占比分母是否也会丢掉被过滤行的上期金额」的边界问题
+- **操作**: 修改（仅文档，无度量值变更）
+- **变更内容**:
+  - 方案文档注意事项 17② 扩写：LP 分母经 REMOVEFILTERS(sku_size) 上卷至 category + size category 层级，汇总覆盖该分组底层数据中的全部 size（含被表格过滤掉的行组合的上期金额）；视觉级度量筛选器只决定行组合显示与否、不向其他行度量值注入列筛选，sku_size 列筛选器/切片器也会被分母 REMOVEFILTERS(sku_size) 移除；并注明 LP 分母为普通 CALCULATE + REMOVEFILTERS 模式，不受注意事项 16 候选迭代类污染影响
+- **关联文件**: SKU Sales Tracking/1 Top Size Sales Performance/Top_Size_Sales Performance_table.md
+- **备注**: 结论——过滤当期空值行不会改变剩余行的 LP 分子分母，代价仅为丢掉被过滤行自身承载的上期信息
+
+## [2026-10-15 09:30] DAX 修复 — Sort Key L3 空值垫底与上期值边界说明
+
+- **模块**: SKU Sales Tracking - Top Size Sales Performance
+- **任务**: ① 当期占比为空的行排在分组最后（原升序 RANKX 中 BLANK 计为更小值浮到组内最前，如 XXL 行 EOH Amt% 空、LP 有值排序异常）；② 澄清过滤当期空值行对上期值计算的影响
+- **操作**: 修改
+- **变更内容**:
+  - `Top Size Sales Sort Key` / `Top Size Inventory Sort Key`：L3 增加空值垫底——候选 [@Pct] 与 value 参数双侧把 BLANK 映射为 1E15 哨兵值（同构避免两阶段不一致），空值行排在分组最后且不占正序名次；外层 ADDCOLUMNS 嵌套新增 [@RankValue] 列
+  - 方案文档 §3.5 L3 规则与新增空值垫底说明（真 BLANK 垫底 vs 0% 小值按真实值排序的区分）；§4.17/4.18 代码与头部注释同步；§8 注意事项 6 重写（行显示范围与空值边界：真 BLANK 被「不为空」筛选器排除，小值 0% 保留展示），新增注意事项 17（空值垫底机制 + LP 类 Value 按行组合独立计算不受行级过滤影响 + 零值与真空区分）
+- **关联文件**: SKU Sales Tracking/1 Top Size Sales Performance/Top_Size_Sales Performance_table.md
+- **备注**: 过滤当期空值行不会影响剩余行的上期值（LP 按行内组合独立计算），但会丢掉被过滤行自身承载的上期信息——需展示上期信息时应保留行并垫底而非过滤；「不为空」筛选器排不掉 0% 小值行（非 BLANK）
+
 ## [2026-10-14 22:00] DAX 修复 — Sort Key 候选迭代被视觉级度量筛选器污染（XXL 名次虚增）
 
 - **模块**: SKU Sales Tracking - Top Size Sales Performance
