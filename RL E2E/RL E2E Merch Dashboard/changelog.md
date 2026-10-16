@@ -28,6 +28,49 @@
 
 ## [SKU Sales Tracking] 模块
 
+## [2026-10-16 18:00] 测试 SQL 调整 — Series Sales 变量改字面量直嵌 + 拆分明细 / 汇总两段
+
+- **模块**: SKU Sales Tracking - Series Sales Performance
+- **任务**: 测试环境不支持用户变量模式（SET @var），改为字面量直嵌；拆分为两段独立 SQL 分别验证明细行与 series 汇总行
+- **操作**: 修改
+- **变更内容**:
+  - 删除全部 SET @变量与参数取值辅助查询，参数字面量直嵌：Division 四值全选（division IN ('CW','HM','MN','WM')，等价切片器全选）、This Period ['2026-03-29', '2026-07-25']、End Period 快照日 '2026-07-25'、YTD 财年第一天 '2026-03-29'（FY27 财年首日 = TimeFrame_Min，本参数下 YTD 与 This Period 重合）
+  - 拆为 SQL 1/2 明细行（(special_series, spu_id, spu_img_url) 三元组粒度，库存按 spu_id 匹配）+ SQL 2/2 series 汇总行（仅 special_series 维度、非空，库存按 series 值匹配，Spu_Rank 固定 999,999）两段独立执行
+  - SQL 1/2 排名窗口去除 row_level 隔离分区（纯明细段不再需要）；分母 CTE 简化（sales_total 从 trade_agg 直接 SUM 金额 / 数量，inv_total 去嵌套子查询改为全量条件聚合）
+- **关联文件**: SKU Sales Tracking/4 Series Sales Performance/test_Series_Sales_Table.sql
+- **备注**: 后续修改参数时对两段全文替换对应日期 / 维度值；去窗口条件即全量 LTD / YTD 口径
+
+## [2026-10-16 17:30] 方案修复 — Series Sales 行区域新增 spu_img_url 后占比恒 100% / Sort Key 恒 1 修复
+
+- **模块**: SKU Sales Tracking - Series Sales Performance
+- **任务**: spu_img_url 拖入表格行区域（第三层图片列，行粒度变为 (special_series, spu_id, spu_img_url) 三元组）后，占比类指标恒 100%、Sort Key 恒 1000001——修复占比分母与 Sort Key 排名候选的子级行筛选残留；新增 IsEmpty 行非空判定度量
+- **操作**: 修改
+- **变更内容**:
+  - 根因：url 列进入行轴后成为行筛选上下文的一部分——SLS Amt% / SLS Unit% 分母 REMOVEFILTERS 仅移除两列，url 筛选残留使分母被收窄为分子自身（占比恒 100%）；Sort Key L1 relation ALL(special_series) / L2 relation ALL(spu_id) 均仅移除自身列筛选，spu_id / url 子级行筛选残留在候选金额评估中使候选集收窄为当前行自身（名次恒 1）
+  - `Series Sales SLS Amt% Value` / `Series Sales SLS Unit% Value`：分母 REMOVEFILTERS 扩为三列（special_series / spu_id / spu_img_url）
+  - `Series Sales Sort Key`：L1 候选金额 CALCULATE 内 REMOVEFILTERS(spu_id, spu_img_url) 上卷到 series 粒度、L2 候选金额 CALCULATE 内 REMOVEFILTERS(spu_img_url) 上卷到 spu 粒度（relation FILTER 与 ORDERBY 两处同步）；__CurrentAmt 保持三元组行粒度（垫底判定）
+  - 库存类指标无需修改：url 明细行与 spu 层小计行均满足 ISINSCOPE(spu_id)，TREATAS 按 spu_id 传递天然兼容三层结构（一对多异常时 url 行显示相同 spu 级库存，为可接受降级；inv 表 url 与 trade 表 url 不保证同步，双列传递存在库存漏计风险）
+  - 新增 `Series Sales IsEmpty`（行非空判定，§4.32）：判断组合按分子依赖简化——SLS Amt 为空则 SLS Amt% 必为空，占比类不单独判断；原子集 = SLS Amt / SLS Unit / EOH Amt / EOH Unit / YTD SLS Unit / LTD SLS Unit，全空返回 0（视觉级筛选器 IsEmpty = 1 仅显示有数据行）
+  - 方案文档同步：§1.1 / §1.2（行粒度三元组 + 一对多异常说明）/ §1.6 / §3.2 / §3.3 / §3.4（排名粒度上卷）/ §4.1 / §4.3 / §4.5 / §4.32 新增 / §5（32 个度量值）/ §6 / §7（行字段三层 + IsEmpty 筛选器 + spu 层小计建议关闭）/ §8 注意事项 5、6 重写 + 新增 15（spu_img_url 行维度）、16（IsEmpty）
+  - 测试 SQL 同步：trade_agg GROUP BY 三元组、新增 trade_spu CTE（L2 排名依据跨 url 上卷）、Spu_Rank / Sort_Key 排序列改用 spu_rank_amt、垫底判定用三元组粒度 spu_amt、头部口径还原说明更新
+- **关联文件**: SKU Sales Tracking/4 Series Sales Performance/Series_Sales_Table.md、SKU Sales Tracking/4 Series Sales Performance/test_Series_Sales_Table.sql
+- **备注**: 一对多异常时同一 spu 的多个 url 行共享 (SeriesRank, SpuRank)，键值相同行序由表格呈现确定；销售类指标按 (spu, url) 记录归属拆分（历史换图记录按各自 url 归属）
+
+## [2026-10-16 16:30] 方案新建 — Series Sales Performance 表格解决方案
+
+- **模块**: SKU Sales Tracking - Series Sales Performance
+- **任务**: 依据口径文档子模块七（§13~§27），产出 Series > AXC 层级行 + Image 图片列单表格完整解决方案（15 列指标 + Sort Key，开启行小计），解决两事实表无模型关系下行维度值向库存侧传递与 series 汇总行数据正常问题
+- **操作**: 新建
+- **变更内容**:
+  - 新建 `SKU Sales Tracking/4 Series Sales Performance/Series_Sales_Table.md`（31 个度量值 = 1 个 Sort Key + 15 个指标 Value + 15 个指标 Display）
+  - 行维度值跨表传递：库存类指标（EOH / ST% 库存加项）在度量内部以 ISINSCOPE 分层 TREATAS 桥接——明细行传 spu_id（单 spu 精确匹配）、series 汇总行传 special_series（该 series 全部库存，不受渠道筛选影响）、总计行不传维度仅 series 非空；IF 标量分支实现（IF 返回表会降级为标量），行小计数据正常
+  - special_series 非空前提核查（§1.6）：销售占比分母 REMOVEFILTERS(两列) 后显式重加 series 非空条件（视觉级「不为空」筛选被 REMOVEFILTERS 移除后必须还原，否则空白 series 金额混入分母）；库存分母显式 inv 侧 series 非空
+  - Sort Key：L1 series 粒度当期净销售金额降序 + L2 series 内 spu 金额降序（两级维度值升序决胜，RANK(DENSE, ALL(列), ORDERBY(金额 DESC, 维度 ASC)) 窗口函数；L2 relation ALL(spu_id) 保留 series 筛选 → series 内排名无需上下文重建）；汇总行编码 999,999 组内最后；当期无金额行键值垫底
+  - YTD 区间起点读 Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day]（新增字段）；LTD 销售侧仅上限 dt ≤ TimeFrame_Max、库存侧 end period 快照日；ST% 库存字段 inv_qty（≠ EOH Unit 的 stock_inv_qty）；模型加载窗口对 YTD/LTD 的截断限制已注明（§8.7）
+  - 新建配套测试 SQL `test_Series_Sales_Table.sql`（明细 + series 汇总行两段 UNION ALL + DENSE_RANK 双列 ORDER BY 还原两级排名与 Sort Key；ST% 分母 NULL 侧按 0 处理对齐 DAX BLANK 算术行为；默认附加模型加载窗口与 PBI 值对齐，去窗口即全量 LTD/YTD 口径）
+- **关联文件**: SKU Sales Tracking/4 Series Sales Performance/Series_Sales_Table.md、SKU Sales Tracking/4 Series Sales Performance/test_Series_Sales_Table.sql
+- **备注**: 表格视觉级筛选器仅 special_series 不为空；Image 列拖值区域（数据类别图像 URL，汇总行为空）；金额 Display 统一 BLANK 显示 "-"（无 TopN 金额筛选器，空值行正常显示）
+
 ## [2026-10-15 18:30] 方案重构 — Emerging Style 行列维度表化 + 热力 SVG（v2.0）
 
 - **模块**: SKU Sales Tracking - Emerging Style Identification

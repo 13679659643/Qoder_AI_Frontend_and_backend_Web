@@ -5,6 +5,15 @@ WITH dim_t00_bi_fiscal_calendar AS (
 select t1.*
 from indep_rl_dim.dim_t00_bi_fiscal_calendar t1
 -- where t1.timeframe_max < current_date()
+),
+-- ★ 财年小维表：每年只有一行
+fiscal_year AS (
+    SELECT
+        timeframe_key      AS fiscal_year_key,
+        timeframe_min      AS fiscal_year_first_day,
+        timeframe_max      AS fiscal_year_last_day
+    FROM indep_rl_dim.dim_t00_bi_fiscal_calendar
+    WHERE timeframe_id = 'Year'
 )
 SELECT
     t1.`etl_time`,
@@ -31,7 +40,9 @@ SELECT
     t2.`ly_timeframe_min` AS `Last_Fiscal_Month_Min_LY`,
     t2.`ly_timeframe_max` AS `Last_Fiscal_Month_Max_LY`,
     t2.`lp_timeframe_min` AS `Last_Fiscal_Month_Min_LP`,
-    t2.`lp_timeframe_max` AS `Last_Fiscal_Month_Max_LP`
+    t2.`lp_timeframe_max` AS `Last_Fiscal_Month_Max_LP`,
+        -- ★ 新增：财年第一天
+    fy.`fiscal_year_first_day` AS `Fiscal_Year_First_Day`
 FROM (
     -- 子查询：原始逻辑 + 计算 Last_Fiscal_Month
     SELECT
@@ -75,6 +86,9 @@ FROM (
 LEFT JOIN dim_t00_bi_fiscal_calendar t2
     ON  t2.`timeframe_label` = '月'
     AND t2.`timeframe_value` = t1.`Last_Fiscal_Month`
+-- ★ 财年关联：timeframe_min 落在哪个财年区间内，就取哪个财年的第一天
+LEFT JOIN fiscal_year fy
+    ON t1.`TimeFrame_Min` BETWEEN fy.`fiscal_year_first_day` AND fy.`fiscal_year_last_day`
 WHERE (t1.`TimeFrame_ID` = 'Day' AND t1.`timeframe_value` >='2025-01-01' AND t1.`timeframe_value` < CURDATE()) 
 OR (t1.`TimeFrame_ID` = 'Week' AND t1.`TimeFrame_Key` >=202540)
 OR (t1.`TimeFrame_ID` = 'Month' AND t1.`TimeFrame_Key` >=202510)
