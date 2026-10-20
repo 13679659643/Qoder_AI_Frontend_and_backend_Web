@@ -64,6 +64,30 @@
 - **关联文件**: Dimension Cross Analysis/1 Label & Product Type Inventory Structure/ 下上述三个 .sql
 - **备注**: 参数：Platform/Store 全选不筛选，Sales This ['2026-03-29','2026-07-25'] / Last ['2025-03-30','2025-07-26']，双期快照日 '2026-07-25'/'2025-07-26'；YTD 财年第一天与 This 起点重合；sales 侧 platform IN ('JD','TM','RLE','DY') 为模型加载过滤与切片器无关
 
+## [2026-10-20 11:35] DAX 新建 — Label & Division Table 表格解决方案（含测试 SQL）
+
+- **模块**: Dimension Cross Analysis - Product Type Sales & Inventory Structure【Category × Division/Label】
+- **任务**: 子模块五（§17~§18）SLS Amt% / EOH Amt% 及 vs LP / vs LY 附属指标表格解决方案 + 对数测试 SQL
+- **操作**: 新建
+- **变更内容**:
+  - 新建 16 个度量值（§4.1~§4.16）：SLS Amt% / EOH Amt% 各 Value/Display + vs LP / vs LY 各 Value/Display + LP / LY 中间度量值 4 个；分母 ALLSELECTED(Slicer_Category[category]) 组内分母（保留 Division/Label 视觉对象筛选器，组内占比之和 = 100%），Division 分组表与 Label 分组表共用一套度量值
+  - vs LP 与 vs LY 双独立基线：vs LP 读 Last Period 日期切片器（Min_Last/Max_Last）；vs LY 读 Min_This/Max_This 表的 TimeFrame_Min_LY/TimeFrame_Max_LY 字段（财年同期映射，与 LP 切片器无关）；EOH 三个快照日各自独立取值（This = Max_This 范围、LP = Max_Last 范围、LY = Max_This _LY 字段范围各自最后快照日）
+  - 测试 SQL test_Label_&_Division_table.sql：一个文件两段独立 SQL（SQL 1/2 Division 分组、SQL 2/2 Label 分组/brand 字段），窗口 PARTITION BY 分组键还原组内分母；trade ∪ inv UNION ALL 再聚合还原 FULL OUTER；差值 CASE 拦截 NULL 对齐 DAX ISBLANK；参数：Platform/Store 全选不筛选，This/LP/TY/LY = ['2026-03-29','2026-07-25']/['2025-03-30','2025-09-27']/['2026-03-29','2026-07-25']/['2025-03-30','2025-07-26']，三快照日 '2026-07-25'/'2025-09-27'/'2025-07-26'
+- **关联文件**: Dimension Cross Analysis/2 Product Type Sales & Inventory Structure/Label_&_Division_table.md；同目录 test_Label_&_Division_table.sql
+- **备注**: 用户澄清分母口径为组内分母（Division/Label 视觉对象筛选器固定单值，页面多表分组展示，占比之和 = 100%）；口径文档§17/§18业务定义与公式列的“占所有 Category”表述按此澄清理解
+
+## [2026-10-20 11:52] 口径类型统一 — integer_bp 更名 delta_bp
+
+- **模块**: Dimension Cross Analysis - Label & Division Table / 口径文档
+- **任务**: 附属指标类型命名统一（integer_bp → delta_bp，对齐《数据类型和格式总览》标准类型名）
+- **操作**: 修改
+- **变更内容**:
+  - Label_&_Division_table.md：13 处（§1.2 指标清单 4 处、§3.1 分层图 1 处、4 个 Display 度量值注释、§5 度量值清单 4 处）
+  - 口径文档 Dimension Cross Analysis.md：6 处附属指标类型行（§1/§2/§9/§10 各 1 处、§17/§18 各 1 处）
+  - 数据格式与显示行为不变：`#,##0bp;-#,##0bp;0bp`（不含正号，负数自带负号，零值 0bp），与同看板既有 delta_bp 实现惯例一致
+- **关联文件**: Dimension Cross Analysis/2 Product Type Sales & Inventory Structure/Label_&_Division_table.md；口径文档/口径Markdown格式/Dimension Cross Analysis.md
+- **备注**: SKU Sales Tracking.md（另一 Tab 口径文档）中仍有自定义 integer_bp 数据类型/格式定义块（Top Size 附属指标引用），本次未动，如需全局统一另行确认
+
 ## [SKU Sales Tracking] 模块
 
 ## [2026-10-16 18:00] 测试 SQL 调整 — Series Sales 变量改字面量直嵌 + 拆分明细 / 汇总两段

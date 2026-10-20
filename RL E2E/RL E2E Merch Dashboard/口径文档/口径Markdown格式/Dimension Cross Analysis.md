@@ -50,7 +50,7 @@
 | **附属指标** | SLS Amt% vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
-| **附属指标类型** | SLS Amt% vs LP:integer_bp |
+| **附属指标类型** | SLS Amt% vs LP:delta_bp |
 
 ---
 
@@ -65,7 +65,7 @@
 | **附属指标** | EOH Amt% vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
-| **附属指标类型** | EOH Amt% vs LP:integer_bp |
+| **附属指标类型** | EOH Amt% vs LP:delta_bp |
 
 ---
 
@@ -172,7 +172,7 @@
 | **附属指标** | SLS Amt% vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
-| **附属指标类型** | SLS Amt% vs LP:integer_bp |
+| **附属指标类型** | SLS Amt% vs LP:delta_bp |
 
 ---
 
@@ -187,7 +187,7 @@
 | **附属指标** | EOH Amt% vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
-| **附属指标类型** | EOH Amt% vs LP:integer_bp |
+| **附属指标类型** | EOH Amt% vs LP:delta_bp |
 
 ---
 
@@ -283,14 +283,15 @@
 
 > **商品维度切换**: Label：`label` / Division：`division`
 > **视图说明**: 横坐标及表格行固定聚合在 Category 粒度（`category`），统计各 Category 占对应 Division/Label 的比例
+> **附属指标说明**: vs LP：this period - last period（差值，bp 指标，展示时×10000 转 bp）；vs LY：this year - last year（差值，bp 指标，展示时×10000 转 bp）；其中this period、last period分别指两个日期切片器的筛选值;this year、last year中this year对应data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]],last year对应data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min_LY], Slicer_Time_Frame_Max_This[TimeFrame_Max_LY]];
 
 ### 17. SLS Amt% — 销售金额占比
 
 | 项目 | 内容 |
 |---|---|
 | **指标名称** | SLS Amt% / 销售金额占比 |
-| **业务定义** | 横坐标及表格行固定聚合在 Category 粒度，统计各 Category 占对应 Division/Label 的比例 |
-| **计算公式** | 时间范围看 this period；分子：各 category 下 `sum(net_sales_amt)`；分母：对应 Division/Label 下 `sum(net_sales_amt)` |
+| **业务定义** | 横坐标及表格行固定聚合在 Category 粒度，统计各 Category 占所有 Category的比例 |
+| **计算公式** | 时间范围看 this period；分子：各 category 下 `sum(net_sales_amt)`；分母：ALL `sum(net_sales_amt)` |
 | **数据底表** | `a02_e2e_product_performance_sales_summary_d` |
 | **附属指标** | vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp）；vs LY：今年 - 去年（差值，bp 指标，展示时 ×10000 转 bp） |
 | **注意** | 分母原始公式仅写 `sum(net_sales_amt)`，按业务定义"占对应 Division/Label 的比例"理解为对应 Division/Label 分组内合计；vs LY 的「今年/去年」时间范围见待确认项汇总 |
@@ -305,11 +306,11 @@
 | 项目 | 内容 |
 |---|---|
 | **指标名称** | EOH Amt% / 期末库存金额占比 |
-| **业务定义** | 横坐标及表格行固定聚合在 Category 粒度，统计各 Category 占对应 Division/Label 的比例 |
-| **计算公式** | 看所选时间范围 end period 最后一天；分子：各 category 下 `sum(msrp_inv_amt)`；分母：对应 Division/Label 下 `sum(msrp_inv_amt)` |
+| **业务定义** | 横坐标及表格行固定聚合在 Category 粒度，统计各 Category 占所有 Category的比例|
+| **计算公式** | 看所选时间范围 end period 最后一天；分子：各 category 下 `sum(msrp_inv_amt)`；分母：ALL `sum(msrp_inv_amt)` |
 | **数据底表** | `a02_e2e_product_performance_inv_summary_d` |
 | **附属指标** | vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp）；vs LY：今年 - 去年（差值，bp 指标，展示时 ×10000 转 bp） |
-| **注意** | 原始口径该行 vs LP 的 Definition 写"×100 转 bp"，按计算指标列及全局规范 ×10000 转 bp（笔误）；原始 Name_CN"销售金额占比vs LP"为笔误，实为 EOH Amt% vs LP |
+| **注意** | 计算指标列及全局规范 ×10000 转 bp；为 EOH Amt% vs LP |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
 | **附属指标类型** | vs LP:delta_bp、vs LY:delta_bp |
