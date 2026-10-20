@@ -25,6 +25,44 @@
 
 ## [Dimension Cross Analysis] 模块
 
+## [2026-10-19 15:31] DAX 新建 — Label & Product Type Inventory Structure 表格解决方案
+
+- **模块**: Dimension Cross Analysis - Label & Product Type Inventory Structure
+- **任务**: 子模块一~四（Label / Product Type Sales & Inventory Structure 主视图与交叉视图）Power BI 表格 + 柱形图解决方案
+- **操作**: 新建
+- **变更内容**:
+  - 新建 26 个度量值（§4.1~§4.26）：主视图 8 指标 Value/Display + LP 中间度量值 2 个 + vs LP 附属 2 组；交叉视图 Cross Label / Cross PT 各 2 指标 Value/Display
+  - 主视图占比分母 ALLSELECTED 六个 Slicer_ 维度表字段（label / super_season / product_type / category / md_type / division），六维度行切换一套逻辑通吃，子模块一/三共享；行字段从维度表拉取，行筛选经一对多关系自动传导双事实表，无需 TREATAS 桥接
+  - 交叉视图分母 ALLSELECTED 五个交叉维度字段（保留 x 轴基数维度柱形筛选，与「移除后重加 x 轴当前值」等价），子模块二/四因交叉维度集合互异独立成套
+  - 时间口径：This/Last Period 区间（Min_Last/Max_Last 直读）+ end period 范围最后快照日期末时点（LP 侧用 Max_Last 范围）+ YTD 财年区间（Fiscal_Year_First_Day）；vs LP 差值 ×10000 转 bp 在 Display 层
+- **关联文件**: Dimension Cross Analysis/1 Label & Product Type Inventory Structure/Label_&_Product_Type_table.md
+- **备注**: 全部指标为占比/数量/比率类，不涉及币种换算；inv 表无渠道字段，库存侧（EOH 系列、YTD ST% 分母、Cross EOH Amt%）不受渠道筛选影响；YTD ST% 分子分母渠道口径不对称为模型物理限制
+
+## [2026-10-19 15:53] DAX 修改 — Label & PT Table 交叉视图补充金额类附属度量值
+
+- **模块**: Dimension Cross Analysis - Label & Product Type Inventory Structure
+- **任务**: 子模块二/四交叉视图金额类附属指标补充（口径文档 §7/§8/§15/§16 已由业务补入附属指标类型：SLS Amt:currency / EOH Amt:currency）
+- **操作**: 修改
+- **变更内容**:
+  - 新增 8 个金额类附属度量值（§4.27~§4.34）：Cross Label SLS Amt / Cross Label EOH Amt / Cross PT SLS Amt / Cross PT EOH Amt 各 Value/Display；与对应占比主指标分子同维度同时间口径（SLS Amt 为 This Period 区间，EOH Amt 为快照日单日），不涉及占比分母
+  - 币种处理：Value 层 ÷ Currency_ExchangeRate 换算为当前币种（RMB 汇率 = 1 时值不变），Display 层拼接 Currency_Symbol（#,##0）
+  - 同步更新 §1.4 指标清单（序号 13~16）、§1.6 币种口径、§3.1 分层图、§5 度量值清单（15~18）、§6.2/6.3 备用说明、§7.6 验证 SQL、§8 注意事项 11/13
+  - 金额附属度量值为备用输出，具体绑定（tooltip / 数据标签 / 轴切换）由后续视觉对象配置决定
+- **关联文件**: Dimension Cross Analysis/1 Label & Product Type Inventory Structure/Label_&_Product_Type_table.md；口径文档/口径Markdown格式/Dimension Cross Analysis.md（业务已同步补入附属指标类型行）
+- **备注**: SLS Amt 附属受渠道筛选影响（sales 侧），EOH Amt 附属不受（inv 表无渠道字段）
+
+## [2026-10-20 10:12] 测试 SQL 新建 — Label & PT Table 三份拆分测试 SQL
+
+- **模块**: Dimension Cross Analysis - Label & Product Type Inventory Structure
+- **任务**: 主视图与交叉视图度量值对数测试 SQL（按视觉对象拆分三文件，字面量直嵌无用户变量）
+- **操作**: 新建
+- **变更内容**:
+  - test_Label_&_Product_Type_table_1_主视图.sql：子模块一/三全部 8 指标，六种行维度 UNION ALL 一次输出（Row_Dimension 列区分），分母全量合计对应 ALLSELECTED 六维度；trade/inv 各自独立上卷后 LEFT JOIN（inv 同维度全量含 trade 无记录子组合）
+  - test_Label_&_Product_Type_table_2_交叉视图_Label基数.sql：子模块二 SLS/EOH Amt% + 金额附属，五种图例维度一次输出，分母窗口 PARTITION BY Label 对应 ALLSELECTED 五交叉维度；行组合 trade ∪ inv（UNION ALL 再聚合还原 FULL OUTER，对齐 PBI 数据点由度量值非空驱动）
+  - test_Label_&_Product_Type_table_3_交叉视图_PT基数.sql：子模块四同构，窗口 PARTITION BY Product_Type
+  - NULL 传播对齐 DAX BLANK（显示 "-"）；YTD ST% 分母 COALESCE 对齐 DAX 算术 BLANK 当 0；vs LP 输出原始差值；金额附属输出 RMB 原值
+- **关联文件**: Dimension Cross Analysis/1 Label & Product Type Inventory Structure/ 下上述三个 .sql
+- **备注**: 参数：Platform/Store 全选不筛选，Sales This ['2026-03-29','2026-07-25'] / Last ['2025-03-30','2025-07-26']，双期快照日 '2026-07-25'/'2025-07-26'；YTD 财年第一天与 This 起点重合；sales 侧 platform IN ('JD','TM','RLE','DY') 为模型加载过滤与切片器无关
 
 ## [SKU Sales Tracking] 模块
 
