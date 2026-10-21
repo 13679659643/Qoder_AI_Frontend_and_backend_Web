@@ -88,6 +88,19 @@
 - **关联文件**: Dimension Cross Analysis/2 Product Type Sales & Inventory Structure/Label_&_Division_table.md；口径文档/口径Markdown格式/Dimension Cross Analysis.md
 - **备注**: SKU Sales Tracking.md（另一 Tab 口径文档）中仍有自定义 integer_bp 数据类型/格式定义块（Top Size 附属指标引用），本次未动，如需全局统一另行确认
 
+## [2026-10-21 09:48] DAX 新建 — MD Sales Table 表格/柱形图解决方案（含测试 SQL）
+
+- **模块**: Dimension Cross Analysis - MD Sales Structure
+- **任务**: 子模块六（§19~§20）SLS Amt% / SLS Amt / SLS Amt% vs LP / MSRP Amt% / MSRP Amt / MSRP Amt% vs LP 六指标解决方案 + 对数测试 SQL
+- **操作**: 新建
+- **变更内容**:
+  - 新建 14 个度量值（§4.1~§4.14）：六指标各 Value/Display + LP 中间度量值 2 个；分母 ALLSELECTED(Slicer_Md_Type[md_type]) 保留 Division/渠道/商品维度切片器筛选（单选组内占比、全选全局占比，一套度量值兼容）；行维度 md_type 单级，全部指标取自 sales 单表（net_sales_amt / msrp_net_sales_amt），无库存表无期末时点
+  - bp 转换位置变更：SLS Amt% vs LP / MSRP Amt% vs LP 的 ×10000 转换在 Value 层完成（Value 直接返回 bp 数值），柱形图 Y 轴绑定 Value 时刻度即 bp 数值；Display 层仅拼接 "bp" 后缀不再乘算（类型 integer_bp，本次方案独立命名）
+  - 金额附属 SLS Amt / MSRP Amt 为 currency：Value 层 ÷ Currency_ExchangeRate，Display 层拼 Currency_Symbol（#,##0）
+  - 测试 SQL test_MD_Sales_table.sql：单段独立执行，division × md_type 全组合 + 窗口 PARTITION BY division 还原分母；bp 差值 ×10000 直接输出对齐 Value 层；参数 This ['2026-03-29','2026-07-25'] / LP ['2025-03-30','2025-09-27']（沿用同看板）
+- **关联文件**: Dimension Cross Analysis/3 MD Sales Structure/MD_Sales_table.md；同目录 test_MD_Sales_table.sql
+- **备注**: 用户澄清本次 vs LP 类型用 integer_bp（独立于其他方案的 delta_bp 命名），且 bp 转换放 Value 层因 vs LP 度量值用于柱形图 Y 轴（刻度需为 bp 数值）；Y 轴/排序绑 Value（数值），表格展示绑 Display（文本），注意事项 1 已写明不可混绑
+
 ## [SKU Sales Tracking] 模块
 
 ## [2026-10-16 18:00] 测试 SQL 调整 — Series Sales 变量改字面量直嵌 + 拆分明细 / 汇总两段

@@ -1,7 +1,7 @@
 >> Merchandise Performance Overview:
 >>
 
-# DCA Label & Product 第一轮提示词:
+# DCA 1 Label & Product 第一轮提示词:
 
 1、口径文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\口径文档\口径Markdown格式\Dimension Cross Analysis.md
 只关注口径文档中子模块一到子模块四，这四部分。
@@ -34,7 +34,7 @@ SLS Amt%、EOH Amt%、SLS Amt% vs LP、EOH Amt% vs LP：分母计算直接ALLSEL
 我们做的是一个独立的解决方案，不要出现AI语境类的口语化文本，以及对比某某方案的话术，需要保留必要的dax注释信息。
 综合以上信息，不懂就问；我的理解有任何问题都可以指出讨论。
 
-# DCA Label & Division第二轮提示词:
+# DCA 2 Label & Division第二轮提示词:
 1、
 参考文件格式:
 D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\SKU Sales Tracking\4 Series Sales Performance\Series_Sales_Table.md
@@ -60,3 +60,17 @@ this year、last year中this year对应data_date ∈ [Slicer_Time_Frame_Min_This
 按Label分组输出一段SQL，即在Label分组下，每个Label对应的所有Category指标情况，Label在表中对应brand字段。
 一个测试文件中输出两段SQL。
 
+# DCA 3 MD Sales 第三轮提示词:
+1、
+参考文件格式:
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\2 Product Type Sales & Inventory Structure\Label_&_Division_table.md
+2、
+只关注口径文档中的子模块六：MD Sales Structure
+3、
+由于我们这个场景不是做矩阵，是表格，所以只需要独立输出每个指标的Value和Display，此外附属指标也需要写逻辑输出。本次方案一共就六个指标：SLS Amt%、SLS Amt：currency、SLS Amt% vs LP:integer_bp、MSRP Amt%、MSRP Amt：currency、MSRP Amt% vs LP:integer_bp；其中integer_bp类型的，展示时×10000 转 bp，这个步骤放在Value中，这样我Y轴刻度数才是正确的。
+4、
+我们做的是一个独立的解决方案，不要出现AI语境类的口语化文本，以及对比某某方案的话术，需要保留必要的dax注释信息。
+本次方案和之前做的Label_&_Division_table方案类似，之前的是统计各 Category比例，本次是各 md_type；参考Label_&_Division_table方案输出解决方案和测试SQL文件。
+综合以上信息，不懂就问；我的理解有任何问题都可以指出讨论。
+综合以上信息在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\3 MD Sales Structure目录下给出完整的解决方案，命名为
+MD_Sales_table。

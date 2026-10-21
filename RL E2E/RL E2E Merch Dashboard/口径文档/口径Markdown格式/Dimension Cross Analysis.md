@@ -334,7 +334,7 @@
 | **注意** | 原始口径 Definition 与计算指标列均写"今年 - 去年"，已确认以指标名为准修正为 this period - last period（公式列为笔误） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
-| **附属指标类型** | SLS Amt% vs LP:delta_bp |
+| **附属指标类型** | SLS Amt：currency、SLS Amt% vs LP:integer_bp |
 
 ---
 
@@ -350,7 +350,7 @@
 | **注意** | 原始口径 Definition 与计算指标列均写"今年 - 去年"，已确认以指标名为准修正为 this period - last period（公式列为笔误） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
-| **附属指标类型** | MSRP Amt% vs LP:delta_bp |
+| **附属指标类型** | MSRP Amt：currency、MSRP Amt% vs LP:integer_bp |
 
 ---
 
