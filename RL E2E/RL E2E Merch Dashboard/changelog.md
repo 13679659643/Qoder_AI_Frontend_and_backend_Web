@@ -101,6 +101,50 @@
 - **关联文件**: Dimension Cross Analysis/3 MD Sales Structure/MD_Sales_table.md；同目录 test_MD_Sales_table.sql
 - **备注**: 用户澄清本次 vs LP 类型用 integer_bp（独立于其他方案的 delta_bp 命名），且 bp 转换放 Value 层因 vs LP 度量值用于柱形图 Y 轴（刻度需为 bp 数值）；Y 轴/排序绑 Value（数值），表格展示绑 Display（文本），注意事项 1 已写明不可混绑
 
+## [2026-10-21 15:22] DAX 新建 — Handbags Sales_ms 字段参数动态行维度解决方案
+
+- **模块**: Dimension Cross Analysis - Handbags Sales Analysis by Dimension
+- **任务**: 子模块十一（§48~§52）七指标（SLS Amt / SLS Amt% / SLS Amt% vs LP / SLS Unit / EOH Unit / EOH Unit vs LP / ST%）矩阵解决方案，字段参数动态行维度 + 双事实表 TREATAS 桥接
+- **操作**: 新建
+- **变更内容**:
+  - 新建 17 个度量值（§4.1~§4.17）：七指标各 Value/Display + LP 中间度量值 2 个（LP SLS Amt% / LP EOH Unit）+ IsEmpty 行可见性 1 个
+  - 字段参数路由：行区域 Field_Parameter_Store_Name[NAMEOF 列]，行筛选自动落 trade 表当前维度列（分子无需路由）；SELECTEDVALUE(参数名列) 读当前字段名 → SWITCH 五分支路由占比分母（ALLSELECTED trade[当前字段]）与 inv 侧 TREATAS 桥接
+  - inv 桥接：SWITCH 五分支 TREATAS(VALUES(trade[当前字段]), inv[同名字段]) + inv[category]="Handbags"（Size 模式必需，尺码跨品类）；数据字典已确认 inv 表五字段齐备
+  - 渠道上下文：Button_Store_Name 单选 TREATAS 施加 trade[shop_name]，TTL = 显式 IN 六实际值（TM/JD/RLE_CN/DY_Family/DY_W/DY_M）；inv 侧不受渠道影响（无渠道字段）
+  - 前置筛选：trade 侧依赖页面视觉筛选器 Slicer_Category="Handbags" 关系传导；inv 侧 DAX 显式条件保证；Category 模式下 SLS Amt%=100% 为口径正确语义
+  - SLS Amt% vs LP 的 ×10000 在 Display 层（表格场景）；EOH Unit vs LP 为变化率 percent_0dp 不含正号（按口径）
+- **关联文件**: Dimension Cross Analysis/4 Handbags Sales Analysis by Dimension/Handbags_Sales_ms.md
+- **备注**: 测试 SQL 未输出（本轮未要求），验证方法见方案 §7；s02 表 dt 字段、net_sales_amt 为 PQ 行级列（SQL 验证按 product_qty×sales_price 还原）
+
+## [2026-10-21 16:40] DAX 修改 — Handbags Sales_ms 字段参数多选支持 + 渠道上下文范式修正
+
+- **模块**: Dimension Cross Analysis - Handbags Sales Analysis by Dimension
+- **任务**: 字段参数切片器支持多选（路由架构去参数表依赖）+ 渠道上下文 IF/TREATAS 表降级问题修正
+- **操作**: 修改
+- **变更内容**:
+  - 路由架构重写：废弃 SELECTEDVALUE(参数名列) → SWITCH 五分支（多选时 SELECTEDVALUE 返回 BLANK 失效），改为天然路由——ISINSCOPE(trade 五个动态维度列) 判定行上字段 + VALUES(trade[字段]) 读当前行值，不读参数表，单选 / 多选 / 任意字段组合同一套逻辑
+  - SLS Amt% / LP SLS Amt% 分母：SWITCH 五分支 ALLSELECTED(单列) 改为 ALLSELECTED(trade 五列) 整体移除行区域分组（单选 / 多选统一）；Handbags 前置筛选位于 Slicer_Category 表列（一对多关系传导），不受 trade 列 ALLSELECTED 影响；不使用 REMOVEFILTERS（会误删列上外部显式筛选）
+  - EOH Unit / LP EOH Unit / ST% 库存侧桥接：SWITCH 五分支 TREATAS 改为 SUMX + FILTER 行上字段谓词匹配（(NOT ISINSCOPE) || inv[同名字段] IN VALUES(trade[字段]) 五谓词 AND）——行上字段精确匹配当前行值、非行字段短路放行（不传 trade 值域，纯库存无销售记录的 SPU / 子类 / 季节 / 尺码组合不漏算）；总计行五谓词全放行 → Handbags 全量库存，行值域与总计自洽
+  - 渠道上下文：IF(__Store="TTL", TREATAS(...), TREATAS(...)) 改为 IF 分支均为 FILTER 迭代表范式（__IsAllStore 布尔 + FILTER(ALL(trade[shop_name]), IN/等于 条件)）——TREATAS 经 IF 分支会被降级为标量，禁用；变更应用于 SLS Amt / SLS Amt% / LP SLS Amt% / SLS Unit / ST% 全部 trade 侧度量值
+  - 行区域字段说明修正：字段参数列 Field_Parameter_Store_Name[Field_Parameter_Store_Name] 由引擎自动展开为所选字段的实际值（单选单列 / 多选多列），删除原“必须使用 NAMEOF 列”警告；§6.2 切片器单选限制解除
+  - 机制章节同步重写（§1.1/§1.2/§1.5/§1.6/§2/§3.1/§3.2/§3.3/§6/§7/§8，新增注意事项 13 inv 桥接性能）
+- **关联文件**: Dimension Cross Analysis/4 Handbags Sales Analysis by Dimension/Handbags_Sales_ms.md
+- **备注**: 行维度扩展时需同步三处（ALLSELECTED 列清单 / ISINSCOPE+VALUES 变量 / FILTER 谓词）；单选模式语义与原逐字段 TREATAS 等价
+
+## [2026-10-22 09:20] 测试 SQL 新建 — Handbags Sales_ms 四段对数文件（多选架构全覆盖）
+
+- **模块**: Dimension Cross Analysis - Handbags Sales Analysis by Dimension
+- **任务**: 输出 Handbags_Sales_ms 测试 SQL，一个文件四段：总计 / spu_model / spu_model+ax_sub_class / 五维明细，对齐字段参数切换的四种行维度状态（含 v1.1 多选架构）
+- **操作**: 新建
+- **变更内容**:
+  - 新建 test_Handbags_Sales_ms.sql（342 行，四段独立执行）：段 1 总计（ISINSCOPE 全 FALSE 口径，SLS Amt% = 100%）；段 2 spu_model 分组（单选 Model）；段 3 spu_model + ax_sub_class 分组（多选 Model + Subclass）；段 4 五维组合明细（全选，SKU 级）
+  - 行值域机制：值域 = trade WHERE category='Handbags' 的分组列 DISTINCT（全期，不受时间 / 渠道限制——dt 与渠道均在度量值 CALCULATE 内），inv 纯库存组合经值域 LEFT JOIN 天然排除；维度列 NULL 用 <=> NULL 安全 JOIN（对齐 PBI (Blank) 行）
+  - 占比分母 = SUM() OVER ()（对齐 ALLSELECTED 五列整体移除，与分组粒度无关）；vs LP 输出原始差值小数（×10000 在 Display 层）；NULL 语义全部对齐 DAX（分子 NULL→NULL / vs LP 单侧 NULL→NULL / EOH vs LP 零值拦截 / ST% 加法 BLANK 当 0）
+  - 参数沿用同看板惯例：渠道 TTL（六值 IN）、This ['2026-03-29','2026-07-25']、LP ['2025-03-30','2025-09-27']、快照日 '2026-07-25' / '2025-09-27'
+  - 同步更新方案文档 §7 验证方法（指向测试文件 + 四段对数表 + 值域 / NULL / IsEmpty 对数说明）
+- **关联文件**: Dimension Cross Analysis/4 Handbags Sales Analysis by Dimension/test_Handbags_Sales_ms.sql；Handbags_Sales_ms.md（§7）
+- **备注**: net_sales_amt 按行级 ROUND(product_qty×sales_price,6) 还原；段 4 行数为 SKU 级明细量级，对数时可按维度值先筛选
+
 ## [SKU Sales Tracking] 模块
 
 ## [2026-10-16 18:00] 测试 SQL 调整 — Series Sales 变量改字面量直嵌 + 拆分明细 / 汇总两段

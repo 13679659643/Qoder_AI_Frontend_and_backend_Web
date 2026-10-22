@@ -74,3 +74,48 @@ D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Da
 综合以上信息，不懂就问；我的理解有任何问题都可以指出讨论。
 综合以上信息在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\3 MD Sales Structure目录下给出完整的解决方案，命名为
 MD_Sales_table。
+
+
+# DCA 8 Handbags Sales 第三轮提示词:
+1、
+参考文件格式:
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\3 MD Sales Structure\MD_Sales_table.md
+2、
+只关注口径文档中的子模块十一：Handbags Sales Analysis by Dimension，我们跳着做的不用惊讶。
+3、
+只需要独立输出每个指标的Value和Display，此外附属指标也需要写逻辑输出。本次方案一共就七个指标：SLS Amt、SLS Amt%、SLS Amt% vs LP、SLS Unit、EOH Unit、EOH Unit vs LP、ST%；
+4、
+涉及两张数据表，s02_trade_sku_data_d、s02_inventory_stock_sales_detail_d，其中库存表是没有平台、店铺渠道属性的。
+5、
+字段参数，D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\维度复用\筛选器\字段参数\Field_Parameter_Store_Name，矩阵行字段使用字段参数表的Field_Parameter_Store_Name字段，通过字段参数实现动态维度切换，参数表字段都来自于s02_trade_sku_data_d表，所以矩阵行维度也是，两个事实表之间没有建立关系，维度字段无法传递，需要显示处理涉及到s02_inventory_stock_sales_detail_d表的指标。类似的参考案例涉及多个事实表作用于同一个矩阵：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\SKU Sales Tracking\4 Series Sales Performance\Series_Sales_Table.md
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E BOSS Dashboard\Performance by Merchandise\PB_Merchandise_Fulfillment_detail_ms.md
+6、
+渠道按钮切片器，始终单选：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\维度复用\筛选器\按钮筛选器\Button_Store_Name
+使用其中的ActualValue实际值对应表中的s02_trade_sku_data_d[shop_name]字段，TTL的时候就是全部，使用IN 所有的shop_name字段值。
+7、参考一下dax输出七个指标非空的度量：
+```dax
+MD Sales Table IsEmpty =
+// ========================================
+// 度量值: MD Sales Table IsEmpty
+// 中文名: 行非空判定
+// Display Folder: MD Sales Table IsEmpty\IsEmpty
+// 用途: 行可见性判定——该行全部核心指标为空时返回 0，任一有值返回 1；
+//       用于表格视觉级筛选器（IsEmpty = 1 仅显示有数据的行，
+// ========================================
+    IF(
+        ISBLANK([MD Sales Table SLS Amt% Value]) &&
+        ISBLANK([MD Sales Table SLS Amt% vs LP Value]) &&
+        ISBLANK([MD Sales Table MSRP Amt% Value]) &&
+        ISBLANK([MD Sales Table MSRP Amt% vs LP Value]),
+        0,
+        1
+    )
+```
+8、
+我们做的是一个独立的解决方案，不要出现AI语境类的口语化文本，以及对比某某方案的话术，需要保留必要的dax注释信息。
+
+综合以上信息，评估一下，是否可以实现，通过字段参数切片器实现矩阵行维度的动态变化，指标值也会根据行维度变化而变化，不懂就问；我的理解有任何问题都可以指出讨论。
+综合以上信息在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\4 Handbags Sales Analysis by Dimension目录下给出完整的解决方案，命名为
+Handbags_Sales_ms。

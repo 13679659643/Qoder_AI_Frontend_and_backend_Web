@@ -365,7 +365,7 @@
 |---|---|
 | **指标名称** | SLS Amt / DCom净销售额 |
 | **业务定义** | 统计周期内DCom净销售额 = DCom销售订单总销售额 - 退货额 |
-| **计算公式** | 时间范围看 this period；该 spu_id/sku_id 下 `sum(product_qty*sales_price)` |
+| **计算公式** | 时间范围看 this period；该 spu_id/sku_id 下 `sum(net_sales_amt)` |
 | **数据底表** | `s02_trade_sku_data_d` |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
@@ -461,7 +461,7 @@
 | **业务定义** | 统计周期内销售数量 /（销售数量 + 期末库存数量）× 100% |
 | **计算公式** | 销售数量：看所选时间范围销售数量之和（this period 区间）；期末库存数量：看所选时间范围 end period 最后一天；该 spu_id/sku_id 下 `sales.sum(product_qty) / (sales.sum(product_qty) + inv.sum(stock_inv_qty))` |
 | **数据底表** | `s02_trade_sku_data_d`（sales）；`s02_inventory_stock_sales_detail_d`（inv） |
-| **注意** | 原始口径公式为金额口径 `sales.sum(product_qty*sales_price)/(sales.sum(product_qty*sales_price)+inv.sum(msrp_inv_amt))`，已确认修正为数量口径；原始描述中"销售金额/期末库存金额"字样以公式为准（数量口径） |
+| **注意** | 原始口径公式为金额口径 `sales.sum(net_sales_amt)/(sales.sum(net_sales_amt)+inv.sum(msrp_inv_amt))`，已确认修正为数量口径；原始描述中"销售金额/期末库存金额"字样以公式为准（数量口径） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
 
@@ -473,7 +473,7 @@
 |---|---|
 | **指标名称** | AUR / 件单价 |
 | **业务定义** | 净销售金额 / 商品净出库件数 |
-| **计算公式** | 时间范围看 this period；该 spu_id/sku_id 下 `sum(product_qty*sales_price) / sum(product_qty)` |
+| **计算公式** | 时间范围看 this period；该 spu_id/sku_id 下 `sum(net_sales_amt) / sum(product_qty)` |
 | **数据底表** | `s02_trade_sku_data_d` |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
@@ -697,7 +697,7 @@
 |---|---|
 | **指标名称** | SLS Amt / DCom净销售额 |
 | **业务定义** | 统计周期内DCom净销售额 = DCom销售订单总销售额 - 退货额 |
-| **计算公式** | 时间范围看 this period；该 spu_model 下 `sum(product_qty*sales_price)` |
+| **计算公式** | 时间范围看 this period；该 spu_model 下 `sum(net_sales_amt)` |
 | **数据底表** | `s02_trade_sku_data_d` |
 | **附属指标** | Amt vs LP：this period / last period - 1 |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
@@ -712,7 +712,7 @@
 |---|---|
 | **指标名称** | SLS Amt% / 销售金额占比 |
 | **业务定义** | 该 model 占 total 的比例 |
-| **计算公式** | 时间范围看 this period；分子：该 spu_model 下 `sum(product_qty*sales_price)`；分母：`sum(product_qty*sales_price)`（Handbags/Outwear 筛选范围内） |
+| **计算公式** | 时间范围看 this period；分子：该 spu_model 下 `sum(net_sales_amt)`；分母：`sum(net_sales_amt)`（Handbags/Outwear 筛选范围内） |
 | **数据底表** | `s02_trade_sku_data_d` |
 | **附属指标** | SLS Amt% vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
@@ -727,7 +727,7 @@
 |---|---|
 | **指标名称** | ST% / 售罄率%（金额） |
 | **业务定义** | 统计周期内销售金额 /（销售金额 + 期末库存金额）× 100% |
-| **计算公式** | 销售金额：看所选时间范围销售金额之和；期末库存金额：看所选时间范围 end period 最后一天；该 spu_model 下 `sales.sum(product_qty*sales_price) / (sales.sum(product_qty*sales_price) + inv.sum(msrp_inv_amt))` |
+| **计算公式** | 销售金额：看所选时间范围销售金额之和；期末库存金额：看所选时间范围 end period 最后一天；该 spu_model 下 `sales.sum(net_sales_amt) / (sales.sum(net_sales_amt) + inv.sum(msrp_inv_amt))` |
 | **数据底表** | `s02_trade_sku_data_d`（sales）；`s02_inventory_stock_sales_detail_d`（inv） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
@@ -751,8 +751,8 @@
 
 ## 子模块十一：Handbags Sales Analysis by Dimension
 
-> **前置筛选**: 整个模块需要先筛选 category = 'Handbags'
-> **渠道维度**: TTL/TMALL/JD/RLE/DY/DY_W/DY_MN（固定渠道值；指标计算受所选渠道筛选影响，TTL 为全部渠道口径；取值映射参照 Slicer_Platform_Selection / Slicer_Store_Name，DAX 实现时确认）
+> **前置筛选**: 整个模块需要先筛选 category = 'Handbags'，这个我在页面视觉对象筛选就行，来源表为Slicer_Category
+> **渠道维度**: TTL/TMALL/JD/RLE/DY/DY_W/DY_MN（固定渠道值；指标计算受所选渠道筛选影响，TTL 为全部渠道口径；取值映射参照 Button_Store_Name）
 > **商品维度组合（用户选择）**: Model：`spu_model` / Subclass：`ax_sub_class` / Season：`season` / Category：`category` / Size：`sku_size`
 
 ### 48. SLS Amt — DCom净销售额
@@ -761,7 +761,7 @@
 |---|---|
 | **指标名称** | SLS Amt / DCom净销售额 |
 | **业务定义** | 统计周期内DCom净销售额 = DCom销售订单总销售额 - 退货额 |
-| **计算公式** | 时间范围看 this period；该 dimension（商品维度组合）下 `sum(product_qty*sales_price)` |
+| **计算公式** | 时间范围看 this period；该 dimension（商品维度组合）下 `sum(net_sales_amt)` |
 | **数据底表** | `s02_trade_sku_data_d` |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
@@ -774,12 +774,12 @@
 |---|---|
 | **指标名称** | SLS Amt% / 销售金额占比 |
 | **业务定义** | 该 dimension 占 Handbags total 的比例 |
-| **计算公式** | 时间范围看 this period；分子：该 dimension 下 `sum(product_qty*sales_price)`；分母：`sum(product_qty*sales_price)`（Handbags 筛选范围内） |
+| **计算公式** | 时间范围看 this period；分子：该 dimension 下 `sum(net_sales_amt)`；分母：`sum(net_sales_amt)`（Handbags 筛选范围内） |
 | **数据底表** | `s02_trade_sku_data_d` |
-| **附属指标** | vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
+| **附属指标** | vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp），这里我用于表格，在Display中×10000 |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
-| **附属指标类型** | vs LP:delta_bp |
+| **附属指标类型** | vs LP:integer_bp |
 
 ---
 
@@ -807,7 +807,7 @@
 | **附属指标** | vs LP：this period / last period - 1 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
-| **附属指标类型** | vs LP:delta_pct_0dp |
+| **附属指标类型** | vs LP:percent_0dp → 百分比整数，不含正号 |
 
 ---
 
@@ -817,7 +817,7 @@
 |---|---|
 | **指标名称** | ST% / 售罄率%（金额） |
 | **业务定义** | 统计周期内销售金额 /（销售金额 + 期末库存金额）× 100% |
-| **计算公式** | 销售金额：看所选时间范围销售金额之和；期末库存金额：看所选时间范围 end period 最后一天；该 dimension 下 `sales.sum(product_qty*sales_price) / (sales.sum(product_qty*sales_price) + inv.sum(msrp_inv_amt))` |
+| **计算公式** | 销售金额：看所选时间范围销售金额之和；期末库存金额：看所选时间范围 end period 最后一天；该 dimension 下 `sales.sum(net_sales_amt) / (sales.sum(net_sales_amt) + inv.sum(msrp_inv_amt))` |
 | **数据底表** | `s02_trade_sku_data_d`（sales）；`s02_inventory_stock_sales_detail_d`（inv） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |

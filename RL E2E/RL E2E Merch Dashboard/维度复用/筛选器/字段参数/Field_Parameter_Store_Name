@@ -1,0 +1,13 @@
+Field_Parameter_Store_Name =
+// 通过页面创建字段参数，NAMEOF:以文本字符串的形式返回表、列、度量值或日历的名称。 可选参数控制返回名称的哪个组件以及如何转义结果。
+// 第一列字段名Field_Parameter_Store_Name：创建后，用于标识字段参数的名称，系统自带。
+// 第二列字段名Field_Parameter_Store_Name 个字段：字段参数的值，系统自带。
+// 第三列排序名Field_Parameter_Store_Name 个订单：用于排序，系统自带。
+// 第四列显示标签Label：用于显示的标签，人为自主创建。
+{
+    ("spu_model", NAMEOF('s02_trade_sku_data_d'[spu_model]), 0, "Model"),
+    ("ax_sub_class", NAMEOF('s02_trade_sku_data_d'[ax_sub_class]), 1, "Subclass"),
+    ("season", NAMEOF('s02_trade_sku_data_d'[season]), 2, "Season"),
+    ("category", NAMEOF('s02_trade_sku_data_d'[category]), 3, "Category"),
+    ("sku_size", NAMEOF('s02_trade_sku_data_d'[sku_size]), 4, "Size")
+}

@@ -1,0 +1,18 @@
+Button_Store_Name = 
+// Label为页面显示值
+// ActualValue对应事实表中的实际值
+// SortOrder排序字段
+DATATABLE(
+    "Label", STRING,
+    "ActualValue", STRING,
+    "SortOrder", INTEGER,
+    {
+        {"TTL", "TTL", 0},
+        {"Tmall", "TM", 1},
+        {"JD", "JD", 2},
+        {"RLE", "RLE_CN", 3},
+        {"DY_Family", "DY_Family", 4},
+        {"DY_W", "DY_W", 5},
+        {"DY_MN", "DY_M", 6}
+    }
+)
