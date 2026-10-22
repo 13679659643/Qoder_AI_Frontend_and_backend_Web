@@ -119,3 +119,25 @@ MD Sales Table IsEmpty =
 综合以上信息，评估一下，是否可以实现，通过字段参数切片器实现矩阵行维度的动态变化，指标值也会根据行维度变化而变化，不懂就问；我的理解有任何问题都可以指出讨论。
 综合以上信息在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\4 Handbags Sales Analysis by Dimension目录下给出完整的解决方案，命名为
 Handbags_Sales_ms。
+
+
+# DCA 7 Handbags & Outwear Sales 第三轮提示词:
+口径文档:
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\口径文档\口径Markdown格式\Dimension Cross Analysis.md
+只关注口径文档中的子模块十：Handbags Sales Performance，我们跳着做的不用惊讶。
+类似解决方案:
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales Performance Details by Channel\Dim_ColMetric_Sales_Performance_Details.md
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales Performance Details by Channel\Sales_Performance_Details_ms.md
+
+现在这个场景，和我提到的解决方案极度类似，商品维度切换：Category = Handbags/Outwear，作为前置筛选条件在视觉对象筛选器中完成，这里只有一个行维度为spu_model，有专门的维度表Slicer_Spu_Model，和事实表一对多关联，不用显示Dax处理。Slicer_Spu_Model里面包括排序字段，为了避免“按列排序（Sort by Column）”功能的隐藏筛选传播，存在使用ALLSELECTED的时候需要针对整张表。列维度，渠道分组只有一个Store，TTL下有七个指标，每个Store下指标都是4个且一模一样，图中指标显示是换行态，我们做的时候不需要在意这些，直接空格英文单词就行，比如：SLS Unit、SLS Amt、SLS Amt%等等。
+TTL指标：SLS Unit、SLS Amt、SLS Amt%、Amt vs LP、ST%、EOH、EOH vs LP、
+单个Store：SLS Unit、SLS Amt、SLS Amt%、vs LP
+由于矩阵在检测到该行所有度量均为 BLANK() 时，通常会自动隐藏该行（包括层级行），需要所有指标都为 BLANK() 才会自动隐藏该行。所以Display中返回BLANK()。不返回"-"；
+综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\7 Handbags Sales Performance目录下输出Handbags_&_Outwear_ms;
+Dim_ColMetric_Handbags&Outwear_Sales_ms列指标维度表
+SQL参数
+-- Store Name:       TTL+六个Store
+-- This Period:     dt ∈ ['2026-03-29', '2026-07-25']（区间汇总）
+-- Last Period:     dt ∈ ['2025-03-30', '2025-07-26']（区间汇总）
+-- 库存相关end period最后一天This：'2026-07-25'
+-- 库存相关end period最后一天Last：'2025-07-26'

@@ -145,6 +145,48 @@
 - **关联文件**: Dimension Cross Analysis/4 Handbags Sales Analysis by Dimension/test_Handbags_Sales_ms.sql；Handbags_Sales_ms.md（§7）
 - **备注**: net_sales_amt 按行级 ROUND(product_qty×sales_price,6) 还原；段 4 行数为 SKU 级明细量级，对数时可按维度值先筛选
 
+## [2026-10-22 14:00] DAX 新建 — Handbags & Outwear Sales Performance 矩阵解决方案（含列维度表）
+
+- **模块**: Dimension Cross Analysis - Handbags Sales Performance
+- **任务**: 子模块十（§43-§47）Handbags/Outwear 前置筛选 + spu_model 行维度 × Store 渠道列指标矩阵解决方案（列维度表单独文件输出）
+- **操作**: 新建
+- **变更内容**:
+  - 新建 Dim_ColMetric_Handbags&Outwear_Sales_ms.md：断开列维度表 31 行，三层 ChannelGroup（仅 Store）> Label（TTL + 6 店铺）> ColName；TTL 7 列（SLS Unit / SLS Amt / SLS Amt% / Amt vs LP / ST% / EOH / EOH vs LP）+ 6 店铺 × 4 列（SLS Unit / SLS Amt / SLS Amt% / vs LP，组合一致）；Label_Value 映射 shop_name（TM / JD / RLE_CN / DY_Family / DY_W / DY_M）；ColName 拼 Metric_ID 前缀避同名排序冲突；_Sort 字段 10 起步长 10
+  - 新建 Handbags_&_Outwear_ms.md（7 个度量值，参照 Sales Performance Details by Channel 架构）：Act / LY / Base 总路由 + Cell Value / Display / Font Color / Background Color；渠道上下文 UNION+FILTER（TTL = ALLSELECTED 移除视觉内部 shop_name 筛选保留外部切片器）；vs LP 三种派生（Amt vs LP 比值 / vs LP 占比差值 / EOH vs LP 双快照比值）分子经整表 REMOVEFILTERS + ChannelGroup + Label_Value + 基础 ColType 三条件重路由
+  - SLS Amt% 分母 ALLSELECTED('Slicer_Spu_Model') 整表：spu_model 按 sort_order 按列排序，单列 ALLSELECTED 无法剥离组合筛选中的 sort_order 部分（行维度筛选残留 → 占比恒 100% 坑），必须整表写法
+  - inv 侧（EOH / EOH vs LP / ST% 库存侧）TREATAS(VALUES(trade[spu_model]), inv[spu_model]) 单字段桥接（行维度唯一，总计 = 可见行之和）+ inv[category] IN {"Handbags", "Outwear"} 显式限定（不依赖页面筛选器传导）
+  - Display 层 BLANK 一律返回 BLANK()（非 "-"）：矩阵检测该行全部度量值均为 BLANK() 时自动隐藏行（含层级），无需 IsEmpty 视觉级筛选器
+  - 口径格式：percent_0dp 不含正号（Amt vs LP / EOH vs LP 变化率）；integer_bp（vs LP 占比差值 ×10000 转 bp 在 Display 层）；currency 币种符号 + 千分位整数（Value 层汇率换算）
+- **关联文件**: Dimension Cross Analysis/7 Handbags Sales Performance/Dim_ColMetric_Handbags&Outwear_Sales_ms.md；Handbags_&_Outwear_ms.md
+- **备注**: 待确认项 #9（'Outwear' 疑似 'Outerwear'，以底表实际取值为准，确认后仅调整度量值内 IN 清单）；行维度 Slicer_Spu_Model 与 trade 一对多关系自动传导无需显式 DAX；EOH / ST% 库存侧不受渠道影响（inv 无渠道字段，且仅存在于 TTL 列）；表名含 "&" 引用需单引号
+
+## [2026-10-22 16:30] DAX 修改 — Handbags & Outwear_ms 移除 inv 桥接 + Display 扩展格式 + Outerwear 笔误修正
+
+- **模块**: Dimension Cross Analysis - Handbags Sales Performance
+- **任务**: 三项调整——① inv 侧移除 TREATAS 桥接改关系自然传导；② Cell Display 补充 5 种扩展格式；③ 口径文档 'Outwear' 笔误确认修正为 'Outerwear'
+- **操作**: 修改
+- **变更内容**:
+  - inv 侧（EOH / EOH vs LP / ST% 库存侧）：Slicer_Spu_Model 与 trade / inv 均建一对多关系（共享维度模式），行筛选经关系自动传导双表，移除全部 TREATAS（Act / LY 共 3 处聚合）；保留 inv[category] IN {"Handbags", "Outerwear"} 显式限定（不依赖 Slicer_Category 与 inv 的关系配置）
+  - 总计行语义补录：总计行无 spu_model 行分组，trade / inv 两侧均为品类全量（行值域仅 3 个 model，总计 ≠ 明细行之和），需总计 = 展示行之和时关闭矩阵总计行（注意事项 5）
+  - Cell Display 补充 5 种扩展格式（对齐参考方案 Sales_Performance_Details_ms）：currency_M_K_Int_0db / integer_M_K_Int_0db（M/K 缩写）、percent_1dp / delta_pct_1dp（1 位小数）、decimal_1dp；当前无列使用，预留便于后续快速调整
+  - 'Outwear' 笔误修正：口径文档待确认项 #9 已确认为笔误，底表实际值 'Outerwear'；度量值 IN 清单与两份文档全文同步更新
+- **关联文件**: Dimension Cross Analysis/7 Handbags Sales Performance/Handbags_&_Outwear_ms.md；Dim_ColMetric_Handbags&Outwear_Sales_ms.md
+- **备注**: 若模型中 Slicer_Spu_Model 未与 inv 表建关系，inv 侧需回退 TREATAS 桥接（方案注意事项 2 已注明回退写法与参考）
+
+## [2026-10-22 18:00] DAX 修改 + 测试 SQL 新建 — Handbags & Outwear_ms 品类硬编码移除（改双侧关系传导）+ 两段对数文件
+
+- **模块**: Dimension Cross Analysis - Handbags Sales Performance
+- **任务**: ① 移除度量值内 inv[category] IN 品类硬编码，改 Slicer_Category 与 trade / inv 双侧一对多关系自动传导；② 输出测试 SQL（MySQL 语法、字面量直嵌不支持变量）
+- **操作**: 修改 + 新建
+- **变更内容**:
+  - 品类硬编码移除：Slicer_Category 与 trade / inv 均建一对多关系（建模前提），品类筛选经双侧关系自动传导，移除 3 处聚合的 `inv[category] IN {"Handbags", "Outerwear"}`（__EOHUnit / __InvAmt_End / __EOHUnit_LP）——后续品类切换（改值 / 增删值）仅需修改视觉对象筛选器配置，无需触碰 DAX；若 Slicer_Category 未与 inv 建关系需回退显式条件（注意事项 5 注明回退位置）
+  - 同步更新：顶部关联维度行（一对多关系 × 2）、§1.1 / §2 / §3.5 / §6 血缘图 / §7 注意事项 5、11 + 新增注意事项 15（测试 SQL 引用）；维度表头注释同步
+  - 新建 test_Handbags_&_Outwear_ms.sql（225 行，两段独立执行）：段 1 TTL 7 指标（行 = spu_model，渠道 = 六值 IN）；段 2 六 Store 列 4 指标（行 = Store × spu_model，store_label 映射 TM/JD/RLE_CN/DY_Family/DY_W/DY_M）
+  - 参数字面量：This ['2026-03-29','2026-07-25'] / LP ['2025-03-30','2025-07-26'] / 双期快照日 '2026-07-25' 与 '2025-07-26'
+  - NULL 语义逐项对齐 DAX：占比分子 NULL 输出 0（DIVIDE(BLANK,x)=0）/ Amt vs LP 的 this NULL 按 0 处理（→ -1）/ ST% 单侧 NULL 按 0（加法 BLANK 当 0）/ EOH vs LP 双侧拦截 / vs LP 输出原始差值小数（×10000 转 bp 在 Display 层）；行值域 = Slicer_Spu_Model 三值全集，全 NULL 行页面自动隐藏对数忽略；FIELD() 按页面 sort_order 排序
+- **关联文件**: Dimension Cross Analysis/7 Handbags Sales Performance/Handbags_&_Outwear_ms.md；Dim_ColMetric_Handbags&Outwear_Sales_ms.md；test_Handbags_&_Outwear_ms.sql
+- **备注**: TTL = ALLSELECTED([shop_name]) 全值域，SQL 按六值 IN 对数——若底表存在六值外 shop_name 页面会含，差异需核对；对数假设无外部渠道切片器筛选
+
 ## [SKU Sales Tracking] 模块
 
 ## [2026-10-16 18:00] 测试 SQL 调整 — Series Sales 变量改字面量直嵌 + 拆分明细 / 汇总两段

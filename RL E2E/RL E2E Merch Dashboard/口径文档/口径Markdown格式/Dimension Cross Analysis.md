@@ -702,7 +702,7 @@
 | **附属指标** | Amt vs LP：this period / last period - 1 |
 | **数据类型** | currency → 货币符号由币种切片器决定，千分位整数 |
 | **数据格式** | `#,##0`（在 DAX 中用 `__CurrencySymbol & FORMAT(__Value, "#,##0")` 拼接币种符号） |
-| **附属指标类型** | Amt vs LP:delta_pct_0dp |
+| **附属指标类型** | Amt vs LP:percent_0dp → 百分比整数，不含正号 |
 
 ---
 
@@ -714,10 +714,10 @@
 | **业务定义** | 该 model 占 total 的比例 |
 | **计算公式** | 时间范围看 this period；分子：该 spu_model 下 `sum(net_sales_amt)`；分母：`sum(net_sales_amt)`（Handbags/Outwear 筛选范围内） |
 | **数据底表** | `s02_trade_sku_data_d` |
-| **附属指标** | SLS Amt% vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
+| **附属指标** | vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
-| **附属指标类型** | SLS Amt% vs LP:delta_bp |
+| **附属指标类型** | vs LP:integer_bp |
 
 ---
 
@@ -745,7 +745,7 @@
 | **附属指标** | EOH vs LP：this period / last period - 1 |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
-| **附属指标类型** | EOH vs LP:delta_pct_0dp |
+| **附属指标类型** | EOH vs LP:percent_0dp → 百分比整数，不含正号 |
 
 ---
 
