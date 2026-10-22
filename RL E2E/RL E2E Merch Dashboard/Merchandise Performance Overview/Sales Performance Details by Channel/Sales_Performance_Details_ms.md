@@ -15,11 +15,12 @@
 
 Sales Performance Details by Channel 是按渠道展开的销售明细矩阵：
 
-- **列**：三层结构 ChannelGroup（Platform / Store）> Label（页面显示标签）> ColName（指标列），共 74 列
-  - Platform 组：TTL（7 列）+ Tmall / JD / RLE / DY（各 6 列）
-  - Store 组：TTL（7 列）+ Tmall / JD / RLE / DY_Family / DY_W / DY_MN（各 6 列）
-  - TTL 列组合：SLS Unit、SLS Amt、vs LP、SLS Amt%、LTD ST%、EOH Unit、AUR
-  - 非 TTL 列组合：SLS Unit、SLS Amt、vs LP、Vert. Amt%、Horiz. Amt%、AUR
+- **列**：三层结构 ChannelGroup（Platform / Store）> Label（页面显示标签）> ColName（指标列），共 86 列
+  - Platform 组：TTL（8 列）+ Tmall / JD / RLE / DY（各 7 列）
+  - Store 组：TTL（8 列）+ Tmall / JD / RLE / DY_Family / DY_W / DY_MN（各 7 列）
+  - TTL 列组合：SLS Unit、SLS Amt、vs LP、SLS Amt%、LTD ST%、EOH Unit、AUR、MD
+  - 非 TTL 列组合：SLS Unit、SLS Amt、vs LP、Vert. Amt%、Horiz. Amt%、AUR、MD
+  - MD（本次新增，12 列每组末位）：1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)，percent_0dp；口径来源为业务新增指令（原口径文档 §33-§41 未含 MD）
 - **行**：商品维度字段六选一拉到矩阵（`brand` / `super_season` / `product_type` / `category` / `md_type` / `division`，均取自 sales 表）
 
 ### 1.2 路由维度
@@ -27,7 +28,7 @@ Sales Performance Details by Channel 是按渠道展开的销售明细矩阵：
 | 路由维度 | 来源                                                                  | 类型       | 说明                                                                                                        |
 | -------- | --------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------- |
 | 渠道     | Dim_ColMetric_Sales_Performance_Details 的 ChannelGroup + Label_Value | 断开列维度 | Platform 组过滤事实表 [platform]，Store 组过滤 [shop_name]；Label_Value = "TTL" 时走 ALLSELECTED 全渠道合计 |
-| 指标     | Dim_ColMetric_Sales_Performance_Details 的 ColType                    | 断开列维度 | 9 种：SLS Unit / SLS Amt / vs LP / SLS Amt% / Vert. Amt% / Horiz. Amt% / LTD ST% / EOH Unit / AUR             |
+| 指标     | Dim_ColMetric_Sales_Performance_Details 的 ColType                    | 断开列维度 | 10 种：SLS Unit / SLS Amt / vs LP / SLS Amt% / Vert. Amt% / Horiz. Amt% / LTD ST% / EOH Unit / AUR / MD     |
 | 行维度   | sales 表商品维度字段六选一                                            | 事实表字段 | 一次只使用一个字段；占比分母类别总计用 ALLSELECTED 移除该行维度筛选                                         |
 
 **Label → 事实表实际值映射**（已核对 Slicer_Platform_Selection / Slicer_Store_Name）：
@@ -45,29 +46,30 @@ Sales Performance Details by Channel 是按渠道展开的销售明细矩阵：
 
 ### 1.3 时间口径
 
-| 口径                     | 时间范围                                                                                                                          | 适用指标                                                            |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| This Period（区间类）    | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                               | SLS Unit、SLS Amt、vs LP 分子、SLS Amt%、Vert. Amt%、Horiz. Amt%、AUR |
-| Last Period（vs LP 基线）  | data_date ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]]                               | vs LP 分母                                                            |
-| End Period（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个快照日** | EOH Unit、LTD ST% 分母库存                                          |
-| LTD 区间                 | data_date ∈ [2024-01-01（口径待定）, This Period end]                                                                            | LTD ST% 分子销售                                                    |
+| 口径                      | 时间范围                                                                                                                          | 适用指标                                                                  |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| This Period（区间类）     | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                               | SLS Unit、SLS Amt、vs LP 分子、SLS Amt%、Vert. Amt%、Horiz. Amt%、AUR、MD |
+| Last Period（vs LP 基线） | data_date ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]]                               | vs LP 分母                                                                |
+| End Period（期末时点类）  | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个快照日** | EOH Unit、LTD ST% 分母库存                                                |
+| LTD 区间                  | data_date ∈ [Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day]（end period 所在财年第一天）, This Period end]                      | LTD ST% 分子销售                                                          |
 
 说明：
 
 - vs LP 是 this period 和 last period 对比，受 last period 时间筛选器影响
-- LTD ST% 销售区间为 2024 年起算至所选 end period（原始口径标注「待定」），起算日以度量值内变量 `__LTDStartDate` 承载，确认后改一处即可
+- LTD ST% 销售区间 = end period 所在财年第一天起算至 This Period end（起点读 Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day] 财年日历字段，非固定日期）
 - 期末时点类实现为 end period 范围内最后一个有数据的快照日：口径为 end period 最后一天，快照缺数时自动回退到范围内最近一天；快照表按日存储只取单日，整段区间求和会重复计数库存
 
 ---
 
 ## 2. 现状分析
 
-- 数据底表 `a02_e2e_product_performance_sales_summary_d`（日粒度）：net_sales_amt / net_sales_qty 及全部商品维度字段（brand、super_season、product_type、category、md_type、division、framework、ax_class、category_summary、special_supply、predictive_buy、computed_product_tag）+ platform / shop_name 渠道字段；platform 已在数据源层过滤 IN ('JD','TM','RLE','DY')
+- 数据底表 `a02_e2e_product_performance_sales_summary_d`（日粒度）：net_sales_amt / net_sales_qty / md_net_sales_amt / msrp_net_sales_amt 及全部商品维度字段（brand、super_season、product_type、category、md_type、division、framework、ax_class、category_summary、special_supply、predictive_buy、computed_product_tag）+ platform / shop_name 渠道字段；platform 已在数据源层过滤 IN ('JD','TM','RLE','DY')
 - 数据底表 `a02_e2e_product_performance_inv_summary_d`（日快照）：msrp_inv_amt / inv_qty，商品维度字段与 sales 表同名同构；**无 platform / shop_name 字段**，渠道筛选不影响库存侧
 - 商品维度字段为 `brand`（品牌标签：W Polo、FJ、CL、PL、CW、M Polo、RRL、HM、Lauren；数据字典已由 label 统一更新为 brand），口径中的 "Label / Brand" 维度即该字段，本方案按 `brand` 实现
 - 列维度表 `Dim_ColMetric_Sales_Performance_Details` 已存在（本目录），含 ChannelGroup / Label / Label_Value / ColName / ColType / Metric_Format / Metric_IsCurrencyAmount / 颜色字段
 - 行维度六个字段取自 sales 表；inv 侧指标（EOH Unit、LTD ST% 分母）通过 TREATAS 将 sales 侧行维度筛选传递到 inv 表
 - Slicer_Platform_Selection、Slicer_Store_Name、Slicer_AX_Class 等筛选器与事实表一对多关联，筛选自动传递，DAX 无需显式处理
+- Slicer_Time_Frame_Max_This 含 Fiscal_Year_First_Day 字段（按 TimeFrame_Min 落入的财年区间自关联财年日历生成），LTD ST% 区间起点直接读取（end period 所在财年第一天，非固定日期）
 - 字段名已逐一核对数据字典
 
 ---
@@ -83,7 +85,7 @@ Act Base Value / LY Base Value
     ↓
 Base Value（总路由）
     ←  vs LP = SLS Amt This / SLS Amt Last - 1（整表 REMOVEFILTERS + 渠道三条件重路由取分子）
-       其余 8 种 ColType 直接取 Act Base Value
+       其余 9 种 ColType 直接取 Act Base Value
     ↓
 Cell Value
     ←  金额类（Metric_IsCurrencyAmount = TRUE）汇率换算（÷ Currency_ExchangeRate）
@@ -111,13 +113,14 @@ Cell Font Color / Cell Background Color
 | ----------- | ----------- | ------------------- | ---------------------------------------------------------------------------------------------- | ------------- |
 | SLS Unit    | sales       | This Period 区间    | sum(net_sales_qty)                                                                             | integer       |
 | SLS Amt     | sales       | This Period 区间    | sum(net_sales_amt)                                                                             | currency      |
-| vs LP         | sales       | This / Last 区间    | SLS Amt This / SLS Amt Last - 1                                                                | delta_pct_0dp |
+| vs LP       | sales       | This / Last 区间    | SLS Amt This / SLS Amt Last - 1                                                                | delta_pct_0dp |
 | SLS Amt%    | sales       | This Period 区间    | 单元格 SLS Amt / 该列渠道全部商品维度合计                                                      | percent_0dp   |
 | Vert. Amt%  | sales       | This Period 区间    | 单元格 SLS Amt / 该列渠道全部商品维度合计（与 SLS Amt% 公式结构相同，渠道上下文为对应 Label）  | percent_0dp   |
 | Horiz. Amt% | sales       | This Period 区间    | 单元格 SLS Amt / 该行商品维度全渠道合计                                                        | percent_0dp   |
 | LTD ST%     | sales + inv | LTD 区间 / 期末快照 | LTD 销售金额 /（LTD 销售金额 + 期末库存金额）                                                  | percent_0dp   |
 | EOH Unit    | inv         | 期末快照单日        | sum(inv_qty)（口径 §40 原文写作 sum(msrp_inv_amt)，按「数量」定义实现为 inv_qty，需业务确认） | integer       |
 | AUR         | sales       | This Period 区间    | sum(net_sales_amt) / sum(net_sales_qty)                                                        | currency      |
+| MD          | sales       | This Period 区间    | 1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)（分母空或 0 → BLANK）                     | percent_0dp   |
 
 ### 3.4 占比指标分子分母
 
@@ -147,11 +150,12 @@ Sales Performance Details Act Base Value =
 // 度量值: Sales Performance Details Act Base Value
 // Display Folder: Base Metrics
 // 用途: This Period 基础值，按渠道上下文（ChannelGroup + Label_Value）+ ColType 路由，
-//       覆盖 8 种基础指标列（SLS Unit / SLS Amt / SLS Amt% / Vert. Amt% / Horiz. Amt% /
-//       LTD ST% / EOH Unit / AUR），保留 RMB 原始值
+//       覆盖 9 种基础指标列（SLS Unit / SLS Amt / SLS Amt% / Vert. Amt% / Horiz. Amt% /
+//       LTD ST% / EOH Unit / AUR / MD），保留 RMB 原始值
 //       vs LP 为跨期派生指标，在 Base Value 总路由中处理，本度量值不涉及
 // 依赖: 'Dim_ColMetric_Sales_Performance_Details'[ChannelGroup, Label_Value, ColType]
 //       Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
+//       Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day]（LTD 起算日 = end period 所在财年第一天）
 // 数据底表: a02_e2e_product_performance_sales_summary_d（销售类）
 //           a02_e2e_product_performance_inv_summary_d（库存类：EOH Unit / LTD ST% 分母）
 // 汇率换算: 不在此度量值处理，保持原始 RMB，由 Cell Value 层统一换算
@@ -173,8 +177,8 @@ VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── LTD 起算日（口径待定项：原始口径标注 2024-01-01 待定，确认后仅调整此处）──
-VAR __LTDStartDate = DATE(2024, 1, 1)
+// ── LTD 起算日 = end period 所在财年第一天（财年日历字段，非固定日期）──
+VAR __LTDStartDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day])
 
 // ── 期末快照日：end period 范围内最后一个有数据的日期 ──
 // REMOVEFILTERS 保证快照日不随行维度 / 商品切片器上下文漂移（全表最后一个快照日）
@@ -249,6 +253,32 @@ VAR __SLSUnit_This =
 // ═══ AUR（件单价 = SLS Amt / SLS Unit；金额类，双模式无关，汇率换算在 Cell Value 层）═══
 VAR __AUR = DIVIDE(__SLSAmt_This, __SLSUnit_This)
 
+// ═══ MD（平均折扣 = 1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)；12 列，每组末位）═══
+// 边界: 分母（吊牌金额）空或 0 时返回 BLANK，避免 1 - BLANK() = 1（即 100% 折扣）失真；
+//       分子分母为同表金额字段（底表 RMB），折扣率不受币种选择影响
+VAR __MdAmt =
+    CALCULATE(
+        SUM('a02_e2e_product_performance_sales_summary_d'[md_net_sales_amt]),
+        __PlatformCtx,
+        __ShopNameCtx,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+    )
+VAR __MsrpAmt =
+    CALCULATE(
+        SUM('a02_e2e_product_performance_sales_summary_d'[msrp_net_sales_amt]),
+        __PlatformCtx,
+        __ShopNameCtx,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+    )
+VAR __MD =
+    IF(
+        ISBLANK(__MsrpAmt) || __MsrpAmt = 0,
+        BLANK(),
+        1 - DIVIDE(__MdAmt, __MsrpAmt)
+    )
+
 // ═══ SLS Amt% / Vert. Amt%（占比 = 单元格 SLS Amt / 该列渠道全部商品维度合计）═══
 // 两者公式结构相同，渠道上下文由列位置自动区分：
 //   SLS Amt%（TTL 列）  → 渠道上下文 = TTL（ALLSELECTED platform / shop_name）
@@ -285,7 +315,7 @@ VAR __SLSAmt_Total_Row =
 VAR __HorizAmtPct = DIVIDE(__SLSAmt_This, __SLSAmt_Total_Row)
 
 // ═══ LTD ST%（LTD 售罄率%金额，仅 TTL 列；跨 sales + inv 双表）═══
-// 分子: LTD 销售金额 = 2024-01-01（待定）至 This Period end 的 net_sales_amt 合计（TTL 渠道上下文）
+// 分子: LTD 销售金额 = 财年第一天（Fiscal_Year_First_Day）至 This Period end 的 net_sales_amt 合计（TTL 渠道上下文）
 // 分母: LTD 销售金额 + 期末库存金额（inv 表期末快照日单日时点）
 // inv 侧行维度筛选通过 TREATAS 从 sales 表六个商品维度字段传递（上行字段传行筛选，
 // 未上行字段传外部切片器上下文）
@@ -324,6 +354,7 @@ RETURN
         "LTD ST%",     __LTDSTPct,       // LTD ST% Act（仅 TTL 列）
         "EOH Unit",    __EOHUnit,        // EOH Unit Act（仅 TTL 列）
         "AUR",         __AUR,            // AUR Act
+        "MD",          __MD,             // MD Act（12 列，每组末位）
         BLANK()
     )
 ```
@@ -413,7 +444,7 @@ Sales Performance Details Base Value =
 // Display Folder: Base Metrics
 // 用途: 总路由，按 ColType 分发
 //       - vs LP → SLS Amt This Period / SLS Amt Last Period - 1
-//       - 其余 8 种 ColType → 直接取 Act Base Value
+//       - 其余 9 种 ColType → 直接取 Act Base Value
 //
 // vs LP 分子重路由机制（整表 REMOVEFILTERS + 三条件重建）:
 //   矩阵列头三层（ChannelGroup > Label > ColName）在视觉对象查询（SUMMARIZECOLUMNS）中
@@ -522,7 +553,7 @@ Sales Performance Details Cell Display =
 //   integer       → FORMAT(__Value, "#,##0") 整数千分位（SLS Unit / EOH Unit）
 //   currency      → __CurrencySymbol & FORMAT(__Value, "#,##0")（SLS Amt / AUR，符号由币种切片器决定）
 //   delta_pct_0dp → IF(__Value>0,"+","") & FORMAT(__Value,"#,##0%") 百分比整数变化，含正号（vs LP）
-//   percent_0dp   → FORMAT(__Value, "#,##0%") 百分比整数（SLS Amt% / Vert. Amt% / Horiz. Amt% / LTD ST%）
+//   percent_0dp   → FORMAT(__Value, "#,##0%") 百分比整数（SLS Amt% / Vert. Amt% / Horiz. Amt% / LTD ST% / MD）
 // 说明: BLANK 显示为 "-"; Cell Value 层已完成汇率换算，Display 层只负责符号拼接
 // ========================================
     VAR __Value = [Sales Performance Details Cell Value]
@@ -644,15 +675,15 @@ Sales Performance Details Cell Background Color =
 
 ## 5. 度量值清单与 Display Folder
 
-| 序号 | 度量值名称                                      | Display Folder | 用途                                                                            |
-| ---- | ----------------------------------------------- | -------------- | ------------------------------------------------------------------------------- |
-| 1    | Sales Performance Details Act Base Value        | Base Metrics   | This Period 基础值（8 种基础 ColType）；渠道上下文 + ColType 路由；RMB 原值     |
-| 2    | Sales Performance Details LY Base Value         | Base Metrics   | Last Period SLS Amt 基线（vs LP 分母）                                            |
-| 3    | Sales Performance Details Base Value            | Base Metrics   | 总路由（vs LP 派生 + 整表 REMOVEFILTERS + 渠道三条件重路由；其余直接取 Act）；74 列全覆盖 |
-| 4    | Sales Performance Details Cell Value            | Cell Values    | 对外值：金额类（SLS Amt / AUR）汇率换算（÷ Currency_ExchangeRate）             |
-| 5    | Sales Performance Details Cell Display          | Formatting     | 格式化显示文本（integer / currency / delta_pct_0dp / percent_0dp + 扩展格式）   |
-| 6    | Sales Performance Details Cell Font Color       | Formatting     | 字体颜色（基础指标=fixed_black；vs LP=pos_neg_zero 三色）                         |
-| 7    | Sales Performance Details Cell Background Color | Formatting     | 背景色（ColName 层#FFFFFF vs 上层 #E6D9C7）                                     |
+| 序号 | 度量值名称                                      | Display Folder | 用途                                                                                      |
+| ---- | ----------------------------------------------- | -------------- | ----------------------------------------------------------------------------------------- |
+| 1    | Sales Performance Details Act Base Value        | Base Metrics   | This Period 基础值（9 种基础 ColType）；渠道上下文 + ColType 路由；RMB 原值               |
+| 2    | Sales Performance Details LY Base Value         | Base Metrics   | Last Period SLS Amt 基线（vs LP 分母）                                                    |
+| 3    | Sales Performance Details Base Value            | Base Metrics   | 总路由（vs LP 派生 + 整表 REMOVEFILTERS + 渠道三条件重路由；其余直接取 Act）；86 列全覆盖 |
+| 4    | Sales Performance Details Cell Value            | Cell Values    | 对外值：金额类（SLS Amt / AUR）汇率换算（÷ Currency_ExchangeRate）                       |
+| 5    | Sales Performance Details Cell Display          | Formatting     | 格式化显示文本（integer / currency / delta_pct_0dp / percent_0dp + 扩展格式）             |
+| 6    | Sales Performance Details Cell Font Color       | Formatting     | 字体颜色（基础指标=fixed_black；vs LP=pos_neg_zero 三色）                                 |
+| 7    | Sales Performance Details Cell Background Color | Formatting     | 背景色（ColName 层#FFFFFF vs 上层 #E6D9C7）                                               |
 
 ---
 
@@ -665,7 +696,8 @@ Sales Performance Details Cell Background Color =
 │  字段: data_date, platform, shop_name,                              │
 │        brand, super_season, product_type, category,                 │
 │        md_type, division, framework, ax_class, ...                  │
-│        net_sales_amt, net_sales_qty                                 │
+│        net_sales_amt, net_sales_qty, md_net_sales_amt,              │
+│        msrp_net_sales_amt                                           │
 │  a02_e2e_product_performance_inv_summary_d（库存类，日快照）        │
 │  字段: data_date + 商品维度（与 sales 同名同构，无渠道字段）,        │
 │        msrp_inv_amt, inv_qty                                        │
@@ -738,12 +770,13 @@ Sales Performance Details Cell Background Color =
 5. **占比分母的 ALLSELECTED**：SLS Amt% / Vert. Amt% 分母同时 ALLSELECTED 六个商品维度字段（一次只有一个字段在行上，其余为无操作），移除视觉对象内部行维度筛选、保留外部切片器；Horiz. Amt% 分母不 ALLSELECTED 商品字段（保留行筛选），改为 ALLSELECTED [platform] / [shop_name]（该行全渠道合计）。
 6. **SLS Amt% 与 Vert. Amt% 公式同构**：两者均为「单元格 SLS Amt / 该列渠道全部商品合计」，渠道上下文由列位置（TTL / 非 TTL）自动区分，Act Base Value 中共用同一组变量。
 7. **vs LP 口径**：this period / last period 对比，受 last period 时间筛选器影响；分子通过 `REMOVEFILTERS(Dim 整表) + ChannelGroup = 当前值 + Label_Value = 当前值 + ColType = "SLS Amt"` 三条件重路由取得（同渠道对比，ChannelGroup / Label_Value 标量在 CALCULATE 外捕获后重建筛选）；Last Period 值空或 0 时返回 BLANK。
-8. **LTD ST% 待定项**：销售区间起算 2024-01-01 为口径待定项，以变量 `__LTDStartDate` 承载（Act Base Value 内一处调整）；分母期末库存金额取 end period 范围内最后快照日单日值，LTD ST% 仅存在于 TTL 列。
+8. **LTD ST% 区间起点**：销售区间 = end period 所在财年第一天至 This Period end，起点读 Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day] 财年日历字段（按 TimeFrame_Min 落入的财年区间自关联生成，非固定日期）；分母期末库存金额取 end period 范围内最后快照日单日值，LTD ST% 仅存在于 TTL 列。
 9. **EOH Unit 口径差异**：原始口径 §40 公式写作 `sum(msrp_inv_amt)`（金额字段），与「期末库存数量」定义存在差异，本方案按数量口径 `sum(inv_qty)` 实现，需业务确认；确认若为金额口径，仅调整 `__EOHUnit` 的聚合字段。
 10. **inv 表无渠道字段**：a02_e2e_product_performance_inv_summary_d 无 platform / shop_name，渠道上下文不作用于 inv 侧；EOH Unit / LTD ST% 分母不受渠道筛选影响，需业务知悉该口径影响。
 11. **期末快照日机制**：`__EndPeriodDate` 取 end period 范围 [Max_This[TimeFrame_Min], Max_This[TimeFrame_Max]] 内最后一个有数据的快照日，用 REMOVEFILTERS(inv) 计算，保证快照日不随行维度 / 商品切片器漂移；快照缺数时自动回退到范围内最近一天。
 12. **vs LP 分子重路由必须整表 REMOVEFILTERS 的原因**：矩阵列头三层（ChannelGroup > Label > ColName）在视觉对象查询（SUMMARIZECOLUMNS）中以 GroupBy 组合筛选形式存在，`REMOVEFILTERS(Dim[ColName])` 单列写法无法从组合筛选中剥离 ColName 部分，残留的 ColName（vs LP 列）筛选与新加的 `ColType = "SLS Amt"` 互斥 → Dim 表空集 → 分子始终 BLANK（同坑在 Merchandising Core KPI 已实证沉淀，其注释：矩阵行/列标题保留的筛选器会导致冲突返回 BLANK）；正确模式 = CALCULATE 外捕获 ChannelGroup / Label_Value 标量 + `REMOVEFILTERS(整表)` + 三条件重建（ChannelGroup + Label_Value + ColType 唯一定位单行）。ChannelGroup / Label 层汇总单元格无唯一 ColType → BLANK → 显示 "-"。
 13. **汇率换算分层**：Base Value 层始终保留 RMB 原始值（vs LP 派生计算口径一致）；换算集中在 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1）；Cell Display 只拼接 Currency_Symbol。金额类判定用 Metric_IsCurrencyAmount（本模块无双模式，该字段直接生效）。
-14. **渠道上下文过滤器构造**：`__PlatformCtx` / `__ShopNameCtx` 用 UNION+FILTER 构造（避免 IF/SWITCH 分支退化表变量），作为 CALCULATE 表过滤器统一传入所有 sales 侧聚合，六种聚合（SLS Amt / SLS Unit / 渠道合计 / 行合计 / LTD 销售）共用同一渠道上下文。
+14. **渠道上下文过滤器构造**：`__PlatformCtx` / `__ShopNameCtx` 用 UNION+FILTER 构造（避免 IF/SWITCH 分支退化表变量），作为 CALCULATE 表过滤器统一传入所有 sales 侧聚合，八种聚合（SLS Amt / SLS Unit / MD 双字段 / 渠道合计 / 行合计 / LTD 销售）共用同一渠道上下文。
 15. **字段名已核对数据字典**：net_sales_amt / net_sales_qty / platform / shop_name / brand / super_season / product_type / category / md_type / division（sales 表）；msrp_inv_amt / inv_qty + 同名商品维度（inv 表）；日期字段统一为 data_date（date 类型）。
 16. **DAX 语法规范**：文本常量使用双引号（如 [md_type] = "FP"），单引号仅用于表名，列名使用方括号；与解决方案存在争议时一切以口径文档为准。
+17. **MD 指标（本次新增，12 列，每组末位 ColName_Sort=600）**：1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)，This Period 区间，渠道上下文随列位置（TTL = ALLSELECTED 全渠道；非 TTL = 对应 Label_Value 渠道）；percent_0dp 不含正号；分母（吊牌金额）空或 0 时返回 BLANK（避免 1 - BLANK() = 1 即 100% 折扣伪值，与 Label & Product Type 板块 MD 同款保护）；分子分母同表同币种，折扣率不受币种选择影响（Metric_IsCurrencyAmount = FALSE 不换算）。口径来源为业务新增指令，原口径文档 §33-§41 未含 MD，待口径文档同步补录。

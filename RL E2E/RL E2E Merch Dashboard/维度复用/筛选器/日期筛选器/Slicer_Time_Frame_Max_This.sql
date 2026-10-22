@@ -42,7 +42,9 @@ SELECT
     t2.`lp_timeframe_min` AS `Last_Fiscal_Month_Min_LP`,
     t2.`lp_timeframe_max` AS `Last_Fiscal_Month_Max_LP`,
         -- ★ 新增：财年第一天
-    fy.`fiscal_year_first_day` AS `Fiscal_Year_First_Day`
+    fy.`fiscal_year_first_day` AS `Fiscal_Year_First_Day`,
+    -- ★ 新增：财月第一天（TimeFrame_Min 所在财月的起始日）
+    fm.`timeframe_min` AS `Fiscal_Month_First_Day`
 FROM (
     -- 子查询：原始逻辑 + 计算 Last_Fiscal_Month
     SELECT
@@ -88,7 +90,11 @@ LEFT JOIN dim_t00_bi_fiscal_calendar t2
     AND t2.`timeframe_value` = t1.`Last_Fiscal_Month`
 -- ★ 财年关联：timeframe_min 落在哪个财年区间内，就取哪个财年的第一天
 LEFT JOIN fiscal_year fy
-    ON t1.`TimeFrame_Min` BETWEEN fy.`fiscal_year_first_day` AND fy.`fiscal_year_last_day`
+    ON t1.`TimeFrame_Max` BETWEEN fy.`fiscal_year_first_day` AND fy.`fiscal_year_last_day`
+-- ★ 新增：财月关联——TimeFrame_Min 落在哪个财月区间内，就取该财月的第一天
+LEFT JOIN dim_t00_bi_fiscal_calendar fm
+    ON  fm.`timeframe_label` = '月'
+    AND t1.`TimeFrame_Max` BETWEEN fm.`timeframe_min` AND fm.`timeframe_max`
 WHERE (t1.`TimeFrame_ID` = 'Day' AND t1.`timeframe_value` >='2025-01-01' AND t1.`timeframe_value` < CURDATE()) 
 OR (t1.`TimeFrame_ID` = 'Week' AND t1.`TimeFrame_Key` >=202540)
 OR (t1.`TimeFrame_ID` = 'Month' AND t1.`TimeFrame_Key` >=202510)

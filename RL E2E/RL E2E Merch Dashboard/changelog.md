@@ -23,6 +23,20 @@
 - **关联文件**: Sales Performance Details by Channel/Sales_Performance_Details_ms.md
 - **备注**: 分母 LY Base Value 无重路由、不受影响；ChannelGroup / Label 层汇总单元格显示 "-" 的行为不变
 
+## [2026-10-22 20:30] DAX 修改 + 测试 SQL 新建 — Sales Performance Details 全组新增 MD 列 + LTD ST% 起算日改财年日历字段
+
+- **模块**: Merchandise Performance Overview - Sales Performance Details by Channel
+- **任务**: ① 12 个分组（Platform TTL / 4 平台 / Store TTL / 6 店铺）各新增 MD 列（每组末位）；② LTD ST% 起算日由固定 DATE(2024,1,1) 改为财年日历字段；③ 输出本模块首个测试 SQL（四段全指标）
+- **操作**: 修改 + 新建
+- **变更内容**:
+  - Dim_ColMetric_Sales_Performance_Details.md：74 → 86 行（Platform 组 36 行 = TTL 8 列 + 4 渠道 × 7 列；Store 组 50 行 = TTL 8 列 + 6 店铺 × 7 列），新增 MD 列 Metric_ID 75-86（ColType="MD"、percent_0dp、fixed_black、非金额类、ColName_Sort=600 每组末位）；头注释规模 / 格式说明 / 排序说明 / 各分组列数同步
+  - Sales_Performance_Details_ms.md：Act Base Value 新增 __MdAmt / __MsrpAmt / __MD 变量（渠道上下文 + This Period 区间）与 SWITCH "MD" 分支；§1.1（86 列）/ §1.2（10 种 ColType）/ §1.3 / §2 / §3.1 / §3.3 / §4.5 / §5 / §6 / 注意事项 14、17 全量同步；MD 空值保护：分母（msrp 合计）空或 0 时返回 BLANK，避免 1 - BLANK() = 1（100% 折扣）伪值，与 Label & Product Type 板块 MD 同款
+  - LTD ST% 起算日调整：DATE(2024,1,1) 固定值改为 SELECTEDVALUE(Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day])（end period 所在财年第一天，财年日历字段），同步更新 §1.3 时间口径表 / 说明 / §2 现状 / §4.1 依赖与变量 / 注意事项 8 共 7 处；口径来源为业务指令（原口径文档 LTD 待定项落定）
+  - 新建 test_Sales_Performance_Details_ms.sql（381 行，四段独立执行，行维度 brand）：段 1 Platform TTL（8 指标）/ 段 2 Platform 各个（7 指标，行 = platform × brand）/ 段 3 Store TTL（8 指标）/ 段 4 Store 各个（7 指标，行 = shop_name × brand）；渠道上下文对齐 §3.2（TTL 无渠道条件、Platform 组只限 platform、Store 组只限 shop_name）；Vert./Horiz./SLS Amt% 分母分别对齐 ALLSELECTED 逻辑；LTD 起算日 '2026-03-29'（FY27 与 This 起点重合）
+  - NULL 语义逐项对齐 DAX：vs LP 的 this NULL 按 0（→ -1）/ 占比分子 NULL → 0 / LTD ST% 单侧 NULL 按 0 / AUR 分母 NULL 拦截 / MD 分母空零拦截；段 1 与段 3 应同值互验，段 2 与段 4 Horiz. Amt% 同 brand 同值
+- **关联文件**: Sales Performance Details by Channel/Dim_ColMetric_Sales_Performance_Details.md；Sales_Performance_Details_ms.md；test_Sales_Performance_Details_ms.sql
+- **备注**: MD 口径来源为业务新增指令，原口径文档 §33-§41 未含 MD 待补录；对数假设无外部切片器筛选；金额为 RMB 原值（汇率换算 / 符号拼接在 Display 层不在 SQL 范围）
+
 ## [Dimension Cross Analysis] 模块
 
 ## [2026-10-19 15:31] DAX 新建 — Label & Product Type Inventory Structure 表格解决方案

@@ -59,4 +59,19 @@ Store事实表实际值：TLL的时候需要ALLSELECTED函数移除视觉对象�
 综合以上信息，不懂就问，输出Sales_Performance_Details_ms.md的完整解决方案。
 
 
+# MPO第五轮提示词:
+待修改文件：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales Performance Details by Channel\Dim_ColMetric_Sales_Performance_Details.md
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales Performance Details by Channel\Sales_Performance_Details_ms.md
 
+现在上述我写的待修改文件有新的调整，Platform/Store下的TTL以及各个Platform或者Store，都需要新增一个MD指标，指标逻辑为：
+1-sum(md_net_sales_amt)/sum(msrp_net_sales_amt)
+表：a02_e2e_product_performance_sales_summary_d
+数据类型为：percent_0dp
+排在每个分组的最后。
+先修改列指标维度文件：Dim_ColMetric_Sales_Performance_Details.md，在修改解决方案文件：Sales_Performance_Details_ms.md
+最后输出测试SQL，一共四段，
+1、Platform TTL
+2、Platform 各个Platform
+3、Store TTL
+4、Store 各个Store

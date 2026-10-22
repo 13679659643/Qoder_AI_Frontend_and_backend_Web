@@ -356,7 +356,7 @@
 
 ## 子模块七：Item Stockout & Slow Mover Alert
 
-> **商品维度切换**: Item：`spu_id` / SKU：`sku_id`（仅取 Top 100，排序依据原始口径未标注，见待确认项汇总）
+> **商品维度切换**: Item：`spu_id` / SKU：`sku_id`（仅取 Top 10，排序依据SLS Amt排序，降序取最大的十条。所有需要给出排序度量Dax，排名：RANK 窗口函数（金额降序 + Item：`spu_id` / SKU：`sku_id` 字母序决胜，唯一名次），所以要有两个排序度量）
 > **属性列**: US（`us_style`）、Class（`ax_class`）、Type（`product_type`）、Series（`special_series`）、Image（`spu_img_url`，商品图片）、Product tag（`computed_product_tag`）、Special Supply（`special_supply`）；其中 Product tag / Special Supply 底表为 `s02_inventory_stock_sales_detail_d`
 
 ### 21. SLS Amt — DCom净销售额
@@ -447,7 +447,7 @@
 | **业务定义** | 所选时间范围 end period 所在财年第一天至 end period 最后一天的净销售数量 |
 | **计算公式** | 时间范围看 this period 的 end period 所在财年第一天至 end period 最后一天；该 spu_id/sku_id 下 `sum(product_qty)` |
 | **数据底表** | `s02_trade_sku_data_d` |
-| **注意** | 同 MTD SLS Unit：原始口径计算指标列写"时间范围看this period"，按 Definition 的 YTD 区间理解 |
+| **注意** | 大于等于，财年第一天，日期表有对应字段：Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day] ；小于等于end period最后一天，Slicer_Time_Frame_Max_This[TimeFrame_Max]|
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 
