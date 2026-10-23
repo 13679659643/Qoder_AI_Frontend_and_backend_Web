@@ -159,6 +159,24 @@
 - **关联文件**: Dimension Cross Analysis/4 Handbags Sales Analysis by Dimension/test_Handbags_Sales_ms.sql；Handbags_Sales_ms.md（§7）
 - **备注**: net_sales_amt 按行级 ROUND(product_qty×sales_price,6) 还原；段 4 行数为 SKU 级明细量级，对数时可按维度值先筛选
 
+## [2026-10-22 11:05] DAX 新建 — Item Stockout_Table 双表格 Top 100 解决方案（SPU/SKU 切换 + 三元组桥接）
+
+- **模块**: Dimension Cross Analysis - Item Stockout & Slow Mover Alert
+- **任务**: 子模块七（§21~§33）十三个指标双表格（SPU / SKU 按钮书签切换，各取 SLS Amt Top 100）解决方案，命名为 Item_Stockout_Table
+- **操作**: 新建
+- **变更内容**:
+  - 新建 33 个度量值（§4.1~§4.33）：Rank 2 个（SPU Rank / SKU Rank）+ 十三个指标 Value/Display 26 个（SLS Amt / SLS Units / EOH / In-transit / Weeks Cover / MTD / YTD / ST% / AUR / MD / Alert / Available Sizes / Replenishment）+ 属性度量 5 个（US Style / AX Class / SPU Image 一对一属性 SELECTEDVALUE，Product Tag / Special Supply inv 桥接）
+  - 行主键三元组（业务修正）：(spu_id / sku_id, product_type, special_series) 为唯一键——product_type / special_series 一对多（同一主键展开多行各自排名），us_style / ax_class / spu_img_url 一对一经值区域度量输出，不进字段井（避免六列行分组下视觉级 Rank 筛选器落地为跨列组合筛选侵入候选集）
+  - Rank 四键决胜：金额 DESC → 主键（spu_id / sku_id）→ product_type → special_series 字母序 ASC——三元组主键下仅一列决胜无法消除同行并列，四键保证名次唯一；relation = ADDCOLUMNS(ALL(主键三列), @Amt) 物化候选金额，ALL 三列整体清除行分组与视觉级落地的组合筛选；候选排除空白主键与当期无金额
+  - 单度量双维度：trade 侧零分支（行分组筛选自动传导）；inv 侧 ISINSCOPE(trade[spu_id]) 判定 + TREATAS 三列交集桥接 + IF 标量双分支（TREATAS / CALCULATETABLE 不经 IF 传递）——除 Rank 外每指标一个度量两表通用
+  - Alert 优先级聚合（用户裁定）：SPU 表该组合任一 sku 缺货→"缺货"，否则任一滞销→"滞销"，否则"其他"；快照日无 inv 记录返回 BLANK；oos_tag 判空含空字符（LEN(TRIM)>0）
+  - 渠道：Slicer_Platform_Selection / Slicer_Store_Name 与 trade 表一对多自动传导（不显式处理，Top 100 候选随筛选收窄）；inv 侧无渠道字段不受影响，ST% / Weeks Cover 分子分母渠道不对称为物理限制
+  - Product Tag / Special Supply（用户裁定进表）：SKU 表快照日单行 MAX 单值；SPU 表 distinct 顿号拼接
+  - 视觉级筛选器：Rank 介于 1 与 100（含下界）+ SLS Amt Value 不为空双保险；行排序按 Rank 升序
+  - MTD / YTD 起点读 Slicer_Time_Frame_Max_This 表 Fiscal_Month_First_Day / Fiscal_Year_First_Day；MD 行级乘积 NULL 行不计入 + 分母 0/任一侧 BLANK 拦截（1-BLANK=1 失真防护）；总计行不特判（交由视觉对象默认生成）
+- **关联文件**: Dimension Cross Analysis/4 Item Stockout & Slow Mover Alert/Item_Stockout_Table.md
+- **备注**: 测试 SQL 本轮未要求，还原要点见方案 §7；口径修正项（§25 分子分母写反、§28 ST% 数量口径、§33 reph_qty 以字段为准）已内嵌
+
 ## [2026-10-22 14:00] DAX 新建 — Handbags & Outwear Sales Performance 矩阵解决方案（含列维度表）
 
 - **模块**: Dimension Cross Analysis - Handbags Sales Performance

@@ -76,7 +76,7 @@ D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Da
 MD_Sales_table。
 
 
-# DCA 8 Handbags Sales 第三轮提示词:
+# DCA 8 Handbags Sales 第四轮提示词:
 1、
 参考文件格式:
 D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\3 MD Sales Structure\MD_Sales_table.md
@@ -121,23 +121,15 @@ MD Sales Table IsEmpty =
 Handbags_Sales_ms。
 
 
-# DCA 7 Handbags & Outwear Sales 第三轮提示词:
+# DCA 4 Item Stockout & Slow Mover Alert  第五轮提示词:
 口径文档:
 D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\口径文档\口径Markdown格式\Dimension Cross Analysis.md
-只关注口径文档中的子模块十：Handbags Sales Performance，我们跳着做的不用惊讶。
-类似解决方案:
-D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales Performance Details by Channel\Dim_ColMetric_Sales_Performance_Details.md
-D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales Performance Details by Channel\Sales_Performance_Details_ms.md
+只关注口径文档中的子模块七：Item Stockout & Slow Mover Alert，我们跳着做的不用惊讶。
+排名参考文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\SKU Sales Tracking\2 Top Color Sales Performance\Top_Color_Sales_Performance_table.md
+多事实表桥接参考文档：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\8 Handbags Sales Analysis by Dimension\Handbags_Sales_ms.md
 
-现在这个场景，和我提到的解决方案极度类似，商品维度切换：Category = Handbags/Outwear，作为前置筛选条件在视觉对象筛选器中完成，这里只有一个行维度为spu_model，有专门的维度表Slicer_Spu_Model，和事实表一对多关联，不用显示Dax处理。Slicer_Spu_Model里面包括排序字段，为了避免“按列排序（Sort by Column）”功能的隐藏筛选传播，存在使用ALLSELECTED的时候需要针对整张表。列维度，渠道分组只有一个Store，TTL下有七个指标，每个Store下指标都是4个且一模一样，图中指标显示是换行态，我们做的时候不需要在意这些，直接空格英文单词就行，比如：SLS Unit、SLS Amt、SLS Amt%等等。
-TTL指标：SLS Unit、SLS Amt、SLS Amt%、Amt vs LP、ST%、EOH、EOH vs LP、
-单个Store：SLS Unit、SLS Amt、SLS Amt%、vs LP
-由于矩阵在检测到该行所有度量均为 BLANK() 时，通常会自动隐藏该行（包括层级行），需要所有指标都为 BLANK() 才会自动隐藏该行。所以Display中返回BLANK()。不返回"-"；
-综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\7 Handbags Sales Performance目录下输出Handbags_&_Outwear_ms;
-Dim_ColMetric_Handbags&Outwear_Sales_ms列指标维度表
-SQL参数
--- Store Name:       TTL+六个Store
--- This Period:     dt ∈ ['2026-03-29', '2026-07-25']（区间汇总）
--- Last Period:     dt ∈ ['2025-03-30', '2025-07-26']（区间汇总）
--- 库存相关end period最后一天This：'2026-07-25'
--- 库存相关end period最后一天Last：'2025-07-26'
+需求场景：我有两个按钮一个SPU一个SKU，对应s02_trade_sku_data_d[spu_id]\s02_trade_sku_data_d[sku_id],Powerbi中我要做的是spu_id维度的一张表，sku_id维度的一张表，注意是表不是矩阵，通过按钮去切换。仅取 Top 100，排序依据SLS Amt排序，降序取最大的100条。所有需要给出排序度量Dax，排名：RANK 窗口函数（金额降序 + Item：`spu_id` / SKU：`sku_id` 字母序决胜，唯一名次），所以要有两个排序度量；
+表维度字段：spu_id/sku_id、us_style、ax_class、product_type、special_series、spu_img_url，区别仅在于spu_id/sku_id，同一个spu_id/sku_id后面五个属性业务上是一样的，所以只需要通过spu_id/sku_id去过滤行就行了。我以s02_trade_sku_data_d表中的字段作为表维度，所以涉及到s02_inventory_stock_sales_detail_d表的指标需要显示处理。
+能否每个指标只写一个度量，就可以满足spu_id/sku_id，如果不行的话就只有分开写。注意这里是表只有总计，由页面提供，没用小计没有层级。
+
+综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\4 Item Stockout & Slow Mover Alert目录下输出Item_Stockout_Table;

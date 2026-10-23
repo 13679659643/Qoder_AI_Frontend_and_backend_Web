@@ -356,7 +356,7 @@
 
 ## 子模块七：Item Stockout & Slow Mover Alert
 
-> **商品维度切换**: Item：`spu_id` / SKU：`sku_id`（仅取 Top 10，排序依据SLS Amt排序，降序取最大的十条。所有需要给出排序度量Dax，排名：RANK 窗口函数（金额降序 + Item：`spu_id` / SKU：`sku_id` 字母序决胜，唯一名次），所以要有两个排序度量）
+> **商品维度切换**: Item：`spu_id` / SKU：`sku_id`（仅取 Top 100，排序依据SLS Amt排序，降序取最大的100条。所有需要给出排序度量Dax，排名：RANK 窗口函数（金额降序 + Item：`spu_id` / SKU：`sku_id` 字母序决胜，唯一名次），所以要有两个排序度量）
 > **属性列**: US（`us_style`）、Class（`ax_class`）、Type（`product_type`）、Series（`special_series`）、Image（`spu_img_url`，商品图片）、Product tag（`computed_product_tag`）、Special Supply（`special_supply`）；其中 Product tag / Special Supply 底表为 `s02_inventory_stock_sales_detail_d`
 
 ### 21. SLS Amt — DCom净销售额
@@ -433,7 +433,7 @@
 | **业务定义** | 所选时间范围 end period 所在财月第一天至 end period 最后一天的净销售数量 |
 | **计算公式** | 时间范围看 this period 的 end period 所在财月第一天至 end period 最后一天；该 spu_id/sku_id 下 `sum(product_qty)` |
 | **数据底表** | `s02_trade_sku_data_d` |
-| **注意** | 原始口径计算指标列写"时间范围看this period"，按 Definition 的 MTD 区间理解（见待确认项汇总） |
+| **注意** | 日期表有对应字段：Slicer_Time_Frame_Max_This[Fiscal_Month_First_Day] ；小于等于end period最后一天，Slicer_Time_Frame_Max_This[TimeFrame_Max] |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 
@@ -498,11 +498,11 @@
 | 项目 | 内容 |
 |---|---|
 | **指标名称** | Alert / 判断规则 |
-| **业务定义** | 缺货 oos → 感叹号；slow mover → 下降符号 |
-| **计算公式** | `oos_tag = ？` → 感叹号；`computed_product_tag = "slow mover"` → 下降符号 |
+| **业务定义** | 缺货、滞销、其他 |
+| **计算公式** | `oos_tag` 和`computed_product_tag `字段共同决定 |
 | **数据底表** | `s02_inventory_stock_sales_detail_d` |
-| **注意** | 原始口径"oos_tag =  -> 感叹号"中判定值为空，待业务确认（见待确认项汇总） |
-| **数据类型** | 文本/图标（感叹号 / 下降符号），无数值格式 |
+| **注意** | 1、滞销：如果computed_product_tag = 'slow mover' 并且oos_tag不为空，则输出为"滞销"； 2、缺货：如果computed_product_tag <> 'slow mover' 并且oos_tag不为空, 则输出为"缺货"；3、oos_tag为空输出为"其他 |
+| **数据类型** | 文本 |
 | **数据格式** | 无 |
 
 ---
@@ -515,7 +515,7 @@
 | **业务定义** | 期末在库库存的尺码枚举值 |
 | **计算公式** | 看所选时间范围 end period 最后一天；该 spu_id/sku_id 下 distinct `sku_size` where `inv_qty > 0` |
 | **数据底表** | `s02_inventory_stock_sales_detail_d` |
-| **注意** | 原始口径字段名 `inv_qty` 与同模块 EOH 字段（`stock_inv_qty`）不一致，DAX 实现时需对照数据字典确认 |
+| **注意** | 如果有多个值，用顿号拼接后输出 |
 | **数据类型** | 文本枚举，无数值格式 |
 | **数据格式** | 无 |
 
@@ -529,7 +529,7 @@
 | **业务定义** | 近4周的销售数量平均值 * 5/3/1 -（期末库存数量 + 在途库存数量） |
 | **计算公式** | 看所选时间范围 end period 最后一天；该 spu_id/sku_id 下 `sum(reph_qty)` |
 | **数据底表** | `s02_inventory_stock_sales_detail_d` |
-| **注意** | 计算指标列直接取 `reph_qty` 字段（以字段为准，Definition 公式由数仓预计算实现）；"5/3/1"倍数含义待业务确认（见待确认项汇总） |
+| **注意** | 计算指标列直接取 `reph_qty` 字段（以字段为准，Definition 公式由数仓预计算实现）； |
 | **数据类型** | integer → 整数，千分位整数 |
 | **数据格式** | `#,##0` |
 
