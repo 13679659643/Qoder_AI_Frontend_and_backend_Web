@@ -151,3 +151,32 @@ computed_product_tag字段只存在于s02_inventory_stock_sales_detail_d表，�
 -- end period最后一天：'2026-07-25'
 -- end period所在财年第一天：'2026-03-29'
 -- end period所在财月第一天：'2026-06-28'
+
+
+# DCA 5 Top & OPP SKUs Analysis  第六轮提示词 Top:
+口径文档:
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\口径文档\口径Markdown格式\Dimension Cross Analysis.md
+只关注口径文档中的子模块九：Top & OPP SKUs Analysis，这个模块其实包括了两个部分，我们先做简单的Top部分。
+维度值取最新一条参考文档:
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\4 Item Stockout & Slow Mover Alert\Item_Stockout_Table.md
+排序参考文档：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\SKU Sales Tracking\1 Top Size Sales Performance\Top_Size_Sales Performance_table.md
+
+需求场景：
+还是涉及两个表：s02_trade_sku_data_d、s02_inventory_stock_sales_detail_d，表中的字段依旧是使用s02_trade_sku_data_d表的字段，所以涉及库存相关的指标需要桥接。
+我会前置筛选即再视觉对象筛选处，筛选Slicer_Framework[framework]='Foundation',维度表和事实表一对多关联，无需显示处理。
+表字段有以下，口径文档可能没有显示全:
+1、
+category：s02_trade_sku_data_d[category]
+sku_id：s02_trade_sku_data_d[sku_id]
+spu_img_url：筛选条件下，取category+sku_id+dt最新的一条数据，排序参考文档中有参考。
+product_type：筛选条件下，取category+sku_id+dt最新的一条数据，排序参考文档中有参考。
+md_price：筛选条件下，取category+sku_id+dt最新的一条数据，排序参考文档中有参考。
+Weeks Cover：口径文档40. Weeks Cover — 库存周转周数
+SLS Units：口径文档41. SLS Units — DCom净销售数量
+EOH：口径文档42. EOH — 期末库存数量
+Predictive Buy：s02_trade_sku_data_d[predictive_buy]为String类型，值包括"1"\"0"\空。筛选条件下，取category+sku_id+dt最新的一条数据，排序参考文档中有参考，并且如果为"1"，输出为"Y","0"对应"N",其余为空。
+隐藏指标，SLS Amt — DCom净销售额：该 category+sku_id分组 下 `sum(net_sales_amt)`，排序规则使用此字段值降序排序。
+筛选条件下，每个category会有多个sku_id，需要生成Sort Key表格行排序键，然后用于视觉对象筛选中过滤Top3的，这样每个category分组下就只有三个SKU。
+
+综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\5 Top & OPP SKUs Analysis目录下输出Top_SKUs_Analysis_Table;
