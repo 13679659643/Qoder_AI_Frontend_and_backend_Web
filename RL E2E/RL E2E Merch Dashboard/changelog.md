@@ -177,6 +177,65 @@
 - **关联文件**: Dimension Cross Analysis/4 Item Stockout & Slow Mover Alert/Item_Stockout_Table.md
 - **备注**: 测试 SQL 本轮未要求，还原要点见方案 §7；口径修正项（§25 分子分母写反、§28 ST% 数量口径、§33 reph_qty 以字段为准）已内嵌
 
+## [2026-10-23 10:30] DAX 修改 — Item Stockout_Table v2.0 维度收敛为单列主键 + 属性字段全部指标化
+
+- **模块**: Dimension Cross Analysis - Item Stockout & Slow Mover Alert
+- **任务**: 需求变更——模块维度收敛为单列 spu_id/sku_id，七个属性字段全部指标化输出（最新值规则），排名与指标聚合按主键粒度
+- **操作**: 修改（文档整体重写，v1.0 三元组结构废止）
+- **变更内容**:
+  - 字段井由三元组 (spu_id/sku_id, product_type, special_series) 收敛为单列主键——最终展示不重复的 spu_id/sku_id；product_type/special_series 转属性指标输出
+  - 属性字段指标化（7 个，用户两轮裁定取值规则）：trade 侧六字段（us_style/ax_class/product_type/special_series/spu_img_url/special_supply）= This Period 区间 + 主键筛选下 MAX(dt) 那天 distinct 顿号拼接（同日多值常态全部拼接；一对一属性退化单值；区间无记录/当天全空白→BLANK）；Product Tag = inv 快照日 distinct 拼接（该表独有字段从 inv 取）；special_supply 改源为 trade（v1.0 曾从 inv 桥接）
+  - Available Sizes 维持不取最新：快照日全部尺码（inv_qty>0）distinct 拼接（口径 §32 原文语义，与属性最新值规则明确区分）
+  - Rank 由四键决胜简化为两键（金额 DESC → 主键 ASC）：主键单列在候选集内唯一，两键即保证名次唯一；relation 简化为 ALL(主键单列)
+  - 全部指标聚合粒度扩大：主键全量（跨 product_type/special_series/尺码/渠道明细汇总）；inv 桥接由三列 TREATAS 交集简化为主键单列 TREATAS
+  - 度量值数 33 → 35（新增 Product Type / Special Series 属性度量；US Style/AX Class/SPU Image/Special Supply 由 SELECTEDVALUE 单值模式重写为最新日期拼接模式；Product Tag 由 SPU拼接/SKU单值双模式统一为拼接模式）
+  - 机制章节同步重写（§1.1/§1.2/§1.3 新增属性取值规则/§1.6/§1.7/§2/§3.1~§3.4/§5/§6.1/§7/§8 重写，注意事项 17 条）
+- **关联文件**: Dimension Cross Analysis/4 Item Stockout & Slow Mover Alert/Item_Stockout_Table.md
+- **备注**: 头部版本记录保留 v1.0→v2.0 演进说明；测试 SQL 未输出（本轮未要求），还原要点见 §7（属性字段 SQL 还原 = MAX(dt) 当天 GROUP_CONCAT distinct）
+
+## [2026-10-23 15:40] DAX 修改 — Item Stockout_Table v2.1 Rank 度量性能优化（无 relation 窗口计算）
+
+- **模块**: Dimension Cross Analysis - Item Stockout & Slow Mover Alert
+- **任务**: 两个 Rank 度量卡顿优化——用户反馈“表中每一行都要去计算一次 ADDCOLUMNS”（relation 为表表达式时每单元格物化一次候选集）
+- **操作**: 修改
+- **变更内容**:
+  - SPU Rank / SKU Rank 重写为 RANK 无 relation 用法：RANK(DENSE, ORDERBY(金额 CALCULATE DESC, 主键 ASC), LAST)——省略 relation 时默认 ALLSELECTED(orderBy 中的所有列)（官方文档语义），引擎对查询行集执行一次窗口排序计算（窗口函数下推，O(行数 log 行数)），废弃 FILTER(ADDCOLUMNS(ALL(主键), @Amt)) 表达式 relation（每单元格完整物化一次候选集，O(行数 × 候选集)，卡顿根源）
+  - 空白主键行排除迁移：原 relation 内 FILTER 排除 → 视觉级列筛选器「spu_id/sku_id 不为空」（列筛选器直接收窄查询行集，Rank 无 relation 行集同步收窄；文本列 NULL 与空字符均归 (Blank) 组被排除）——§3.2 / §6.1 视觉级筛选器由两条扩为三条
+  - blanks = LAST：金额 BLANK 行强制垫尾（净销售含负值退货，DEFAULT 的数值空白位于 0 与负值之间会插入名次序列）；当期无金额行不占有效名次 + 外层 IF 拦截（区间筛选排除）
+  - ORDERBY 表达式约束写入注释：必须按行集行上下文求值（内联 CALCULATE），不可引用当前行标量 VAR（全行集排序键同值、名次恒 1）
+  - 机制章节同步重写（§1.6 新增无 relation 窗口计算条 / §3.1 分层图 / §3.3 改名“排名行集与窗口计算” / §8 注意事项 5-6 重写含“禁止改回”警示）；头部版本记录 v2.1
+- **关联文件**: Dimension Cross Analysis/4 Item Stockout & Slow Mover Alert/Item_Stockout_Table.md
+- **备注**: 排名语义不变（金额降序 + 主键字母序决胜，名次唯一，Top 100 恰好 100 行）；对数时需确认表格已配三条视觉级筛选器（新增主键不为空）
+
+## [2026-10-23 17:10] DAX 修改 — Item Stockout_Table v2.2 Rank 回退 relation 用法 + 行筛选改原生 TopN 列筛选器
+
+- **模块**: Dimension Cross Analysis - Item Stockout & Slow Mover Alert
+- **任务**: 修复 v2.1 Rank 无 relation 写法报错"已省略 RANK 的关系参数，并且其 ORDERBY 子句包含非引用列表达式。不支持此操作"，并重新定位性能根源
+- **操作**: 修改
+- **变更内容**:
+  - SPU Rank / SKU Rank 回退 relation 用法（v2.0 模式）：RANK(DENSE, FILTER(ADDCOLUMNS(ALL(主键), @Amt, CALCULATE), 非空白 && @Amt 非空), ORDERBY(@Amt DESC, 主键 ASC))——引擎约束实证：**RANK 省略 relation 时 ORDERBY 仅允许简单列引用**（引擎依 orderBy 列构建默认行集），CALCULATE 等度量表达式作排序键直接报错；按度量值排名必须显式指定 relation
+  - 性能根源重新定位：卡顿元凶非 relation 本身，而是「Rank 介于 1 与 100」**度量筛选器**（迫使引擎对全部主键分组逐组求值 Rank，每组物化一次候选集，O(行数 × 候选集)，数万主键量级下明显卡顿）
+  - 行筛选改原生「前 N 个」列筛选器：spu_id/sku_id 前 100 个（按 Item Stockout SLS Amt Value 降序）——引擎单遍分组求值排序度量取 TopN，Rank 仅对可见 100 行求值；候选表跨行共享（各行候选求值上下文一致，ALL(主键) 移除行内差异筛选，引擎缓存复用，有效成本 = 一次候选物化 + 100 次名次匹配）
+  - 视觉级筛选器三条定型：①主键 前 100 个（TopN 列筛选器）②SLS Amt Value 不为空 ③主键 不为空；**禁止配置 Rank 区间度量筛选器**（§3.2 / §6.1 / §8 注 5-6 明示）
+  - 排名恒为全局真实名次：TopN 落地筛选被候选集 ALL(主键) 移除，可见行恰为全局 Top 100 → 显示 1..100；边界并列提示（TopN 引擎并列打破不确定，金额完全相等且恰跨第 100 名边界时与 Rank 决胜链可能不一致，6 位小数精度下概率极低）
+  - 机制章节同步重写（§1.6 / §1.7 / §3.1 / §3.2 / §3.3 / §4.1 / §4.2 / §6.1 / §8，头部版本记录 v2.2，v2.1 条目标注"被引擎约束拒绝，已回退"保留实证）
+- **关联文件**: Dimension Cross Analysis/4 Item Stockout & Slow Mover Alert/Item_Stockout_Table.md
+- **备注**: 排名语义与 v2.0 完全一致（金额降序 + 主键字母序决胜，名次唯一）；落地操作：①两个 Rank 度量替换为 §4.1/§4.2 代码 ②删除视觉对象上「Rank 介于 1 与 100」筛选器 ③新增「spu_id/sku_id 前 100 个（按 SLS Amt Value 降序）」列筛选器
+
+## [2026-10-23 18:20] DAX 修改 — Item Stockout_Table v2.3 Alert 判定规则修订 + 测试 SQL 输出
+
+- **模块**: Dimension Cross Analysis - Item Stockout & Slow Mover Alert
+- **任务**: Alert 判定规则修订（业务确认）+ TopN 列筛选器定型确认 + 输出两段测试 SQL
+- **操作**: 修改
+- **变更内容**:
+  - Alert 判定规则修订（§4.23 / §1.2 / §8 注 8）：缺货 = oos_tag = "1"（String 字面量，用户确认字段为 String 类型）；滞销 = computed_product_tag = 'slow mover'；其他 = 有快照日记录但两条件均不成立；两条件 SKU 级互斥（oos_tag="1" 时 tag 必不为 'slow mover'）——SKU 表单行判定免优先级（结构与 SPU 分支同构，单行下聚合退化）；SPU 表按最高预警级别聚合（任一 sku 缺货 → "缺货"，否则任一滞销 → "滞销"，否则"其他"）；废弃原"oos_tag 不为空且 tag<>/='slow mover'"两分支判定与 oos_tag 判空含空字符逻辑（NULL 语义安全：oos_tag NULL 时 <>"1" 不成立）
+  - 新建 test_Item_Stockout_Table.sql（328 行，两段独立执行）：SQL 1/2 SPU 维度（GROUP BY spu_id，Alert 优先级聚合 MAX(CASE)）、SQL 2/2 SKU 维度（GROUP BY sku_id，单行互斥判定）；每段 ORDER BY sls_amt_this DESC + 主键 ASC + LIMIT 100（对齐 PBI TopN 列筛选器与行序）；DENSE_RANK() 两键决胜对齐 PBI Rank
+  - SQL 结构：trade_base（This Period + 主键非空）→ trade_maxdt（主键 MAX(dt)）→ trade_attr（最新日期当天 distinct 属性顿号拼接，NULLIF(TRIM()) 排空白）→ trade_agg（指标聚合，net_sales_amt 行级还原，MD 行级乘积 CASE 拦截 NULL）→ inv_agg（快照日单日，库存三指标 + Alert 判定 + Available Sizes（inv_qty>0 尺码拼接）+ Product Tag 拼接）→ LEFT JOIN 主查询（ST% / Weeks Cover / AUR / MD 空值边界全部 CASE 拦截对齐 DAX）
+  - 参数：Platform / Store 全选、This Period ['2026-03-29','2026-07-25']、快照日 '2026-07-25'（用户确认 end period 最后一天，非参数模板残留的 '2025-07-26'）、财月首日 '2026-06-28'、财年首日 '2026-03-29'（YTD 与 This Period 重合）；Last Period / Last Year / This Year 组参数本方案无 vs 指标不参与计算，参数区留档
+  - 同步更新方案文档 §7 验证方法（指向测试文件 + 两段结构 + 参数区）；头部版本记录 v2.3
+- **关联文件**: Dimension Cross Analysis/4 Item Stockout & Slow Mover Alert/Item_Stockout_Table.md；test_Item_Stockout_Table.sql
+- **备注**: TopN 列筛选器沿用 v2.2 定型（用户确认"直接使用自带的 TopN 列筛选器"）；对数时 PBI 表格 100 行 vs SQL 前 100 行逐列比对
+
 ## [2026-10-22 14:00] DAX 新建 — Handbags & Outwear Sales Performance 矩阵解决方案（含列维度表）
 
 - **模块**: Dimension Cross Analysis - Handbags Sales Performance

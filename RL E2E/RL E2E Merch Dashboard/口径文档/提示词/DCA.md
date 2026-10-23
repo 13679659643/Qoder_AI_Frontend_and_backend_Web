@@ -133,3 +133,21 @@ D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Da
 能否每个指标只写一个度量，就可以满足spu_id/sku_id，如果不行的话就只有分开写。注意这里是表只有总计，由页面提供，没用小计没有层级。
 
 综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\4 Item Stockout & Slow Mover Alert目录下输出Item_Stockout_Table;
+
+上述维度有问题，我们讨论一下：
+表中现在是涉及到以下八个表字段相关的：spu_id/sku_id、us_style、ax_class、product_type、special_series、spu_img_url、computed_product_tag、special_supply
+现在需求变化，一切计算都按spu_id/sku_id维度计算了，其他字段存在多行的都只展示最新的那行，用户选择了一个时间段，也只展示最新的那条，比如先筛选条件以及当前行上下文的筛选下，us_style如果存在多少，那么表中只展示当前spu_id/sku_id下，dt+us_style最新的那条数据。
+相当于这个模块的维度只有spu_id/sku_id，其余所有字段，都当成指标去写逻辑处理了，最终展示的一定是不重复的spu_id/sku_id；
+排名也是按照spu_id/sku_id维度去排名。
+computed_product_tag字段只存在于s02_inventory_stock_sales_detail_d表，那就从这个表去，其余维度值在s02_trade_sku_data_d取。
+最特殊的这个Available sizes指标，不是取最新，而是spu_id/sku_id下所有的尺码顿号拼接。
+
+-- Platform:              'ALL'（全选，等价不筛选，SQL 中不附加条件）
+-- Store Name:            'ALL'（全选，等价不筛选，SQL 中不附加条件）
+-- This Period:     dt ∈ ['2026-03-29', '2026-07-25']（区间汇总）
+-- Last Period:     dt ∈ ['2025-03-30', '2025-09-27']（区间汇总）
+-- This Year:   dt ∈ ['2026-03-29', '2026-07-25']（区间汇总）
+-- Last Year:   dt ∈ ['2025-03-30', '2025-07-26']（区间汇总）
+-- end period最后一天：'2026-07-25'
+-- end period所在财年第一天：'2026-03-29'
+-- end period所在财月第一天：'2026-06-28'
