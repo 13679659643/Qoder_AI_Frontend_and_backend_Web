@@ -180,3 +180,15 @@ Predictive Buy：s02_trade_sku_data_d[predictive_buy]为String类型，值包括
 筛选条件下，每个category会有多个sku_id，需要生成Sort Key表格行排序键，然后用于视觉对象筛选中过滤Top3的，这样每个category分组下就只有三个SKU。
 
 综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\5 Top & OPP SKUs Analysis目录下输出Top_SKUs_Analysis_Table;
+
+# DCA 6 Top & OPP SKUs Analysis  第六轮提示词 OPP:
+上面Top写的没问问题，接下来我们实现OPP的解决方案，会有一些不一样的点：
+OPP：上架时间(launch_time) > 2周，售罄率(ST%) < 均值，EOH Units > 同Label & CLASS下sku的均值，Weeks Cover > 均值，按照库存降序排序，取top 3 sku，按照库存排序，所以我们以s02_inventory_stock_sales_detail_d库存表为主，stock_inv_qty在库库存排序。
+我们一步一步的分析口径，
+第一步，在外部筛选条件下，以及前置筛选即再视觉对象筛选处，筛选Slicer_Framework[framework]='Foundation'，这个无需dax显示处理，先过滤出符合条件的SKU：
+1、上架时间(launch_time) > 2周：s02_inventory_stock_sales_detail_d[launch_time],值为2022-09-02 00:00:00.000这样，String类型需要转化一下为日期比较，上架时间至筛选时间en period最后一天>2周，即14天。
+2、售罄率(ST%) < 均值：比如，说针对单个SKU，ST%=统计周期内销售金额/（销售金额+期末库存金额）× 100%，即sales.net_sales_amt/(sales.net_sales_amt+inv.msrp_inv_amt)，那均值就是所有sku的统计周期内销售金额，也就是sum(销售金额)/(sum(销售金额)+sum(期末库存金额))*100%，即sum(sales.net_sales_amt)/sum(sales.net_sales_amt+inv.msrp_inv_amt)
+3、Weeks Cover > 均值：处理方式和ST%一致，单个SKU：`sum(inv.stock_inv_qty) + sum(inv.in_trans_inv_qty)`/`sum(sales.product_qty)`；均值所有SKU：`sum(inv.stock_inv_qty) + sum(inv.in_trans_inv_qty)`/`sum(sales.product_qty)`
+4、EOH Units > 同Label & CLASS下sku的均值：意思是，EOH Units(`sum(inv.stock_inv_qty)`)的均值，不是所有SKU去计算，而是brand+ax_class分组去计算，即单个SKU的EOH Units，和brand+ax_class整个分组的平均值去对比，即Label & CLASS的total EOH Units/这个Label & CLASS的sku个数
+通过上述1~4筛选出符合结果的SKU。
+在把这这些SKU，取出对应category的Top3,SKU按照EOH Units降序规则。

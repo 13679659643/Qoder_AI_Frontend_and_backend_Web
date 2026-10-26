@@ -278,6 +278,74 @@
 - **关联文件**: Dimension Cross Analysis/7 Handbags Sales Performance/Handbags_&_Outwear_ms.md；Dim_ColMetric_Handbags&Outwear_Sales_ms.md；test_Handbags_&_Outwear_ms.sql
 - **备注**: TTL = ALLSELECTED([shop_name]) 全值域，SQL 按六值 IN 对数——若底表存在六值外 shop_name 页面会含，差异需核对；对数假设无外部渠道切片器筛选
 
+## [2026-10-26 10:30] DAX 新建 — Top_SKUs_Analysis_Table Top 部分表格解决方案（每 category Top3 SKU）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（Top 部分）
+- **任务**: 子模块九 TOP 部分（§40 Weeks Cover / §41 SLS Units / §42 EOH + 属性列 Product Photo / Product Type / Price / Predictive Buy）每 category Top3 SKU 平铺表格解决方案；OPP 部分（§43~§49）后续另行方案
+- **操作**: 新建
+- **变更内容**:
+  - 新建 14 个度量值（§4.1~§4.14）：SLS Amt（隐藏排序依据）Value/Display + SKU Rank / Sort Key 排名排序 2 个 + 属性度量 4 个（category+sku_id 分组下最新日期值，Item Stockout §1.3 同模式）+ SLS Units / EOH / Weeks Cover 各 Value/Display
+  - 行分组双列（category + sku_id，平铺表格无层级小计）；Top3 行筛选 = 视觉级「Top SKUs SKU Rank 介于 1 与 3」组内排名度量筛选器（金额降序 + sku_id 字母序决胜名次唯一；原生「前 N 个」列筛选器为全局 TopN 不分组，不适用；区间含下界排除 BLANK）——双度量分工（用户裁定：Sort Key 编码"类别排名×权重+组内排名"，另设组内排名度量配筛选器）
+  - Sort Key 行排序键 = 类别排名 × 1,000,000 + 组内排名（全局唯一：category 块按 SLS Amt 降序、块内 sku 按金额降序，行序完全确定；权重前提单 category sku 数 < 1,000,000）
+  - 候选上下文净化（内嵌预防）：视觉级度量筛选器落地为 (category, sku_id) 跨列组合筛选，单列 ALL 无法清除——SKU Rank / Sort Key 候选金额统一 REMOVEFILTERS(两列) 清除 + TREATAS 重建候选/当前值（Top Size Sort Key 同源坑；类别排名候选同时上卷 category 粒度防 RANK 恒 1）
+  - inv 侧 TREATAS(trade[sku_id] → inv[sku_id]) 单列桥接（仅 sku 粒度，无需 Item Stockout 的 ISINSCOPE+IF 分支）；快照日 REMOVEFILTERS(整表) 全局取值
+  - 前置筛选 Slicer_Framework[framework]='Foundation' 经一对多关系自动传导双表（framework 字段两表齐备），DAX 不显式处理
+  - Predictive Buy：String "1"→"Y" / "0"→"N" / 其余空（数据字典标注 Int32，以用户口径与底表实际取值为准，注意事项 8 注明回退写法）；Price = md_price 最新日期值（÷汇率 + 币种符号 + #,##0）；Weeks Cover 分子分母方向按 §40 修正项（库存+在途 / 销售数量）
+- **关联文件**: Dimension Cross Analysis/5 Top & OPP SKUs Analysis/Top_SKUs_Analysis_Table.md
+- **备注**: 测试 SQL 本轮未要求，还原要点见方案 §7（DENSE_RANK PARTITION BY category 还原组内排名、category_rank × 1000000 + sku_rank 还原 Sort Key）；对数参数 framework='Foundation'、This ['2026-03-29','2026-07-25']、快照日 '2026-07-25'
+
+## [2026-10-26 11:40] DAX 修改 — Top_SKUs_Analysis_Table v1.1 排名候选集收窄性能修复 + Predictive Buy 改整数比较
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（Top 部分）
+- **任务**: ① 修复表格加 Top SKUs Sort Key / SKU Rank 后加载超时（QueryUserError 锁定冲突，查询被取消）；② predictive_buy 实证为整数类型，比较修正
+- **操作**: 修改
+- **变更内容**:
+  - 性能根因：v1.0 SKU Rank 候选集为 ALL(sku_id) 全模型 sku 值域——视觉级「介于 1 与 3」度量筛选器迫使引擎对全部 category+sku 行组合逐组求值 Rank，每次迭代全量值域逐候选 CALCULATE（含 TREATAS + dt 条件）→ O(行组合数 × 全值域)，数万 × 数万次聚合查询超时被取消
+  - 修复：排名表整体改在 CALCULATETABLE 净化上下文（REMOVEFILTERS(category, sku_id 两列) 清除行筛选 / 视觉级组合筛选 + TREATAS 重限当前 category，外部筛选保留）中求值——候选集 = 净化上下文中的 VALUES(sku_id)（当前 category 内 sku 值域，非全模型 ALL）；@Amt 经上下文转换自动叠加候选筛选，无需逐候选 TREATAS；同 category 各行排名表求值上下文一致 → 引擎缓存复用，有效成本 = 每类别一次组内分组聚合；Sort Key 类别排名同步改同构写法（VALUES(category) 数十行级）
+  - category / sku_id「不为空」列筛选器补充定位：先行收窄查询行集，进一步减少 Rank 求值行数（务必配置）
+  - Predictive Buy：用户实证 predictive_buy 为整数类型（Nullable(Int32)，值 1 / 0 / NULL）——§4.8 比较改整数字面量（= 1 / = 0，SWITCH 1→"Y" / 0→"N"）；v1.0 按 String 比较恒不成立会输出全空
+  - 排名语义 / 视觉对象配置 / 其余度量不变；机制章节同步（头部版本记录 v1.1、§1.2/§1.3/§1.6 候选集值域收窄条目、§2、§3.1 分层图、§3.2 性能结构、§4.3/§4.4 注释与代码、§8 注 4/5/6/8 重写 + 新增注 18 禁止回退警示）
+- **关联文件**: Dimension Cross Analysis/5 Top & OPP SKUs Analysis/Top_SKUs_Analysis_Table.md
+- **备注**: 落地操作：①替换 §4.3 SKU Rank / §4.4 Sort Key / §4.8 Predictive Buy 三个度量值 ②确认视觉对象已配 category / sku_id「不为空」列筛选器；若仍卡顿再评估计算表预聚合排名；净化后排名为全局真实名次（不受 Top3 筛选影响）不变
+
+## [2026-10-26 14:30] DAX 修改 — Top_SKUs_Analysis_Table v2.0 排名表 SUMMARIZE 批量物化（性能修复第二轮）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（Top 部分）
+- **任务**: v1.1 候选集收窄后 SKU Rank / Sort Key 仍卡——定位逐候选上下文转换开销，排名表改单次分组查询批量物化
+- **操作**: 修改
+- **变更内容**:
+  - 复杂度诊断（修正 v1.1 误判）：视觉级「介于 1 与 3」度量筛选器迫使引擎对全部 (category, sku) 行组合求值 Rank（非仅显示行）；当期无销售行组经 __CurrentAmt BLANK 短路（VAR 惰性），当期有销售的 R′ 行组各物化一次本 category 排名表——v1.1 的 ADDCOLUMNS + 逐候选 CALCULATE 为 O(R′ × K̄) 次上下文转换（R′=3万、K̄=1000 即 3000万次，仍卡根因；SE 查询可缓存但 FE 上下文转换开销无法被缓存消除）；v1.1 注释"每类别一次分组聚合、缓存复用"表述过于乐观，已在文档修正
+  - 修复：SKU Rank 排名表改 CALCULATETABLE 净化上下文（REMOVEFILTERS 两列 + TREATAS 重限 category + dt 区间）中 SUMMARIZE 一次分组查询物化（GROUP BY sku_id 单条 SE 查询，同 category 各行共享缓存，候选集天然 = 该 category 在 dt 区间内有记录的 sku）；FE 仅余每行 O(K) 名次匹配，常数降 1~2 个数量级；Sort Key 类别排名保留 ADDCOLUMNS（category 值域数十行，C² 量级成本可忽略）
+  - 新增注意事项 19（再优化路径）：① RANK 改计数式排名（COUNTROWS FILTER，免每次排序）② (dt, category, sku_id) 粒度聚合表 ③ 源侧预计算 Top3；定位手段：性能分析器看 SE / FE 耗时占比
+  - 机制章节同步：头部版本记录 v2.0、§1.6 排名求值复杂度、§3.1 分层图、§3.2 性能结构、§4.3 注释与代码、§8 注 18 重写 + 新增注 19
+- **关联文件**: Dimension Cross Analysis/5 Top & OPP SKUs Analysis/Top_SKUs_Analysis_Table.md
+- **备注**: 落地操作：仅需替换 §4.3 Top SKUs SKU Rank 一个度量值（其余不变）；若 v2.0 仍卡，按注意事项 19 路径递进（先性能分析器定位 SE/FE 占比）
+
+## [2026-10-26 16:00] DAX 修改（用户改写）— Top_SKUs_Analysis_Table v2.1 RANKX 迭代器 + Sort Key 金额编码
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（Top 部分）
+- **任务**: 用户自行改写两个排名/排序度量（v2.0 后仍卡，用户实践验证可用）
+- **操作**: 修改（用户改写，AI 仅补记版本记录与文档同步，代码未动）
+- **变更内容**:
+  - Top SKUs SKU Rank：RANK relation 候选集改 RANKX 迭代器模式——候选集 CALCULATETABLE(VALUES(sku_id), REMOVEFILTERS(sku_id), category 等值条件, dt 区间)（等值条件覆盖组合筛选的 category 部分，替代 REMOVEFILTERS 两列 + TREATAS 重建）；value 参数迭代外预计算；无中间表物化、SE 批量合并聚合；并列语义改 DENSE（金额并列共享名次，含并列放行，可能 >3 行/分组）
+  - Top SKUs Sort Key：排名编码改金额编码——排序键 = -(CatAmt × 1,000,000 + SkuAmt)，负号翻转实现升序=金额降序，每行仅 2 次 SUM（排序与排名解耦，各司其职）；权重前提单 SKU 金额 < 1e6（超限改 1e9/1e12）
+  - 文档头部补版本记录 v2.1；§4.3/§4.4 代码与注释为用户版本未改动
+- **关联文件**: Dimension Cross Analysis/5 Top & OPP SKUs Analysis/Top_SKUs_Analysis_Table.md
+- **备注**: 权重 1e6 前提提醒：Top3 头部 SKU金额大促期间可能超百万（SkuAmt > 1e6 会侵入下一 category 块），建议直接 1e9/1e12；方法论沉淀（RANKX 迭代器替代 relation 物化 / 排序不需要排名——金额本身即顺序）已同步至 OPP 方案复用
+
+## [2026-10-26 16:30] DAX 新建 — OPP_SKUs_Analysis_Table OPP 部分表格解决方案（四条件资格筛选 + 资格集合内 Top3）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（OPP 部分）
+- **任务**: 子模块九 OPP 部分——四项资格条件（上架超 2 周 / ST% 低于全量均值 / WC 高于全量均值 / EOH 高于同 Label & CLASS 分组均值）筛选机会 SKU，资格集合内每 category 按 EOH（快照日 stock_inv_qty，库存表为主）降序取 Top3
+- **操作**: 新建
+- **变更内容**:
+  - 新建 3 个度量：OPP SKUs Qualify（四条件行级判定，视觉级筛选器「为 1」先行收窄行集，每行常数次聚合无候选迭代）；OPP SKUs SKU Rank（RANKX 学 Top v2.1 模式，候选表物化：inv 侧 SUMMARIZE 一次分组查询（库存为主——brand/ax_class/launch_time/msrp_inv_amt 同表齐备，库存侧判定免桥接）+ trade 侧 2 列 TREATAS(ROW) 桥接 + 分组均值表 MAXX 内存匹配，FILTER 四条件后资格集合内 EOH 降序 DENSE 排名）；OPP SKUs Sort Key（学 Top v2.1 金额编码：-(CatEOH × 1e6 + SkuEOH) 负号翻转，块间按快照日库存量降序）
+  - 展示指标复用 Top SKUs 系列 9 个度量（行分组双列同构 trade[category]+trade[sku_id]，传导机制一致）：Photo/Type/Price/Predictive Buy/SLS Units/EOH/Weeks Cover
+  - 口径要点：Top3 在资格集合内取（非全量排名后过滤）；均值 = 比值均值（两侧各自全量 sum 后相除，SKU 域独立）；分组均值 = brand+ax_class 分组 EOH 合计 / 分组内快照日 distinct sku 数（全 inv 侧口径）；launch_time String 前 10 位 DATEVALUE，快照日 - 上架日 > 14 天严格大于；均值净化——trade 侧全量 REMOVEFILTERS(两列) 防视觉级组合筛选收窄均值（同源坑预防）
+  - 视觉级筛选器五条：framework=Foundation / Qualify=1（勿用≤1）/ Rank 介于 1 与 3 / category 不为空 / sku_id 不为空；TOP/OPP 按钮书签切换
+- **关联文件**: Dimension Cross Analysis/5 Top & OPP SKUs Analysis/OPP_SKUs_Analysis_Table.md
+- **备注**: 测试 SQL 本轮未要求，还原要点见方案 §7（inv_agg/grp_avg/trade_agg 三 CTE + 四条件 + 资格集合内 DENSE_RANK）；纯库存无销售 SKU 天然排除（WC 分母 0 → BLANK 不成立，如需纳入需业务确认兑底规则）；Qualify 与 Rank 判定同构双写需同步维护（注 3）
+
 ## [SKU Sales Tracking] 模块
 
 ## [2026-10-16 18:00] 测试 SQL 调整 — Series Sales 变量改字面量直嵌 + 拆分明细 / 汇总两段
