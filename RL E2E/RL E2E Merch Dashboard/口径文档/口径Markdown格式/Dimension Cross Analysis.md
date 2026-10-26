@@ -551,7 +551,7 @@
 | **附属指标** | vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp；Foundation/Acceleration/Complementary 三个占比共用） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
-| **附属指标类型** | vs LP:delta_bp |
+| **附属指标类型** | vs LP:integer_bp |
 
 ---
 
@@ -566,7 +566,7 @@
 | **附属指标** | vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
-| **附属指标类型** | vs LP:delta_bp |
+| **附属指标类型** | vs LP:integer_bp |
 
 ---
 
@@ -581,7 +581,7 @@
 | **附属指标** | vs LP：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
-| **附属指标类型** | vs LP:delta_bp |
+| **附属指标类型** | vs LP:integer_bp |
 
 ---
 
@@ -597,7 +597,7 @@
 | **注意** | 占比分母范围原始口径未明确（该 Category 下全渠道合计 / 该渠道下合计 / 全局合计），DAX 实现时需与业务确认（见待确认项汇总） |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
-| **附属指标类型** | vs LP:delta_bp |
+| **附属指标类型** | vs LP:integer_bp |
 
 ---
 

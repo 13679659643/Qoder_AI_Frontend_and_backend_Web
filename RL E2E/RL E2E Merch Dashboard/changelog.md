@@ -566,3 +566,33 @@
 - **关联文件**: SKU Sales Tracking/1 Top Size Sales Performance/Top_Size_Sales Performance_table.md
 - **备注**: net_sales_amt 为取数新增列（ROUND(product_qty × sales_price, 6)，业务确认）；inv 表无 platform / shop_name 字段，Inventory 指标不受渠道筛选影响（业务确认接受）；Sales/Inventory 视图切换由页面按钮 + 书签实现，不在度量值范围内
 
+## [2026-10-26 20:30] DAX 新建 — Platform_Merchandising_ms 矩阵解决方案（含列维度表补列）
+
+- **模块**: Dimension Cross Analysis - Platform Merchandising Performance
+- **任务**: 子模块八（§34-§39 + TAR 类口径）Framework + Category 层级行 × 渠道列指标矩阵解决方案 + 列维度表补齐 TAR ACH% 列
+- **操作**: 新建 + 修改
+- **变更内容**:
+  - Dim_ColMetric_Platform_Merchandising_Performance.md：54 → 64 行（用户确认漏列后重写）——Platform 组 27 = TTL 7 + 4 渠道 × 5；Store 组 37 = TTL 7 + 6 店铺 × 5；非 TTL 列组合补入 TAR ACH%（每 Label 五指标：SLS Amt% / vs LP / TAR ACH% / MTD TAR Progress / YTD TAR Progress）；EOH / ST% 仍仅 TTL（inv 无渠道字段）；Metric_ID 1-64 重排，头注释规模 / 列结构 / ColName_Sort 说明同步
+  - 新建 Platform_Merchandising_ms.md（7 个度量值，参照 Sales Performance Details by Channel 架构）：Act / LY / Base 总路由 + Cell Value / Display / Font Color / Background Color；Display 空值返回 BLANK() 支撑矩阵整行自动隐藏（含层级）
+  - TAR 三指标五粒度分支（口径 actual除target逻辑详情.md）：actual 恒为 This Period 区间 sales[net_sales_amt]；TAR ACH% 全粒度 This/This；MTD = Day/Week 不跨财月取 Max_This 所在财月汇总 target（跨月 BLANK）、Month This/This、Quarter/Year BLANK；YTD = Day/Week/Month/Quarter 不跨财年取所在财年汇总 target（跨年 BLANK）、Year 始终 This/This；粒度读 Slicer_Time_Frame[TimeFrame_ID]，跨财月 / 跨财年判定不区分粒度直接比较 Min_This / Max_This 的 Month_Value / Year_Value（文本）；分母区间读 Max_This 的 Fiscal_Month/Year_First/Last_Day 字段
+  - 渠道上下文对称构造：sales 侧与 fcst 侧各一组 UNION+FILTER（TTL = ALLSELECTED 保留外部切片器；a05 无 TTL 预聚合值，TTL 列 target 由 ALLSELECTED 汇总不重复计数）；行维度 Slicer_Framework / Slicer_Category 与三张事实表一对多自动传导，无 TREATAS；日期筛选器与三表断开维度，区间均度量值内 data_date 显式过滤
+  - SLS Amt% 分母 ALLSELECTED(Slicer_Framework[framework]) + ALLSELECTED(Slicer_Category[category])，一套逻辑覆盖 §34-§36（framework 行）与 §37（category 行）；vs LP 为 SLS Amt% This - Last 占比差值，×10000 转 bp 在 Display 层（类型 integer_bp，不含正号），分子经整表 REMOVEFILTERS + 渠道三条件重路由
+- **关联文件**: Dimension Cross Analysis/5 Platform Merchandising Performance/Dim_ColMetric_Platform_Merchandising_Performance.md；Platform_Merchandising_ms.md
+- **备注**: 四项边界口径用户确认：Month 粒度 MTD = This/This（含跨月多选）；Year 粒度 YTD 始终计算且 This/This；跨财月 / 跨年判定不区分粒度；a05 无 TTL 值且渠道值域与 sales 一致直接过滤；口径文档待确认项 #4（TAR 交互细节）与 #3（Category SLS Amt% 分母范围）按 actual除target逻辑详情 + 列指标表设计落地
+
+## [2026-10-26 21:10] DAX 新建 — Platform_Merchandising_Card 卡片图 KPI 解决方案
+
+- **模块**: Dimension Cross Analysis - Platform Merchandising Performance（卡片图衍生场景）
+- **任务**: 五指标（SLS Amt% / SLS Amt% vs LP / TAR ACH% / MTD TAR Progress / YTD TAR Progress）卡片图 KPI，无矩阵行列维度，每指标独立 Value + Display
+- **操作**: 新建
+- **变更内容**:
+  - 新建 Platform_Merchandising_Card.md（10 个度量值）：筛选全部由页面筛选器（一对多自动传导）+ 视觉对象筛选器（固定单选 Slicer_Framework[framework]）提供，仅日期表断开维度需度量值内显式 data_date 过滤；无渠道路由层（无 ChannelGroup / Label_Value）
+  - SLS Amt% / vs LP 分母：ALLSELECTED(Slicer_Framework[framework], Slicer_Framework[sort_order]) 两列同写（framework 按 sort_order 按列排序，视觉筛选以两列组合筛选落地，单列 ALLSELECTED 剥离不掉 sort_order 部分 → 分母恒等于分子占比恒 100%）——占比 = 单 framework ÷ 全部 framework；双期同构（This / Last 占比分子分母口径一致后作差）
+  - 类型差异落地：SLS Amt% / TAR ACH% / MTD / YTD = percent_1dp（#,##0.0% 一位小数不含正号）；vs LP = delta_bp（Value 层原始差值小数，×10000 转 bp 在 Display 层，卡片无 Y 轴；不含正号）
+  - TAR 三指标五粒度分支与矩阵方案同口径（TAR ACH% 全粒度 This/This；MTD：Day/Week 不跨财月取所在财月 target、Month This/This、Quarter/Year BLANK；YTD：Day~Quarter 不跨财年取所在财年 target、Year 始终 This/This）
+  - Display 空值返回 BLANK()（卡片显示空白，“不计算”场景由此消化）
+- **关联文件**: Dimension Cross Analysis/5 Platform Merchandising Performance/Platform_Merchandising_Card.md
+- **备注**: 卡片主体/数据标签绑 Display（文本），数值类条件格式绑 Value（数值）；无金额类指标不涉及汇率换算；TAR 比率为 actual/target 同币种相除不受币种影响
+
+
+

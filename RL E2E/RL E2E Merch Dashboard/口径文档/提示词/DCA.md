@@ -153,7 +153,7 @@ computed_product_tag字段只存在于s02_inventory_stock_sales_detail_d表，�
 -- end period所在财月第一天：'2026-06-28'
 
 
-# DCA 5 Top & OPP SKUs Analysis  第六轮提示词 Top:
+# DCA 6.1 Top & OPP SKUs Analysis  第六轮提示词 Top:
 口径文档:
 D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\口径文档\口径Markdown格式\Dimension Cross Analysis.md
 只关注口径文档中的子模块九：Top & OPP SKUs Analysis，这个模块其实包括了两个部分，我们先做简单的Top部分。
@@ -181,7 +181,7 @@ Predictive Buy：s02_trade_sku_data_d[predictive_buy]为String类型，值包括
 
 综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\5 Top & OPP SKUs Analysis目录下输出Top_SKUs_Analysis_Table;
 
-# DCA 6 Top & OPP SKUs Analysis  第六轮提示词 OPP:
+# DCA 6.2 Top & OPP SKUs Analysis  第七轮提示词 OPP:
 上面Top写的没问问题，接下来我们实现OPP的解决方案，会有一些不一样的点：
 OPP：上架时间(launch_time) > 2周，售罄率(ST%) < 均值，EOH Units > 同Label & CLASS下sku的均值，Weeks Cover > 均值，按照库存降序排序，取top 3 sku，按照库存排序，所以我们以s02_inventory_stock_sales_detail_d库存表为主，stock_inv_qty在库库存排序。
 我们一步一步的分析口径，
@@ -192,3 +192,27 @@ OPP：上架时间(launch_time) > 2周，售罄率(ST%) < 均值，EOH Units > �
 4、EOH Units > 同Label & CLASS下sku的均值：意思是，EOH Units(`sum(inv.stock_inv_qty)`)的均值，不是所有SKU去计算，而是brand+ax_class分组去计算，即单个SKU的EOH Units，和brand+ax_class整个分组的平均值去对比，即Label & CLASS的total EOH Units/这个Label & CLASS的sku个数
 通过上述1~4筛选出符合结果的SKU。
 在把这这些SKU，取出对应category的Top3,SKU按照EOH Units降序规则。
+
+# DCA 5 Platform Merchandising Performance  第八轮提示词:
+
+口径文档:
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\口径文档\口径Markdown格式\Dimension Cross Analysis.md
+只关注口径文档中的子模块八：Platform Merchandising Performance；
+actual除target逻辑详情：
+涉及到三个指标TAR ACH%、MTD TAR Progress、YTD TAR Progress，五个时间粒度之间是有差异的，按照口径来，不懂就问，
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\口径文档\口径Markdown格式\actual除target逻辑详情.md；
+解决方案参考文档：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales Performance Details by Channel\Sales_Performance_Details_ms.md
+日期表和a05_e2e_product_fcst_data_d断开维度，其中日期字段为data_date，其余五个platform、shop_name、brand、framework、category和a05_e2e_product_fcst_data_d一对多关联。
+
+需求场景：
+涉及三个表：a02_e2e_product_performance_sales_summary_d、a02_e2e_product_performance_inv_summary_d、a05_e2e_product_fcst_data_d，按Framework + Category展开的销售明细矩阵：
+1、矩阵行来源为Slicer_Framework[framework]、Slicer_Category[category];列指标取列指标维度表的ChannelGroup + Label_Value；Platform 组过滤事实表 [platform]，Store 组过滤 [shop_name]；Label_Value = "TTL" 时走 ALLSELECTED 全渠道合计；
+2、矩阵在检测到该行所有度量均为 BLANK() 时，通常会自动隐藏该行（包括层级行），需要所有指标都为 BLANK() 才会自动隐藏该行。所以Display度量中空的返回BLANK();
+3、列指标文件：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\5 Platform Merchandising Performance\Dim_ColMetric_Platform_Merchandising_Performance.md
+4、actual和target计算字段：
+actual：a02_e2e_product_performance_sales_summary_d[net_sales_amt]
+target：a05_e2e_product_fcst_data_d[fcst_sales_amt]
+
+
+综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\5 Platform Merchandising Performance目录下输出Platform_Merchandising_ms;不懂就问，尤其是actual除target逻辑。
