@@ -1,11 +1,12 @@
 # Merchandising Core KPI 矩阵解决方案
 
-> **版本**: v1.0
+> **版本**: v1.1
 > **模块**: RL E2E Merch Dashboard - Merchandise Performance Overview Tab - Merchandising Core KPI
-> **关联口径**: 口径文档/口径Markdown格式/Merchandise Performance Overview.md - 子模块一【Amt】（§1-§10）+ 子模块二【Unit】（§11-§20）
+> **关联口径**: 口径文档/口径Markdown格式/Merchandise Performance Overview.md - 子模块一【Amt】（§1-§10）+ 子模块二【Unit】（§11-§20）+ 口径文档/口径Markdown格式/actual除target逻辑详情.md（TAR 类指标五粒度规则）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
 > **数据底表（库存类）**: a02_e2e_product_performance_inv_summary_d
-> **关联维度**: Dim_ColMetric_Merchandising_Core_KPI（列）、IsAmtUnitFilter（Amt/Unit 按钮）、IsProductTagFilter（商品标签按钮）、Slicer_Time_Frame_Min_This / Max_This / Min_Last / Max_Last（时间）、Slicer_Currency_Selection（币种）
+> **数据底表（目标类）**: a05_e2e_product_fcst_data_d
+> **关联维度**: Dim_ColMetric_Merchandising_Core_KPI（列）、IsAmtUnitFilter（Amt/Unit 按钮）、IsProductTagFilter（商品标签按钮）、Slicer_Time_Frame（时间粒度）、Slicer_Time_Frame_Min_This / Max_This / Min_Last / Max_Last（时间）、Slicer_Currency_Selection（币种）
 > **参考方案**: Customer_Breakdown_ms.md（仅分层结构与书写风格参考，具体口径以 Merch 口径文档 + 提示词第 1~7 点为准）
 
 ---
@@ -14,8 +15,9 @@
 
 ### 1.1 模块定位
 
-Merchandising Core KPI 是 Merchandise Performance Overview Tab 的核心 KPI 矩阵，覆盖 10 个 KPI 分组（SLS / ST% / AVG MD / Fullprice% / AUR / EOH / In-Transit Inventory / O2O Inventory / Inbound / Outbound）× 主指标 + 附属指标 = 20 列。
-【Amt】与【Unit】指标数量、结构完全一致，共用单套 20 列，由 Amt/Unit 按钮切换计算逻辑。
+Merchandising Core KPI 是 Merchandise Performance Overview Tab 的核心 KPI 矩阵，覆盖 10 个 KPI 分组（SLS / ST% / AVG MD / Fullprice% / AUR / EOH / In-Transit Inventory / O2O Inventory / Inbound / Outbound）× 主指标 + 附属指标 = 21 列（SLS 组 5 列：SLS / SLS vs LY / TAR ACH% / MTD TAR Progress / YTD TAR Progress）。
+【Amt】与【Unit】指标数量、结构完全一致，共用单套 21 列，由 Amt/Unit 按钮切换计算逻辑。
+TAR 类三指标（TAR ACH% / MTD TAR Progress / YTD TAR Progress）同时用于卡片图：每张卡片通过视觉级筛选器固定 Dim[ColName] 为唯一值，与矩阵共用同一套度量值。
 
 ### 1.2 路由维度
 
@@ -23,7 +25,7 @@ Merchandising Core KPI 是 Merchandise Performance Overview Tab 的核心 KPI �
 | -------------------------------------- | ------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------- |
 | Amt / Unit                             | IsAmtUnitFilter                      | 断开按钮维度 | SELECTEDVALUE([Sort])：=10 → Amt 逻辑；=20 → Unit 逻辑；默认 Amt（未选时取 10）                              |
 | ALL / Hero Model / Slow Mover / Normal | IsProductTagFilter                   | 断开按钮维度 | computed_product_tag 过滤：选中 "ALL" → IN {"hero model", "slow mover", "normal"}；其余 → 单值匹配；默认 ALL |
-| Metric_ID（10 组 20 列）               | Dim_ColMetric_Merchandising_Core_KPI | 断开列维度   | Act / vs LY / TAR ACH% Progress / TAR ACH% Target 列路由                                                       |
+| Metric_ID（10 组 21 列）               | Dim_ColMetric_Merchandising_Core_KPI | 断开列维度   | Act / vs LY / TAR ACH% / MTD TAR Progress / YTD TAR Progress 列路由                                              |
 
 **与 Customer Breakdown 方案的关键差异**：
 
@@ -31,7 +33,7 @@ Merchandising Core KPI 是 Merchandise Performance Overview Tab 的核心 KPI �
 2. LY 不再使用 _LY 字段对称映射，改为**直接读 Last Period 筛选器**（Min_Last / Max_Last 表的 TimeFrame_Min / TimeFrame_Max）
 3. 新增**期末时点口径**（EOH / In-Transit / O2O / ST% 分母）：end period 范围内最后一个快照日
 4. 格式驱动为 **Metric_Format_Amt / Metric_Format_Unit 双列**（按模式取一），金额类为 currency（非 currency_M_K_Int_0db），比率类 vs LY 为 delta_bp（基点）
-5. TAR ACH% Progress / Target 为占位符（返回 1 和 2），公式待业务确认后实现
+5. TAR 类三指标（TAR ACH% / MTD TAR Progress / YTD TAR Progress）为 actual ÷ target 真实现（占位符已废弃）：actual 按 Amt/Unit 模式路由 sales 金额/数量字段，target 按模式路由 a05[fcst_sales_amt] / [fcst_sales_qty]，分母区间随时间粒度分支（读 Slicer_Time_Frame[TimeFrame_ID]）
 
 ### 1.3 时间口径
 
@@ -41,6 +43,8 @@ Merchandising Core KPI 是 Merchandise Performance Overview Tab 的核心 KPI �
 | Last Period（LY 对比）   | data_date ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]]                               | 上述全部指标的 LY 基线                                    |
 | End Period（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个快照日** | EOH、In-Transit、O2O、ST% 分母                            |
 | End Period LY            | end period 范围 [Slicer_Time_Frame_Max_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] 内**最后一个快照日** | 上述期末类指标的 LY 基线                                  |
+| target MTD 区间          | [Slicer_Time_Frame_Max_This[Fiscal_Month_First_Day], Slicer_Time_Frame_Max_This[Fiscal_Month_Last_Day]]（TimeFrame_Max 所在财月） | MTD TAR Progress 分母（Day / Week 不跨财月）              |
+| target YTD 区间          | [Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day], Slicer_Time_Frame_Max_This[Fiscal_Year_Last_Day]]（TimeFrame_Max 所在财年） | YTD TAR Progress 分母（Day / Week / Month / Quarter 不跨财年） |
 
 说明：
 
@@ -48,6 +52,7 @@ Merchandising Core KPI 是 Merchandise Performance Overview Tab 的核心 KPI �
 - ST% 这类跨双表指标需留意：sales 部分（分子）是整个 This Period 的区间汇总，inv 部分（分母）只看 end period 范围的最后一天，不能混用
 - 期末时点类实现为「end period 范围内最后一个有数据的快照日」：口径定义为 end period 最后一天，快照缺数时自动回退到范围内最近一天，避免整段空值
 - 快照表按日存储，期末时点**只取单日**，若对 end period 整段区间求和会把库存重复计数
+- TAR 类三指标：actual 恒为 This Period 区间（Amt 模式 = sum(net_sales_amt)，Unit 模式 = sum(net_sales_qty)，均受商品标签过滤）；TAR ACH% 全粒度 date to date；时间粒度读 SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])；跨财月判定不区分粒度，比较 Min_This[TimeFrame_Min_Month_Value] 与 Max_This[TimeFrame_Max_Month_Value]（财月 value，文本），不相等 → 跨财月；跨财年判定同理比较两表 Year_Value 字段
 
 ---
 
@@ -55,7 +60,9 @@ Merchandising Core KPI 是 Merchandise Performance Overview Tab 的核心 KPI �
 
 - 数据底表 `a02_e2e_product_performance_sales_summary_d`（日粒度）：net_sales_amt / net_sales_qty / md_net_sales_amt / msrp_net_sales_amt / msrp_inbound_amt / inbound_qty / md_outbound_amt / outbound_qty，维度含 platform、shop_name、md_type、computed_product_tag 及全部商品维度；platform 已在数据源层过滤 IN ('JD','TM','RLE','DY')
 - 数据底表 `a02_e2e_product_performance_inv_summary_d`（日快照）：msrp_inv_amt / inv_qty / msrp_in_trans_inv_amt / in_trans_inv_qty / msrp_o2o_inv_amt / o2o_inv_qty，维度含 computed_product_tag 及商品维度；**无 platform / shop_name 字段**（渠道筛选不影响库存侧指标）
-- 列维度表 `Dim_ColMetric_Merchandising_Core_KPI` 已存在（本目录），含 Metric_Format_Amt / Metric_Format_Unit 双格式列与 Metric_IsCurrencyAmount 标记
+- 数据底表 `a05_e2e_product_fcst_data_d`（目标类）：data_date（date 类型）、platform、shop_name、brand、framework、category、fcst_sales_amt（金额目标）、fcst_sales_qty（数量目标）；**无 computed_product_tag 字段**（target 侧无法按商品标签过滤）；渠道 / 商品维度切片器与该表一对多关联自动传导；与日期筛选器断开维度
+- 列维度表 `Dim_ColMetric_Merchandising_Core_KPI` 已存在（本目录，21 行），含 Metric_Format_Amt / Metric_Format_Unit 双格式列与 Metric_IsCurrencyAmount 标记
+- Slicer_Time_Frame_Max_This 含 Fiscal_Month_First/Last_Day、Fiscal_Year_First/Last_Day 及 TimeFrame_Max_Month/Year_Value 字段，Slicer_Time_Frame_Min_This 含 TimeFrame_Min_Month/Year_Value——TAR 分母区间与跨期判定字段直接读取
 - Slicer_Platform_Selection、Slicer_Store_Name、Slicer_AX_Class 等筛选器与事实表一对多关联，筛选自动传递，DAX 无需显式处理
 - 字段名已逐一核对数据字典（含 md_outbound_amt、msrp_in_trans_inv_amt、msrp_o2o_inv_amt 等）
 
@@ -66,11 +73,11 @@ Merchandising Core KPI 是 Merchandise Performance Overview Tab 的核心 KPI �
 ### 3.1 度量值分层
 
 ```
-Act Base Value / LY Base Value
+Act Base Value / LY Base Value / TAR Base Value
     ←  Amt/Unit 路由 + 商品标签路由 + Metric_ID 路由，保留 RMB 原值
     ↓
 Base Value（总路由）
-    ←  Metric_ID 派生 vs LY（变化率 / 差值 bp）+ TAR ACH% 占位
+    ←  Metric_ID 派生 vs LY（变化率 / 差值 bp）+ TAR 类三分支调用 TAR Base Value
     ↓
 Cell Value
     ←  模式相关金额类汇率换算（÷ Currency_ExchangeRate）
@@ -123,9 +130,10 @@ Cell Font Color / Cell Background Color
 | 12        | vs LY 变化率      | 11（AUR）          | Act / LY - 1                                   | delta_pct_0dp |
 | 14        | vs LY 变化率      | 13（EOH）          | Act / LY - 1                                   | delta_pct_0dp |
 | 18        | vs LY 变化率      | 17（Inbound）      | Act / LY - 1                                   | delta_pct_0dp |
-| 20        | vs LY 变化率      | 19（Outbound）     | Act / LY - 1                                   | delta_pct_0dp |
-| 3         | TAR ACH% Progress | —                 | 占位符，返回 1（公式待业务确认）               | delta_pct_0dp |
-| 4         | TAR ACH% Target   | —                 | 占位符，返回 2（公式待业务确认）               | delta_pct_0dp |
+| 20        | vs LY 变化率      | 19（Outbound）      | Act / LY - 1                                   | delta_pct_0dp |
+| 21        | TAR ACH%          | —（TAR Base Value 内实现） | This actual / This target（date to date，全粒度）           | percent_0dp   |
+| 3         | MTD TAR Progress  | —（TAR Base Value 内实现） | This actual / 分母区间 target（Day/Week 不跨财月取财月、Month This/This、Quarter/Year 不计算） | percent_1dp |
+| 4         | YTD TAR Progress  | —（TAR Base Value 内实现） | This actual / 分母区间 target（Day~Quarter 不跨财年取财年、Year 始终 This/This） | percent_1dp   |
 
 ### 3.5 金额类汇率换算（模式相关）
 
@@ -134,7 +142,7 @@ Cell Font Color / Cell Background Color
 | SLS / EOH / In-Transit / O2O / Inbound / Outbound 的 Act | currency → 换算 | integer → 不换算 |
 | AUR 的 Act                                               | currency → 换算 | currency → 换算  |
 | ST% / AVG MD / Fullprice% 的 Act                         | 比率，不换算     | 比率，不换算      |
-| 全部 vs LY / TAR ACH%                                    | 派生比率，不换算 | 派生比率，不换算  |
+| 全部 vs LY / TAR 类                                     | 派生比率，不换算 | 派生比率，不换算  |
 
 判定方式（Dim 表设计原则第 4 条）：`IF(__IsAmt, Metric_Format_Amt = "currency", Metric_Format_Unit = "currency")`。
 说明：Metric_IsCurrencyAmount 为按【Amt】口径的静态标记，Unit 模式下 6 组金额/数量类指标为 integer，故不能直接用该标记判断当前模式是否换算，统一用模式相关格式列等价判断。
@@ -635,28 +643,193 @@ RETURN
     )
 ```
 
-### 4.3 Merchandising Core KPI Base Value（总路由）
+### 4.3 Merchandising Core KPI TAR Base Value（TAR 类三指标：actual ÷ target）
+
+```dax
+Merchandising Core KPI TAR Base Value =
+// ========================================
+// 度量值: Merchandising Core KPI TAR Base Value
+// Display Folder: Base Metrics
+// 用途: TAR 类三指标（Metric_ID=21 TAR ACH% / 3 MTD TAR Progress / 4 YTD TAR Progress），
+//       按 current 列 Metric_ID 分支（在自身 Metric_ID 上下文内计算，无需重路由；
+//       由 Base Value 总路由在 21/3/4 分支调用；矩阵列与卡片图视觉筛选固定 ColName 均生效）
+// actual: This Period 区间 sales 聚合，按 Amt/Unit 模式路由字段
+//       （Amt = sum(net_sales_amt) / Unit = sum(net_sales_qty)），受商品标签按钮过滤
+// target: a05 聚合，按模式路由字段（Amt = sum(fcst_sales_amt) / Unit = sum(fcst_sales_qty)）；
+//       a05 无 computed_product_tag 字段，target 侧无法按标签过滤（物理限制，
+//       分子分母标签口径不对称）；渠道 / 商品维度切片器与 a05 一对多自动传导
+// 粒度分支（时间粒度读 Slicer_Time_Frame[TimeFrame_ID]）:
+//   TAR ACH% (21)   全粒度 This actual / This target（date to date）
+//   MTD TAR Progress (3): Day/Week 不跨财月取所在财月汇总 target、跨财月不计算；
+//                          Month This/This；Quarter/Year 不计算
+//   YTD TAR Progress (4): Day/Week/Month/Quarter 不跨财年取所在财年汇总 target、
+//                          跨财年不计算；Year 始终计算且 This/This
+// 汇率换算: 不在此度量值处理（actual/target 同模式同币种相除，比率不受币种影响）
+// ========================================
+
+// ── 模式路由：Amt / Unit ──
+VAR __AmtUnitSort = SELECTEDVALUE('IsAmtUnitFilter'[Sort], 10)
+VAR __IsAmt = (__AmtUnitSort = 10)
+
+// ── 列维度路由：Metric_ID（21 / 3 / 4）──
+VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_Merchandising_Core_KPI'[Metric_ID])
+
+// ── 商品标签路由：ALL / Hero Model / Slow Mover / Normal ──
+VAR __ProductTag = SELECTEDVALUE('IsProductTagFilter'[computed_product_tag], "ALL")
+
+// ── This Period 时间区间（actual；TAR ACH% 与 Month/Year 的 This/This 分母）──
+VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
+VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+
+// ── TAR 分母区间（均以 TimeFrame_Max 所在财月 / 财年框定）──
+VAR __MonthFirstDay = SELECTEDVALUE(Slicer_Time_Frame_Max_This[Fiscal_Month_First_Day])
+VAR __MonthLastDay = SELECTEDVALUE(Slicer_Time_Frame_Max_This[Fiscal_Month_Last_Day])
+VAR __YearFirstDay = SELECTEDVALUE(Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day])
+VAR __YearLastDay = SELECTEDVALUE(Slicer_Time_Frame_Max_This[Fiscal_Year_Last_Day])
+
+// ── 时间粒度与跨期判定（判定不区分粒度，直接比较财月 / 财年 value 文本）──
+VAR __TimeFrameID = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])
+VAR __IsCrossMonth =
+    SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min_Month_Value])
+        <> SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_Month_Value])
+VAR __IsCrossYear =
+    SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min_Year_Value])
+        <> SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_Year_Value])
+
+// ── 商品标签过滤器（sales 表；UNION+FILTER 保证表类型稳定）──
+VAR __TagFilter_Sales =
+    UNION(
+        FILTER(
+            ALL('a02_e2e_product_performance_sales_summary_d'[computed_product_tag]),
+            __ProductTag = "ALL"
+                && 'a02_e2e_product_performance_sales_summary_d'[computed_product_tag]
+                    IN {"hero model", "slow mover", "normal"}
+        ),
+        FILTER(
+            ALL('a02_e2e_product_performance_sales_summary_d'[computed_product_tag]),
+            __ProductTag <> "ALL"
+                && 'a02_e2e_product_performance_sales_summary_d'[computed_product_tag] = __ProductTag
+        )
+    )
+
+// ═══ actual：This Period 区间 sales 聚合（按模式路由金额 / 数量，受标签过滤）═══
+VAR __Actual =
+    CALCULATE(
+        IF(
+            __IsAmt,
+            SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+            SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_qty])
+        ),
+        __TagFilter_Sales,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+    )
+
+// ═══ target：a05 三区间聚合（按模式路由金额 / 数量目标；a05 与日期筛选器断开维度，显式过滤）═══
+// a05 无 computed_product_tag 字段，target 侧不施加标签过滤（物理限制）
+VAR __Fcst_This =
+    CALCULATE(
+        IF(
+            __IsAmt,
+            SUM('a05_e2e_product_fcst_data_d'[fcst_sales_amt]),
+            SUM('a05_e2e_product_fcst_data_d'[fcst_sales_qty])
+        ),
+        'a05_e2e_product_fcst_data_d'[data_date] >= __PeriodMin,
+        'a05_e2e_product_fcst_data_d'[data_date] <= __PeriodMax
+    )
+VAR __Fcst_MTD =
+    CALCULATE(
+        IF(
+            __IsAmt,
+            SUM('a05_e2e_product_fcst_data_d'[fcst_sales_amt]),
+            SUM('a05_e2e_product_fcst_data_d'[fcst_sales_qty])
+        ),
+        'a05_e2e_product_fcst_data_d'[data_date] >= __MonthFirstDay,
+        'a05_e2e_product_fcst_data_d'[data_date] <= __MonthLastDay
+    )
+VAR __Fcst_YTD =
+    CALCULATE(
+        IF(
+            __IsAmt,
+            SUM('a05_e2e_product_fcst_data_d'[fcst_sales_amt]),
+            SUM('a05_e2e_product_fcst_data_d'[fcst_sales_qty])
+        ),
+        'a05_e2e_product_fcst_data_d'[data_date] >= __YearFirstDay,
+        'a05_e2e_product_fcst_data_d'[data_date] <= __YearLastDay
+    )
+
+// ═══ MTD TAR Progress：actual 恒为 This Period，分母区间随粒度分支 ═══
+VAR __MTDProgress =
+    SWITCH(
+        TRUE(),
+        // Day / Week：不跨财月 → This actual / 所在财月汇总 target；跨财月 → 不计算
+        __TimeFrameID IN {"Day", "Week"},
+            IF(__IsCrossMonth, BLANK(), DIVIDE(__Actual, __Fcst_MTD)),
+        // Month：分子分母始终和 This Period 区间一致
+        __TimeFrameID = "Month",
+            DIVIDE(__Actual, __Fcst_This),
+        // Quarter / Year 及其他：不计算
+        BLANK()
+    )
+
+// ═══ YTD TAR Progress：actual 恒为 This Period，分母区间随粒度分支 ═══
+VAR __YTDProgress =
+    SWITCH(
+        TRUE(),
+        // Day / Week / Month / Quarter：不跨财年 → This actual / 所在财年汇总 target；跨财年 → 不计算
+        __TimeFrameID IN {"Day", "Week", "Month", "Quarter"},
+            IF(__IsCrossYear, BLANK(), DIVIDE(__Actual, __Fcst_YTD)),
+        // Year：始终计算，分子分母始终和 This Period 区间一致
+        __TimeFrameID = "Year",
+            DIVIDE(__Actual, __Fcst_This),
+        // 其他：不计算
+        BLANK()
+    )
+
+RETURN
+    SWITCH(
+        __MetricID,
+        21, DIVIDE(__Actual, __Fcst_This),   // TAR ACH%（date to date，全粒度）
+        3,  __MTDProgress,                   // MTD TAR Progress
+        4,  __YTDProgress,                   // YTD TAR Progress
+        BLANK()
+    )
+
+// ========================================
+// 尾部注释: TAR 三指标 × 五粒度计算矩阵（actual 恒为 This Period 区间，模式路由金额/数量）
+//   指标              Day              Week            Month           Quarter        Year
+//   TAR ACH%(21)      This/This        This/This       This/This       This/This      This/This
+//   MTD(3)            不跨月:This/财月  跨月:BLANK      同Day           This/This      BLANK
+//   YTD(4)            不跨年:This/财年  跨年:BLANK      同Day           同Day          This/This
+//   财月区间 = [Fiscal_Month_First_Day, Fiscal_Month_Last_Day]（TimeFrame_Max 所在财月）
+//   财年区间 = [Fiscal_Year_First_Day, Fiscal_Year_Last_Day]（TimeFrame_Max 所在财年）
+// ========================================
+```
+
+### 4.4 Merchandising Core KPI Base Value（总路由）
 
 ```dax
 Merchandising Core KPI Base Value =
 // ========================================
 // 度量值: Merchandising Core KPI Base Value
 // Display Folder: Base Metrics
-// 用途: 总路由，按 Metric_ID 分发到 Act / vs LY（变化率 / 差值 bp）/ TAR ACH%（占位）
+// 用途: 总路由，按 Metric_ID 分发到 Act / vs LY（变化率 / 差值 bp）/ TAR 类三指标
 // 依赖: [Merchandising Core KPI Act Base Value],
 //       [Merchandising Core KPI LY Base Value],
+//       [Merchandising Core KPI TAR Base Value],
 //       'Dim_ColMetric_Merchandising_Core_KPI'[Metric_ID]
 //
-// Metric_ID 路由规则（10 组 20 列）:
+// Metric_ID 路由规则（10 组 21 列）:
 //   Act 基础指标 ID   : 1, 5, 7, 9, 11, 13, 15, 16, 17, 19
 //   vs LY 变化率 ID   : 2（SLS）, 12（AUR）, 14（EOH）, 18（Inbound）, 20（Outbound）
 //   vs LY 差值 bp ID  : 6（ST%）, 8（AVG MD）, 10（Fullprice%）
-//   TAR ACH% 占位 ID  : 3（Progress，返回 1）, 4（Target，返回 2）
+//   TAR 类 ID         : 21（TAR ACH%）, 3（MTD TAR Progress）, 4（YTD TAR Progress）
+//                       → TAR Base Value（actual ÷ target，粒度分支在彼处实现）
 //
 // 派生规则:
 //   vs LY 变化率 = Act / LY - 1（比率类附属指标，口径全局逻辑）
 //   vs LY 差值 bp = Act - LY（ST%/AVG MD/Fullprice% 比率类差值；×10000 转 bp 在 Cell Display 实现）
-//   TAR ACH% Progress / Target = 占位符 1 / 2（口径文档未给出公式，待业务确认后替换）
+//   TAR 类三指标 = actual ÷ target（在自身 Metric_ID 上下文内计算，直接调用 TAR Base Value）
 //
 // REMOVEFILTERS 机制:
 //   派生列需先 REMOVEFILTERS 清除断开维度的所有筛选，再应用目标 Metric_ID，
@@ -679,8 +852,6 @@ Merchandising Core KPI Base Value =
         SWITCH(
             __MetricID,
             2,  1,   // SLS vs LY        → SLS
-            3,  1,   // TAR ACH% Progress → SLS（占位，暂不参与派生计算）
-            4,  1,   // TAR ACH% Target   → SLS（占位，暂不参与派生计算）
             6,  5,   // ST% vs LY        → ST%
             8,  7,   // AVG MD vs LY     → AVG MD
             10, 9,   // Fullprice% vs LY → Fullprice%
@@ -758,14 +929,15 @@ Merchandising Core KPI Base Value =
             6,  __VsLYBpResult,      // ST% vs LY
             8,  __VsLYBpResult,      // AVG MD vs LY
             10, __VsLYBpResult,      // Fullprice% vs LY
-            // ─── TAR ACH% 占位（2 个，公式待业务确认后替换）───
-            3,  1,                   // TAR ACH% Progress 占位符
-            4,  2,                   // TAR ACH% Target 占位符
+            // ─── TAR 类三指标（actual ÷ target，粒度分支在 TAR Base Value 内）───
+            21, [Merchandising Core KPI TAR Base Value],  // TAR ACH%（date to date）
+            3,  [Merchandising Core KPI TAR Base Value],  // MTD TAR Progress
+            4,  [Merchandising Core KPI TAR Base Value],  // YTD TAR Progress
             BLANK()
         )
 ```
 
-### 4.4 Merchandising Core KPI Cell Value（对外值，含模式相关汇率换算）
+### 4.5 Merchandising Core KPI Cell Value（对外值，含模式相关汇率换算）
 
 ```dax
 Merchandising Core KPI Cell Value =
@@ -774,7 +946,7 @@ Merchandising Core KPI Cell Value =
 // Display Folder: Cell Values
 // 用途: 对外暴露的单元格值
 //       - 当前模式下格式为 "currency" 的列（金额类 Act）→ 按汇率换算
-//       - 其余（Unit 模式数量类、比率类 Act、全部 vs LY / TAR ACH% 派生列）→ 直接返回 Base Value
+//       - 其余（Unit 模式数量类、比率类 Act、全部 vs LY / TAR 类派生列）→ 直接返回 Base Value
 // 依赖: [Merchandising Core KPI Base Value],
 //       'Dim_ColMetric_Merchandising_Core_KPI'[Metric_Format_Amt, Metric_Format_Unit],
 //       Slicer_Currency_Selection[Currency_ExchangeRate]
@@ -815,7 +987,7 @@ Merchandising Core KPI Cell Value =
         )
 ```
 
-### 4.5 Merchandising Core KPI Cell Display（格式化显示，模式相关格式 + delta_bp 转 bp）
+### 4.6 Merchandising Core KPI Cell Display（格式化显示，模式相关格式 + delta_bp 转 bp）
 
 ```dax
 Merchandising Core KPI Cell Display =
@@ -830,8 +1002,9 @@ Merchandising Core KPI Cell Display =
 // 格式类型（严格遵循口径文档数据类型 + 模版复用/数据类型和格式总览.md）:
 //   currency      → __CurrencySymbol & FORMAT(__Value, "#,##0")（金额类 Act，符号由币种切片器决定）
 //   integer       → FORMAT(__Value, "#,##0") 整数千分位（Unit 模式数量类 Act）
-//   percent_0dp   → FORMAT(__Value, "#,##0%") 百分比整数，不含正号（ST%/AVG MD/Fullprice% Act）
-//   delta_pct_0dp → IF(>0,"+","") & FORMAT(#,##0%) 百分比整数变化，含正号（vs LY 变化率 / TAR ACH%）
+//   percent_0dp   → FORMAT(__Value, "#,##0%") 百分比整数，不含正号（ST%/AVG MD/Fullprice% Act / TAR ACH%）
+//   percent_1dp   → FORMAT(__Value, "#,##0.0%") 百分比一位小数，不含正号（MTD / YTD TAR Progress）
+//   delta_pct_0dp → IF(>0,"+","") & FORMAT(#,##0%) 百分比整数变化，含正号（vs LY 变化率）
 //   delta_bp      → 基点，含正负号，值×10000 转 bp 在本层实现（ST%/AVG MD/Fullprice% vs LY）
 // 说明:
 //   - BLANK 显示为 "-"
@@ -904,7 +1077,7 @@ Merchandising Core KPI Cell Display =
         )
 ```
 
-### 4.6 Merchandising Core KPI Cell Font Color（字体颜色）
+### 4.7 Merchandising Core KPI Cell Font Color（字体颜色）
 
 ```dax
 Merchandising Core KPI Cell Font Color =
@@ -917,7 +1090,7 @@ Merchandising Core KPI Cell Font Color =
 //
 // 颜色规则:
 //   1. 全部主指标 Act 列（Metric_ID=1,5,7,9,11,13,15,16,17,19）固定 #252423 → "fixed_black"
-//   2. 全部 vs LY / TAR ACH% 附属列（10 列，比率为正/负/零三色）→ "pos_neg_zero"
+//   2. 全部 vs LY / TAR 类附属列（11 列，比率为正/负/零三色）→ "pos_neg_zero"
 // ========================================
     VAR __Value = [Merchandising Core KPI Cell Value]
     VAR __ColorRule = SELECTEDVALUE('Dim_ColMetric_Merchandising_Core_KPI'[Metric_ColorRule], "fixed_default")
@@ -944,7 +1117,7 @@ Merchandising Core KPI Cell Font Color =
         )
 ```
 
-### 4.7 Merchandising Core KPI Cell Background Color（背景色）
+### 4.8 Merchandising Core KPI Cell Background Color（背景色）
 
 ```dax
 Merchandising Core KPI Cell Background Color =
@@ -971,11 +1144,12 @@ Merchandising Core KPI Cell Background Color =
 | ---- | -------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------- |
 | 1    | Merchandising Core KPI Act Base Value        | Base Metrics   | This Period 基础值（区间类 + 期末时点类）；Amt/Unit + 商品标签 + Metric_ID 三重路由；RMB 原值 |
 | 2    | Merchandising Core KPI LY Base Value         | Base Metrics   | Last Period 基础值（vs LY 对比基线，读 Min_Last / Max_Last 筛选器）                           |
-| 3    | Merchandising Core KPI Base Value            | Base Metrics   | 总路由（Act + vs LY 变化率 / 差值 bp + TAR ACH% 占位 + REMOVEFILTERS）；20 列全覆盖           |
-| 4    | Merchandising Core KPI Cell Value            | Cell Values    | 对外值：当前模式金额类触发汇率换算（÷ Currency_ExchangeRate），其余直接返回                  |
-| 5    | Merchandising Core KPI Cell Display          | Formatting     | 格式化显示文本（模式相关 Metric_Format；delta_bp ×10000 转 bp；币种符号拼接）                |
-| 6    | Merchandising Core KPI Cell Font Color       | Formatting     | 字体颜色（Act=fixed_black；vs LY / TAR ACH%=pos_neg_zero 三色）                               |
-| 7    | Merchandising Core KPI Cell Background Color | Formatting     | 背景色（KPIGroup 层#E6D9C7 vs ColName 层 #FFFFFF）                                            |
+| 3    | Merchandising Core KPI TAR Base Value        | Base Metrics   | TAR 类三指标（TAR ACH% / MTD / YTD TAR Progress）：actual ÷ target；Amt/Unit 字段路由 + 时间粒度分支 |
+| 4    | Merchandising Core KPI Base Value            | Base Metrics   | 总路由（Act + vs LY 变化率 / 差值 bp + TAR 类三分支 + REMOVEFILTERS）；21 列全覆盖            |
+| 5    | Merchandising Core KPI Cell Value            | Cell Values    | 对外值：当前模式金额类触发汇率换算（÷ Currency_ExchangeRate），其余直接返回                  |
+| 6    | Merchandising Core KPI Cell Display          | Formatting     | 格式化显示文本（模式相关 Metric_Format；percent_1dp；delta_bp ×10000 转 bp；币种符号拼接）    |
+| 7    | Merchandising Core KPI Cell Font Color       | Formatting     | 字体颜色（Act=fixed_black；vs LY / TAR 类=pos_neg_zero 三色）                                 |
+| 8    | Merchandising Core KPI Cell Background Color | Formatting     | 背景色（KPIGroup 层#E6D9C7 vs ColName 层 #FFFFFF）                                            |
 
 ---
 
@@ -995,6 +1169,9 @@ Merchandising Core KPI Cell Background Color =
 │  字段: data_date + 商品维度（无 platform/shop_name）,                │
 │        msrp_inv_amt, inv_qty, msrp_in_trans_inv_amt,                │
 │        in_trans_inv_qty, msrp_o2o_inv_amt, o2o_inv_qty              │
+│  a05_e2e_product_fcst_data_d（目标类，无 computed_product_tag）     │
+│  字段: data_date, platform, shop_name, brand, framework,            │
+│        category, fcst_sales_amt, fcst_sales_qty                     │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │ 渠道/商品切片器 1:N 自动传递（无需 DAX）
                                ▼
@@ -1017,8 +1194,17 @@ Merchandising Core KPI Cell Background Color =
 │               │        │ This / Min/Max_Last          │             │
 │               ▼        └──────────────────────────────┘             │
 │  ┌──────────────────────────────────────────────────────┐           │
+│  │ Merchandising Core KPI TAR Base Value                │           │
+│  │ (TAR ACH% / MTD / YTD: actual ÷ target;              │           │
+│  │  Amt/Unit 字段路由 + 时间粒度分支;                    │           │
+│  │  actual←sales, target←a05[fcst_sales_amt/qty])       │           │
+│  │          ▲ Slicer_Time_Frame[TimeFrame_ID]           │           │
+│  │          │ + 财月/财年区间与跨期判定字段              │           │
+│  └───────────────────────┬──────────────────────────────┘           │
+│                          ▼                                          │
+│  ┌──────────────────────────────────────────────────────┐           │
 │  │ Merchandising Core KPI Base Value                    │           │
-│  │ (总路由: Act + vs LY 变化率/差值bp + TAR ACH% 占位)   │           │
+│  │ (总路由: Act + vs LY 变化率/差值bp + TAR 类三分支)    │           │
 │  │ REMOVEFILTERS + 目标 Metric_ID                        │           │
 │  │          ▲ Dim_ColMetric_Merchandising_Core_KPI      │           │
 │  │          │ (Metric_ID, Metric_Format_Amt/Unit,       │           │
@@ -1061,7 +1247,7 @@ Merchandising Core KPI Cell Background Color =
 
 ## 7. 注意事项
 
-1. **TAR ACH% 占位符**：Metric_ID=3（Progress）返回 1、Metric_ID=4（Target）返回 2，口径文档未给出具体计算公式，待业务确认后在 Base Value 总路由中替换占位分支；实现时可参考 Slicer_Time_Frame[TimeFrame_ID] 做触发条件判定（如 Customer 模块的 Month/Year 单选条件）。占位值经 delta_pct_0dp 格式化显示为 "+100%" / "+200%"。
+1. **TAR 类三指标真实现（占位符已废弃）**：TAR ACH%（Metric_ID=21）= This actual / This target（date to date，全粒度）；MTD TAR Progress（3）actual 恒为 This Period 区间，Day/Week 不跨财月取 TimeFrame_Max 所在财月汇总 target（跨财月不计算）、Month This/This、Quarter/Year 不计算；YTD TAR Progress（4）Day/Week/Month/Quarter 不跨财年取所在财年汇总 target（跨财年不计算）、Year 始终计算且 This/This。计算在 TAR Base Value 内完成（粒度分支 + 跨期判定），“不计算”返回 BLANK → Display 显示 "-"（卡片显示空）。
 2. **LY = Last Period 筛选器**：本方案 LY 直接读 Slicer_Time_Frame_Min_Last[TimeFrame_Min] / Slicer_Time_Frame_Max_Last[TimeFrame_Max]（非 _LY 字段对称映射，与 Customer 模块不同）；期末时点类 LY 读 Max_Last 表的 TimeFrame_Min / TimeFrame_Max 范围。依赖模型中 Last 表与主时间筛选器的既有关系配置。
 3. **期末时点口径**：EOH / In-Transit / O2O / ST% 分母取 end period 范围 [Max_This[TimeFrame_Min], Max_This[TimeFrame_Max]] 内**最后一个快照日**（快照缺数时自动回退到范围内最近一天）；快照表按日存储，只取单日，对整段区间求和会重复计数库存。__EndPeriodDate 用 REMOVEFILTERS(inv) 计算，保证快照日不随商品切片器或矩阵上下文漂移。
 4. **ST% 跨双表口径**：分子（sales）为整个 This Period 区间汇总，分母（inv）为期末快照日单日值，两者时间口径不同，不可混用（提示词第 4 点）。
@@ -1070,7 +1256,7 @@ Merchandising Core KPI Cell Background Color =
 7. **AVG MD 与 AUR 双模式共享**：口径标注【Amt】【Unit】同一套逻辑，DAX 中不重复计算（同一组聚合变量两个模式复用）。
 8. **商品标签过滤**：UNION+FILTER 构造表类型稳定的过滤器（避免 IF 退化表变量）；ALL(computed_product_tag) 全量替换该列筛选（该列不是切片器字段，筛选仅来自 IsProductTagFilter 按钮）。选中 "ALL" → IN {"hero model", "slow mover", "normal"} 三值；未选或多选时默认 "ALL"。IsProductTagFilter 作矩阵行或按钮切片器均兼容（SELECTEDVALUE 逐行取值，汇总行回退 ALL）。
 9. **Amt/Unit 默认值**：SELECTEDVALUE('IsAmtUnitFilter'[Sort], 10)，未选择时默认 Amt 逻辑。
-10. **REMOVEFILTERS 机制**：派生列（vs LY / TAR ACH%）取值必须先 REMOVEFILTERS('Dim_ColMetric_Merchandising_Core_KPI') 再应用目标 Metric_ID，否则矩阵行/列标题保留的筛选器会导致冲突返回 BLANK。
+10. **REMOVEFILTERS 机制**：vs LY 派生列取值必须先 REMOVEFILTERS('Dim_ColMetric_Merchandising_Core_KPI') 再应用目标 Metric_ID，否则矩阵行/列标题保留的筛选器会导致冲突返回 BLANK；TAR 类三指标在自身 Metric_ID 上下文内计算（TAR Base Value），无需重路由。
 11. **Metric_ID 路由生效前提**：SELECTEDVALUE(Dim[Metric_ID]) 依赖矩阵列（KPIGroup > ColName）将 Dim 表筛选到单行；ColName 带 Metric_ID 前缀全局唯一是前提（同名区分机制）。KPIGroup 层汇总单元格无唯一 ColName → BLANK → 显示 "-"。
 12. **汇率换算分层**：Base Value 层始终保留 RMB 原始值（Act / LY 派生计算口径一致）；换算集中在展示层 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1）；Cell Display 只拼接 Currency_Symbol。金额类判定为模式相关：IF(__IsAmt, Metric_Format_Amt = "currency", Metric_Format_Unit = "currency")，Unit 模式下仅 AUR 换算。
 13. **delta_bp 转换位置**：Base Value 返回原始差值（如 0.04），Cell Display 中 ×10000 转 bp（+400bp），乘法不落在 Base 层，保证派生值可复用。
@@ -1078,3 +1264,6 @@ Merchandising Core KPI Cell Background Color =
 15. **AVG MD 空值保护**：分母（msrp_net_sales_amt）空或 0 时返回 BLANK，避免 1 - BLANK() = 1（即 100% 折扣）的失真。
 16. **字段名已核对数据字典**：net_sales_amt / net_sales_qty / md_net_sales_amt / msrp_net_sales_amt / msrp_inbound_amt / inbound_qty / md_outbound_amt / outbound_qty（sales 表）；msrp_inv_amt / inv_qty / msrp_in_trans_inv_amt / in_trans_inv_qty / msrp_o2o_inv_amt / o2o_inv_qty（inv 表）；日期字段统一为 data_date（date 类型）。
 17. **DAX 语法规范**：文本常量使用双引号（如 [md_type] = "FP"），单引号仅用于表名，列名使用方括号；与解决方案存在争议时一切以口径文档为准。
+18. **TAR 类 Amt/Unit 字段路由**：actual = sales[net_sales_amt]（Amt）/ [net_sales_qty]（Unit）；target = a05[fcst_sales_amt]（Amt）/ [fcst_sales_qty]（Unit）。三指标双模式格式列相同（TAR ACH% 为 percent_0dp、MTD / YTD 为 percent_1dp）；比率为同模式同币种相除，不受币种选择影响（Cell Value 层仅 currency 格式触发换算，percent 类不涉及）。
+19. **TAR 类标签口径不对称（物理限制）**：actual 侧受 IsProductTagFilter 商品标签过滤（与模块其他指标一致）；a05 无 computed_product_tag 字段，target 侧无法按标签过滤——选中非 ALL 标签时分子分母标签口径不对称，需业务知悉。
+20. **a05 关系与日期断开**：a05 与日期筛选器断开维度，target 三区间（This Period / 财月 / 财年）在 TAR Base Value 内 data_date 显式过滤；渠道（platform / shop_name）与商品维度（brand / framework / category 等）切片器与 a05 一对多关联自动传导，actual / target 维度口径天然一致。

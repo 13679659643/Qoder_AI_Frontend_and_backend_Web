@@ -6,9 +6,11 @@ Dim_ColMetric_Merchandising_Core_KPI =
 // 范围: 口径文档/口径Markdown格式/Merchandise Performance Overview.md
 //       - 子模块一：Merchandising Core KPI【Amt】（§1-§10）
 //       - 子模块二：Merchandising Core KPI【Unit】（§11-§20）
-//       【Amt】与【Unit】指标数量、结构完全一致 → 单套 20 列共用（10 个 KPI 分组，含主指标与附属指标）
+//       【Amt】与【Unit】指标数量、结构完全一致 → 单套 21 列共用（10 个 KPI 分组，含主指标与附属指标）
 // 数据底表（销售类）: indep_rl_ads.a02_e2e_product_performance_sales_summary_d（SLS、AVG MD、Fullprice%、AUR、Inbound、Outbound 及 ST% 分子）
 // 数据底表（库存类）: indep_rl_ads.a02_e2e_product_performance_inv_summary_d（EOH、In-Transit、O2O 及 ST% 分母）
+// 数据底表（目标类）: indep_rl_ads.a05_e2e_product_fcst_data_d（TAR 类三指标 target：
+//                     fcst_sales_amt（Amt 模式）/ fcst_sales_qty（Unit 模式）；无 computed_product_tag 字段）
 // 矩阵行维度: 商品维度切换 ALL / Hero Model / Slow Mover / Normal（computed_product_tag，配合 IsProductTagFilter）
 //
 // 【Amt】/【Unit】按钮切换设计（配合 维度复用/按钮筛选控制/IsAmtUnitFilter）:
@@ -18,7 +20,7 @@ Dim_ColMetric_Merchandising_Core_KPI =
 //      - Metric_Format_Amt  → 【Amt】模式展示格式（子模块一口径）
 //      - Metric_Format_Unit → 【Unit】模式展示格式（子模块二口径）
 //      - 6 组金额/数量类主指标（SLS / EOH / In-Transit Inventory / O2O Inventory / Inbound / Outbound）双列不同（currency vs integer）
-//      - 共享指标（ST% / AVG MD / Fullprice% / AUR）及全部附属指标（vs LY / TAR ACH%）双列相同
+//      - 共享指标（ST% / AVG MD / Fullprice% / AUR）及全部附属指标（vs LY / TAR 类）双列相同
 //   4. KPIGroup / ColName 采用模式中性命名（如 "SLS" 而非 "SLS Amt"/"SLS Unit"），当前模式由按钮状态表达，列名不重复标注
 //
 // 各主指标 Amt/Unit 计算逻辑差异备注（后续度量值实现依据，口径文档 §1-§10 vs §11-§20，字段名已核对数据字典）:
@@ -44,17 +46,18 @@ Dim_ColMetric_Merchandising_Core_KPI =
 //   2. 行格式严格遵循口径文档数据类型定义；与解决方案存在争议时，一切以口径文档为准
 //   3. 颜色规则通过 Metric_ColorRule 字段标识，由 Cell Font Color 度量值统一调度
 //      - "fixed_black"  → 始终 #252423（全部主指标 Act 列）
-//      - "pos_neg_zero" → 按值正/负/零取色（全部 vs LY / TAR ACH% 附属指标列）
+//      - "pos_neg_zero" → 按值正/负/零取色（全部 vs LY / TAR 类附属指标列）
 //   4. 金额类换算：仅 Amt 模式下的金额类指标（Metric_Format_Amt = "currency"，含双模式的 AUR）
 //      需按 Slicer_Currency_Selection 汇率结果在 Display 度量中换算并拼接币种符号；Unit 模式及比率/派生列不涉及
 //
 // 字段说明:
-//   Metric_ID            主键（全局唯一 1-20）
+//   Metric_ID            主键（全局唯一 1-21；21 为 SLS 组 TAR ACH% 追加列，不改动既有 1-20 配置）
 //   KPIGroup             Level 1: KPI 分组名（10 个，模式中性命名）
 //   ColName              Level 2: 列名（Metric_ID + 指标名称，避免同名冲突，支持独立排序）
 //   KPIGroup_Sort        Level 1 排序（步长 10：10-100，按口径文档指标顺序）
-//   ColName_Sort         Level 2 排序（同组内 Act=100, vs LY=200, TAR ACH% Progress=400, TAR ACH% Target=410）
-//   ColType              列类型标识：Act / vs LY / TAR ACH% Progress（进度达成）/ TAR ACH% Target（目标达成）
+//   ColName_Sort         Level 2 排序（同组内 Act=100, vs LY=200, TAR ACH%=300,
+//                         MTD TAR Progress=400, YTD TAR Progress=410）
+//   ColType              列类型标识：Act / vs LY / TAR ACH%（达成率）/ MTD TAR Progress（月度进度）/ YTD TAR Progress（年度进度）
 //   Metric_Format_Amt    【Amt】模式展示格式（SELECTEDVALUE('IsAmtUnitFilter'[Sort])=10 时取用）
 //   Metric_Format_Unit   【Unit】模式展示格式（SELECTEDVALUE('IsAmtUnitFilter'[Sort])=20 时取用）
 //   Metric_ColorRule     字体颜色规则：fixed_black / pos_neg_zero
@@ -68,15 +71,28 @@ Dim_ColMetric_Merchandising_Core_KPI =
 //                   （SLS/EOH/In-Transit Inventory/O2O Inventory/Inbound/Outbound 的 Amt 格式；AUR 双模式格式）
 //   integer       → `#,##0` 整数千分位
 //                   （SLS/EOH/In-Transit Inventory/O2O Inventory/Inbound/Outbound 的 Unit 格式）
-//   percent_0dp   → `#,##0%` 百分比整数，不含正号（ST% / AVG MD / Fullprice% Act 列，双模式相同）
+//   percent_0dp   → `#,##0%` 百分比整数，不含正号（ST% / AVG MD / Fullprice% Act 列，双模式相同；
+//                   TAR ACH%，双模式相同）
+//   percent_1dp   → `#,##0.0%` 百分比一位小数，不含正号
+//                   （MTD TAR Progress / YTD TAR Progress，双模式相同）
 //   delta_pct_0dp → IF(__Value>0,"+","") & FORMAT(__Value,"#,##0%") 百分比整数变化，含正号
-//                   （SLS/EOH/AUR/Inbound/Outbound 的 vs LY；SLS 的 TAR ACH% Progress/Target，口径明确为 delta_pct_0dp）
+//                   （SLS/EOH/AUR/Inbound/Outbound 的 vs LY）
 //   delta_bp      → `+#,##0bp;-#,##0bp;0bp` 基点，含正负号，值×10000 转 bp 在 Cell Display 中实现
 //                   （ST% / AVG MD / Fullprice% 的 vs LY，比率类差值指标）
 //
-// TAR ACH% 说明:
-//   仅 SLS 附属 TAR ACH% 两列（口径全局逻辑：仅 SLS Amt、SLS Unit 附属 TAR ACH%）
-//   - TAR ACH% Progress（进度达成）/ TAR ACH% Target（目标达成），口径文档未给出具体计算公式，计算逻辑在后续度量值中实现
+// TAR 类指标说明（三个，均为 SLS 附属；计算逻辑同口径文档/口径Markdown格式/actual除target逻辑详情.md）:
+//   - TAR ACH%（Metric_ID=21，percent_0dp）：This actual / This target（date to date，全粒度）
+//   - MTD TAR Progress（Metric_ID=3，percent_1dp）：actual 恒为 This Period 区间；
+//     Day/Week 不跨财月取 TimeFrame_Max 所在财月汇总 target、Month 为 This/This、
+//     Quarter/Year 不计算；跨财月不计算
+//   - YTD TAR Progress（Metric_ID=4，percent_1dp）：actual 恒为 This Period 区间；
+//     Day/Week/Month/Quarter 不跨财年取 TimeFrame_Max 所在财年汇总 target、
+//     Year 始终计算且 This/This；跨财年不计算
+//   - actual：sales[net_sales_amt]（Amt）/ sales[net_sales_qty]（Unit），This Period 区间，
+//     受商品标签按钮过滤；target：a05[fcst_sales_amt]（Amt）/ a05[fcst_sales_qty]（Unit）
+//   - a05 无 computed_product_tag 字段，target 侧无法按标签过滤（分子分母口径不对称，属物理限制）；
+//     a05 与日期筛选器断开维度，target 三区间在度量值内 data_date 显式过滤；
+//     渠道 / 商品维度切片器与 a05 一对多关联自动传导
 //
 // 同名区分机制（ColName 加 Metric_ID 前缀）:
 //   Power BI Sort by Column 要求同名字段只能绑定一个排序值，
@@ -106,16 +122,18 @@ DATATABLE(
     "Metric_ColorDefault",   STRING,     // 默认颜色
     {
         // ════════════════════════════════════════════════════════════════
-        // 分组 1：SLS — DCom 净销售额 / 净销售数量（4 列，唯一附属 TAR ACH% 的分组）
+        // 分组 1：SLS — DCom 净销售额 / 净销售数量（5 列，唯一附属 TAR 类的分组）
         // 口径 Amt: sum(net_sales_amt)；Unit: sum(net_sales_qty)（区间汇总，sales 表）
         // 附属: vs LY = this period / last period - 1（delta_pct_0dp）；
-        //       TAR ACH% Progress 进度达成 / TAR ACH% Target 目标达成（delta_pct_0dp，公式后续度量值实现）
-        // 颜色规则: Act=固定黑；vs LY / TAR ACH%=正负零三色
+        //       TAR ACH%（percent_0dp）/ MTD TAR Progress / YTD TAR Progress（percent_1dp），
+        //       TAR 类三列均为 actual ÷ target 口径（actual 同 SLS 字段按模式路由）
+        // 颜色规则: Act=固定黑；vs LY / TAR 类=正负零三色
         // ════════════════════════════════════════════════════════════════
         { 1,  "SLS", "1-SLS",                   10, 100, "Act",               "currency",      "integer",      TRUE,           "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 2,  "SLS", "2-SLS vs LY",             10, 200, "vs LY",             "delta_pct_0dp", "delta_pct_0dp", FALSE,          "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 3,  "SLS", "3-SLS TAR ACH% Progress", 10, 400, "TAR ACH% Progress", "delta_pct_0dp", "delta_pct_0dp", FALSE,          "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 4,  "SLS", "4-SLS TAR ACH% Target",   10, 410, "TAR ACH% Target",   "delta_pct_0dp", "delta_pct_0dp", FALSE,          "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 21, "SLS", "21-TAR ACH%",            10, 300, "TAR ACH%",          "percent_0dp",   "percent_0dp",   FALSE,          "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 3,  "SLS", "3-MTD TAR Progress",      10, 400, "MTD TAR Progress",  "percent_1dp",   "percent_1dp",   FALSE,          "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 4,  "SLS", "4-YTD TAR Progress",      10, 410, "YTD TAR Progress",  "percent_1dp",   "percent_1dp",   FALSE,          "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // 分组 2：ST% — 售罄率%（2 列）

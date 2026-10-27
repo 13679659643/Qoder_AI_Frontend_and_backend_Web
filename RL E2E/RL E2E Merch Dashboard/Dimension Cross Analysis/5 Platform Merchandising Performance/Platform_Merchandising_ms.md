@@ -544,7 +544,7 @@ RETURN
 ### 4.3 Platform Merchandising Base Value（总路由）
 
 ```dax
-Platform Merchandising Base Value =
+Platform Merchandising Base Value = 
 // ========================================
 // 度量值: Platform Merchandising Base Value
 // Display Folder: Platform Merchandising Performance\Base Metrics
@@ -596,14 +596,14 @@ Platform Merchandising Base Value =
             IF(
                 ISBLANK(__SLSAmtPct_This) || ISBLANK(__SLSAmtPct_Last),
                 BLANK(),
-                __SLSAmtPct_This - __SLSAmtPct_Last
+                __SLSAmtPct_This *10000 - __SLSAmtPct_Last *10000
             )
         )
 
     RETURN
         IF(
             __IsVsLP,
-            __vsLPResult,                                // vs LP（12 列，每组各 Label 下 1 列）
+            IF(ISBLANK(__vsLPResult)&& NOT ISBLANK(__SLSAmtPct_This),"-",__vsLPResult),                                // vs LP（12 列，每组各 Label 下 1 列）
             [Platform Merchandising Act Base Value]      // 其余 6 种 ColType 直接取 Act
         )
 ```
@@ -648,7 +648,7 @@ Platform Merchandising Cell Value =
 ### 4.5 Platform Merchandising Cell Display（格式化显示）
 
 ```dax
-Platform Merchandising Cell Display =
+Platform Merchandising Cell Display = 
 // ========================================
 // 度量值: Platform Merchandising Cell Display
 // Display Folder: Platform Merchandising Performance\Formatting
@@ -687,7 +687,7 @@ Platform Merchandising Cell Display =
                     FORMAT(__Value, "#,##0%"),                                                       // 26%
                 // ─── bp 差值（占比差值 ×10000 转 bp，不含正号）───
                 "integer_bp",
-                    FORMAT(__Value * 10000, "#,##0") & "bp",                                         // -152bp / 0bp
+                    FORMAT(__Value , "#,##0") & IF(__Value="-",BLANK(),"bp"),                                         // -152bp / 0bp
                 // ─── 扩展格式（便于后续快速调整）───
                 "percent_1dp",
                     FORMAT(__Value, "#,##0.0%"),                                                    // 26.5%

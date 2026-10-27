@@ -109,7 +109,7 @@ TAR ACH% / MTD TAR Progress / YTD TAR Progress Value
 ### 3.1 Platform Merchandising Card SLS Amt% Value
 
 ```dax
-Platform Merchandising Card SLS Amt% Value =
+Platform Merchandising Card SLS Amt% Value = 
 // ========================================
 // 度量值: Platform Merchandising Card SLS Amt% Value
 // 中文名: 单Framework销售金额占比（卡片）
@@ -145,9 +145,10 @@ VAR __SLSAmt_This =
 VAR __SLSAmt_Total =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
-        ALLSELECTED(Slicer_Framework[framework], Slicer_Framework[sort_order]),
+        ALL(Slicer_Framework[framework], Slicer_Framework[sort_order]),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax,
+        NOT ISBLANK('Slicer_Framework'[framework])
     )
 
 RETURN
@@ -210,9 +211,10 @@ VAR __SLSAmt_Last =
 VAR __SLSAmt_Total_Last =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
-        ALLSELECTED(Slicer_Framework[framework], Slicer_Framework[sort_order]),
+        ALL(Slicer_Framework[framework], Slicer_Framework[sort_order]),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY,
+        NOT ISBLANK('Slicer_Framework'[framework])
     )
 VAR __SLSAmtPct_Last = DIVIDE(__SLSAmt_Last, __SLSAmt_Total_Last)
 
@@ -236,7 +238,7 @@ Platform Merchandising Card SLS Amt% vs LP Display =
 // 中文名: 单Framework销售金额占比vs LP显示（卡片）
 // Display Folder: Platform Merchandising Performance\Card KPIs\Display
 // 用途: 卡片图 vs LP 格式化显示，delta_bp：差值 ×10000 转 bp
-//       负数自带负号、零值 0bp、不含正号
+//       负数自带负号、零值 0bp、含正号
 // 依赖: [Platform Merchandising Card SLS Amt% vs LP Value]
 // 空值规则: BLANK 返回 BLANK()（卡片显示空白）
 // ========================================
@@ -246,7 +248,7 @@ Platform Merchandising Card SLS Amt% vs LP Display =
         IF(
             ISBLANK(__Value),
             BLANK(),
-            FORMAT(__Value * 10000, "#,##0") & "bp"    // -152bp / 0bp
+            IF(__Value * 10000 >0,"+","") & FORMAT(__Value * 10000, "#,##0") & "bp"    // -152bp / 0bp
         )
 ```
 
