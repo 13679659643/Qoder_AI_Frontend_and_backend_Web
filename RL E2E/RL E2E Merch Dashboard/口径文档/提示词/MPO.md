@@ -75,3 +75,30 @@ D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Da
 2、Platform 各个Platform
 3、Store TTL
 4、Store 各个Store
+
+# MPO第六轮提示词:
+1、参考文件格式：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Merchandising Core KPI\Merchandising_Core_KPI_ms.md
+2、
+本次使用新增的日期筛选器：Slicer_Time_Frame_Sales_Trend.sql，且单选模式，比如在对应的时间粒度Month下，单选TimeFrame_Value字段值为2027-04；
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\维度复用\筛选器\日期筛选器\Slicer_Time_Frame_Sales_Trend.sql
+日期表中的字段都是齐全的，比如计算LY的指标，需要使用TimeFrame_Min_LY、TimeFrame_Max_LY。YOY指标：今年/去年-1；都可以使用日期表中预计算的日期值范围。
+3、
+本次要做的是表格，不是矩阵，所以只需要输出单独的Value和Display度量即可，并且Display度量仅需要输出数据类型为currency的时候度量。
+4、
+口径文档：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\口径文档\口径Markdown格式\Sales & Inventory Penetration Trend.md
+5、
+维度表都与事实表一朵对多关联无需dax显示处理，
+Sales模块下有9个指标：SLS Amt%、SLS Unit（TY）、SLS Amt（TY）、ST%（TY）、SLS Unit（LY）、SLS Amt（LY）、ST%（LY）、SLS Amt YOY、SLS Unit YOY
+Inventory模块下有11个指标：EOH Amt%、EOH Unit（TY）、EOH Amt（TY）、In-transit Unit（TY）、ST%（TY）、EOH Unit（LY）、EOH Amt（LY）、In-transit Unit（LY）、ST%（LY）、EOH Amt YOY、EOH Unit YOY
+其中SLS Amt%和EOH Amt%，分母 ALLSELECTED 六个商品维度表（brand / super_season / product_type / category / md_type / division）：
+一次只有一个字段在矩阵行上，其余字段 ALLSELECTED 为无操作；移除视觉对象内部的行维度筛选，保留外部切片器，实现对所有商品维度的统计，这样无论切换哪个维度，一个度量就可以实现对所有商品维度的统计        
+ALLSELECTED('Slicer_Label'),
+ALLSELECTED('Slicer_Super_Season'),
+ALLSELECTED('Slicer_Product_Type'),
+ALLSELECTED('Slicer_Category'),
+ALLSELECTED('Slicer_Md_Type'),
+ALLSELECTED('Slicer_Division')。
+综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales & Inventory Penetration Trend目录下，输出解决方案：Sales_&_Inventory_Table.md
+不懂不明白的就问。
