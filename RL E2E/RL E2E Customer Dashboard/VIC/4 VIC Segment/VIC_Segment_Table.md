@@ -1346,7 +1346,7 @@ Customer No. vs LY Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0.0%")
+            FORMAT(__Value, "#,##0.00%")
         )
 ```
 
@@ -1366,7 +1366,7 @@ Customer% Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0.0%")
+            FORMAT(__Value, "#,##0.00%")
         )
 ```
 
@@ -1387,7 +1387,7 @@ Customer% vs LY Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")
+            FORMAT(__Value * 100, "#,##0.00pts;-#,##0.00pts;0pts")
         )
 ```
 
@@ -1430,7 +1430,7 @@ SLS vs LY Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0.0%")
+            FORMAT(__Value, "#,##0.00%")
         )
 ```
 
@@ -1450,7 +1450,7 @@ SLS% Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0.0%")
+            FORMAT(__Value, "#,##0.00%")
         )
 ```
 
@@ -1472,7 +1472,7 @@ SLS% vs LY Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")
+            FORMAT(__Value * 100, "#,##0.00pts;-#,##0.00pts;0pts")
         )
 ```
 
@@ -1534,7 +1534,7 @@ UPT Display =
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value, "#,##0")
+            FORMAT(__Value, "#,##0.00")
         )
 ```
 

@@ -1,6 +1,6 @@
 # Sales Performance Details by Channel 矩阵解决方案
 
-> **版本**: v1.0
+> **版本**: v1.1（期末时点口径调整：end period 最后一天直接取 Slicer_Time_Frame_Max_This 表 TimeFrame_Max 单日过滤，移除「范围内最后一个有数据的快照日」回退模式）
 > **模块**: RL E2E Merch Dashboard - Merchandise Performance Overview Tab - Sales Performance Details by Channel
 > **关联口径**: 口径文档/口径Markdown格式/Merchandise Performance Overview.md - 子模块六：Sales Performance Details by Channel（§33-§41）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
@@ -46,18 +46,18 @@ Sales Performance Details by Channel 是按渠道展开的销售明细矩阵：
 
 ### 1.3 时间口径
 
-| 口径                      | 时间范围                                                                                                                          | 适用指标                                                                  |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| This Period（区间类）     | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                               | SLS Unit、SLS Amt、vs LP 分子、SLS Amt%、Vert. Amt%、Horiz. Amt%、AUR、MD |
-| Last Period（vs LP 基线） | data_date ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]]                               | vs LP 分母                                                                |
-| End Period（期末时点类）  | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个快照日** | EOH Unit、LTD ST% 分母库存                                                |
-| LTD 区间                  | data_date ∈ [Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day]（end period 所在财年第一天）, This Period end]                      | LTD ST% 分子销售                                                          |
+| 口径                      | 时间范围                                                                                                       | 适用指标                                                                  |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| This Period（区间类）     | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]            | SLS Unit、SLS Amt、vs LP 分子、SLS Amt%、Vert. Amt%、Horiz. Amt%、AUR、MD |
+| Last Period（vs LP 基线） | data_date ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]]            | vs LP 分母                                                                |
+| End Period（期末时点类）  | **end period 最后一天** = Slicer_Time_Frame_Max_This[TimeFrame_Max]（单日时点，直接单日过滤）            | EOH Unit、LTD ST% 分母库存                                                |
+| LTD 区间                  | data_date ∈ [Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day]（end period 所在财年第一天）, This Period end] | LTD ST% 分子销售                                                          |
 
 说明：
 
 - vs LP 是 this period 和 last period 对比，受 last period 时间筛选器影响
 - LTD ST% 销售区间 = end period 所在财年第一天起算至 This Period end（起点读 Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day] 财年日历字段，非固定日期）
-- 期末时点类实现为 end period 范围内最后一个有数据的快照日：口径为 end period 最后一天，快照缺数时自动回退到范围内最近一天；快照表按日存储只取单日，整段区间求和会重复计数库存
+- 期末时点类实现为「end period 最后一天」：= Max_This 表 TimeFrame_Max，inv[data_date] = TimeFrame_Max 直接单日过滤——原「范围内最后一个有数据的快照日」回退模式已移除；快照表按日存储只取单日，整段区间求和会重复计数库存；边界：进行中的时间单位（TimeFrame_Max 在未来）或该日快照未产出时，EOH Unit / LTD ST% 分母返回 BLANK（口径忠实：期末未到无期末值）
 
 ---
 
@@ -109,18 +109,18 @@ Cell Font Color / Cell Background Color
 
 ### 3.3 指标口径（ColType 路由）
 
-| ColType     | 数据底表    | 时间口径            | 公式                                                                                           | 格式          |
-| ----------- | ----------- | ------------------- | ---------------------------------------------------------------------------------------------- | ------------- |
-| SLS Unit    | sales       | This Period 区间    | sum(net_sales_qty)                                                                             | integer       |
-| SLS Amt     | sales       | This Period 区间    | sum(net_sales_amt)                                                                             | currency      |
-| vs LP       | sales       | This / Last 区间    | SLS Amt This / SLS Amt Last - 1                                                                | delta_pct_0dp |
-| SLS Amt%    | sales       | This Period 区间    | 单元格 SLS Amt / 该列渠道全部商品维度合计                                                      | percent_0dp   |
-| Vert. Amt%  | sales       | This Period 区间    | 单元格 SLS Amt / 该列渠道全部商品维度合计（与 SLS Amt% 公式结构相同，渠道上下文为对应 Label）  | percent_0dp   |
-| Horiz. Amt% | sales       | This Period 区间    | 单元格 SLS Amt / 该行商品维度全渠道合计                                                        | percent_0dp   |
-| LTD ST%     | sales + inv | LTD 区间 / 期末快照 | LTD 销售金额 /（LTD 销售金额 + 期末库存金额）                                                  | percent_0dp   |
-| EOH Unit    | inv         | 期末快照单日        | sum(inv_qty)（口径 §40 原文写作 sum(msrp_inv_amt)，按「数量」定义实现为 inv_qty，需业务确认） | integer       |
-| AUR         | sales       | This Period 区间    | sum(net_sales_amt) / sum(net_sales_qty)                                                        | currency      |
-| MD          | sales       | This Period 区间    | 1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)（分母空或 0 → BLANK）                     | percent_0dp   |
+| ColType     | 数据底表    | 时间口径                | 公式                                                                                           | 格式          |
+| ----------- | ----------- | ----------------------- | ---------------------------------------------------------------------------------------------- | ------------- |
+| SLS Unit    | sales       | This Period 区间        | sum(net_sales_qty)                                                                             | integer       |
+| SLS Amt     | sales       | This Period 区间        | sum(net_sales_amt)                                                                             | currency      |
+| vs LP       | sales       | This / Last 区间        | SLS Amt This / SLS Amt Last - 1                                                                | delta_pct_0dp |
+| SLS Amt%    | sales       | This Period 区间        | 单元格 SLS Amt / 该列渠道全部商品维度合计                                                      | percent_0dp   |
+| Vert. Amt%  | sales       | This Period 区间        | 单元格 SLS Amt / 该列渠道全部商品维度合计（与 SLS Amt% 公式结构相同，渠道上下文为对应 Label）  | percent_0dp   |
+| Horiz. Amt% | sales       | This Period 区间        | 单元格 SLS Amt / 该行商品维度全渠道合计                                                        | percent_0dp   |
+| LTD ST%     | sales + inv | LTD 区间 / 期末最后一天 | LTD 销售金额 /（LTD 销售金额 + 期末库存金额）                                                  | percent_0dp   |
+| EOH Unit    | inv         | 期末最后一天（单日）    | sum(inv_qty)（口径 §40 原文写作 sum(msrp_inv_amt)，按「数量」定义实现为 inv_qty，需业务确认） | integer       |
+| AUR         | sales       | This Period 区间        | sum(net_sales_amt) / sum(net_sales_qty)                                                        | currency      |
+| MD          | sales       | This Period 区间        | 1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)（分母空或 0 → BLANK）                     | percent_0dp   |
 
 ### 3.4 占比指标分子分母
 
@@ -173,22 +173,11 @@ VAR __ColType = SELECTEDVALUE('Dim_ColMetric_Sales_Performance_Details'[ColType]
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── End Period 时间范围（期末时点类指标）──
-VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
-VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
-
 // ── LTD 起算日 = end period 所在财年第一天（财年日历字段，非固定日期）──
 VAR __LTDStartDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期 ──
-// REMOVEFILTERS 保证快照日不随行维度 / 商品切片器上下文漂移（全表最后一个快照日）
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 渠道上下文过滤器（platform 侧；UNION+FILTER 保证表类型稳定）──
 //   TTL 列      → ALLSELECTED([platform])：移除视觉对象内部 platform 筛选，保留外部切片器
@@ -770,10 +759,10 @@ Sales Performance Details Cell Background Color =
 5. **占比分母的 ALLSELECTED**：SLS Amt% / Vert. Amt% 分母同时 ALLSELECTED 六个商品维度字段（一次只有一个字段在行上，其余为无操作），移除视觉对象内部行维度筛选、保留外部切片器；Horiz. Amt% 分母不 ALLSELECTED 商品字段（保留行筛选），改为 ALLSELECTED [platform] / [shop_name]（该行全渠道合计）。
 6. **SLS Amt% 与 Vert. Amt% 公式同构**：两者均为「单元格 SLS Amt / 该列渠道全部商品合计」，渠道上下文由列位置（TTL / 非 TTL）自动区分，Act Base Value 中共用同一组变量。
 7. **vs LP 口径**：this period / last period 对比，受 last period 时间筛选器影响；分子通过 `REMOVEFILTERS(Dim 整表) + ChannelGroup = 当前值 + Label_Value = 当前值 + ColType = "SLS Amt"` 三条件重路由取得（同渠道对比，ChannelGroup / Label_Value 标量在 CALCULATE 外捕获后重建筛选）；Last Period 值空或 0 时返回 BLANK。
-8. **LTD ST% 区间起点**：销售区间 = end period 所在财年第一天至 This Period end，起点读 Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day] 财年日历字段（按 TimeFrame_Min 落入的财年区间自关联生成，非固定日期）；分母期末库存金额取 end period 范围内最后快照日单日值，LTD ST% 仅存在于 TTL 列。
+8. **LTD ST% 区间起点**：销售区间 = end period 所在财年第一天至 This Period end，起点读 Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day] 财年日历字段（按 TimeFrame_Min 落入的财年区间自关联生成，非固定日期）；分母期末库存金额取 end period 最后一天（Max_This[TimeFrame_Max]）单日值，LTD ST% 仅存在于 TTL 列。
 9. **EOH Unit 口径差异**：原始口径 §40 公式写作 `sum(msrp_inv_amt)`（金额字段），与「期末库存数量」定义存在差异，本方案按数量口径 `sum(inv_qty)` 实现，需业务确认；确认若为金额口径，仅调整 `__EOHUnit` 的聚合字段。
 10. **inv 表无渠道字段**：a02_e2e_product_performance_inv_summary_d 无 platform / shop_name，渠道上下文不作用于 inv 侧；EOH Unit / LTD ST% 分母不受渠道筛选影响，需业务知悉该口径影响。
-11. **期末快照日机制**：`__EndPeriodDate` 取 end period 范围 [Max_This[TimeFrame_Min], Max_This[TimeFrame_Max]] 内最后一个有数据的快照日，用 REMOVEFILTERS(inv) 计算，保证快照日不随行维度 / 商品切片器漂移；快照缺数时自动回退到范围内最近一天。
+11. **期末日期口径（调整：直接取 end period 最后一天）**：`__EndPeriodDate` = `Slicer_Time_Frame_Max_This[TimeFrame_Max]`（end period 最后一天），`inv[data_date] = __EndPeriodDate` 直接单日过滤——原「范围内最后一个有数据的快照日」回退模式已移除（免 REMOVEFILTERS(inv) 全表扫描）；边界：进行中的时间单位（TimeFrame_Max 在未来，如未结束的当月）或该日快照未产出时，EOH Unit / LTD ST% 分母返回 BLANK（口径忠实：期末未到无期末值）；LTD ST% 在分母缺失而分子有值时会失真为 100%（DIVIDE(SLS, SLS + BLANK)），建议比照 Sales & Inventory 表格方案 §4.5 加空值保护（__InvAmt_End 为 BLANK 时 LTD ST% 返回 BLANK），待业务确认是否统一补上；如业务需展示最近可得快照，可改回 `CALCULATE(MAX(inv[data_date]), REMOVEFILTERS(inv), 区间谓词)` 回退模式，需业务确认。
 12. **vs LP 分子重路由必须整表 REMOVEFILTERS 的原因**：矩阵列头三层（ChannelGroup > Label > ColName）在视觉对象查询（SUMMARIZECOLUMNS）中以 GroupBy 组合筛选形式存在，`REMOVEFILTERS(Dim[ColName])` 单列写法无法从组合筛选中剥离 ColName 部分，残留的 ColName（vs LP 列）筛选与新加的 `ColType = "SLS Amt"` 互斥 → Dim 表空集 → 分子始终 BLANK（同坑在 Merchandising Core KPI 已实证沉淀，其注释：矩阵行/列标题保留的筛选器会导致冲突返回 BLANK）；正确模式 = CALCULATE 外捕获 ChannelGroup / Label_Value 标量 + `REMOVEFILTERS(整表)` + 三条件重建（ChannelGroup + Label_Value + ColType 唯一定位单行）。ChannelGroup / Label 层汇总单元格无唯一 ColType → BLANK → 显示 "-"。
 13. **汇率换算分层**：Base Value 层始终保留 RMB 原始值（vs LP 派生计算口径一致）；换算集中在 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1）；Cell Display 只拼接 Currency_Symbol。金额类判定用 Metric_IsCurrencyAmount（本模块无双模式，该字段直接生效）。
 14. **渠道上下文过滤器构造**：`__PlatformCtx` / `__ShopNameCtx` 用 UNION+FILTER 构造（避免 IF/SWITCH 分支退化表变量），作为 CALCULATE 表过滤器统一传入所有 sales 侧聚合，八种聚合（SLS Amt / SLS Unit / MD 双字段 / 渠道合计 / 行合计 / LTD 销售）共用同一渠道上下文。

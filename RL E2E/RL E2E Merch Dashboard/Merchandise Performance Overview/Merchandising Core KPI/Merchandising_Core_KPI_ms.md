@@ -1,6 +1,6 @@
 # Merchandising Core KPI 矩阵解决方案
 
-> **版本**: v1.1
+> **版本**: v1.2（期末时点口径调整：end period 最后一天直接取 Slicer_Time_Frame_Max_This / Max_Last 表 TimeFrame_Max 单日过滤，移除「范围内最后一个有数据的快照日」回退模式）
 > **模块**: RL E2E Merch Dashboard - Merchandise Performance Overview Tab - Merchandising Core KPI
 > **关联口径**: 口径文档/口径Markdown格式/Merchandise Performance Overview.md - 子模块一【Amt】（§1-§10）+ 子模块二【Unit】（§11-§20）+ 口径文档/口径Markdown格式/actual除target逻辑详情.md（TAR 类指标五粒度规则）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
@@ -31,7 +31,7 @@ TAR 类三指标（TAR ACH% / MTD TAR Progress / YTD TAR Progress）同时用于
 
 1. 行路由从 Net/Demand（Dim_RowMetric）改为 **Amt/Unit 按钮 + 商品标签按钮**（两个断开按钮维度）
 2. LY 不再使用 _LY 字段对称映射，改为**直接读 Last Period 筛选器**（Min_Last / Max_Last 表的 TimeFrame_Min / TimeFrame_Max）
-3. 新增**期末时点口径**（EOH / In-Transit / O2O / ST% 分母）：end period 范围内最后一个快照日
+3. 新增**期末时点口径**（EOH / In-Transit / O2O / ST% 分母）：end period 最后一天（= Max_This / Max_Last 表 TimeFrame_Max，直接单日过滤）
 4. 格式驱动为 **Metric_Format_Amt / Metric_Format_Unit 双列**（按模式取一），金额类为 currency（非 currency_M_K_Int_0db），比率类 vs LY 为 delta_bp（基点）
 5. TAR 类三指标（TAR ACH% / MTD TAR Progress / YTD TAR Progress）为 actual ÷ target 真实现（占位符已废弃）：actual 按 Amt/Unit 模式路由 sales 金额/数量字段，target 按模式路由 a05[fcst_sales_amt] / [fcst_sales_qty]，分母区间随时间粒度分支（读 Slicer_Time_Frame[TimeFrame_ID]）
 
@@ -41,8 +41,8 @@ TAR 类三指标（TAR ACH% / MTD TAR Progress / YTD TAR Progress）同时用于
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | This Period（区间类）    | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                               | SLS、AVG MD、Fullprice%、AUR、Inbound、Outbound、ST% 分子 |
 | Last Period（LY 对比）   | data_date ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]]                               | 上述全部指标的 LY 基线                                    |
-| End Period（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个快照日** | EOH、In-Transit、O2O、ST% 分母                            |
-| End Period LY            | end period 范围 [Slicer_Time_Frame_Max_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] 内**最后一个快照日** | 上述期末类指标的 LY 基线                                  |
+| End Period（期末时点类） | **end period 最后一天** = Slicer_Time_Frame_Max_This[TimeFrame_Max]（单日时点，直接单日过滤） | EOH、In-Transit、O2O、ST% 分母                            |
+| End Period LY            | **end period LY 最后一天** = Slicer_Time_Frame_Max_Last[TimeFrame_Max]（单日时点，直接单日过滤） | 上述期末类指标的 LY 基线                                  |
 | target MTD 区间          | [Slicer_Time_Frame_Max_This[Fiscal_Month_First_Day], Slicer_Time_Frame_Max_This[Fiscal_Month_Last_Day]]（TimeFrame_Max 所在财月） | MTD TAR Progress 分母（Day / Week 不跨财月）              |
 | target YTD 区间          | [Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day], Slicer_Time_Frame_Max_This[Fiscal_Year_Last_Day]]（TimeFrame_Max 所在财年） | YTD TAR Progress 分母（Day / Week / Month / Quarter 不跨财年） |
 
@@ -50,7 +50,7 @@ TAR 类三指标（TAR ACH% / MTD TAR Progress / YTD TAR Progress）同时用于
 
 - 没有特殊说明的情况下，计算 LY 时使用 Last Period 特定筛选器的结果作为上期时间范围对比
 - ST% 这类跨双表指标需留意：sales 部分（分子）是整个 This Period 的区间汇总，inv 部分（分母）只看 end period 范围的最后一天，不能混用
-- 期末时点类实现为「end period 范围内最后一个有数据的快照日」：口径定义为 end period 最后一天，快照缺数时自动回退到范围内最近一天，避免整段空值
+- 期末时点类实现为「end period 最后一天」：= Max_This 表 TimeFrame_Max（LY 侧 = Max_Last 表 TimeFrame_Max），直接以 inv[data_date] = TimeFrame_Max 单日过滤——原「范围内最后一个有数据的快照日」回退模式已移除；边界：进行中的时间单位（TimeFrame_Max 在未来，如未结束的当月）或该日快照未产出时，期末类指标返回 BLANK（口径忠实：期末未到无期末值）
 - 快照表按日存储，期末时点**只取单日**，若对 end period 整段区间求和会把库存重复计数
 - TAR 类三指标：actual 恒为 This Period 区间（Amt 模式 = sum(net_sales_amt)，Unit 模式 = sum(net_sales_qty)，均受商品标签过滤）；TAR ACH% 全粒度 date to date；时间粒度读 SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])；跨财月判定不区分粒度，比较 Min_This[TimeFrame_Min_Month_Value] 与 Max_This[TimeFrame_Max_Month_Value]（财月 value，文本），不相等 → 跨财月；跨财年判定同理比较两表 Year_Value 字段
 
@@ -170,8 +170,8 @@ Merchandising Core KPI Act Base Value =
 //   区间类（SLS/AVG MD/Fullprice%/AUR/Inbound/Outbound/ST% 分子）:
 //     data_date ∈ [Min_This[TimeFrame_Min], Max_This[TimeFrame_Max]]
 //   期末时点类（EOH/In-Transit/O2O/ST% 分母）:
-//     end period 范围 [Max_This[TimeFrame_Min], Max_This[TimeFrame_Max]] 内最后一个快照日
-//     （口径为 end period 最后一天；快照缺数时自动取范围内最近一天）
+//     end period 最后一天 = Max_This[TimeFrame_Max]，inv[data_date] = TimeFrame_Max 直接单日过滤
+//     （原「范围内最后一个有数据的快照日」回退模式已移除，见注意事项 3）
 // 汇率换算: 不在此度量值处理，保持原始 RMB，由 Cell Value 层统一换算
 // ========================================
 
@@ -189,19 +189,8 @@ VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_Merchandising_Core_KPI'[Metric_ID]
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── End Period 时间范围（期末时点类指标）──
-VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
-VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
-
-// ── 期末快照日：end period 范围内最后一个有数据的日期 ──
-// REMOVEFILTERS 保证快照日不随商品切片器/矩阵上下文漂移（全表最后一个快照日，确定性更强）
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 商品标签过滤器（sales 表；UNION+FILTER 保证表类型稳定，避免 IF 退化表变量）──
 VAR __TagFilter_Sales =
@@ -369,7 +358,7 @@ VAR __FullpricePct_Act =
     IF(
         __IsAmt,
         DIVIDE(__FPNetSalesAmt_Act, __NetSalesAmt_Act),
-        DIVIDE(__MsrpNetSalesAmt_Act, __NetSalesAmt_Act)
+        DIVIDE(__FPNetSalesAmt_Act, __NetSalesAmt_Act)
     )
 
 // ═══ Metric_ID=11: AUR（Amt/Unit 同一套逻辑，直接复用；金额类双模式均换算）═══
@@ -437,18 +426,8 @@ VAR __MetricID = SELECTEDVALUE('Dim_ColMetric_Merchandising_Core_KPI'[Metric_ID]
 VAR __PeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min_Last[TimeFrame_Min])
 VAR __PeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
-// ── End Period LY 时间范围（期末时点类指标）──
-VAR __EndPeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Min])
-VAR __EndPeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
-
-// ── 期末快照日（LY）：end period LY 范围内最后一个有数据的日期 ──
-VAR __EndPeriodDate_LY =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin_LY,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax_LY
-    )
+// ── 期末日期（LY）：end period LY 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
 // ── 商品标签过滤器（sales 表）──
 VAR __TagFilter_Sales =
@@ -608,7 +587,7 @@ VAR __FullpricePct_LY =
     IF(
         __IsAmt,
         DIVIDE(__FPNetSalesAmt_LY, __NetSalesAmt_LY),
-        DIVIDE(__MsrpNetSalesAmt_LY, __NetSalesAmt_LY)
+        DIVIDE(__FPNetSalesAmt_LY, __NetSalesAmt_LY)
     )
 
 // ═══ Metric_ID=11: AUR LY ═══
@@ -1248,9 +1227,9 @@ Merchandising Core KPI Cell Background Color =
 ## 7. 注意事项
 
 1. **TAR 类三指标真实现（占位符已废弃）**：TAR ACH%（Metric_ID=21）= This actual / This target（date to date，全粒度）；MTD TAR Progress（3）actual 恒为 This Period 区间，Day/Week 不跨财月取 TimeFrame_Max 所在财月汇总 target（跨财月不计算）、Month This/This、Quarter/Year 不计算；YTD TAR Progress（4）Day/Week/Month/Quarter 不跨财年取所在财年汇总 target（跨财年不计算）、Year 始终计算且 This/This。计算在 TAR Base Value 内完成（粒度分支 + 跨期判定），“不计算”返回 BLANK → Display 显示 "-"（卡片显示空）。
-2. **LY = Last Period 筛选器**：本方案 LY 直接读 Slicer_Time_Frame_Min_Last[TimeFrame_Min] / Slicer_Time_Frame_Max_Last[TimeFrame_Max]（非 _LY 字段对称映射，与 Customer 模块不同）；期末时点类 LY 读 Max_Last 表的 TimeFrame_Min / TimeFrame_Max 范围。依赖模型中 Last 表与主时间筛选器的既有关系配置。
-3. **期末时点口径**：EOH / In-Transit / O2O / ST% 分母取 end period 范围 [Max_This[TimeFrame_Min], Max_This[TimeFrame_Max]] 内**最后一个快照日**（快照缺数时自动回退到范围内最近一天）；快照表按日存储，只取单日，对整段区间求和会重复计数库存。__EndPeriodDate 用 REMOVEFILTERS(inv) 计算，保证快照日不随商品切片器或矩阵上下文漂移。
-4. **ST% 跨双表口径**：分子（sales）为整个 This Period 区间汇总，分母（inv）为期末快照日单日值，两者时间口径不同，不可混用（提示词第 4 点）。
+2. **LY = Last Period 筛选器**：本方案 LY 直接读 Slicer_Time_Frame_Min_Last[TimeFrame_Min] / Slicer_Time_Frame_Max_Last[TimeFrame_Max]（非 _LY 字段对称映射，与 Customer 模块不同）；期末时点类 LY 取 Max_Last 表的 TimeFrame_Max（end period LY 最后一天）。依赖模型中 Last 表与主时间筛选器的既有关系配置。
+3. **期末时点口径（调整：直接取 end period 最后一天）**：EOH / In-Transit / O2O / ST% 分母取 **end period 最后一天** = `Slicer_Time_Frame_Max_This[TimeFrame_Max]`（LY 侧 = `Slicer_Time_Frame_Max_Last[TimeFrame_Max]`），`inv[data_date] = __EndPeriodDate` 直接单日过滤——语义贴合口径原文、免 REMOVEFILTERS(inv) 全表扫描（原「范围内最后一个有数据的快照日」回退模式已移除）；快照表按日存储，只取单日，对整段区间求和会重复计数库存。边界：进行中的时间单位（TimeFrame_Max 在未来，如未结束的当月）或该日快照未产出时，期末类指标返回 BLANK（口径忠实：期末未到无期末值）；如业务需展示最近可得快照，可改回 `CALCULATE(MAX(inv[data_date]), REMOVEFILTERS(inv), 区间谓词)` 回退模式，需业务确认。另：ST% 在分母（期末库存）缺失而分子（销售）有值时会失真为 100%（DIVIDE(SLS, SLS + BLANK)），建议比照 Sales & Inventory 表格方案 §4.5 加空值保护（__EOH_Act 为 BLANK 时 ST% 返回 BLANK），待业务确认是否统一补上。
+4. **ST% 跨双表口径**：分子（sales）为整个 This Period 区间汇总，分母（inv）为期末最后一天单日值，两者时间口径不同，不可混用（提示词第 4 点）。
 5. **inv 表无渠道字段**：a02_e2e_product_performance_inv_summary_d 无 platform / shop_name 字段，渠道筛选（Slicer_Platform_Selection / Slicer_Store_Name）不影响 EOH / In-Transit / O2O 及 ST% 分母；ST% 分子（sales 侧）受渠道筛选影响，分母不受影响，需业务知悉该口径影响。
 6. **Fullprice% 双公式**：Amt = sum(case when md_type = "FP" then net_sales_amt else 0 end) / sum(net_sales_amt)；Unit = sum(msrp_net_sales_amt) / sum(net_sales_amt)（口径已确认，Unit 版分子分母均为金额字段）。
 7. **AVG MD 与 AUR 双模式共享**：口径标注【Amt】【Unit】同一套逻辑，DAX 中不重复计算（同一组聚合变量两个模式复用）。

@@ -236,7 +236,7 @@
 | **计算公式** | `sum(msrp_net_sales_amt) / sum(net_sales_amt)` |
 | **数据底表** | `indep_rl_ads.a02_e2e_product_performance_sales_summary_d` |
 | **附属指标** | vs LY：this period - last period（差值，bp 指标，展示时 ×10000 转 bp） |
-| **注意** | 原始口径该行公式与子模块一 Fullprice%（`md_type = 'FP'` 口径）不同，DAX 实现时需与业务确认：已确认，此处直接sum(msrp_net_sales_amt) |
+| **注意** | 原始口径该行公式与子模块一 Fullprice%（`md_type = 'FP'` 口径）不同，DAX 实现时需与业务确认：已确认，和子模块一 Fullprice% 口径一致`sum(case when md_type = 'FP' then net_sales_amt else 0 end) / sum(net_sales_amt)`。 |
 | **数据类型** | percent_0dp → 百分比整数，不含正号 |
 | **数据格式** | `#,##0%` |
 | **附属指标类型** | vs LY:delta_bp |
