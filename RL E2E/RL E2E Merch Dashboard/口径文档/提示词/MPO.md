@@ -102,3 +102,13 @@ ALLSELECTED('Slicer_Md_Type'),
 ALLSELECTED('Slicer_Division')。
 综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales & Inventory Penetration Trend目录下，输出解决方案：Sales_&_Inventory_Table.md
 不懂不明白的就问。
+
+# MPO第六轮提示词:
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales & Inventory Penetration Trend\Sales_&_Inventory_Table.md
+这个方案的每一个指标也需要新增全局区间框定机制。
+除了4.23 S&I TimeFrame Value TY和4.24 S&I TimeFrame Value LY，其他指标都需要新增全局区间框定机制。
+此外，还需要新增一个，视觉对象筛选度量，背景：
+全局切片器时间粒度是day、week、month、year、quarter，`data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]`（全局 This Period）；
+我有一个切片器A，用的是Slicer_Time_Frame_Sales_Trend[TimeFrame_Value],受到按钮切片器B Slicer_Time_Frame_Sales_Trend[TimeFrame_ID]的影响，时间粒度只有Week、Month、Year。
+全局区间框定机制，也需要对这个切片器影响，框定其中的值，特殊情况，比如，我的切片器时间粒度是Month，但全局筛选器的时间粒度是day，选择的范围是2027-03-28到2027-04-04，虽然不是整月，但我的切片器A的字段值应该需要包括：2027-03、2027-04，Week、Year粒度也是一样。
+不懂就问。
