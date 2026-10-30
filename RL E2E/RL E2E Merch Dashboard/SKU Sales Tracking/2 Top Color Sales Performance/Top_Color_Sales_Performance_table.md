@@ -245,15 +245,8 @@ Top Color Inventory Color Rank =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期 ──
-// REMOVEFILTERS 保证快照日不随切片器 / 表格行上下文漂移
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 当前行 color（空白/空字符拦截的判定依据）──
 VAR __CurrentColor = SELECTEDVALUE('s02_inventory_stock_sales_detail_d'[color_name])
@@ -472,14 +465,8 @@ Top Color Inventory EOH Amt Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 币种汇率（RMB = 1；USD 动态取自数仓汇率表）──
 VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
@@ -517,14 +504,8 @@ Top Color Inventory EOH Amt% Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：当前行 color 期末库存金额（期末快照日单日值）──
 VAR __Numerator =
@@ -566,14 +547,8 @@ Top Color Inventory EOH Unit Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 RETURN
     CALCULATE(
@@ -603,14 +578,8 @@ Top Color Inventory EOH Unit% Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：当前行 color 期末库存数量（期末快照日单日值）──
 VAR __Numerator =
@@ -947,7 +916,8 @@ SELECTEDVALUE('Slicer_Division'[division],"切片器和按钮交集为空！")
 
 1. **inv 表无渠道字段**：s02_inventory_stock_sales_detail_d 无 platform / shop_name 字段，Inventory 全部指标（EOH Amt / EOH Amt% / EOH Unit / EOH Unit%）与 Inventory Top10 排名不受 Platform / Store Name 筛选影响，仅受 date + Division 影响；Sales 全部指标受 date + Platform + Store Name + Division 四组筛选影响。该口径限制已与业务确认。
 2. **期末时点只取单日**：EOH 系列指标取 end period 范围内最后一个快照日的单日值；快照表按日存储，对整段区间求和会把库存重复计数。快照缺数时在 end period 窗口内自动回退到最近一天（口径定义为 this period 最后一天）。
-3. **快照日 REMOVEFILTERS 机制**：__EndPeriodDate 用 REMOVEFILTERS(整表) 计算，保证快照日不随 Division / color 行上下文或切片器漂移，全表确定性取值。
+3. **快照日 REMOVEFILTERS 机制**：__EndPeriodDate 用 // ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 4. **Top10 排名的筛选范围**：Rank 度量值中 ALL(color_name) 仅移除 color 列筛选，Platform / Store Name（Sales 侧）/ Division 筛选保留，排名是当前筛选组合下的排名；空白与空字符 color_name（数据中 NULL 与 "" 并存）在度量值内部用 LEN(TRIM()) > 0 排除，不参与排名。注意：视觉级 color_name 列筛选器会被候选集的 ALL(color_name) 移除而无法影响排名，空白排除必须在度量值内部实现。
 5. **名称决胜的排名语义**：RANK 的 ORDERBY 以金额降序为第一序、color_name 字母序升序为第二序——金额相同的 color 因名称不同而名次相邻不并列（金额 [100, 95, 95, 90] → 排名 [1, 2, 3, 4]），名次严格连续唯一；只有金额与 color_name 都相同才会共享名次（color_name 唯一时不存在），「Rank 介于 1 与 10」恒放行恰好 10 行、Top10 边界确定。金额展示值经四舍五入，肉眼相同不代表底层并列；名称决胜使名次与行序不依赖底层是否真并列（DENSE 保证连续不跳号，元组唯一时名次即排序位置）。
 6. **占比分母为全量**：Amt% / Unit% 分母经 REMOVEFILTERS(color_name) 上卷至全部 color（含 Top10 之外颜色、含空白 color_name 记录的金额/数量），Top10 行占比加总小于 100%；占比基数不随 Top10 行筛选与币种选择变化。拓展为 Top10 color 集合分母的修改方式见 §9。

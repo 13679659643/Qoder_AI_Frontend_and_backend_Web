@@ -500,15 +500,8 @@ Series Sales EOH Amt Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-// REMOVEFILTERS(整表) 保证快照日不随行上下文 / 切片器漂移，全表确定性取值
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 币种汇率（RMB = 1；USD 动态取自数仓汇率表）──
 VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
@@ -575,14 +568,8 @@ Series Sales EOH Amt% Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：当前行粒度期末库存金额（TREATAS 行维度传递，期末快照日单日值）──
 VAR __Numerator =
@@ -649,14 +636,8 @@ Series Sales EOH Unit Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 RETURN
     IF(
@@ -712,14 +693,8 @@ Series Sales EOH Unit% Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：当前行粒度期末库存数量（TREATAS 行维度传递）──
 VAR __Numerator =
@@ -930,14 +905,8 @@ VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：该行粒度 YTD 销售数量（trade 表行筛选自动传递）──
 VAR __YtdSalesQty =
@@ -1011,14 +980,8 @@ VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：该行粒度 YTD 销售金额（原始 RMB）──
 VAR __YtdSalesAmt =
@@ -1120,14 +1083,8 @@ VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：该行粒度 LTD 销售数量（trade 表行筛选自动传递）──
 VAR __LtdSalesQty =
@@ -1662,7 +1619,8 @@ Series Sales IsEmpty =
 1. **inv 表无渠道字段**：s02_inventory_stock_sales_detail_d 无 platform / shop_name 字段，库存类全部指标（EOH 系列、ST% 库存加项）与库存占比分母不受 Platform / Store Name 筛选影响，仅受 date + 与 inv 表已建关系的商品维度切片器（Division）影响；销售类全部指标受 date + 渠道 + 商品维度筛选影响。series 汇总行的 EOH / ST% 覆盖 inv 表中该 series 全部库存（含 trade 侧无销售记录的 spu），可能大于表格内可见 AXC 行库存之和——行为符合口径（库存为时点全量，与渠道筛选无关）
 2. **行维度传递的层级判定**：库存类指标的 TREATAS 桥接依赖 ISINSCOPE(spu_id) / ISINSCOPE(special_series) 判定行层级（明细 / 汇总 / 总计三分支）。若后续在行区域增删字段或调整层级，需同步复核各库存类度量的分支判定
 3. **期末时点只取单日**：EOH 系列与 ST% 库存加项取 end period 范围内最后一个快照日的单日值；快照表按日存储，对整段区间求和会把库存重复计数。快照缺数时在 end period 窗口内自动回退到最近一天（口径定义为 this period 最后一天）
-4. **快照日 REMOVEFILTERS 机制**：`__EndPeriodDate` 用 REMOVEFILTERS(整表) 计算，保证快照日不随行上下文 / Division / 切片器漂移，全表确定性取值
+4. **快照日 REMOVEFILTERS 机制**：`__EndPeriodDate` 用 // ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 5. **占比分母为全量有效 series**：SLS Amt% / SLS Unit% 分母经 REMOVEFILTERS(三列：series / spu_id / spu_img_url) 上卷至全部有效 series 商品（含表格未显示行），同时显式重加 series 非空条件（视觉级「不为空」筛选被 REMOVEFILTERS 移除后必须还原，否则空白 series 金额混入分母、占比偏小；spu_img_url 行筛选必须一并移除，否则分母被当前行 url 筛选收窄为分子自身、占比恒 100%）；EOH Amt% / EOH Unit% 分母为 inv 表全量有效 series（显式非空）。全部 AXC 行占比加总小于 100%
 6. **Sort Key 排名语义与粒度上卷**：两级 RANK 的 ORDERBY 均为金额降序 + 维度值升序决胜——金额相同的行因维度值不同而名次相邻不并列（金额 [100, 95, 95, 90] → 排名 [1, 2, 3, 4]），名次严格连续唯一；金额展示值经四舍五入，肉眼相同不代表底层并列。L2 的 series 内排名依赖 relation `ALL(spu_id)` 仅移除 spu_id 列筛选、保留当前行 series 筛选（行区域字段顺序变化不影响该机制，series 筛选始终存在于明细行上下文）；行区域含 spu_img_url 时，候选金额必须按排名粒度上卷——L1 候选 CALCULATE 内 REMOVEFILTERS(spu_id, spu_img_url)（series 粒度）、L2 候选 CALCULATE 内 REMOVEFILTERS(spu_img_url)（spu 粒度），否则候选集被当前行子级筛选收窄为自身、名次恒 1；一对多异常时同一 spu 的多个 url 行共享同一 L2 名次，行序由表格呈现确定
 7. **YTD / LTD 的模型加载窗口限制**：Power Query 取数窗口为 trade `(2026-03-29 ~ 2026-09-26) ∪ (2025-03-30 ~ 2025-09-27)`、inv `(2026-03-29 ~ 2026-07-25) ∪ (2025-03-30 ~ 2025-07-26)`。LTD「开店以来」与 YTD「财年第一天起」在模型中实际统计范围为窗口 ∩ 口径区间：财年第一天早于窗口起点时 YTD ≈ This Period；LTD 仅含窗口内两段日期。窗口外历史数据不在模型中，如需全量 LTD / YTD 口径需扩窗重新取数。测试 SQL 默认附加相同窗口条件与 Power BI 模型值对齐，去窗口即为全量口径

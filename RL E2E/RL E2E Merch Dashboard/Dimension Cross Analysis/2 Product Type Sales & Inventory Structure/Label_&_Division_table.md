@@ -398,15 +398,8 @@ Label & Division Table EOH Amt% Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── This 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-// REMOVEFILTERS(整表) 保证快照日不随行维度 / 分组筛选 / 切片器上下文漂移
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：当前 Category 期末库存金额（快照日单日值）──
 VAR __Numerator =
@@ -466,14 +459,8 @@ Label & Division Table LP EOH Amt% Value =
 VAR __EndPeriodMin_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Min])
 VAR __EndPeriodMax_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
-// ── LP 期末快照日：end period LP 范围内最后一个有数据的日期 ──
-VAR __EndPeriodDate_LP =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin_LP,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax_LP
-    )
+// ── 期末日期（LP）：end period LP 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
 // ── 分子：当前 Category LP 期末库存金额（LP 快照日单日值）──
 VAR __Numerator =
@@ -514,14 +501,8 @@ Label & Division Table LY EOH Amt% Value =
 VAR __EndPeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min_LY])
 VAR __EndPeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_LY])
 
-// ── LY 期末快照日：LY 区间范围内最后一个有数据的日期 ──
-VAR __EndPeriodDate_LY =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin_LY,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax_LY
-    )
+// ── 期末日期（LY）：end period LY 最后一天 = Max_This 表 TimeFrame_Max_LY（直接单日过滤）──
+VAR __EndPeriodDate_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_LY])
 
 // ── 分子：当前 Category LY 期末库存金额（LY 快照日单日值）──
 VAR __Numerator =

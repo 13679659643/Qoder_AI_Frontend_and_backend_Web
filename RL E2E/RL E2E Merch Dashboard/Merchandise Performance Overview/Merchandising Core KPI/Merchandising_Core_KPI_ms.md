@@ -192,6 +192,9 @@ VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
+// ── 店铺集合（表变量，供 Inbound/Outbound 去重取单值）──
+VAR __Stores = VALUES('Slicer_Store_Name'[Store_ID])
+
 // ── 商品标签过滤器（sales 表；UNION+FILTER 保证表类型稳定，避免 IF 退化表变量）──
 VAR __TagFilter_Sales =
     UNION(
@@ -262,34 +265,49 @@ VAR __FPNetSalesAmt_Act =
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
+
+
 VAR __MsrpInboundAmt_Act =
-    CALCULATE(
-        SUM('a02_e2e_product_performance_sales_summary_d'[msrp_inbound_amt]),
-        __TagFilter_Sales,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+    MAXX(
+        __Stores,
+        CALCULATE(
+            SUM('a02_e2e_product_performance_sales_summary_d'[msrp_inbound_amt]),
+            __TagFilter_Sales,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+        )
     )
 VAR __InboundQty_Act =
-    CALCULATE(
-        SUM('a02_e2e_product_performance_sales_summary_d'[inbound_qty]),
-        __TagFilter_Sales,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+    MAXX(
+        __Stores,
+        CALCULATE(
+            SUM('a02_e2e_product_performance_sales_summary_d'[inbound_qty]),
+            __TagFilter_Sales,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+        )
     )
 VAR __MDOutboundAmt_Act =
-    CALCULATE(
-        SUM('a02_e2e_product_performance_sales_summary_d'[md_outbound_amt]),
-        __TagFilter_Sales,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+    MAXX(
+        __Stores,
+        CALCULATE(
+            SUM('a02_e2e_product_performance_sales_summary_d'[md_outbound_amt]),
+            __TagFilter_Sales,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+        )
     )
 VAR __OutboundQty_Act =
-    CALCULATE(
-        SUM('a02_e2e_product_performance_sales_summary_d'[outbound_qty]),
-        __TagFilter_Sales,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+    MAXX(
+        __Stores,
+        CALCULATE(
+            SUM('a02_e2e_product_performance_sales_summary_d'[outbound_qty]),
+            __TagFilter_Sales,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+        )
     )
+    
 
 // ═══ 公共聚合：inv 表期末快照日（单日时点，供 EOH/ST% 分母复用）═══
 VAR __MsrpInvAmt_End =
@@ -429,6 +447,9 @@ VAR __PeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 // ── 期末日期（LY）：end period LY 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
+// ── 店铺集合（表变量，供 Inbound/Outbound LY 去重取单值）──
+VAR __Stores = VALUES('Slicer_Store_Name'[Store_ID])
+
 // ── 商品标签过滤器（sales 表）──
 VAR __TagFilter_Sales =
     UNION(
@@ -498,33 +519,46 @@ VAR __FPNetSalesAmt_LY =
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
     )
+
 VAR __MsrpInboundAmt_LY =
-    CALCULATE(
-        SUM('a02_e2e_product_performance_sales_summary_d'[msrp_inbound_amt]),
-        __TagFilter_Sales,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
+    MAXX(
+        __Stores,
+        CALCULATE(
+            SUM('a02_e2e_product_performance_sales_summary_d'[msrp_inbound_amt]),
+            __TagFilter_Sales,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
+        )
     )
 VAR __InboundQty_LY =
-    CALCULATE(
-        SUM('a02_e2e_product_performance_sales_summary_d'[inbound_qty]),
-        __TagFilter_Sales,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
+    MAXX(
+        __Stores,
+        CALCULATE(
+            SUM('a02_e2e_product_performance_sales_summary_d'[inbound_qty]),
+            __TagFilter_Sales,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
+        )
     )
 VAR __MDOutboundAmt_LY =
-    CALCULATE(
-        SUM('a02_e2e_product_performance_sales_summary_d'[md_outbound_amt]),
-        __TagFilter_Sales,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
+    MAXX(
+        __Stores,
+        CALCULATE(
+            SUM('a02_e2e_product_performance_sales_summary_d'[md_outbound_amt]),
+            __TagFilter_Sales,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
+        )
     )
 VAR __OutboundQty_LY =
-    CALCULATE(
-        SUM('a02_e2e_product_performance_sales_summary_d'[outbound_qty]),
-        __TagFilter_Sales,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
-        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
+    MAXX(
+        __Stores,
+        CALCULATE(
+            SUM('a02_e2e_product_performance_sales_summary_d'[outbound_qty]),
+            __TagFilter_Sales,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
+            'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
+        )
     )
 
 // ═══ 公共聚合：inv 表期末快照日（LY，单日时点）═══

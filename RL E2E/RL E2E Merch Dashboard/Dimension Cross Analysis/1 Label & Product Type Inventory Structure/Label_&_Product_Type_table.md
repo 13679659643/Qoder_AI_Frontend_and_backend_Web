@@ -145,7 +145,7 @@ Display（格式化显示）
 
 ### 3.4 期末时点与 vs LP
 
-- 期末快照日：`__EndPeriodDate` 在每个库存类 Value 度量内以 `CALCULATE(MAX(inv[data_date]), REMOVEFILTERS(inv), end period 范围)` 确定性取值，不随行维度、切片器或柱形图上下文漂移；LP 侧快照日同法取 end period LP 范围
+- 期末快照日：`__EndPeriodDate` 在每个库存类 Value 度量内以 `VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])` 确定性取值，不随行维度、切片器或柱形图上下文漂移；LP 侧快照日同法取 end period LP 范围
 - vs LP 附属：LP 侧占比（LP SLS Amt% / LP EOH Amt%）作为独立中间度量值输出（时间范围替换为 Last Period / end period LP，分母机制与 This 侧完全一致），vs LP Value = This 期占比 − LP 期占比（原始差值）；任一期 BLANK 时返回 BLANK（避免单侧缺失产生失真差值）；×10000 转 bp 在 Display 层实现，保证 Value 层差值可复用
 - EOH Amt% vs LP 的双期时点：This 侧取 end period 范围最后快照日，LP 侧取 end period LP 范围最后快照日，两侧各自单日时点值
 
@@ -346,15 +346,8 @@ Label & PT Table EOH Amt% Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-// REMOVEFILTERS(整表) 保证快照日不随行维度 / 切片器上下文漂移，全表确定性取值
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：当前行维度值期末库存金额（快照日单日值）──
 VAR __Numerator =
@@ -419,14 +412,8 @@ Label & PT Table LP EOH Amt% Value =
 VAR __EndPeriodMin_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Min])
 VAR __EndPeriodMax_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
-// ── LP 期末快照日：end period LP 范围内最后一个有数据的日期 ──
-VAR __EndPeriodDate_LP =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin_LP,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax_LP
-    )
+// ── 期末日期（LP）：end period LP 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
 // ── 分子：当前行维度值 LP 期末库存金额（LP 快照日单日值）──
 VAR __Numerator =
@@ -566,14 +553,8 @@ Label & PT Table EOH Unit Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 RETURN
     CALCULATE(
@@ -634,14 +615,8 @@ VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：YTD 销售数量（YTD 区间，sales 表，行筛选自动传导）──
 VAR __SLSQty_YTD =
@@ -843,14 +818,8 @@ Label & PT Table Cross Label EOH Amt% Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：该 label × 交叉维度值期末库存金额（快照日单日值）──
 VAR __Numerator =
@@ -992,14 +961,8 @@ Label & PT Table Cross PT EOH Amt% Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：该 product_type × 交叉维度值期末库存金额（快照日单日值）──
 VAR __Numerator =
@@ -1128,14 +1091,8 @@ Label & PT Table Cross Label EOH Amt Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 币种汇率（RMB = 1；USD 动态取自数仓汇率表）──
 VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
@@ -1255,14 +1212,8 @@ Label & PT Table Cross PT EOH Amt Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 币种汇率（RMB = 1；USD 动态取自数仓汇率表）──
 VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)

@@ -29,8 +29,10 @@
 --      （对应视觉级筛选器「Value 不为空」）
 --   7. vs LP = this % - last %（任一侧为 NULL 则差值为 NULL，对应 DAX
 --      任一期 BLANK 返回 BLANK）；Vs_LP_Bp 为 ×10000 转 bp
---   8. 行序对应 Sort Key：L1 字母尺码 > 数字尺码 > 其余；L2 分组当期金额
---      降序；L3 组内占比升序
+--   8. 行序对应 Sort Key（v1.1 两级编码）：L1 分组当期金额降序；L2 组内 size_rank
+--      升序——LEFT JOIN indep_rl_dim.dim_t00_size_category_mapping 取
+--      MIN(rank)（与 PBI 取数 SQL 同逻辑），未命中映射 COALESCE 999,999 垫底
+--      （对应 DAX COALESCE 哨兵值）
 -- ======================================================================
 
 SET @division := 'WM';
@@ -95,15 +97,19 @@ SELECT
 FROM pct p
 JOIN top_category tc
   ON p.category = tc.category
+LEFT JOIN (
+    SELECT size, size_category, MIN(rank) AS size_rank
+    FROM indep_rl_dim.dim_t00_size_category_mapping
+    GROUP BY size, size_category
+) sr
+  ON p.sku_size = sr.size
+ AND p.sku_size_category = sr.size_category
 WHERE p.this_amt IS NOT NULL       -- This Period 有记录且金额非全 NULL（对应 DAX SUM 空集 = BLANK）
   AND p.this_denom IS NOT NULL
   AND p.this_denom <> 0            -- 分组分母为空/零 → 占比 BLANK → 行过滤（对应「Value 不为空」）
 ORDER BY
-    CASE WHEN p.sku_size_category LIKE '%字母尺码%' THEN 0
-         WHEN p.sku_size_category LIKE '%数字尺码%' THEN 1
-         ELSE 2 END,                                                          -- L1 分组优先级
-    p.this_denom DESC,                                                        -- L2 分组当期金额降序
-    p.this_amt / NULLIF(p.this_denom, 0) ASC;                                 -- L3 组内占比升序
+    p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
 -- SQL 2/8: Sales Top2（Category Rank = 2）
@@ -165,15 +171,19 @@ SELECT
 FROM pct p
 JOIN top_category tc
   ON p.category = tc.category
+LEFT JOIN (
+    SELECT size, size_category, MIN(rank) AS size_rank
+    FROM indep_rl_dim.dim_t00_size_category_mapping
+    GROUP BY size, size_category
+) sr
+  ON p.sku_size = sr.size
+ AND p.sku_size_category = sr.size_category
 WHERE p.this_amt IS NOT NULL
   AND p.this_denom IS NOT NULL
   AND p.this_denom <> 0
 ORDER BY
-    CASE WHEN p.sku_size_category LIKE '%字母尺码%' THEN 0
-         WHEN p.sku_size_category LIKE '%数字尺码%' THEN 1
-         ELSE 2 END,
-    p.this_denom DESC,
-    p.this_amt / NULLIF(p.this_denom, 0) ASC;
+    p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
 -- SQL 3/8: Sales Top3（Category Rank = 3）
@@ -235,15 +245,19 @@ SELECT
 FROM pct p
 JOIN top_category tc
   ON p.category = tc.category
+LEFT JOIN (
+    SELECT size, size_category, MIN(rank) AS size_rank
+    FROM indep_rl_dim.dim_t00_size_category_mapping
+    GROUP BY size, size_category
+) sr
+  ON p.sku_size = sr.size
+ AND p.sku_size_category = sr.size_category
 WHERE p.this_amt IS NOT NULL
   AND p.this_denom IS NOT NULL
   AND p.this_denom <> 0
 ORDER BY
-    CASE WHEN p.sku_size_category LIKE '%字母尺码%' THEN 0
-         WHEN p.sku_size_category LIKE '%数字尺码%' THEN 1
-         ELSE 2 END,
-    p.this_denom DESC,
-    p.this_amt / NULLIF(p.this_denom, 0) ASC;
+    p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
 -- SQL 4/8: Sales Top4（Category Rank = 4）
@@ -305,15 +319,19 @@ SELECT
 FROM pct p
 JOIN top_category tc
   ON p.category = tc.category
+LEFT JOIN (
+    SELECT size, size_category, MIN(rank) AS size_rank
+    FROM indep_rl_dim.dim_t00_size_category_mapping
+    GROUP BY size, size_category
+) sr
+  ON p.sku_size = sr.size
+ AND p.sku_size_category = sr.size_category
 WHERE p.this_amt IS NOT NULL
   AND p.this_denom IS NOT NULL
   AND p.this_denom <> 0
 ORDER BY
-    CASE WHEN p.sku_size_category LIKE '%字母尺码%' THEN 0
-         WHEN p.sku_size_category LIKE '%数字尺码%' THEN 1
-         ELSE 2 END,
-    p.this_denom DESC,
-    p.this_amt / NULLIF(p.this_denom, 0) ASC;
+    p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
 -- SQL 5/8: Inventory Top1（Category Rank = 1）
@@ -373,15 +391,19 @@ SELECT
 FROM pct p
 JOIN top_category tc
   ON p.category = tc.category
+LEFT JOIN (
+    SELECT size, size_category, MIN(rank) AS size_rank
+    FROM indep_rl_dim.dim_t00_size_category_mapping
+    GROUP BY size, size_category
+) sr
+  ON p.sku_size = sr.size
+ AND p.sku_size_category = sr.size_category
 WHERE p.this_amt IS NOT NULL       -- This 时点有快照记录且金额非全 NULL（对应 DAX SUM 空集 = BLANK）
   AND p.this_denom IS NOT NULL
   AND p.this_denom <> 0            -- 分组分母为空/零 → 占比 BLANK → 行过滤（对应「Value 不为空」）
 ORDER BY
-    CASE WHEN p.sku_size_category LIKE '%字母尺码%' THEN 0
-         WHEN p.sku_size_category LIKE '%数字尺码%' THEN 1
-         ELSE 2 END,                                                          -- L1 分组优先级
-    p.this_denom DESC,                                                        -- L2 分组当期期末库存金额降序
-    p.this_amt / NULLIF(p.this_denom, 0) ASC;                                 -- L3 组内占比升序
+    p.this_denom DESC,                                                        -- L1 分组当期期末库存金额降序
+    COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
 -- SQL 6/8: Inventory Top2（Category Rank = 2）
@@ -439,15 +461,19 @@ SELECT
 FROM pct p
 JOIN top_category tc
   ON p.category = tc.category
+LEFT JOIN (
+    SELECT size, size_category, MIN(rank) AS size_rank
+    FROM indep_rl_dim.dim_t00_size_category_mapping
+    GROUP BY size, size_category
+) sr
+  ON p.sku_size = sr.size
+ AND p.sku_size_category = sr.size_category
 WHERE p.this_amt IS NOT NULL
   AND p.this_denom IS NOT NULL
   AND p.this_denom <> 0
 ORDER BY
-    CASE WHEN p.sku_size_category LIKE '%字母尺码%' THEN 0
-         WHEN p.sku_size_category LIKE '%数字尺码%' THEN 1
-         ELSE 2 END,
-    p.this_denom DESC,
-    p.this_amt / NULLIF(p.this_denom, 0) ASC;
+    p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
 -- SQL 7/8: Inventory Top3（Category Rank = 3）
@@ -505,15 +531,19 @@ SELECT
 FROM pct p
 JOIN top_category tc
   ON p.category = tc.category
+LEFT JOIN (
+    SELECT size, size_category, MIN(rank) AS size_rank
+    FROM indep_rl_dim.dim_t00_size_category_mapping
+    GROUP BY size, size_category
+) sr
+  ON p.sku_size = sr.size
+ AND p.sku_size_category = sr.size_category
 WHERE p.this_amt IS NOT NULL
   AND p.this_denom IS NOT NULL
   AND p.this_denom <> 0
 ORDER BY
-    CASE WHEN p.sku_size_category LIKE '%字母尺码%' THEN 0
-         WHEN p.sku_size_category LIKE '%数字尺码%' THEN 1
-         ELSE 2 END,
-    p.this_denom DESC,
-    p.this_amt / NULLIF(p.this_denom, 0) ASC;
+    p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
 -- SQL 8/8: Inventory Top4（Category Rank = 4）
@@ -571,12 +601,16 @@ SELECT
 FROM pct p
 JOIN top_category tc
   ON p.category = tc.category
+LEFT JOIN (
+    SELECT size, size_category, MIN(rank) AS size_rank
+    FROM indep_rl_dim.dim_t00_size_category_mapping
+    GROUP BY size, size_category
+) sr
+  ON p.sku_size = sr.size
+ AND p.sku_size_category = sr.size_category
 WHERE p.this_amt IS NOT NULL
   AND p.this_denom IS NOT NULL
   AND p.this_denom <> 0
 ORDER BY
-    CASE WHEN p.sku_size_category LIKE '%字母尺码%' THEN 0
-         WHEN p.sku_size_category LIKE '%数字尺码%' THEN 1
-         ELSE 2 END,
-    p.this_denom DESC,
-    p.this_amt / NULLIF(p.this_denom, 0) ASC;
+    p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）

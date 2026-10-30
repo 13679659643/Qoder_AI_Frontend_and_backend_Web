@@ -96,3 +96,34 @@ SET @this_max := '2026-07-25';
 SET @end_date := '2026-07-25';
 SET @fy_first := '2026-03-29';
 你现在输出的是明细行，接着再输出一段SQL仅special_series维度的，special_series不为空。
+
+# SKU ST第六轮提示词:
+调整这个解决方案：D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\SKU Sales Tracking\3 Emerging Style Identification\3 Emerging_Style_ms.md
+主要是涉及到ALLSELECTED(Dim_Sales_sku_size[sku_size])相关的。
+之前Dim_Sales_sku_size表只有一个字段，是sku_size，现在新增了四个字段：sku_size_category、size_rank、category_sort、global_sort_key。所以单纯的使用ALLSELECTED+单个字段是不符合我们预期结果的。
+参考以下内容：
+## Power BI 中“按列排序（Sort by Column）”功能的隐藏筛选传播
+### 元宝解释 底层机制：
+1. 为什么 ALLSELECTED('Slicer_Md_Type'[md_type]) 会失效（分母等于分子）？
+   在 Power BI 的数据模型中，当你为 Slicer_Md_Type 表创建了“实际值”和“排序值”两列，并且对“实际值”设置了“按列排序”（按排序值排序）时，Power BI 底层会将这两个列强绑定。
+   当你把 md_type（实际值）放在图表的行上，或者用视觉对象筛选器过滤时，Power BI 为了在后台执行排序，实际上同时对 md_type 和 排序值 两列施加了筛选上下文。
+   单列 ALLSELECTED 的局限：ALLSELECTED('Slicer_Md_Type'[md_type]) 只移除了 md_type 这一列的筛选。但是，那个隐藏的“排序值”列的筛选依然存活在筛选上下文中。
+   结果：存活的“排序值”筛选通过维度表与事实表的一对多关系，继续向事实表传导，把分母死死限制在了当前行（或当前筛选范围）的数据上。因此，分母等于了分子，占比变成了 100%。
+### GLM-5.3:
+1. “强绑定”的引擎术语是 auto-existence（同表共存）：md_type 一旦配置按列排序，视觉对象查询的 GroupBy 就不只是 Slicer_Md_Type[md_type] 一列，Slicer_Md_Type[_Sort] 被隐式带入；同表两列共存于查询时引擎将其合并为表粒度的组合筛选。这就是“为了后台执行排序，同时对两列施加筛选上下文”的底层实现——绑定发生在查询生成阶段，不是计算阶段。
+2. 为什么存活的 _Sort 一个筛选就足够钉死分母：因为排序键与业务值是 1:1 对应（sort-by-column 的配置前提就是 Sort 在表内唯一）。删掉 mdtype 筛选后，Sort=Y 独自存活，但 1:1 反推回去等价于 mdtype=X——维度表仍被钉在当前行那一行，经一对多关系向事实表传导，分母与分子的聚合范围完全重合。若 Sort 不唯一（多行共享一个排序值），钉死就只是部分的，现象会变成“占比异常但不是恒 100%”——恒 100% 正是 1:1 的指纹。
+
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+
+// ── 期末日期（LY）：end period LY 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
+
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_This = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+
+// ── 期末日期（LY）：end period LY 最后一天 = Max_This 表 TimeFrame_Max_LY（直接单日过滤）──
+VAR __EndPeriodDate_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_LY])
+
+// ── 期末日期（LP）：end period LP 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])

@@ -348,6 +348,33 @@
 
 ## [SKU Sales Tracking] 模块
 
+## [2026-10-29 11:30] DAX 修改 — Top_Size_Sales Performance_table v1.1 Sort Key 简化（取消 L1 优先级 / L4 决胜，组内改 size_rank 业务尺码序）
+
+- **模块**: SKU Sales Tracking - Top Size Sales Performance
+- **任务**: 两个排序键度量值调整（业务指令）：① 取消 L1 字母尺码 > 数字尺码 > 其余分组优先级（分组金额降序已决定分组顺序，优先级层冗余）；② 组内顺序改按新增 size_rank 字段升序（不再按指标值）；③ 取消 L4 尺码名决胜（sku_size 与 size_rank 一一对应、不同 sku_size 的 rank 一定不同，无并列）；其余指标不动
+- **操作**: 修改
+- **变更内容**:
+  - `Top Size Sales Sort Key` / `Top Size Inventory Sort Key`：四级编码（优先级×1e9 + 分组排名×1e6 + 组内占比排名×1e3 + 尺码名决胜）简化为两级（分组排名×1e6 + size_rank 值）——删除 __GroupPriority（SWITCH 字母/数字尺码优先级）、__PctRank（组内占比 RANKX 候选迭代整块，含 1E15 空值垫底双侧哨兵）、__TieRank（尺码名字典序决胜）三个变量；新增 __SizeRankValue = COALESCE(SELECTEDVALUE(表[size_rank]), 999999)（空 rank 垫底组内最后）
+  - L1 分组金额 / 分组候选 / 分组排名（REMOVEFILTERS 三列组合 + TREATAS 重建 (category, 分组) 二元组 + 物化 @GroupValue，注意事项 16 净化机制）保持不变，仅层级标签 L2→L1；依赖收窄为 [SLS Amt Value] / [EOH Amt Value]（不再依赖 Amt% Value）
+  - size_rank 来源：两张事实表取数 SQL 新增列（LEFT JOIN dim_t00_size_category_mapping，按 (sku_size, sku_size_category) MIN(rank)，未命中映射为 NULL）；性能副产：组内候选 RANKX 迭代整块移除，排序键计算量下降
+  - 测试 SQL 同步：8 段 ORDER BY 由「L1 优先级 CASE + L2 this_denom DESC + L3 占比 ASC」改为「p.this_denom DESC + COALESCE(sr.size_rank, 999999) ASC」，各段外查询 LEFT JOIN 映射表子查询（MIN(rank)，与 PBI 取数 SQL 同逻辑）；头注释第 8 条同步
+  - 方案文档同步：版本 v1.1、§2 现状（size_rank 字段说明）、§3.5 两级编码表 + v1.1 简化背景 + 示例表重写、§4.17 / §4.18 代码与头注释、§5 清单 17/18、§6 血缘图字段清单、§7.1 / §7.2 排序说明、注意事项 7 / 14 / 15 / 16 / 17
+- **关联文件**: SKU Sales Tracking/1 Top Size Sales Performance/Top_Size_Sales Performance_table.md；test_Top_Size_Sales_Performance_table.sql；维度复用/数据源/s02_trade_sku_data_d.sql、s02_inventory_stock_sales_detail_d.sql
+- **备注**: 其余指标（Rank / Value / Display / IsEmpty）未动（用户确认目前无问题）；数值口径不受排序键变更影响；多个空 size_rank 行之间顺序不确定（映射未覆盖数据，建议补 dim_t00_size_category_mapping 映射）；v1.0 的「升序 RANKX BLANK 候选须 FILTER 排除」与组内并列决胜注意事项已随候选迭代移除改写
+
+## [2026-10-29 10:30] DAX 修复 — Emerging_Style_ms v2.1 sku_size 维度表补列后单列 ALLSELECTED 失效（占比恒 100% / 行可见性候选集钉死）
+
+- **模块**: SKU Sales Tracking - Emerging Style Identification
+- **任务**: 两张 sku_size 维度表补入 4 个排序列（sku_size_category / size_rank / category_sort / global_sort_key，sku_size 按 global_sort_key 按列排序）后，占比分母与行可见性候选集的单列 ALLSELECTED 写法失效修复
+- **操作**: 修改
+- **变更内容**:
+  - 根因：sku_size 按 global_sort_key 按列排序后，矩阵列头分组在视觉对象查询中以 (sku_size, global_sort_key) 组合筛选落地（auto-existence 同表共存，绑定发生在查询生成阶段）；`ALLSELECTED(Dim_*_sku_size[sku_size])` 单列写法只移除 sku_size 列筛选、global_sort_key 筛选残留——排序键与业务值 1:1，残留筛选独自存活等价于仍钉在当前列 → 分母与分子聚合范围重合（占比恒 100%，1:1 指纹）；Is_Matrix_Row 候选集同理被钉死在当前列（仅剩 1 个候选，行可见性判定失效）
+  - `Emerging Style Sales SLS Amt% Value` / `Emerging Style Inventory EOH Amt% Value`：分母 TREATAS 值集由 `ALLSELECTED(Dim_*_sku_size[sku_size])` 改为 `CALCULATETABLE(VALUES(Dim_*_sku_size[sku_size]), ALLSELECTED(Dim_*_sku_size))` 整表写法（同 Handbags ALLSELECTED 整表 / Platform Merchandising Card 两列同写先例）
+  - `Emerging Style Sales Is_Matrix_Row` / `Emerging Style Inventory Is_Matrix_Row`：__AllVisibleSizes 候选集同改整表写法；Is_Matrix_Col 遍历的 color 维度表仍单列、无排序绑定，不受影响（保留单列写法）
+  - 方案文档同步：版本 v2.1、§1.2 维度表五列结构与排序落地说明、§2、§3.1 / §3.2 整表写法机制（auto-existence）、§4.1 / §4.3 / §4.6 / §4.8 代码与注释、§6 血缘图、注意事项 4 / 12（排序列已落地）+ 新增注意事项 14（按列排序 × 单列 ALLSELECTED 失效机制）
+- **关联文件**: SKU Sales Tracking/3 Emerging Style Identification/3 Emerging_Style_ms.md；维度复用/维度表/Emerging Style Identification/Dim_Sales_sku_size.sql、Dim_Inventory_sku_size.sql
+- **备注**: 数值口径不变（分母仍 = 该 color 下维度表 size 值范围金额，整行相加 100%），纯筛选上下文机制修复，测试 SQL 无需调整；global_sort_key 与 sku_size 需保持表内 1:1（按列排序配置前提，维度表按 (sku_size_category, sku_size) DISTINCT——同一 size 若跨 category 出现两行需在取数侧收敛，否则按列排序报错）
+
 ## [2026-10-16 18:00] 测试 SQL 调整 — Series Sales 变量改字面量直嵌 + 拆分明细 / 汇总两段
 
 - **模块**: SKU Sales Tracking - Series Sales Performance

@@ -1,6 +1,7 @@
 # Emerging Style Identification 矩阵解决方案
 
-> **版本**: v2.0（行列维度表化改造：矩阵行列表改为从维度表获取，占比分母限定维度表字段值，新增行列可见性与 SVG 热力度量）
+> **版本**: v2.1（sku_size 维度表补列修复：两张 sku_size 维度表新增 4 个排序列（sku_size 按 global_sort_key 按列排序），矩阵列头筛选落地为 (sku_size, global_sort_key) 组合筛选——auto-existence 机制下单列 ALLSELECTED 剥不掉排序键部分、分母被钉死在当前列（占比恒 100%），分母与行可见性候选集全部改为**整表 ALLSELECTED** 写法）
+> **上一版本**: v2.0（行列维度表化改造：矩阵行列表改为从维度表获取，占比分母限定维度表字段值，新增行列可见性与 SVG 热力度量）
 > **模块**: RL E2E Merch Dashboard - SKU Sales Tracking Tab - Emerging Style Identification
 > **关联口径**: 口径文档/口径Markdown格式/SKU Sales Tracking.md - 子模块五 Emerging Style Identification【Sales】（§11）+ 子模块六 Emerging Style Identification【Inventory】（§12）
 > **数据底表（销售类）**: s02_trade_sku_data_d
@@ -30,12 +31,14 @@ Emerging Style Identification 是 SKU Sales Tracking Tab 的颜色 × 尺码结�
 
 四张行列维度表（位于 维度复用\维度表\Emerging Style Identification，均取自对应事实表 distinct 值并**过滤空白**——`where 字段 is not null and 字段 <> '' and trim(字段) <> ''`）：
 
-| 维度表                   | 取数来源                                       | 过滤                             |
-| ------------------------ | ---------------------------------------------- | -------------------------------- |
-| Dim_Sales_color_name     | s02_trade_sku_data_d[color_name]               | 非空白（NULL / 空字符 / 纯空格） |
-| Dim_Sales_sku_size       | s02_trade_sku_data_d[sku_size]                 | 非空白                           |
-| Dim_Inventory_color_name | s02_inventory_stock_sales_detail_d[color_name] | 非空白                           |
-| Dim_Inventory_sku_size   | s02_inventory_stock_sales_detail_d[sku_size]   | 非空白                           |
+| 维度表                   | 取数来源                                                                                                                                                                                                                                 | 过滤                             |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Dim_Sales_color_name     | s02_trade_sku_data_d[color_name]（单列）                                                                                                                                                                                                 | 非空白（NULL / 空字符 / 纯空格） |
+| Dim_Sales_sku_size       | s02_trade_sku_data_d 五列：sku_size_category、sku_size、size_rank（dim_t00_size_category_mapping MIN(rank) 关联）、category_sort（DENSE_RANK over sku_size_category）、global_sort_key（category_sort×1000000 + COALESCE(size_rank,0)） | sku_size 非空白                  |
+| Dim_Inventory_color_name | s02_inventory_stock_sales_detail_d[color_name]（单列）                                                                                                                                                                                   | 非空白                           |
+| Dim_Inventory_sku_size   | s02_inventory_stock_sales_detail_d 五列（同 Dim_Sales_sku_size 结构，来源 s02_inventory_stock_sales_detail_result_d）                                                                                                                    | sku_size 非空白                  |
+
+**sku_size 排序落地（v2.1）**：`Dim_*_sku_size[sku_size]` 按 `global_sort_key` **按列排序（Sort by Column）**——global_sort_key 与 sku_size 在表内 1:1，矩阵列按业务尺码序（category → size rank）呈现。该绑定使矩阵列头筛选在视觉对象查询中以 (sku_size, global_sort_key) 组合筛选落地（auto-existence / 同表共存），**单列 ALLSELECTED 无法剥离排序键部分**——分母与行可见性候选集必须使用整表 ALLSELECTED 写法（见 §3.2 与注意事项 14）。
 
 **占比口径限定**：矩阵行列从维度表获取（行列值天然非空白，不出现 (Blank) 行 / 列）；占比分母**只包括维度表中的字段值**——事实表中空白 color_name / sku_size 记录的金额不进入分子分母，**矩阵整行（同一 color 的全部 size 列）占比相加 = 100%**。
 
@@ -64,7 +67,7 @@ Emerging Style Identification 是 SKU Sales Tracking Tab 的颜色 × 尺码结�
 
 - 数据底表 `s02_trade_sku_data_d`（SKU 粒度交易表，dt 日粒度）：net_sales_amt 为 Power Query 取数时新增列（`ROUND(product_qty * sales_price, 6) AS net_sales_amt`），业务已确认；维度含 dt、platform、shop_name、division、color_name、sku_size 及其余商品维度
 - 数据底表 `s02_inventory_stock_sales_detail_d`（库存+销售+补货 SKU 模型表，dt 日快照）：msrp_inv_amt（吊牌库存金额）为期末库存金额口径字段；维度含 dt、division、color_name、sku_size 等；**无 platform / shop_name 字段**（渠道筛选不影响库存侧指标，口径限制见注意事项 1）
-- **行列维度表**：四张单列维度表（Dim_Sales_color_name / Dim_Sales_sku_size / Dim_Inventory_color_name / Dim_Inventory_sku_size），取对应事实表 distinct 值且已过滤空白——维度表值集合 = 事实表全部非空白值；矩阵行列绑定维度表字段，行列值与指标计算经 SELECTEDVALUE + 显式等值桥接传递到事实表（维度表与事实表间是否建立模型关系均可——建立一对多关系时筛选自动传递，不建立时由度量值内部显式桥接，两种建模下度量行为一致）
+- **行列维度表**：两张单列 color 维度表（Dim_Sales_color_name / Dim_Inventory_color_name，取对应事实表 distinct 值且已过滤空白）+ 两张五列 size 维度表（Dim_Sales_sku_size / Dim_Inventory_sku_size：sku_size + 4 个排序列，sku_size 按 global_sort_key 按列排序实现业务尺码序）——维度表 sku_size 值集合 = 事实表全部非空白值；矩阵行列绑定维度表字段，行列值与指标计算经 SELECTEDVALUE + 显式等值桥接传递到事实表（维度表与事实表间是否建立模型关系均可——建立一对多关系时筛选自动传递，不建立时由度量值内部显式桥接，两种建模下度量行为一致）
 - 模型关系：日期筛选器（Slicer_Time_Frame_Min_This / Max_This）为断开维度，时间范围在 DAX 中显式筛选；Platform（Slicer_Platform_Selection）、Store Name（Slicer_Store_Name）、Division（Slicer_Division）与两张事实表一对多关联，筛选自动传递
 - 本模块指标均为占比类，不涉及币种兑换
 - 字段名已逐一核对数据字典（两表日期字段统一为 dt，date 类型）
@@ -78,7 +81,7 @@ Emerging Style Identification 是 SKU Sales Tracking Tab 的颜色 × 尺码结�
 ```
 Value（口径计算，保留小数原值）
 ←  行列值经 SELECTEDVALUE 从维度表读取，显式等值桥接到事实表
-←  分母 TREATAS(ALLSELECTED(列维度表)) 限定维度表 size 值范围（整行占比加总 = 100%）
+←  分母 TREATAS(CALCULATETABLE(VALUES(列维度表[sku_size]), ALLSELECTED(列维度表整表))) 限定维度表 size 值范围（整行占比加总 = 100%；整表写法剥离按列排序隐藏排序键筛选）
 ↓
 Display（格式化显示）
 ←  percent_0dp: FORMAT(#,##0%)；BLANK 显示 "-"
@@ -97,7 +100,8 @@ SVG（热力图单元格）
 
 - **行列值读取**：`SELECTEDVALUE(Dim_xxx[color_name])` / `SELECTEDVALUE(Dim_xxx[sku_size])` 在矩阵单元格上下文中取得当前行 / 列值（维度表值非空白）
 - **分子桥接**：`CALCULATE(SUM(事实表[金额]), 事实表[color_name] = 当前行值, 事实表[sku_size] = 当前列值, 时间筛选)`——显式等值筛选，事实表空白记录天然不匹配
-- **分母桥接**：`事实表[color_name] = 当前行值` 保留行维度；`TREATAS(ALLSELECTED(Dim_xxx[sku_size]), 事实表[sku_size])` 将维度表全部 size 值（ALLSELECTED 移除矩阵列头筛选、保留外部切片器筛选；页面无 size 切片器时 = 全部维度表值）映射为事实表 size 筛选——**分母限定在维度表 size 值范围内**（空白 sku_size 金额不进入分母）
+- **分母桥接**：`事实表[color_name] = 当前行值` 保留行维度；`TREATAS(CALCULATETABLE(VALUES(Dim_xxx_sku_size[sku_size]), ALLSELECTED(Dim_xxx_sku_size)), 事实表[sku_size])` 将维度表全部 size 值映射为事实表 size 筛选——**分母限定在维度表 size 值范围内**（空白 sku_size 金额不进入分母）
+- **ALLSELECTED 必须整表、不能单列（v2.1 修复）**：Dim_*_sku_size[sku_size] 按 global_sort_key 按列排序后，矩阵列头分组在视觉对象查询中以 (sku_size, global_sort_key) **组合筛选**落地（auto-existence：同表两列共存于查询时引擎合并为表粒度组合筛选，绑定发生在查询生成阶段）。`ALLSELECTED(Dim_xxx_sku_size[sku_size])` 单列写法只移除 sku_size 列筛选，global_sort_key 上的筛选残留——排序键与业务值 1:1 对应，残留筛选独自存活时等价于仍钉在当前列，分母与分子聚合范围重合 → 占比恒 100%。`ALLSELECTED(Dim_xxx_sku_size)` 整表写法恢复整表外部筛选状态（移除视觉内部筛选、保留外部切片器），sku_size 与 global_sort_key 上的内部筛选一并移除；`CALCULATETABLE(VALUES(...), 整表 ALLSELECTED)` 再收敛回单列值集，供 TREATAS 映射（页面无 size 切片器时 = 全部维度表值）
 - **整行加总 = 100%**：矩阵列 = 维度表 size 值（非空白），各列分子之和 = 该 color 非空白 size 金额之和 = 分母，同一 color 行的全部 size 列占比相加恰为 100%
 
 ### 3.3 行列可见性与 SVG 空值抑制
@@ -160,15 +164,22 @@ VAR __Numerator =
     )
 
 // ── 分母：该 color 层级 This Period 净销售金额（size 限定维度表值范围）──
-// ALLSELECTED 移除矩阵列头 size 筛选、保留外部切片器筛选（页面无 size 切片器
-// 时 = 全部维度表值）；TREATAS 将维度表值集合映射为事实表 sku_size 筛选——
-// 事实表空白 sku_size 记录不进入分母，整行占比加总 = 100%
+// 整表 ALLSELECTED 移除矩阵列头 size 筛选（含按列排序 global_sort_key 隐藏筛选）、
+// 保留外部切片器筛选（页面无 size 切片器时 = 全部维度表值）；CALCULATETABLE(VALUES)
+// 收敛回单列值集，TREATAS 映射为事实表 sku_size 筛选——事实表空白 sku_size 记录
+// 不进入分母，整行占比加总 = 100%
+// 必须整表不能单列：sku_size 按 global_sort_key 按列排序，矩阵列头落地为
+// (sku_size, global_sort_key) 组合筛选，单列 ALLSELECTED 剥不掉排序键部分，
+// 残留筛选把分母钉死在当前列（1:1 反推）→ 占比恒 100%
 VAR __Denominator =
     CALCULATE(
         SUM('s02_trade_sku_data_d'[net_sales_amt]),
         's02_trade_sku_data_d'[color_name] = __CurrentColor,
         TREATAS(
-            ALLSELECTED(Dim_Sales_sku_size[sku_size]),
+            CALCULATETABLE(
+                VALUES(Dim_Sales_sku_size[sku_size]),
+                ALLSELECTED(Dim_Sales_sku_size)
+            ),
             's02_trade_sku_data_d'[sku_size]
         ),
         's02_trade_sku_data_d'[dt] >= __PeriodMin,
@@ -213,14 +224,20 @@ Emerging Style Sales Is_Matrix_Row =
 // 返回值: 1 (该行有效), 0 (该行全空)
 // 使用位置: SVG 度量内部调用（不配置为视觉级筛选器——视觉对象筛选器按行字段
 //       确定粒度，列方向无法对称过滤；行列双向抑制均在 SVG 内实现）
-// 机制: MAXX 遍历 ALLSELECTED(Dim_Sales_sku_size)——移除矩阵列头筛选、保留
-//       外部切片器筛选；CALCULATE 上下文转换使 [Value] 内部 SELECTEDVALUE
-//       读到候选 size 值，逐候选严格复刻单元格 Value 计算
+// 机制: MAXX 遍历整表 ALLSELECTED 收敛的 size 值集——移除矩阵列头筛选（含按列
+//       排序隐藏排序键筛选）、保留外部切片器筛选；CALCULATE 上下文转换使 [Value]
+//       内部 SELECTEDVALUE 读到候选 size 值，逐候选严格复刻单元格 Value 计算
 // ========================================
 VAR __CurrentColor = SELECTEDVALUE(Dim_Sales_color_name[color_name])
 
 // 当前筛选上下文下全部可见的 size 列表（维度表值集合）
-VAR __AllVisibleSizes = ALLSELECTED(Dim_Sales_sku_size[sku_size])
+// 整表 ALLSELECTED：单列写法剥不掉按列排序 global_sort_key 隐藏筛选，候选集被
+// (sku_size, global_sort_key) 组合筛选钉死在当前列（仅剩 1 个候选），行可见性判定失效
+VAR __AllVisibleSizes =
+    CALCULATETABLE(
+        VALUES(Dim_Sales_sku_size[sku_size]),
+        ALLSELECTED(Dim_Sales_sku_size)
+    )
 
 // 迭代检查：遍历该行的全部 size 候选，任一列 Value 非空即行有效
 VAR __HasValidDataInRow =
@@ -465,15 +482,8 @@ Emerging Style Inventory EOH Amt% Value =
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
 VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-// REMOVEFILTERS 保证快照日不随切片器 / 矩阵行列上下文漂移
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 当前行 / 列值（从维度表读取，非空白）──
 VAR __CurrentColor = SELECTEDVALUE(Dim_Inventory_color_name[color_name])
@@ -489,14 +499,19 @@ VAR __Numerator =
     )
 
 // ── 分母：该 color 层级期末库存金额（size 限定维度表值范围，快照日单日值）──
-// TREATAS(ALLSELECTED(Dim_Inventory_sku_size)) 限定分母 size 范围为维度表值，
+// 整表 ALLSELECTED + VALUES 收敛单列值集，TREATAS 限定分母 size 范围为维度表值，
 // 空白 sku_size 金额不进入分母，整行占比加总 = 100%
+// 必须整表不能单列：sku_size 按 global_sort_key 按列排序，矩阵列头落地为
+// (sku_size, global_sort_key) 组合筛选，单列 ALLSELECTED 剥不掉排序键部分 → 占比恒 100%
 VAR __Denominator =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[msrp_inv_amt]),
         's02_inventory_stock_sales_detail_d'[color_name] = __CurrentColor,
         TREATAS(
-            ALLSELECTED(Dim_Inventory_sku_size[sku_size]),
+            CALCULATETABLE(
+                VALUES(Dim_Inventory_sku_size[sku_size]),
+                ALLSELECTED(Dim_Inventory_sku_size)
+            ),
             's02_inventory_stock_sales_detail_d'[sku_size]
         ),
         's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
@@ -539,13 +554,18 @@ Emerging Style Inventory Is_Matrix_Row =
 // 用途: 严格按度量值结果判断，当前 color (行) 是否至少有一个 size (列) 有真实数据
 // 返回值: 1 (该行有效), 0 (该行全空)
 // 使用位置: SVG 度量内部调用（不配置为视觉级筛选器，行列双向抑制均在 SVG 内实现）
-// 机制: 同 Sales 侧——MAXX 遍历 ALLSELECTED(Dim_Inventory_sku_size)，
+// 机制: 同 Sales 侧——MAXX 遍历整表 ALLSELECTED 收敛的 size 值集，
 //       CALCULATE 上下文转换使 [Value] 内部 SELECTEDVALUE 读到候选值
 // ========================================
 VAR __CurrentColor = SELECTEDVALUE(Dim_Inventory_color_name[color_name])
 
 // 当前筛选上下文下全部可见的 size 列表（维度表值集合）
-VAR __AllVisibleSizes = ALLSELECTED(Dim_Inventory_sku_size[sku_size])
+// 整表 ALLSELECTED：单列写法剥不掉按列排序 global_sort_key 隐藏筛选，候选集被钉死在当前列
+VAR __AllVisibleSizes =
+    CALCULATETABLE(
+        VALUES(Dim_Inventory_sku_size[sku_size]),
+        ALLSELECTED(Dim_Inventory_sku_size)
+    )
 
 // 迭代检查：遍历该行的全部 size 候选，任一列 Value 非空即行有效
 VAR __HasValidDataInRow =
@@ -790,8 +810,8 @@ RETURN
 │  Dim_Sales_color_name / Dim_Sales_sku_size                           │
 │  Dim_Inventory_color_name / Dim_Inventory_sku_size                   │
 │  矩阵行列绑定维度表字段；Value 内 SELECTEDVALUE 读行列值 +           │
-│  显式等值桥接事实表；分母 TREATAS(ALLSELECTED(列维度表)) 限定          │
-│  维度表值范围（整行占比加总 = 100%）                                  │
+│  显式等值桥接事实表；分母 TREATAS(VALUES + ALLSELECTED(整表)) 限定     │
+│  维度表值范围（整行占比加总 = 100%；整表写法剥离排序键隐藏筛选）       │
 └──────────────────────────────────┬──────────────────────────────────┘
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -862,7 +882,7 @@ RETURN
 1. **inv 表无渠道字段**：s02_inventory_stock_sales_detail_d 无 platform / shop_name 字段，Inventory 矩阵（EOH Amt%）不受 Platform / Store Name 筛选影响，仅受 date + Division 影响；Sales 矩阵（SLS Amt%）受 date + Platform + Store Name + Division 四组筛选影响。该口径限制已与业务确认。
 2. **期末时点只取单日**：EOH Amt% 分子分母取 end period 范围内最后一个快照日的单日值；快照表按日存储，对整段区间求和会把库存重复计数。快照缺数时在 end period 窗口内自动回退到最近一天（口径定义为 this period 最后一天）。
 3. **快照日 REMOVEFILTERS 机制**：__EndPeriodDate 用 REMOVEFILTERS(整表) 计算，保证快照日不随 Division / color / size 矩阵行列上下文或切片器漂移，全表确定性取值。
-4. **占比分母限定维度表值范围**：分母 size 范围 = ALLSELECTED(列维度表)（页面无 size 切片器时 = 全部维度表值，已过滤空白）→ 事实表空白 sku_size 记录金额不进入分母；**同一 color 行的全部 size 列占比相加 = 100%**。行桥接的 color 值同样来自维度表（非空白），事实表空白 color_name 记录不进入任何行。如未来页面增加 size 相关切片器，分母范围随外部筛选变化（ALLSELECTED 语义）。
+4. **占比分母限定维度表值范围**：分母 size 范围 = ALLSELECTED(Dim_*_sku_size 整表) 收敛的单列值集（页面无 size 切片器时 = 全部维度表值，已过滤空白）→ 事实表空白 sku_size 记录金额不进入分母；**同一 color 行的全部 size 列占比相加 = 100%**。行桥接的 color 值同样来自维度表（非空白），事实表空白 color_name 记录不进入任何行。如未来页面增加 size 相关切片器，分母范围随外部筛选变化（ALLSELECTED 语义）。
 5. **行列维度表与事实表关系可选**：维度表与事实表间是否建立一对多模型关系均可——显式等值桥接对两种建模行为一致（建立关系时筛选自动传递且与等值桥接等价叠加；不建立时由度量值内部桥接）。建议建立一对多关系以获得行列值自动分组与筛选传递。
 6. **Value 度量的汇总位置行为**：Value 按明细单元格设计——行 / 列未展开的位置（小计 / 总计）SELECTEDVALUE 取 BLANK，等值桥接不匹配有效记录（`事实表[sku_size] = BLANK()` 会匹配空白记录，数值不可用）；小计 / 总计已关闭且 SVG 层双 ISINSCOPE 排除总计位置，不依赖 Value 在汇总位置的取值。
 7. **空值抑制依赖矩阵设置**：必须关闭「显示无数据的项」（矩阵格式设置），且 SVG 度量在行 / 列全空时返回真正的 BLANK()——返回空白图片（含灰色 "-" 的 data URI）会把全空行列撑出来，无法隐藏。
@@ -870,5 +890,6 @@ RETURN
 9. **SVG 插值色标与值域**：背景 0%→#d8dee5、30%→#95afcf、50%→#0c2340、100%→#000000；字体 0%→#737373、30%→#333333、35%→#ffffff、100%→#ffffff（白色提前到 35% 保证深底可读）；值域经 MIN(MAX(值, 0), 1) 截断到 0~100%（占比理论上限 100%）。SVG 画布 88x33、圆角 4px，preserveAspectRatio='none' 自动拉伸适应列宽。
 10. **日期筛选器依赖**：SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min]) 等依赖日期切片器保持单选且必选；切片器未选或多选时时间边界为 BLANK，指标不可用（与看板既有日期筛选器使用方式一致）。
 11. **DIVIDE 空值保护**：分母（该 color 层级、限维度表 size 值范围的金额）为空或 0 时 DIVIDE 返回 BLANK——SVG 呈现灰色 "-"（行列有效时）或 BLANK（行列全空时被抑制）；Display 呈现 "-"。
-12. **行 / 列排序**：口径未定义矩阵行列排序规则，默认按维度表字段值顺序呈现（color_name / sku_size 字典序或数据源顺序）。如需业务尺码序（XXS → XS → S …、0 → 1 → 2 …）需为维度表增加排序列（`select distinct sku_size` 基础上追加排序列）并按该列排序。
+12. **行 / 列排序**：sku_size 维度表已落地排序列（v2.1）——`Dim_*_sku_size[sku_size]` 按 `global_sort_key` 按列排序（category_sort×1000000 + COALESCE(size_rank,0)，实现「尺码类别 → 类别内 rank」业务尺码序），矩阵列按该序呈现；color 行仍按字段值默认顺序（color 维度表单列、无排序绑定）。color 如需业务排序，同样建议「加排序列 + 按列排序」，届时 Is_Matrix_Col 的候选集 ALLSELECTED 需同步改为整表写法（见注意事项 14）。
 13. **DAX 语法规范**：文本常量使用双引号，单引号仅用于表名，列名使用方括号；与口径文档存在争议时一切以口径文档为准。
+14. **按列排序 × 单列 ALLSELECTED 失效机制（auto-existence，v2.1 修复）**：`Dim_*_sku_size[sku_size]` 按 global_sort_key 按列排序后，矩阵列头分组在视觉对象查询中以 (sku_size, global_sort_key) 组合筛选落地（同表共存合并为表粒度组合筛选，绑定发生在查询生成阶段）。单列 `ALLSELECTED(Dim_*_sku_size[sku_size])` 只移除 sku_size 列筛选，global_sort_key 筛选残留；排序键与 sku_size 在表内 1:1（按列排序配置前提），残留筛选独自存活等价于仍钉在当前列，经传导后分母与分子聚合范围重合 → **占比恒 100%**（1:1 对应的指纹特征；若排序键不唯一则为部分钉死、占比异常但非恒 100%）。同一坑已在 Handbags（ALLSELECTED 整表）与 Platform Merchandising Card（两列同写）修复沉淀。修复面共 4 处：Sales / Inventory Value 分母 TREATAS 值集、Sales / Inventory Is_Matrix_Row 候选集（Is_Matrix_Col 遍历的 color 维度表仍为单列、无排序绑定，不受影响）。
