@@ -2,7 +2,7 @@
 -- 测试 SQL: Item Stockout Table（两段：SPU 维度 / SKU 维度）
 -- 所属模块: RL E2E Merch Dashboard - Dimension Cross Analysis - Item
 --           Stockout & Slow Mover Alert【单列主键 Top 100 双表格】
--- 关联方案: Item_Stockout_Table.md（v2.3）
+-- 关联方案: Item_Stockout_Table.md（v2.4）
 -- 语法: MySQL 8.0+（CTE / 窗口函数 / GROUP_CONCAT）
 -- 结构: SQL 1/2 SPU 维度（GROUP BY spu_id）+ SQL 2/2 SKU 维度
 --       （GROUP BY sku_id），两段独立执行；每段按 SLS Amt 降序 +
@@ -45,17 +45,19 @@
 --      主键最大 dt 那天的 distinct 值顿号拼接（字母序升序；一对一属性
 --      自然退化为单值）；空值经 NULLIF(TRIM(x), '') 排除（对齐 DAX
 --      FILTER 排空白）；区间内无记录 → 全属性 NULL
---   4. Product Tag（computed_product_tag，inv 独有）：快照日下该主键
---      全部行的 distinct 值顿号拼接（不套用"最新值"规则——快照日本身
---      即最新）；空白值同样排除
---   5. Available Sizes：快照日下该主键全部尺码 distinct 拼接，仅取
---      inv_qty > 0 的行（口径 §32，不取最新——与属性字段规则区分）
---   6. Alert 判定（业务确认修订）：缺货 = oos_tag = '1'（String）；
---      滞销 = computed_product_tag = 'slow mover'；其他 = 有快照日记录
---      但两条件均不成立；两条件 SKU 级互斥——SQL 2/2 SKU 段单行判定
---      无优先级冲突；SQL 1/2 SPU 段按最高预警级别聚合（任一 sku 缺货 →
---      '缺货'，否则任一滞销 → '滞销'，否则'其他'）；快照日无 inv 记录
---      → NULL（对齐 DAX BLANK，PBI 显示 "-"）
+--   4. Product Tag（computed_product_tag，inv 类独有）：SKU 段 = 快照日下该
+--      主键全部行的 distinct 值顿号拼接（不套用"最新值"规则——快照日本身
+--      即最新），空白值排除；SPU 段（v2.4）= 直取 spu 预聚合表单行值
+--   5. Available Sizes：SKU 段 = 快照日下该主键全部尺码 distinct 拼接，仅取
+--      inv_qty > 0 的行（口径 §32，不取最新——与属性字段规则区分）；SPU 段
+--      （v2.4）= 直读 spu 预聚合表 sku_size 预拼接串（逗号分隔，原样输出）
+--   6. Alert 判定（v2.4 业务确认修订）：缺货 = oos_tag = '1'（String）；
+--      滞销 = computed_product_tag = 'slow mover'；其他情况 NULL（v2.3
+--      '其他'类别废止）；两条件互斥为数据不变量（单行必出且仅出一个状态）；
+--      SKU 段（SQL 2/2）单行直判；SPU 段（SQL 1/2）取 v2.4 新增 spu 预聚合
+--      表（indep_rl_dw.s02_inventory_stock_sales_detail_result_d 且
+--      data_type = 'spu'，快照日每 spu 单行）直判，无最高预警级别聚合；
+--      无对应表行 → NULL（对齐 DAX BLANK，PBI 显示 "-"）
 --   7. 金额输出 RMB 原始值（PBI Value 层 ÷ Currency_ExchangeRate，RMB
 --      汇率 = 1 时直接对比；Display 层拼接币种符号 #,##0）；AUR 同
 --   8. MD 空值行为：行级乘积任一字段 NULL 的行不计入分子分母
@@ -77,7 +79,8 @@
 
 
 -- ======================================================================
--- SQL 1/2: SPU 维度（GROUP BY spu_id，Alert 按最高预警级别聚合）
+-- SQL 1/2: SPU 维度（GROUP BY spu_id；v2.4 inv 类指标取 spu 预聚合表，
+--           Alert / Available Sizes / Product Tag 直判直读，无优先级聚合）
 -- ======================================================================
 WITH
 -- ── trade 侧 This Period 区间数据（值域 + 指标聚合 + 属性取值基础）──
@@ -137,24 +140,25 @@ trade_agg AS (
     FROM trade_base
     GROUP BY spu_id
 ),
--- ── inv 侧快照日单日聚合（主键粒度；不附加渠道条件——inv 无渠道字段）──
+-- ── inv 侧快照日单日（v2.4：spu 预聚合表，快照日每 spu 单行，直取不聚合；
+--    不附加渠道条件——inv 类表无渠道字段）──
 inv_agg AS (
     SELECT
         spu_id,
-        SUM(stock_inv_qty)                                                                AS eoh_unit,
-        SUM(in_trans_inv_qty)                                                             AS in_trans_unit,
-        SUM(reph_qty)                                                                     AS reph_count,
-        MAX(CASE WHEN oos_tag = '1' THEN 1 END)                                           AS has_oos,
-        MAX(CASE WHEN computed_product_tag = 'slow mover' THEN 1 END)                     AS has_slow,
-        COUNT(*)                                                                          AS inv_rows,
-        GROUP_CONCAT(DISTINCT CASE WHEN inv_qty > 0 THEN sku_size END
-                 ORDER BY CASE WHEN inv_qty > 0 THEN sku_size END SEPARATOR '、')         AS available_sizes,
-        GROUP_CONCAT(DISTINCT NULLIF(TRIM(computed_product_tag), '')
-                 ORDER BY NULLIF(TRIM(computed_product_tag), '') SEPARATOR '、')          AS product_tag
-    FROM indep_rl_dw.s02_inventory_stock_sales_detail_d
+        stock_inv_qty                                                                     AS eoh_unit,
+        in_trans_inv_qty                                                                  AS in_trans_unit,
+        reph_qty                                                                          AS reph_count,
+        CASE
+            WHEN oos_tag = '1' THEN '缺货'                                                  -- 两条件互斥（数据不变量）
+            WHEN computed_product_tag = 'slow mover' THEN '滞销'
+            ELSE NULL                                                                     -- 其他情况 BLANK（v2.4）
+        END                                                                               AS alert,
+        sku_size                                                                          AS available_sizes,   -- 预拼接串（逗号分隔）直读
+        computed_product_tag                                                              AS product_tag
+    FROM indep_rl_dw.s02_inventory_stock_sales_detail_result_d
     WHERE spu_id IS NOT NULL AND TRIM(spu_id) <> ''
+      AND data_type = 'spu'                                                               -- spu 预聚合行（对齐 PBI 表 s02_inventory_stock_sales_detail_d_spu）
       AND dt = '2026-07-25'                                                               -- This 期末快照日
-    GROUP BY spu_id
 )
 SELECT
     t.spu_id                                                                              AS SPU_Id,
@@ -188,12 +192,7 @@ SELECT
         WHEN t.md_amt IS NULL OR t.msrp_amt IS NULL OR t.msrp_amt = 0 THEN NULL
         ELSE 1 - t.md_amt / t.msrp_amt
     END                                                                                   AS MD_Pct,
-    CASE
-        WHEN i.inv_rows IS NULL THEN NULL                                                 -- 快照日无 inv 记录
-        WHEN i.has_oos = 1 THEN '缺货'                                                     -- 优先级：缺货最高
-        WHEN i.has_slow = 1 THEN '滞销'
-        ELSE '其他'
-    END                                                                                   AS Alert,
+    i.alert                                                                               AS Alert,               -- v2.4 预聚合行直判（其他情况 NULL）
     i.available_sizes                                                                     AS Available_Sizes,
     i.reph_count                                                                          AS Replenishment_Count,
     DENSE_RANK() OVER (ORDER BY t.sls_amt_this DESC, t.spu_id ASC)                        AS Rank
@@ -206,7 +205,8 @@ LIMIT 100;
 
 -- ======================================================================
 -- SQL 2/2: SKU 维度（GROUP BY sku_id，快照日单行判定——两条件互斥
---          无优先级冲突，判定结构与 SPU 段同构，单行下聚合退化为自身）
+--          （数据不变量，有多个状态即数据异常），v2.4 其他情况输出
+--          NULL；inv 类指标仍取 s02_inventory_stock_sales_detail_d）
 -- ======================================================================
 WITH
 trade_base AS (
@@ -314,9 +314,9 @@ SELECT
     END                                                                                   AS MD_Pct,
     CASE
         WHEN i.inv_rows IS NULL THEN NULL                                                 -- 快照日无 inv 记录
-        WHEN i.has_oos = 1 THEN '缺货'                                                     -- 单行互斥，条件顺序无优先级语义
+        WHEN i.has_oos = 1 THEN '缺货'                                                     -- 单行互斥（数据不变量），条件顺序无优先级语义
         WHEN i.has_slow = 1 THEN '滞销'
-        ELSE '其他'
+        ELSE NULL                                                                         -- 其他情况 BLANK（v2.4）
     END                                                                                   AS Alert,
     i.available_sizes                                                                     AS Available_Sizes,
     i.reph_count                                                                          AS Replenishment_Count,

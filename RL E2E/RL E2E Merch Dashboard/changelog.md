@@ -39,6 +39,21 @@
 
 ## [Dimension Cross Analysis] 模块
 
+## [2026-10-30 10:30] DAX 修改 — Item Stockout_Table v2.4 SPU 分支切换 spu 预聚合表 + Alert 规则简化 + Available Sizes 直读
+
+- **模块**: Dimension Cross Analysis - Item Stockout & Slow Mover Alert
+- **任务**: SPU 维度库存类指标改用新表 s02_inventory_stock_sales_detail_d_spu；Alert 判定规则修订（其他情况返回 BLANK、取消 SPU 最高预警级别聚合）；SKU 维度保持原状（Alert 分支性能简化）
+- **操作**: 修改
+- **变更内容**:
+  - 8 个 inv 侧度量的 SPU 分支源表切换（SKU 分支不动）：`Item Stockout EOH Unit Value`(§4.7) / `In-transit Inventory Value`(§4.9) / `Weeks Cover Value` 分子(§4.11) / `ST% Value` 库存加项(§4.17) / `Alert Value`(§4.23) / `Available Sizes Value`(§4.25) / `Replenishment Count Value`(§4.27) / `Product Tag`(§4.35)——s02_inventory_stock_sales_detail_d → s02_inventory_stock_sales_detail_d_spu（同源 data_type='spu' 预聚合，快照日每 spu 单行），TREATAS 锚点列同步改指新表
+  - `Item Stockout Alert Value` 重写：判定规则改为 oos_tag = "1" → 缺货，computed_product_tag = 'slow mover' → 滞销，其他情况 BLANK()（v2.3"其他"类别废止）；SPU 分支新表直判（取消跨 sku 行最高预警级别聚合）；SKU 分支由 CALCULATETABLE 整表物化 + 两次 COUNTROWS(FILTER) 迭代简化为 MAX 标量聚合 + COUNTROWS 行存在性判定
+  - `Item Stockout Available Sizes Value` 重写 SPU 分支：直读 spu 表预拼接 sku_size（逗号分隔整串），VALUES + CONCATENATEX + inv_qty > 0 过滤逻辑废止；SKU 分支保持原状（顿号拼接）
+  - `Item Stockout Product Tag` SPU 分支换表（CONCATENATEX 结构保留，预聚合单行下自然退化为单值）
+  - 文档元信息同步：版本头 v2.4 + 版本记录、数据底表声明、§1.2 指标清单 / 属性列底表、§1.3 inv 侧取值 / Available Sizes 分源 / 取数源、§1.7 双维度机制（切换锚点列与源表）、§1.8 渠道、§2 现状（新增 spu 表条目）、§3.1 分层、§3.4 桥接设计（含建模前提：spu 表需建同款外部维度关系）、§5 清单、§6.1 属性拼接说明、§7 验证方法、§8 注意事项 4/8/9 + 新增 18
+  - 测试 SQL 同步：test_Item_Stockout_Table.sql SPU 段 inv_agg 改查 s02_inventory_stock_sales_detail_result_d（data_type='spu'）直取单行（不再 GROUP BY 聚合），Alert 改单行 CASE 直判（其他 → NULL），Available Sizes 直读 sku_size 预拼接串，Product Tag 直取单值；SKU 段仅 Alert ELSE '其他' → NULL；文件头口径说明 4/5/6 与关联方案版本同步 v2.4
+- **关联文件**: Dimension Cross Analysis/4 Item Stockout & Slow Mover Alert/Item_Stockout_Table.md；test_Item_Stockout_Table.sql
+- **备注**: 判定唯一性为数据不变量（SKU 级两条件互斥，单行必出且仅出一个状态，两条件同时成立属数据异常，SWITCH 顺序仅为兜底）；Available Sizes 两表分隔符不一致（SPU 逗号 / SKU 顿号）为已知显示差异；spu 表 sku_size 为预拼接串，其 size_rank 映射关联必然未命中（本模块不使用该字段，无影响）
+
 ## [2026-10-19 15:31] DAX 新建 — Label & Product Type Inventory Structure 表格解决方案
 
 - **模块**: Dimension Cross Analysis - Label & Product Type Inventory Structure

@@ -125,7 +125,7 @@ SVG（热力图单元格）
 ### 4.1 Emerging Style Sales SLS Amt% Value（当期销售金额占比）
 
 ```dax
-Emerging Style Sales SLS Amt% Value =
+Emerging Style Sales SLS Amt% Value = 
 // ========================================
 // 度量值: Emerging Style Sales SLS Amt% Value
 // 中文名: 当期销售金额占比（color × size 结构）
@@ -152,6 +152,8 @@ VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 当前行 / 列值（从维度表读取，非空白）──
 VAR __CurrentColor = SELECTEDVALUE(Dim_Sales_color_name[color_name])
 VAR __CurrentSize = SELECTEDVALUE(Dim_Sales_sku_size[sku_size])
+// ── 切片器单选：A分类的值还出现在B分类里面，需要加上当前分类的筛选。──
+VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Sales_sku_size[sku_size_category])
 
 // ── 分子：该 color + sku_size This Period 净销售金额（显式等值桥接）──
 VAR __Numerator =
@@ -159,6 +161,7 @@ VAR __Numerator =
         SUM('s02_trade_sku_data_d'[net_sales_amt]),
         's02_trade_sku_data_d'[color_name] = __CurrentColor,
         's02_trade_sku_data_d'[sku_size] = __CurrentSize,
+        's02_trade_sku_data_d'[sku_size_category] = __CurrentSkuSizeCategory,
         's02_trade_sku_data_d'[dt] >= __PeriodMin,
         's02_trade_sku_data_d'[dt] <= __PeriodMax
     )
@@ -182,6 +185,7 @@ VAR __Denominator =
             ),
             's02_trade_sku_data_d'[sku_size]
         ),
+        's02_trade_sku_data_d'[sku_size_category] = __CurrentSkuSizeCategory,
         's02_trade_sku_data_d'[dt] >= __PeriodMin,
         's02_trade_sku_data_d'[dt] <= __PeriodMax
     )
@@ -215,7 +219,7 @@ Emerging Style Sales SLS Amt% Display =
 ### 4.3 Emerging Style Sales Is_Matrix_Row（Sales 行可见性）
 
 ```dax
-Emerging Style Sales Is_Matrix_Row =
+Emerging Style Sales Is_Matrix_Row = 
 // ========================================
 // 度量值: Emerging Style Sales Is_Matrix_Row
 // 中文名: Sales 矩阵行可见性
@@ -229,11 +233,13 @@ Emerging Style Sales Is_Matrix_Row =
 //       内部 SELECTEDVALUE 读到候选 size 值，逐候选严格复刻单元格 Value 计算
 // ========================================
 VAR __CurrentColor = SELECTEDVALUE(Dim_Sales_color_name[color_name])
+// ── 切片器单选：A分类的值还出现在B分类里面，需要加上当前分类的筛选。──
+VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Sales_sku_size[sku_size_category])
 
 // 当前筛选上下文下全部可见的 size 列表（维度表值集合）
 // 整表 ALLSELECTED：单列写法剥不掉按列排序 global_sort_key 隐藏筛选，候选集被
 // (sku_size, global_sort_key) 组合筛选钉死在当前列（仅剩 1 个候选），行可见性判定失效
-VAR __AllVisibleSizes =
+VAR __AllVisibleSizes = 
     CALCULATETABLE(
         VALUES(Dim_Sales_sku_size[sku_size]),
         ALLSELECTED(Dim_Sales_sku_size)
@@ -250,6 +256,7 @@ VAR __HasValidDataInRow =
             CALCULATE(
                 [Emerging Style Sales SLS Amt% Value],
                 's02_trade_sku_data_d'[color_name] = __CurrentColor,
+                's02_trade_sku_data_d'[sku_size_category] = __CurrentSkuSizeCategory,
                 's02_trade_sku_data_d'[sku_size] = __CurrentSize
             )
         RETURN
@@ -275,6 +282,8 @@ Emerging Style Sales Is_Matrix_Col =
 //       逐候选严格复刻单元格 Value 计算
 // ========================================
 VAR __CurrentSize = SELECTEDVALUE(Dim_Sales_sku_size[sku_size])
+// ── 切片器单选：A分类的值还出现在B分类里面，需要加上当前分类的筛选。──
+VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Sales_sku_size[sku_size_category])
 
 // 当前筛选上下文下全部可见的 color 列表（维度表值集合）
 VAR __AllVisibleColors = ALLSELECTED(Dim_Sales_color_name[color_name])
@@ -290,6 +299,7 @@ VAR __HasValidDataInCol =
             CALCULATE(
                 [Emerging Style Sales SLS Amt% Value],
                 's02_trade_sku_data_d'[color_name] = __CurrentColor,
+                's02_trade_sku_data_d'[sku_size_category] = __CurrentSkuSizeCategory,
                 's02_trade_sku_data_d'[sku_size] = __CurrentSize
             )
         RETURN
@@ -460,7 +470,7 @@ RETURN
 ### 4.6 Emerging Style Inventory EOH Amt% Value（当期期末库存金额占比）
 
 ```dax
-Emerging Style Inventory EOH Amt% Value =
+Emerging Style Inventory EOH Amt% Value = 
 // ========================================
 // 度量值: Emerging Style Inventory EOH Amt% Value
 // 中文名: 当期期末库存金额占比（color × size 结构，时点数）
@@ -488,6 +498,7 @@ VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 当前行 / 列值（从维度表读取，非空白）──
 VAR __CurrentColor = SELECTEDVALUE(Dim_Inventory_color_name[color_name])
 VAR __CurrentSize = SELECTEDVALUE(Dim_Inventory_sku_size[sku_size])
+VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Inventory_sku_size[sku_size_category])
 
 // ── 分子：该 color + sku_size 期末库存金额（快照日单日值，显式等值桥接）──
 VAR __Numerator =
@@ -495,6 +506,7 @@ VAR __Numerator =
         SUM('s02_inventory_stock_sales_detail_d'[msrp_inv_amt]),
         's02_inventory_stock_sales_detail_d'[color_name] = __CurrentColor,
         's02_inventory_stock_sales_detail_d'[sku_size] = __CurrentSize,
+        's02_inventory_stock_sales_detail_d'[sku_size_category] = __CurrentSkuSizeCategory,
         's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
     )
 
@@ -514,6 +526,7 @@ VAR __Denominator =
             ),
             's02_inventory_stock_sales_detail_d'[sku_size]
         ),
+        's02_inventory_stock_sales_detail_d'[sku_size_category] = __CurrentSkuSizeCategory,
         's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
     )
 
@@ -546,7 +559,7 @@ Emerging Style Inventory EOH Amt% Display =
 ### 4.8 Emerging Style Inventory Is_Matrix_Row（Inventory 行可见性）
 
 ```dax
-Emerging Style Inventory Is_Matrix_Row =
+Emerging Style Inventory Is_Matrix_Row = 
 // ========================================
 // 度量值: Emerging Style Inventory Is_Matrix_Row
 // 中文名: Inventory 矩阵行可见性
@@ -558,6 +571,8 @@ Emerging Style Inventory Is_Matrix_Row =
 //       CALCULATE 上下文转换使 [Value] 内部 SELECTEDVALUE 读到候选值
 // ========================================
 VAR __CurrentColor = SELECTEDVALUE(Dim_Inventory_color_name[color_name])
+// ── 切片器单选：A分类的值还出现在B分类里面，需要加上当前分类的筛选。──
+VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Inventory_sku_size[sku_size_category])
 
 // 当前筛选上下文下全部可见的 size 列表（维度表值集合）
 // 整表 ALLSELECTED：单列写法剥不掉按列排序 global_sort_key 隐藏筛选，候选集被钉死在当前列
@@ -577,6 +592,7 @@ VAR __HasValidDataInRow =
             CALCULATE(
                 [Emerging Style Inventory EOH Amt% Value],
                 's02_inventory_stock_sales_detail_d'[color_name] = __CurrentColor,
+                's02_inventory_stock_sales_detail_d'[sku_size_category] = __CurrentSkuSizeCategory,
                 's02_inventory_stock_sales_detail_d'[sku_size] = __CurrentSize
             )
         RETURN
@@ -590,7 +606,7 @@ RETURN
 ### 4.9 Emerging Style Inventory Is_Matrix_Col（Inventory 列可见性）
 
 ```dax
-Emerging Style Inventory Is_Matrix_Col =
+Emerging Style Inventory Is_Matrix_Col = 
 // ========================================
 // 度量值: Emerging Style Inventory Is_Matrix_Col
 // 中文名: Inventory 矩阵列可见性
@@ -601,6 +617,8 @@ Emerging Style Inventory Is_Matrix_Col =
 // 机制: 同 Sales 侧——MAXX 遍历 ALLSELECTED(Dim_Inventory_color_name)
 // ========================================
 VAR __CurrentSize = SELECTEDVALUE(Dim_Inventory_sku_size[sku_size])
+// ── 切片器单选：A分类的值还出现在B分类里面，需要加上当前分类的筛选。──
+VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Inventory_sku_size[sku_size_category])
 
 // 当前筛选上下文下全部可见的 color 列表（维度表值集合）
 VAR __AllVisibleColors = ALLSELECTED(Dim_Inventory_color_name[color_name])
@@ -615,6 +633,7 @@ VAR __HasValidDataInCol =
             CALCULATE(
                 [Emerging Style Inventory EOH Amt% Value],
                 's02_inventory_stock_sales_detail_d'[color_name] = __CurrentColor,
+                's02_inventory_stock_sales_detail_d'[sku_size_category] = __CurrentSkuSizeCategory,
                 's02_inventory_stock_sales_detail_d'[sku_size] = __CurrentSize
             )
         RETURN

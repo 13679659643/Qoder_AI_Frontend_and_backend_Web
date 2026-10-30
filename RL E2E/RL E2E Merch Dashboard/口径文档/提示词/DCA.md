@@ -216,3 +216,11 @@ target：a05_e2e_product_fcst_data_d[fcst_sales_amt]
 
 
 综合上述信息，在D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\5 Platform Merchandising Performance目录下输出Platform_Merchandising_ms;不懂就问，尤其是actual除target逻辑。
+
+
+# DCA 测试 4 Item Stockout & Slow Mover Alert  第一轮提示词:
+
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\4 Item Stockout & Slow Mover Alert\Item_Stockout_Table.md
+调整这个表，之前库存相关是s02_inventory_stock_sales_detail_d，现在新增了一个s02_inventory_stock_sales_detail_d_spu表，要求SKU维度保持原状，SPU维度的时候使用s02_inventory_stock_sales_detail_d_spu表。
+其中特殊说明，Item Stockout Available Sizes Value（在库尺码）指标的计算，逻辑变简单了，SPU维度的时候，新增的s02_inventory_stock_sales_detail_d_spu中的sku_size字段是拼接好了1的，即就是该SPU的所有尺码，用逗号隔开。
+Item Stockout Alert Value（缺货/滞销/其他判定）指标也需要特殊说明一下，oos_tag =  1 -> 感缺货；computed_product_tag = 'slow mover' -> 滞销，其他情况返回BLANK()，spu维度使用新表没有级别优先级的判定，SKU维度计算看看能不能优化现在是不是复杂，sku维度下，判定出的状态一定只有一个，有多个就是异常的。
