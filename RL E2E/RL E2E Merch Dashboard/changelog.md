@@ -39,6 +39,22 @@
 
 ## [Dimension Cross Analysis] 模块
 
+## [2026-10-31 10:30] DAX 修改 — 库存类指标期末时点口径对齐（end period 最后一天直读日期表，废除范围内最后快照日回退）
+
+- **模块**: Dimension Cross Analysis - Platform Merchandising Performance / Top & OPP SKUs Analysis / Handbags Sales Performance / Handbags Sales Analysis by Dimension
+- **任务**: 库存相关指标（时间范围看 this period 最后一天）与口径描述对齐——原实现为「end period 范围内最后一个有数据的日期」（快照缺数自动回退到范围内最近一天），与口径「end period 最后一天」不一致，按参考写法改为直接读日期表单日过滤
+- **操作**: 修改
+- **变更内容**:
+  - 期末日期取值统一改写（废除 `CALCULATE(MAX(inv 表日期), REMOVEFILTERS(整表), 范围条件)` 推导及 __EndPeriodMin / __EndPeriodMax 范围变量）：This = `SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])`（`__EndPeriodDate_This`）；LP = `SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])`（`__EndPeriodDate_LP`）——直接单日过滤，该日快照缺数时指标为空、不回退；日期表为断开维度，读值不随行维度 / 切片器上下文漂移
+  - Platform_Merchandising_ms.md：Act Base Value 的 __EOHAmt（EOH / ST% 分母，a02_e2e_product_performance_inv_summary_d）——§1.3 时间口径 / §1.5 EOH 行 / §4.1 代码与注释 / 注意事项 11 同步改写
+  - Top_SKUs_Analysis_Table.md：EOH Value（§4.11）/ Weeks Cover Value 分子（§4.13，s02_inventory_stock_sales_detail_d）——§1.4 时间口径 / §3.1 分层 / §3.4 桥接说明 / §4.x 依赖与口径注释 / 注意事项 9、10 同步改写
+  - OPP_SKUs_Analysis_Table.md：Qualify（§4.1）/ SKU Rank（§4.2）/ Sort Key（§4.3）三度量库存侧判定基准日同步直读 TimeFrame_Max——launch 判定基准日由「end period 快照日（非 TimeFrame_Max）」更正为「end period 最后一天（= Max_This 表 TimeFrame_Max）」；§1.2 条件 1 / §1.4 / §4.x 依赖注释 / 注意事项 6、14 同步改写
+  - Handbags_&_Outwear_ms.md：Act Base Value（__EOHUnit / __InvAmt_End）与 LY Base Value（__EOHUnit_LP）双期期末日期（EOH / EOH vs LP / ST% 库存侧，This = Max_This[TimeFrame_Max]、LP = Max_Last[TimeFrame_Max]）——§1.3 / §4.1 / §4.2 / 注意事项 8 同步改写
+  - Handbags_Sales_ms.md：EOH Unit Value（§4.10）/ LP EOH Unit Value（§4.12）/ ST% Value（§4.15）双期期末日期——§1.3 / §3.3 / §4.x 依赖与口径注释 / 注意事项 7 同步改写
+  - Platform_Merchandising_Card.md 复核：五指标（SLS Amt% / vs LP / TAR ACH% / MTD / YTD）均基于 sales + a05 两表，无库存类指标，不涉及本调整，未修改
+- **关联文件**: Dimension Cross Analysis/5 Platform Merchandising Performance/Platform_Merchandising_ms.md；Dimension Cross Analysis/6 Top & OPP SKUs Analysis/Top_SKUs_Analysis_Table.md、OPP_SKUs_Analysis_Table.md；Dimension Cross Analysis/7 Handbags Sales Performance/Handbags_&_Outwear_ms.md；Dimension Cross Analysis/8 Handbags Sales Analysis by Dimension/Handbags_Sales_ms.md
+- **备注**: ①属性列「最新日期」取值（This Period 区间内该组合 MAX(trade[dt]) 最后记录日）非库存期末时点口径，保持不变；②参考写法中的 LY 期末日期（Max_This 表 TimeFrame_Max_LY）场景本六方案未涉及（无 vs LY 库存类指标），后续如有按同模式取 Max_This[TimeFrame_Max_LY]；③既有测试 SQL 快照日字面量（'2026-07-25' / '2025-07-26' / '2025-09-27'）与各自 TimeFrame_Max 一致，数值口径不受影响，未调整；④Item_Stockout_Table.md / Label_&_Division_table.md / Label_&_Product_Type_table.md 不在本轮清单，未触碰
+
 ## [2026-10-30 10:30] DAX 修改 — Item Stockout_Table v2.4 SPU 分支切换 spu 预聚合表 + Alert 规则简化 + Available Sizes 直读
 
 - **模块**: Dimension Cross Analysis - Item Stockout & Slow Mover Alert

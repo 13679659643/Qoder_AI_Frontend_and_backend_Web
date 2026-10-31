@@ -68,12 +68,12 @@ Top & OPP SKUs Analysis 板块含 TOP 与 OPP 两部分（口径板块级商品�
 | 口径                     | 时间范围                                                                                                                                  | 适用指标                                                        |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | This Period（区间类）    | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                                              | SLS Amt、SLS Units、Weeks Cover 分母、Top3 排名金额、属性"最新日期"判定 |
-| End Period（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个有数据的快照日** | EOH、Weeks Cover 分子                                           |
+| End Period（期末时点类） | end period 最后一天 = Slicer_Time_Frame_Max_This[TimeFrame_Max]（直接单日过滤） | EOH、Weeks Cover 分子                                           |
 
 说明：
 
 - 两张 s02 表日期字段均为 dt（非 data_date）
-- 期末时点实现为「范围内最后一个有数据的快照日」：口径定义为区间最后一天，快照缺数时自动回退到范围内最近一天；快照表按日存储，期末时点只取单日，对整段区间求和会把库存重复计数
+- 期末时点为 end period 最后一天（Max_This 表 TimeFrame_Max，直接单日过滤），与口径描述一致；快照表按日存储，期末时点只取单日，对整段区间求和会把库存重复计数；该日快照缺数时指标为空，不回退取范围内最近一天
 - 属性字段的"最新日期"以 This Period 区间内该组合的实际最大 dt 为准（非 TimeFrame_Max——组合在该区间内的最后记录日）
 
 ### 1.5 币种口径
@@ -128,7 +128,7 @@ Rank / Sort Key（Top3 行筛选 + 行排序，2 个度量）
 Value（口径计算，3 个指标各一 + 4 个属性度量）
 ←  trade 侧：时间范围显式筛选，行分组（category + sku_id）自动传导
 ←  inv 侧：TREATAS(trade[sku_id] → inv[sku_id]) 单列桥接
-      + inv[dt] = 快照日（单日时点，快照日 REMOVEFILTERS(整表) 全局取值）
+      + inv[dt] = end period 最后一天（单日时点，Max_This 表 TimeFrame_Max 直接单日过滤）
 ←  SLS Amt / Price 金额类 Value 层完成币种换算（原始 CNY ÷ 汇率）
 ↓
 Display（格式化显示）
@@ -194,13 +194,13 @@ CALCULATE(
         VALUES('s02_trade_sku_data_d'[sku_id]),
         's02_inventory_stock_sales_detail_d'[sku_id]
     ),
-    's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+    's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
 )
 ```
 
 - **sku_id 单列 TREATAS**：本模块行粒度为 category + sku_id，inv 表唯一键 dt + sku_id——sku_id 单列桥接即唯一锚定该 sku 快照日单行（category 为 sku 从属属性，无需双列传递）
 - **无需 IF 分支**：与 Item Stockout 双表（spu / sku）切换场景不同，本模块仅 sku 粒度单一表格，桥接无分支
-- **期末快照日**：`CALCULATE(MAX(inv[dt]), REMOVEFILTERS(整表), 范围条件)` 全表确定性取值，不随行上下文 / 切片器漂移
+- **期末日期**：end period 最后一天 = `SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])`（直接单日过滤；Max_This 表为断开维度，读值不随行上下文 / 切片器漂移）
 - framework 筛选若与 inv 建立关系经 CALCULATE 自动传导（同一 sku 行，无口径影响）；与 inv 已建关系的其余维度切片器同样自动传导，不在桥接参数内重复处理
 
 ### 3.5 度量值命名与组织
@@ -738,9 +738,9 @@ Top SKUs EOH Value =
 // 中文名: 期末库存数量
 // Display Folder: Top & OPP SKUs Analysis\Top\Base Metrics
 // 用途: 当前行 sku_id 期末库存数量（This 期末快照日单日时点）
-// 依赖: Slicer_Time_Frame_Max_This[TimeFrame_Min] / [TimeFrame_Max]
-// 口径: 口径 §42——时间范围看 this period 最后一天（end period 范围内最后
-//       一个有数据的快照日）；该 sku_id 下 sum(stock_inv_qty)
+// 依赖: Slicer_Time_Frame_Max_This[TimeFrame_Max]（end period 最后一天，直接单日过滤）
+// 口径: 口径 §42——时间范围看 this period 最后一天（end period 最后一天 =
+//       Max_This 表 TimeFrame_Max，直接单日过滤）；该 sku_id 下 sum(stock_inv_qty)
 // 数据底表: s02_inventory_stock_sales_detail_d
 // 行维度传递: 两表无模型关系——TREATAS(trade[sku_id] → inv[sku_id]) 单列
 //       桥接（inv 唯一键 dt + sku_id，sku_id 单列即唯一锚定快照日单行，
@@ -749,19 +749,8 @@ Top SKUs EOH Value =
 // 说明: 期末时点只取快照日单日，对区间求和会重复计数库存
 // ========================================
 
-// ── End Period This 时间范围（期末时点类）──
-VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
-VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
-
-// ── This 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-// REMOVEFILTERS(整表) 保证快照日不随行上下文 / 切片器漂移
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── this period筛选 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_This = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 RETURN
     CALCULATE(
@@ -770,7 +759,7 @@ RETURN
             VALUES('s02_trade_sku_data_d'[sku_id]),
             's02_inventory_stock_sales_detail_d'[sku_id]
         ),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 ```
 
@@ -806,8 +795,8 @@ Top SKUs Weeks Cover Value =
 // 用途: 当前行 sku_id 的库存周转周数（(期末库存 + 在途) / This Period 销售数量），
 //       跨 trade + inv 双表
 // 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
-//       （销售侧区间）；Slicer_Time_Frame_Max_This[TimeFrame_Min] / [TimeFrame_Max]
-//       （库存侧期末时点）
+//       （销售侧区间）；Slicer_Time_Frame_Max_This[TimeFrame_Max]
+//       （库存侧 end period 最后一天，直接单日过滤）
 // 口径: 口径 §40——销售数量看 this period 区间 sum(product_qty)；库存相关看
 //       end period 最后一天 sum(stock_inv_qty) + sum(in_trans_inv_qty)；
 //       (库存 + 在途) / 销售数量（原始口径计算指标列分子分母写反，
@@ -825,18 +814,8 @@ Top SKUs Weeks Cover Value =
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── End Period This 时间范围（库存侧期末时点）──
-VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
-VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
-
-// ── This 期末快照日 ──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── this period筛选 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_This = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 分子：期末库存 + 在途（快照日单日，TREATAS sku_id 单列桥接）──
 VAR __InvUnits =
@@ -847,7 +826,7 @@ VAR __InvUnits =
             VALUES('s02_trade_sku_data_d'[sku_id]),
             's02_inventory_stock_sales_detail_d'[sku_id]
         ),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 
 // ── 分母：This Period 净销售数量（行分组筛选自动传导）──
@@ -983,8 +962,8 @@ Top SKUs Weeks Cover Display =
 6. **候选集口径一致**：类别排名候选金额必须上卷到 category 粒度（CALCULATETABLE 净化上下文已移除 sku 筛选，@Amt 上下文转换仅叠加候选 category 筛选），否则候选金额被限制在当前行 sku 内、与对比值口径不一致，RANK 恒返回 1（Top Size Category Rank 同源坑）
 7. **Sort Key 权重前提**：单个 category 内 sku 数 < 1,000,000（L2 组内排名不侵位 L1 类别排名）；两级名次唯一（两键决胜）→ 排序键全局唯一、行序完全确定
 8. **predictive_buy 类型口径（v1.1 实证确认）**：字段为整数类型（Nullable(Int32)，值 1 / 0 / NULL），DAX 按整数字面量比较（1 → "Y"、0 → "N"、NULL 空）——禁止 String 比较（"1" ≠ 1 恒不成立会输出全空）
-9. **inv 桥接为 TREATAS sku_id 单列**：本模块行粒度单一（category + sku_id，桥接锚点 sku_id），无需 Item Stockout 的 ISINSCOPE + IF 双分支；期末快照日 CALCULATE(MAX(inv[dt]), REMOVEFILTERS(整表)) 全局确定性取值，不随行上下文 / 切片器漂移
-10. **framework 前置筛选传导**：Slicer_Framework 与两张事实表一对多关联（framework 字段两表齐备，数据字典已核对），framework = 'Foundation' 经关系自动传导双表，DAX 不显式处理；快照日计算内 REMOVEFILTERS(inv 整表) 同样移除 inv 侧 framework 筛选（时点日全局取值，属预期行为）
+9. **inv 桥接为 TREATAS sku_id 单列**：本模块行粒度单一（category + sku_id，桥接锚点 sku_id），无需 Item Stockout 的 ISINSCOPE + IF 双分支；期末日期 = end period 最后一天，直接读 SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max]) 单日过滤（Max_This 表为断开维度，读值不随行上下文 / 切片器漂移）
+10. **framework 前置筛选传导**：Slicer_Framework 与两张事实表一对多关联（framework 字段两表齐备，数据字典已核对），framework = 'Foundation' 经关系自动传导双表，DAX 不显式处理；期末日期直接读 Max_This 表 TimeFrame_Max（不依赖 inv 数据取值），单日过滤聚合内 inv 侧 framework 筛选照常生效（限定 Foundation 框架库存，属预期行为）
 11. **渠道口径不对称**：Platform / Store 切片器经关系自动传导仅作用于 trade 侧（SLS 系列指标 + Top3 候选金额）；inv 表无渠道字段，库存侧指标（EOH / Weeks Cover 分子）全量口径——Weeks Cover 分子分母渠道不对称为模型物理限制，业务需知悉
 12. **Weeks Cover 分子分母方向**：分子 = 期末库存 + 在途（快照日单日），分母 = This Period 销售数量——口径 §40 已确认修正项（原始口径计算指标列分子分母写反），不可回退
 13. **net_sales_amt 列来源**：模型内为 Power Query 行级计算列（ROUND(product_qty × sales_price, 6)），数据库无此列——测试 SQL 验证时按行级乘积还原

@@ -224,3 +224,27 @@ D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Da
 调整这个表，之前库存相关是s02_inventory_stock_sales_detail_d，现在新增了一个s02_inventory_stock_sales_detail_d_spu表，要求SKU维度保持原状，SPU维度的时候使用s02_inventory_stock_sales_detail_d_spu表。
 其中特殊说明，Item Stockout Available Sizes Value（在库尺码）指标的计算，逻辑变简单了，SPU维度的时候，新增的s02_inventory_stock_sales_detail_d_spu中的sku_size字段是拼接好了1的，即就是该SPU的所有尺码，用逗号隔开。
 Item Stockout Alert Value（缺货/滞销/其他判定）指标也需要特殊说明一下，oos_tag =  1 -> 感缺货；computed_product_tag = 'slow mover' -> 滞销，其他情况返回BLANK()，spu维度使用新表没有级别优先级的判定，SKU维度计算看看能不能优化现在是不是复杂，sku维度下，判定出的状态一定只有一个，有多个就是异常的。
+
+
+# DCA 测试  第二轮提示词:
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\5 Platform Merchandising Performance\Platform_Merchandising_Card.md
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\5 Platform Merchandising Performance\Platform_Merchandising_ms.md
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\6 Top & OPP SKUs Analysis\Top_SKUs_Analysis_Table.md
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\6 Top & OPP SKUs Analysis\OPP_SKUs_Analysis_Table.md
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\7 Handbags Sales Performance\Handbags_&_Outwear_ms.md
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\8 Handbags Sales Analysis by Dimension\Handbags_Sales_ms.md
+查看上述解决方案文件是否存在修改点，存在就修改，不存在就不修改，需求如下：
+涉及到库存相关的指标，需要时间范围看this period最后一天的时候，参考以下写法，目前我的写法是end period 范围内最后一个有数据的日期，这个是和口径描述不一样的，需要修改调整，
+涉及的表：
+a02_e2e_product_performance_inv_summary_d、s02_trade_sku_data_d、s02_inventory_stock_sales_detail_d
+
+// ── this period筛选 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_This = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+
+// ── this period筛选 期末日期（LY）：end period LY 最后一天 = Max_This 表 TimeFrame_Max_LY（直接单日过滤）──
+VAR __EndPeriodDate_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_LY])
+
+// ── Last period筛选 期末日期（LP）：end period LP 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
+
+不懂就问，其他没提到的修改需要不要修改。记得写入变更日志，D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\changelog.md

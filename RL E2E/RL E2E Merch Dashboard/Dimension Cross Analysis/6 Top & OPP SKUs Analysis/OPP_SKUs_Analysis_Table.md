@@ -42,7 +42,7 @@ Top & OPP SKUs Analysis 板块含 TOP 与 OPP 两部分，经页面按钮 + 书�
 
 口径细节：
 
-- **条件 1**：launch_time 值形如 "2022-09-02 00:00:00.000"（String），取前 10 位转日期（DATEVALUE(LEFT(...,10))）；上架日期 BLANK 或无法解析 → 资格不成立；`__EndPeriodDate - __LaunchDate > 14`（严格大于 14 天）
+- **条件 1**：launch_time 值形如 "2022-09-02 00:00:00.000"（String），取前 10 位转日期（DATEVALUE(LEFT(...,10))）；上架日期 BLANK 或无法解析 → 资格不成立；`__EndPeriodDate_This - __LaunchDate > 14`（严格大于 14 天）
 - **条件 2 / 3 的均值**：比值均值（先各自全量 sum 再相除），非 SKU 值的算术平均；trade 侧与 inv 侧的全量 sum 各自独立（两侧 SKU 域不必对齐——比值公式原始口径）
 - **条件 3 边界**：product_qty 为 0 或 BLANK（当期无净销售数量）→ Weeks Cover 为 BLANK → 严格大于比较不成立 → 资格不通过（纯库存无销售 SKU 天然被排除，见注意事项 5）
 - **条件 4 的分组与 SKU 个数**：分组键 = inv[brand]（Label）+ inv[ax_class]（CLASS）；分组 EOH 合计与 SKU 个数均为**快照日 inv 侧口径**（分组内有库存记录的 distinct sku 数）；SKU 的分组归属按其 inv 快照日行的 brand / ax_class 取值
@@ -60,11 +60,11 @@ Top & OPP SKUs Analysis 板块含 TOP 与 OPP 两部分，经页面按钮 + 书�
 | 口径                     | 时间范围                                                                                                                                  | 适用指标                                                        |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | This Period（区间类）    | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                                              | ST% 销售侧、Weeks Cover 分母、SLS Units 展示、属性"最新日期"判定 |
-| End Period（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个有数据的快照日** | EOH（排序与判定）、launch 判定基准日、ST% 库存侧、WC 分子       |
+| End Period（期末时点类） | end period 最后一天 = Slicer_Time_Frame_Max_This[TimeFrame_Max]（直接单日过滤） | EOH（排序与判定）、launch 判定基准日、ST% 库存侧、WC 分子       |
 
 说明：
 
-- 两张 s02 表日期字段均为 dt；期末时点为「范围内最后一个有数据的快照日」（快照缺数自动回退），只取单日
+- 两张 s02 表日期字段均为 dt；期末时点为 end period 最后一天（Max_This 表 TimeFrame_Max，直接单日过滤），只取单日；该日快照缺数时判定值按空处理，不回退取范围内最近一天
 - 全局均值（条件 2 / 3）与分组均值（条件 4）的时间口径与 SKU 判定值同口径（销售侧 this period、库存侧快照日）
 - 属性字段"最新日期"以 This Period 区间内该组合实际最大 dt 为准（复用 Top 度量，同 §1.3 规则）
 
@@ -178,7 +178,7 @@ OPP SKUs Qualify =
 //       && Weeks Cover 高于全量均值 && EOH 高于同 Label & CLASS 分组均值，
 //       四条件全通过返回 1，否则返回 0；用于视觉级筛选器「为 1」
 // 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
-//       Slicer_Time_Frame_Max_This[TimeFrame_Min] / [TimeFrame_Max]（快照日）
+//       Slicer_Time_Frame_Max_This[TimeFrame_Max]（end period 最后一天，直接单日过滤）
 // 条件 1 上架超 2 周: inv[launch_time]（String，值形如 2022-09-02 00:00:00.000）
 //       取前 10 位 DATEVALUE 转日期，快照日 - 上架日 > 14 天（严格大于）；
 //       launch_time BLANK / 无法解析 → 资格不成立（IFERROR 容错）
@@ -206,16 +206,8 @@ OPP SKUs Qualify =
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── End Period 时间范围与快照日（库存侧期末时点）──
-VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
-VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── this period筛选 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_This = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 当前行分组值 ──
 VAR __CurrentCategory = SELECTEDVALUE('s02_trade_sku_data_d'[category])
@@ -245,26 +237,26 @@ VAR __EOH =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[stock_inv_qty]),
         __SkuFilter,
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 VAR __InvAmt =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[msrp_inv_amt]),
         __SkuFilter,
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 VAR __WcInv =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[stock_inv_qty])
             + SUM('s02_inventory_stock_sales_detail_d'[in_trans_inv_qty]),
         __SkuFilter,
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 VAR __Launch =
     CALCULATE(
         MAX('s02_inventory_stock_sales_detail_d'[launch_time]),
         __SkuFilter,
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 
 // ── 条件 1：上架日期（String 前 10 位转日期；BLANK / 解析失败容错）──
@@ -290,13 +282,13 @@ VAR __T_Qty =
 VAR __T_Inv =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[msrp_inv_amt]),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 VAR __T_WcInv =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[stock_inv_qty])
             + SUM('s02_inventory_stock_sales_detail_d'[in_trans_inv_qty]),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 
 // ── 全量比值均值（先各自全量 sum 再相除，非 SKU 值算术平均）──
@@ -308,13 +300,13 @@ VAR __MyBrand =
     CALCULATE(
         MAX('s02_inventory_stock_sales_detail_d'[brand]),
         __SkuFilter,
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 VAR __MyAx =
     CALCULATE(
         MAX('s02_inventory_stock_sales_detail_d'[ax_class]),
         __SkuFilter,
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 VAR __GrpFilter =
     TREATAS(
@@ -325,13 +317,13 @@ VAR __GrpFilter =
 VAR __GrpEOH =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[stock_inv_qty]),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate,
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This,
         __GrpFilter
     )
 VAR __GrpCnt =
     CALCULATE(
         DISTINCTCOUNT('s02_inventory_stock_sales_detail_d'[sku_id]),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate,
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This,
         __GrpFilter
     )
 VAR __GrpAvgEOH = DIVIDE(__GrpEOH, __GrpCnt)
@@ -339,7 +331,7 @@ VAR __GrpAvgEOH = DIVIDE(__GrpEOH, __GrpCnt)
 // ── 四条件判定（除法比较：分母 0 / BLANK → BLANK → 比较不成立）──
 VAR __PassLaunch =
     NOT ISBLANK(__LaunchDate)
-        && (__EndPeriodDate - __LaunchDate) > 14
+        && (__EndPeriodDate_This - __LaunchDate) > 14
 VAR __PassSt = DIVIDE(__StAmt, __StAmt + __InvAmt) < __AvgSt
 VAR __PassWc = DIVIDE(__WcInv, __Qty) > __AvgWc
 VAR __PassEoh =
@@ -369,7 +361,7 @@ OPP SKUs SKU Rank =
 //       每个 category 分组仅保留资格 SKU 中 EOH 前三（口径：先资格过滤
 //       再取 Top3，非全量排名后再过滤）
 // 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
-//       Slicer_Time_Frame_Max_This[TimeFrame_Min] / [TimeFrame_Max]（快照日）
+//       Slicer_Time_Frame_Max_This[TimeFrame_Max]（end period 最后一天，直接单日过滤）
 //       [OPP SKUs Qualify]
 // 排名依据: EOH = 快照日 sum(inv.stock_inv_qty)（库存表为主，学 Top v2.1
 //       RANKX 迭代器模式——value 参数迭代外预计算）
@@ -403,16 +395,8 @@ OPP SKUs SKU Rank =
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── End Period 时间范围与快照日 ──
-VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
-VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── this period筛选 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_This = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 当前行分组值 ──
 VAR __CurrentCategory = SELECTEDVALUE('s02_trade_sku_data_d'[category])
@@ -426,7 +410,7 @@ VAR __CurrentEOH =
             VALUES('s02_trade_sku_data_d'[sku_id]),
             's02_inventory_stock_sales_detail_d'[sku_id]
         ),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 
 // ── 全量比值均值（迭代外标量，口径与净化同 Qualify）──
@@ -447,13 +431,13 @@ VAR __T_Qty =
 VAR __T_Inv =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[msrp_inv_amt]),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 VAR __T_WcInv =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[stock_inv_qty])
             + SUM('s02_inventory_stock_sales_detail_d'[in_trans_inv_qty]),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 VAR __AvgSt = DIVIDE(__T_St, __T_St + __T_Inv)
 VAR __AvgWc = DIVIDE(__T_WcInv, __T_Qty)
@@ -487,7 +471,7 @@ VAR __InvAgg =
                     + SUM('s02_inventory_stock_sales_detail_d'[in_trans_inv_qty]),
             "@Launch", MAX('s02_inventory_stock_sales_detail_d'[launch_time])
         ),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate,
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This,
         TREATAS(__CandSkus, 's02_inventory_stock_sales_detail_d'[sku_id])
     )
 
@@ -501,7 +485,7 @@ VAR __GrpAvg =
             "@GrpEOH", SUM('s02_inventory_stock_sales_detail_d'[stock_inv_qty]),
             "@GrpCnt", DISTINCTCOUNT('s02_inventory_stock_sales_detail_d'[sku_id])
         ),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 
 // ── 候选判定表：补 trade 侧两列（TREATAS(ROW) 桥接）+ 分组均值（内存匹配）──
@@ -552,7 +536,7 @@ VAR __Qualified =
         VAR __LaunchDate = IFERROR(DATEVALUE(LEFT([@Launch], 10)), BLANK())
         RETURN
             NOT ISBLANK(__LaunchDate)
-                && (__EndPeriodDate - __LaunchDate) > 14
+                && (__EndPeriodDate_This - __LaunchDate) > 14
                 && DIVIDE([@StAmt], [@StAmt] + [@InvAmt]) < __AvgSt
                 && DIVIDE([@WcInv], [@Qty]) > __AvgWc
                 && [@EOH] > [@GrpAvgEOH]
@@ -614,16 +598,8 @@ RETURN
             || LEN(TRIM(__CurrentSkuId)) = 0,
         BLANK(),
 
-        // ── End Period 时间范围与快照日 ──
-        VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
-        VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
-        VAR __EndPeriodDate =
-            CALCULATE(
-                MAX('s02_inventory_stock_sales_detail_d'[dt]),
-                REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-                's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-                's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-            )
+        // ── this period筛选 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+        VAR __EndPeriodDate_This = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
         // ── 当前行 SKU EOH（快照日，TREATAS sku_id 单列桥接）──
         VAR __SkuEOH =
@@ -633,7 +609,7 @@ RETURN
                     VALUES('s02_trade_sku_data_d'[sku_id]),
                     's02_inventory_stock_sales_detail_d'[sku_id]
                 ),
-                's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+                's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
             )
 
         RETURN
@@ -650,7 +626,7 @@ RETURN
                             VALUES('s02_trade_sku_data_d'[category]),
                             's02_inventory_stock_sales_detail_d'[category]
                         ),
-                        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+                        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
                     )
 
                 // ── 排序键 = -(category EOH × 权重 + SKU EOH) ──
@@ -759,7 +735,7 @@ OPP 表格展示指标与属性列直接复用 Top 部分已建度量（行分�
 3. **Qualify 与 Rank 判定同构双写**：四条件判定在两个度量中各写一份（Qualify 当前行版 / Rank 候选表版）——DAX 无表达式共享机制，**口径调整必须两处同步修改**（含全局均值口径）
 4. **均值口径为比值均值**：条件 2 / 3 的均值 = 两侧各自全量 sum 后相除（非 SKU 值的算术平均）；trade / inv 两侧 SKU 域独立不对齐（原始口径，勿改为交集域）
 5. **纯库存无销售 SKU 天然排除**：行值域为 trade 行字段（无 trade 记录的 sku 不出现）；且条件 3 的 WC 分母（product_qty）为 0 / BLANK 时 SKU 值为 BLANK、严格大于比较不成立——若业务需纳入「零销售高库存」滞销品（典型 OPP 候选），需另行确认 WC 分母兜底规则（如以极小值代替 0）后调整
-6. **launch_time 解析**：String 前 10 位 DATEVALUE（"2022-09-02 00:00:00.000" → 2022-09-02）；BLANK / 格式异常经 IFERROR 容错为无资格；判定基准日为 end period 快照日（非 TimeFrame_Max）
+6. **launch_time 解析**：String 前 10 位 DATEVALUE（"2022-09-02 00:00:00.000" → 2022-09-02）；BLANK / 格式异常经 IFERROR 容错为无资格；判定基准日为 end period 最后一天（= Max_This 表 TimeFrame_Max，直接单日过滤）
 7. **条件 4 分组口径**：分组键 inv[brand] + inv[ax_class]（同表，Label / CLASS）；分组 EOH 合计与 SKU 个数均为快照日 inv 侧口径（分组内有库存记录的 distinct sku 数）——SKU 分组归属取 inv 快照日行值（勿改用 trade 侧 brand / ax_class，避免与 EOH 均值域错位）
 8. **排序键权重前提**：单 SKU EOH < 1,000,000（库存件数）；EOH 为数量口径非负，无负值翻转问题；category 块间按快照日库存量降序（如业务要求其他块序依据，仅调 Sort Key 的 L1 聚合）
 9. **渠道口径不对称**：trade 侧（ST% 分子 / WC 分母 / 全量均值分子）受 Platform / Store 筛选，inv 侧（EOH / 库存金额 / WC 分子）不受——判定分子分母渠道不对称为模型物理限制，业务需知悉
@@ -767,6 +743,6 @@ OPP 表格展示指标与属性列直接复用 Top 部分已建度量（行分�
 11. **DENSE 并列语义**：EOH 相同的资格 SKU 共享名次，名次 ≤ 3 的行可能超过 3 行 / 分组（含并列放行，与 Top v2.1 一致）
 12. **复用度量边界**：展示指标复用 Top SKUs 系列 9 个（行分组传导同构成立）；OPP 独立演化指标集时新建 OPP 前缀度量，勿改 Top 度量语义
 13. **ST% 仅参与判定不展示**（口径文档 §633 说明）；如需展示可后续新增（金额口径 net_sales_amt / (net_sales_amt + msrp_inv_amt)）
-14. **期末时点口径**：快照日 = end period 范围内最后一个有数据的日期（快照缺数自动回退）；快照表按日存储只取单日，对区间求和会重复计数库存
+14. **期末时点口径**：期末日期 = end period 最后一天（Max_This 表 TimeFrame_Max，直接单日过滤）；快照表按日存储只取单日，对区间求和会重复计数库存；该日快照缺数时判定值 / 指标为空，不回退取范围内最近一天
 15. **函数版本**：RANKX 全版本可用（无 RANK 窗口函数版本要求）；复用 Top 度量的 predictive_buy 为整数比较（同 Top 注意事项 8）
 16. **口径与语法**：口径文档中定义的所有指标必须遵守其数据类型与数据格式，与解决方案存在争议时一切以口径文档为准；DAX 文本常量使用双引号，单引号仅用于表名，列名使用方括号

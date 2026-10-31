@@ -113,17 +113,17 @@ SET @fy_first := '2026-03-29';
 1. “强绑定”的引擎术语是 auto-existence（同表共存）：md_type 一旦配置按列排序，视觉对象查询的 GroupBy 就不只是 Slicer_Md_Type[md_type] 一列，Slicer_Md_Type[_Sort] 被隐式带入；同表两列共存于查询时引擎将其合并为表粒度的组合筛选。这就是“为了后台执行排序，同时对两列施加筛选上下文”的底层实现——绑定发生在查询生成阶段，不是计算阶段。
 2. 为什么存活的 _Sort 一个筛选就足够钉死分母：因为排序键与业务值是 1:1 对应（sort-by-column 的配置前提就是 Sort 在表内唯一）。删掉 mdtype 筛选后，Sort=Y 独自存活，但 1:1 反推回去等价于 mdtype=X——维度表仍被钉在当前行那一行，经一对多关系向事实表传导，分母与分子的聚合范围完全重合。若 Sort 不唯一（多行共享一个排序值），钉死就只是部分的，现象会变成“占比异常但不是恒 100%”——恒 100% 正是 1:1 的指纹。
 
-// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+// ── this period筛选 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 期末日期（LY）：end period LY 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
-// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+// ── this period筛选 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate_This = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 期末日期（LY）：end period LY 最后一天 = Max_This 表 TimeFrame_Max_LY（直接单日过滤）──
+// ── this period筛选 期末日期（LY）：end period LY 最后一天 = Max_This 表 TimeFrame_Max_LY（直接单日过滤）──
 VAR __EndPeriodDate_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_LY])
 
-// ── 期末日期（LP）：end period LP 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
+// ── Last period筛选 期末日期（LP）：end period LP 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])

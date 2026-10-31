@@ -47,13 +47,13 @@ Handbags Sales Performance 是 Handbags/Outerwear 前置品类筛选下的 Model
 | ---- | -------- | -------- |
 | This Period（区间类） | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] | SLS Unit、SLS Amt、SLS Amt% 分子分母、Amt vs LP 分子、vs LP this 侧占比分子分母、ST% 销售侧 |
 | Last Period（vs LP 基线，区间类） | dt ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] | Amt vs LP 分母、vs LP last 侧占比分子分母 |
-| End Period This（期末时点类） | end period This 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个有数据的快照日** | EOH、EOH vs LP this 侧、ST% 库存侧 |
-| End Period LP（期末时点类） | end period LP 范围 [Slicer_Time_Frame_Max_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] 内**最后一个有数据的快照日** | EOH vs LP 分母 |
+| End Period This（期末时点类） | end period 最后一天 = Slicer_Time_Frame_Max_This[TimeFrame_Max]（直接单日过滤） | EOH、EOH vs LP this 侧、ST% 库存侧 |
+| End Period LP（期末时点类） | end period LP 最后一天 = Slicer_Time_Frame_Max_Last[TimeFrame_Max]（直接单日过滤） | EOH vs LP 分母 |
 
 说明：
 
 - 两张 s02 表日期字段均为 **dt**（非 data_date）
-- 期末时点实现为「范围内最后一个有数据的快照日」：口径为 end period 最后一天，快照缺数时自动回退到范围内最近一天；快照表按日存储只取单日，整段区间求和会重复计数库存
+- 期末时点为 end period 最后一天（This = Max_This 表 TimeFrame_Max、LP = Max_Last 表 TimeFrame_Max，直接单日过滤），与口径描述一致；快照表按日存储只取单日，整段区间求和会重复计数库存；该日快照缺数时指标为空，不回退取范围内最近一天
 - vs LP 受 last period 时间筛选器影响（this period / last period 对比）
 
 ### 1.4 币种口径
@@ -186,19 +186,8 @@ VAR __ColType = SELECTEDVALUE('Dim_ColMetric_Handbags&Outwear_Sales_ms'[ColType]
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── End Period This 时间范围（期末时点类指标）──
-VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
-VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
-
-// ── This 期末快照日：end period This 范围内最后一个有数据的日期（单日时点）──
-// REMOVEFILTERS(整表) 保证快照日不随行维度 / 切片器上下文漂移
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── this period筛选 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_This = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 渠道上下文过滤器（shop_name 侧；UNION+FILTER 保证表类型稳定）──
 //   TTL 列   → ALLSELECTED([shop_name])：移除视觉对象内部 shop_name 筛选，保留外部切片器
@@ -251,7 +240,7 @@ VAR __SLSAmtPct = DIVIDE(__SLSAmt_This, __SLSAmt_Total)
 VAR __EOHUnit =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[stock_inv_qty]),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 
 // ═══ ST%（售罄率%金额，仅 TTL 列；跨 trade + inv 双表）═══
@@ -261,7 +250,7 @@ VAR __EOHUnit =
 VAR __InvAmt_End =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[msrp_inv_amt]),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
 VAR __STPct = DIVIDE(__SLSAmt_This, __SLSAmt_This + __InvAmt_End)
 
@@ -306,18 +295,8 @@ VAR __ColType = SELECTEDVALUE('Dim_ColMetric_Handbags&Outwear_Sales_ms'[ColType]
 VAR __PeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min_Last[TimeFrame_Min])
 VAR __PeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
-// ── End Period LP 时间范围（期末时点类基线）──
-VAR __EndPeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Min])
-VAR __EndPeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
-
-// ── LP 期末快照日：end period LP 范围内最后一个有数据的日期 ──
-VAR __EndPeriodDate_LP =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin_LY,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax_LY
-    )
+// ── Last period筛选 期末日期（LP）：end period LP 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
 // ── 渠道上下文过滤器（构造逻辑同 Act Base Value）──
 VAR __ShopNameCtx =
@@ -748,7 +727,7 @@ Handbags & Outwear Sales Cell Background Color =
 5. **前置品类关系传导（建模前提）与总计行语义**：行维度经 Slicer_Spu_Model → trade / inv、品类经 Slicer_Category → trade / inv 双侧一对多关系自动传导，度量值内零行维度 / 品类硬编码（无 TREATAS、无 IN 清单）——后续品类 / 行维度调整仅需修改视觉对象筛选器与维度表配置；若模型中 Slicer_Category 未与 inv 建关系，需在 inv 侧 3 处聚合（__EOHUnit / __InvAmt_End / __EOHUnit_LP）回退显式条件 `inv[category] IN {...}`。总计行无 spu_model 行分组，trade / inv 两侧均为品类全量——行值域 Slicer_Spu_Model 仅 3 个 model，品类下其余 model 计入总计但不展示明细行（总计 ≠ 明细行之和）；业务若需总计 = 展示行之和，关闭矩阵总计行即可。
 6. **inv 表无渠道字段**：s02_inventory_stock_sales_detail_d 无 shop_name / platform，渠道上下文不作用于 inv 侧——EOH / EOH vs LP / ST% 库存侧不受渠道列影响；三者仅存在于 TTL 列（无跨渠道列对比问题），ST% 分子分母渠道口径不对称为模型物理限制，业务需知悉。
 7. **Display 层 BLANK 返回 BLANK()（本模块特有）**：不返回 "-"——矩阵检测到该行全部度量值均为 BLANK() 时自动隐藏该行（含层级行，需所有指标均为 BLANK()），行可见性由矩阵原生机制承担，无需 IsEmpty 视觉级筛选器；代价是单元格级空值与行级隐藏不可区分（业务已确认接受）。
-8. **期末时点口径**：This / LP 两个快照日各自取对应范围内最后一个有数据的日期（快照缺数自动回退）；快照表按日存储只取单日，对整段区间求和会重复计数库存；`__EndPeriodDate` / `__EndPeriodDate_LP` 用 REMOVEFILTERS(inv 整表) 取值，保证快照日不随行维度 / 切片器上下文漂移。
+8. **期末时点口径**：期末日期 = end period 最后一天（This = `SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])`、LP = `SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])`，直接单日过滤——两张日期表均为断开维度，读值不随行维度 / 切片器上下文漂移）；快照表按日存储只取单日，对整段区间求和会重复计数库存；该日快照缺数时指标为空，不回退取范围内最近一天（与口径「end period 最后一天」一致）。
 9. **net_sales_amt 列来源**：模型内为 Power Query 行级计算列（ROUND(product_qty × sales_price, 6)），数据库无此列——测试 SQL 验证时按行级乘积还原，不可直接引用数据库 net_sales_amt（若底表存在同名字段以取数 SQL 为准核对）。
 10. **vs LP 空值规则**：Amt vs LP / EOH vs LP 在 LP 侧 BLANK 或 0 时返回 BLANK（避免除零与失真变化率；EOH vs LP 另在 this 侧 BLANK 时返回 BLANK）；vs LP（bp 差值）任一侧 BLANK 返回 BLANK（避免单侧缺失产生失真差值）；×10000 转 bp 在 Display 层实现，Value 层保持原始差值小数。
 11. **'Outwear' 笔误已确认**：口径文档子模块十的 'Outwear' 为笔误，底表实际值为 'Outerwear'；前置筛选由视觉对象筛选器（Slicer_Category[category] IN ("Handbags", "Outerwear")）承担，经双侧关系传导生效，度量值内无品类硬编码。

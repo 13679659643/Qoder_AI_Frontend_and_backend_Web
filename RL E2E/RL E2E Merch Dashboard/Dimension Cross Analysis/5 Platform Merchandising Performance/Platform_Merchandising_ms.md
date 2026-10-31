@@ -53,14 +53,14 @@ Platform Merchandising Performance 是按 Framework + Category 展开的渠道 �
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | This Period（区间类）     | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                               | SLS Amt% 分子分母、TAR 三指标 actual、TAR ACH% 分母          |
 | Last Period（vs LP 基线） | data_date ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]]                               | vs LP 分子分母（占比差值双期）                               |
-| End Period（期末时点类）  | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_Time[TimeFrame_Max]] 内**最后一个快照日** | EOH、ST% 分母库存                                            |
+| End Period（期末时点类）  | end period 最后一天 = Slicer_Time_Frame_Max_This[TimeFrame_Max]（直接单日过滤） | EOH、ST% 分母库存                                            |
 | target MTD 区间           | [Slicer_Time_Frame_Max_This[Fiscal_Month_First_Day], Slicer_Time_Frame_Max_This[Fiscal_Month_Last_Day]]（TimeFrame_Max 所在财月） | MTD TAR Progress 分母（Day / Week 不跨月）                   |
 | target YTD 区间           | [Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day], Slicer_Time_Frame_Max_This[Fiscal_Year_Last_Day]]（TimeFrame_Max 所在财年）   | YTD TAR Progress 分母（Day / Week / Month / Quarter 不跨年） |
 
 说明：
 
 - vs LP 是 this period 和 last period 对比，受 last period 时间筛选器影响
-- 期末时点类实现为 end period 范围内最后一个有数据的快照日：口径为 end period 最后一天，快照缺数时自动回退到范围内最近一天；快照表按日存储只取单日，整段区间求和会重复计数库存
+- 期末时点为 end period 最后一天（Max_This 表 TimeFrame_Max，直接单日过滤），与口径描述一致；快照表按日存储只取单日，整段区间求和会重复计数库存；该日快照缺数时指标为空，不回退取范围内最近一天
 - **时间粒度**读 `SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])`（Day / Week / Month / Quarter / Year）
 - **跨财月判定**：不区分粒度，直接比较 `Slicer_Time_Frame_Min_This[TimeFrame_Min_Month_Value]` 与 `Slicer_Time_Frame_Max_This[TimeFrame_Max_Month_Value]`（财月 value，文本类型，如 "2027-08"），不相等 → 跨财月
 - **跨财年判定**：不区分粒度，直接比较 `Slicer_Time_Frame_Min_This[TimeFrame_Min_Year_Value]` 与 `Slicer_Time_Frame_Max_This[TimeFrame_Max_Year_Value]`（财年 value，文本类型，如 "2027"），不相等 → 跨财年
@@ -100,7 +100,7 @@ Platform Merchandising Performance 是按 Framework + Category 展开的渠道 �
 | ---------------- | --------------- | --------------------------------------------------------------------------------------- | ----------- |
 | SLS Amt%         | §34-§37       | 单元格 SLS Amt / 该列渠道全部行合计（占比；随行维度切换承载 framework / category 占比） | percent_0dp |
 | vs LP            | §34-§37 附属  | SLS Amt% This - SLS Amt% Last（占比差值，原始小数，×10000 转 bp 在 Display 层）        | integer_bp  |
-| EOH              | §38            | 期末库存金额 = end period 最后快照日 `sum(msrp_inv_amt)`，仅 TTL 列                   | currency    |
+| EOH              | §38            | 期末库存金额 = end period 最后一天（TimeFrame_Max 单日过滤）`sum(msrp_inv_amt)`，仅 TTL 列 | currency    |
 | ST%              | §39            | This Period 销售金额 /（This Period 销售金额 + 期末库存金额），仅 TTL 列                | percent_0dp |
 | TAR ACH%         | 子模块八 TAR 类 | 见 §1.4 粒度矩阵                                                                       | percent_0dp |
 | MTD TAR Progress | 子模块八 TAR 类 | 见 §1.4 粒度矩阵                                                                       | percent_0dp |
@@ -220,9 +220,8 @@ VAR __ColType = SELECTEDVALUE('Dim_ColMetric_Platform_Merchandising_Performance'
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── End Period 时间范围（期末时点类指标）──
-VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
-VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+// ── this period筛选 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_This = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── TAR 分母区间（均以 TimeFrame_Max 所在财月 / 财年框定）──
 VAR __MonthFirstDay = SELECTEDVALUE(Slicer_Time_Frame_Max_This[Fiscal_Month_First_Day])
@@ -240,16 +239,6 @@ VAR __IsCrossMonth =
 VAR __IsCrossYear =
     SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min_Year_Value])
         <> SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_Year_Value])
-
-// ── 期末快照日：end period 范围内最后一个有数据的日期 ──
-// REMOVEFILTERS 保证快照日不随行维度 / 商品切片器上下文漂移（全表最后一个快照日）
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('a02_e2e_product_performance_inv_summary_d'[data_date]),
-        REMOVEFILTERS('a02_e2e_product_performance_inv_summary_d'),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] >= __EndPeriodMin,
-        'a02_e2e_product_performance_inv_summary_d'[data_date] <= __EndPeriodMax
-    )
 
 // ── 渠道上下文过滤器（sales 侧 platform；UNION+FILTER 保证表类型稳定）──
 //   TTL 列      → ALLSELECTED([platform])：移除视觉对象内部 platform 筛选，保留外部切片器
@@ -361,7 +350,7 @@ VAR __SLSAmtPct = DIVIDE(__SLSAmt_This, __SLSAmt_Total_Channel)
 VAR __EOHAmt =
     CALCULATE(
         SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
-        'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate
+        'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate_This
     )
 
 // ═══ ST%（售罄率%金额，仅 TTL 列，§39）═══
@@ -891,7 +880,7 @@ Platform Merchandising Cell Background Color =
 8. **TTL 的 ALLSELECTED 语义**：TTL 列对 [platform] / [shop_name] 应用 ALLSELECTED——移除视觉对象内部的渠道筛选，保留外部切片器，即外部筛选上下文下的全渠道合计；不选或多选 Label 时 SELECTEDVALUE 默认 "TTL"。
 9. **非 TTL 列与外部渠道切片器的交集关系**：Platform / Store 列的渠道过滤基于 ALLSELECTED 集与 Label_Value 取交集。如外部 platform 切片器仅选 TM，则 JD 列返回空（外部切片器限定数据范围）。
 10. **inv 表无渠道字段**：a02_e2e_product_performance_inv_summary_d 无 platform / shop_name，渠道上下文不作用于库存侧；EOH / ST% 仅 TTL 列展示，其值实际为全渠道口径。
-11. **期末快照日机制**：`__EndPeriodDate` 取 end period 范围 [Max_This[TimeFrame_Min], Max_This[TimeFrame_Max]] 内最后一个有数据的快照日，用 REMOVEFILTERS(inv) 计算，保证快照日不随行维度 / 商品切片器漂移；快照缺数时自动回退到范围内最近一天。
+11. **期末时点机制**：期末日期 = end period 最后一天，直接读 `SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])` 单日过滤（`__EndPeriodDate_This`；Max_This 表为断开维度，读值不随行维度 / 商品切片器漂移）；快照表按日存储只取单日，整段区间求和会重复计数库存；该日快照缺数时指标为空，不回退取范围内最近一天（与口径「end period 最后一天」一致）。
 12. **汇率换算分层**：Base Value 层始终保留 RMB 原始值；换算集中在 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1，仅 EOH 金额类）；Cell Display 只拼接 Currency_Symbol。金额类判定用 Metric_IsCurrencyAmount；TAR / SLS Amt% / ST% / vs LP 为比率或差值，不受币种影响。
 13. **Display 空值返回 BLANK()**：区别于文本 "-" 占位，空值一律返回 BLANK()，使矩阵在整行所有度量值均为 BLANK 时自动隐藏该行（包括 framework / category 层级行），无需额外 IsEmpty 视觉级筛选器。
 14. **字段名已核对数据字典**：net_sales_amt / platform / shop_name / framework / category（sales 表）；msrp_inv_amt（inv 表）；fcst_sales_amt / data_date / platform / shop_name / brand / framework / category（a05 表）；日期字段统一为 data_date（date 类型）。

@@ -47,13 +47,13 @@
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | This Period（区间类）             | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                                                 | SLS Amt、SLS Unit、SLS Amt% 分子分母、ST% 销售侧 |
 | Last Period（vs LP 基线，区间类） | dt ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]]                                                 | LP SLS Amt%（vs LP 的 last 侧）                  |
-| End Period This（期末时点类）     | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个有数据的快照日**    | EOH Unit、ST% 库存侧                             |
-| End Period LP（期末时点类）       | end period LP 范围 [Slicer_Time_Frame_Max_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] 内**最后一个有数据的快照日** | LP EOH Unit（vs LP 的 last 侧）                  |
+| End Period This（期末时点类）     | end period 最后一天 = Slicer_Time_Frame_Max_This[TimeFrame_Max]（直接单日过滤）    | EOH Unit、ST% 库存侧                             |
+| End Period LP（期末时点类）       | end period LP 最后一天 = Slicer_Time_Frame_Max_Last[TimeFrame_Max]（直接单日过滤） | LP EOH Unit（vs LP 的 last 侧）                  |
 
 说明：
 
 - 两张 s02 表日期字段均为 dt（非 data_date）
-- 期末时点实现为「范围内最后一个有数据的快照日」：口径定义为区间最后一天，快照缺数时自动回退到范围内最近一天；快照表按日存储，期末时点只取单日，对整段区间求和会把库存重复计数
+- 期末时点为 end period 最后一天（This = Max_This 表 TimeFrame_Max、LP = Max_Last 表 TimeFrame_Max，直接单日过滤），与口径描述一致；快照表按日存储，期末时点只取单日，对整段区间求和会把库存重复计数；该日快照缺数时指标为空，不回退取范围内最近一天
 
 ### 1.4 币种口径
 
@@ -140,7 +140,7 @@ IsEmpty（行可见性）
 - 单选模式语义与逐字段 TREATAS 等价（行上字段 IN 单值 = TREATAS 传单值）；多选模式行上多字段同时匹配，任意组合同一套逻辑
 - `inv[category] = "Handbags"` 统一叠加：Size 模式下必需（尺码值跨品类通用，不限定会混入其他品类同尺码库存）；其余模式下为口径保险（维度值跨品类重叠时以 category 为准）
 - 与 inv 表已建关系的外部商品维度切片器（Division 等）经 CALCULATETABLE 自动传导，不在桥接谓词内重复处理
-- 期末快照日先经 REMOVEFILTERS(整表) 确定性取值（This / LP 两个范围各自取值），不随行上下文 / 切片器漂移
+- 期末日期 = end period 最后一天直接读断开日期表（This = Max_This[TimeFrame_Max] / LP = Max_Last[TimeFrame_Max]，直接单日过滤），读值不随行上下文 / 切片器漂移
 - 总计行（ISINSCOPE 全 FALSE）五谓词全放行 → Handbags 全量库存，行值域与总计自洽
 
 ### 3.4 度量值命名与组织
@@ -503,8 +503,9 @@ Handbags Sales EOH Unit Value =
 // Display Folder: Handbags Sales by Dimension\Base Metrics
 // 用途: 当前行维度值期末库存数量（This 期末快照日单日时点），行维度经字段参数
 //       动态切换（单选 / 多选统一），跨表行上字段谓词桥接
-// 依赖: Slicer_Time_Frame_Max_This[TimeFrame_Min] / [TimeFrame_Max]
-// 口径: 时间范围看 this period 最后一天（end period 范围内最后一个快照日）；
+// 依赖: Slicer_Time_Frame_Max_This[TimeFrame_Max]（end period 最后一天，直接单日过滤）
+// 口径: 时间范围看 this period 最后一天（end period 最后一天 = Max_This 表
+//       TimeFrame_Max，直接单日过滤）；
 //       该 dimension 下 sum(stock_inv_qty)
 // 数据底表: s02_inventory_stock_sales_detail_d
 // 行维度传递: 两表无模型关系——SUMX + FILTER 行上字段谓词匹配：
@@ -517,19 +518,8 @@ Handbags Sales EOH Unit Value =
 //       总计行（ISINSCOPE 全 FALSE）五谓词全放行 → Handbags 全量库存
 // ========================================
 
-// ── End Period This 时间范围（期末时点类）──
-VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
-VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
-
-// ── This 期末快照日：end period 范围内最后一个有数据的日期（单日时点）──
-// REMOVEFILTERS(整表) 保证快照日不随行维度 / 切片器上下文漂移
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── this period筛选 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_This = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 行上字段判定（不依赖参数表；多选时多字段同时为 TRUE）──
 VAR __InSpuModel = ISINSCOPE('s02_trade_sku_data_d'[spu_model])
@@ -552,7 +542,7 @@ RETURN
             CALCULATETABLE(
                 's02_inventory_stock_sales_detail_d',
                 's02_inventory_stock_sales_detail_d'[category] = "Handbags",
-                's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+                's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
             ),
             ((NOT __InSpuModel) || ('s02_inventory_stock_sales_detail_d'[spu_model] IN __RowSpuModel)) &&
             ((NOT __InAxSubClass) || ('s02_inventory_stock_sales_detail_d'[ax_sub_class] IN __RowAxSubClass)) &&
@@ -594,23 +584,13 @@ Handbags Sales LP EOH Unit Value =
 // 中文名: LP 期末库存数量（vs LP 对比基线）
 // Display Folder: Handbags Sales by Dimension\Base Metrics
 // 用途: LP 期末库存数量，供 EOH Unit vs LP 派生引用，不直接进视觉对象
-// 依赖: Slicer_Time_Frame_Max_Last[TimeFrame_Min] / [TimeFrame_Max]
+// 依赖: Slicer_Time_Frame_Max_Last[TimeFrame_Max]（end period LP 最后一天，直接单日过滤）
 // 口径: 与 EOH Unit 同构（行上字段谓词桥接 + Handbags 限定），期末时点替换为
-//       end period LP 范围内最后一个有数据的快照日
+//       end period LP 最后一天（Max_Last 表 TimeFrame_Max，直接单日过滤）
 // ========================================
 
-// ── End Period LP 时间范围（期末时点类，vs LP 基线）──
-VAR __EndPeriodMin_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Min])
-VAR __EndPeriodMax_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
-
-// ── LP 期末快照日：end period LP 范围内最后一个有数据的日期 ──
-VAR __EndPeriodDate_LP =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin_LP,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax_LP
-    )
+// ── Last period筛选 期末日期（LP）：end period LP 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
 // ── 行上字段判定（不依赖参数表；多选时多字段同时为 TRUE）──
 VAR __InSpuModel = ISINSCOPE('s02_trade_sku_data_d'[spu_model])
@@ -701,10 +681,10 @@ Handbags Sales ST% Value =
 // 用途: 当前行维度值的售罄率——This Period 销售金额 /（This Period 销售金额 +
 //       期末库存金额），跨 sales + inv 双表，行维度经字段参数动态切换（单选 / 多选统一）
 // 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
-//       Slicer_Time_Frame_Max_This[TimeFrame_Min] / [TimeFrame_Max]
+//       Slicer_Time_Frame_Max_This[TimeFrame_Max]（end period 最后一天，直接单日过滤）
 //       Button_Store_Name[ActualValue]
 // 口径: 销售金额：看所选时间范围销售金额之和（this period 区间）；
-//       期末库存金额：看所选时间范围 end period 最后一天（快照日单日）；
+//       期末库存金额：看所选时间范围 end period 最后一天（TimeFrame_Max 单日过滤）；
 //       sales.sum(net_sales_amt) / (sales.sum(net_sales_amt) + inv.sum(msrp_inv_amt))
 // 数据底表: s02_trade_sku_data_d（sales）；s02_inventory_stock_sales_detail_d（inv）
 // 跨表说明: 销售侧行筛选自动传导；库存侧 SUMX + FILTER 行上字段谓词匹配
@@ -719,18 +699,8 @@ Handbags Sales ST% Value =
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── End Period 时间范围（库存侧期末时点）──
-VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
-VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
-
-// ── This 期末快照日 ──
-VAR __EndPeriodDate =
-    CALCULATE(
-        MAX('s02_inventory_stock_sales_detail_d'[dt]),
-        REMOVEFILTERS('s02_inventory_stock_sales_detail_d'),
-        's02_inventory_stock_sales_detail_d'[dt] >= __EndPeriodMin,
-        's02_inventory_stock_sales_detail_d'[dt] <= __EndPeriodMax
-    )
+// ── this period筛选 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_This = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 渠道上下文（TTL = IN 全部店铺实际值）──
 // FILTER(ALL(shop_name), 条件)：IF 分支均为 FILTER 迭代表，表语义完整传递
@@ -778,7 +748,7 @@ VAR __InvAmt =
             CALCULATETABLE(
                 's02_inventory_stock_sales_detail_d',
                 's02_inventory_stock_sales_detail_d'[category] = "Handbags",  // 限定品类
-                's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate     // 限定快照日
+                's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This     // 限定期末最后一天
             ),
             // ── 第 2 层：FILTER 逐行谓词桥接 ──
             // 每个维度遵循同一模式：(NOT 激活 || 列 IN 行值列表)
@@ -955,7 +925,7 @@ Handbags Sales IsEmpty =
 4. **inv 侧 Handbags 限定不可省略**：Size 模式下尺码值跨品类通用，`inv[category] = "Handbags"` 缺失会把其他品类同尺码库存计入；其余模式为口径保险（维度值跨品类重叠时以 category 为准）。inv 桥接谓词只匹配行上字段、非行字段放行（不传 trade 值域）——纯库存无销售记录的 SPU / 子类 / 季节 / 尺码组合不漏算；若改为五列全 TREATAS 传递 VALUES 值域，会把该部分库存排除、EOH 低估
 5. **渠道上下文**：Button_Store_Name 单选经 `FILTER(ALL(trade[shop_name]), 条件)` 施加（非 TTL = 列值等于实际值；TTL = 显式 IN 六个实际值，排除空白与非枚举店铺值）；IF 分支均为 FILTER 迭代表，表语义完整传递——TREATAS 经 IF 分支会被降级为标量，禁用。渠道值清单以 Button_Store_Name 表为准，新增店铺时同步扩展 TTL 集合。trade 侧全部指标受渠道影响；inv 侧不受（无渠道字段）——ST% 分子分母渠道口径不对称为模型物理限制，业务需知悉
 6. **Handbags 前置筛选的双侧实现**：trade 侧依赖页面视觉对象筛选器（Slicer_Category = "Handbags"）经模型关系传导（Slicer_Category 与 s02_trade_sku_data_d 一对多关系）；inv 侧由度量值内 `inv[category] = "Handbags"` 显式保证，不依赖页面配置。若页面筛选缺失，trade 侧指标范围会扩大至全品类（占比分母的 ALLSELECTED 恢复外部筛选状态，无法弥补页面筛选缺失），双侧范围不一致风险需知悉
-7. **期末时点口径**：This / LP 两个快照日各自取对应范围内最后一个有数据的日期（快照缺数自动回退）；快照表按日存储只取单日，对整段区间求和会重复计数库存
+7. **期末时点口径**：期末日期 = end period 最后一天（This = `SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])`、LP = `SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])`，直接单日过滤——两张日期表均为断开维度，读值不随行上下文 / 切片器漂移）；快照表按日存储只取单日，对整段区间求和会重复计数库存；该日快照缺数时指标为空，不回退取范围内最近一天（与口径「end period 最后一天」一致）
 8. **net_sales_amt 列来源**：模型内为 Power Query 行级计算列（ROUND(product_qty × sales_price, 6)），数据库无此列——测试 SQL 验证时按行级乘积还原，不可直接引用数据库 net_sales_amt（若底表存在同名字段以取数 SQL 为准核对）
 9. **vs LP 空值规则**：SLS Amt% vs LP 任一期占比 BLANK → 差值 BLANK；EOH Unit vs LP 在任一侧 BLANK 或 LP 侧为 0 时返回 BLANK（避免除零与单侧缺失失真）；SLS Amt% vs LP 的 ×10000 转 bp 在 Display 层实现（表格展示场景），Value 层保持原始差值小数
 10. **IsEmpty 筛选器**：视觉级筛选器配置「等于 1」；该度量覆盖七个 Value 指标，后续新增指标需同步扩展判定清单
