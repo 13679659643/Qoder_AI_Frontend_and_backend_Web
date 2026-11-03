@@ -1,5 +1,5 @@
 -- 层级筛选的时候，使用度量过滤筛选内容，实现联级效果，比如平台到店铺。
-IsMonthVisible = 
+# IsMonthVisible = 
 	/*
 	功能：判断当前柱形图X轴的月份是否落在起止切片器选定的范围内
 	返回：1（显示）或0（隐藏）
@@ -30,7 +30,7 @@ IsMonthVisible =
 
 
 -- 柱形或者趋势图中用于过滤多余的x轴维度
-IsShopVisible_Optimized = 
+# IsShopVisible_Optimized = 
 VAR SelectedPlatforms = VALUES(Slicer_Platform_Selection[Platform_ID])
 /*
 3、IsShopVisible_Optimized:
@@ -62,7 +62,7 @@ RETURN
         1  // 显示所有店铺
     )
 
-IsMinFiscalYearVisible = 
+# IsMinFiscalYearVisible = 
 /*
 功能：动态控制筛选器，仅显示最大年份（本财年）的月份
 返回：1（显示）或 0（隐藏）
@@ -87,7 +87,7 @@ VAR MaxYear =
 RETURN
     IF(CurrentYear = MaxYear, 1, 0)
 
-IsMaxFiscalYearVisible = 
+# IsMaxFiscalYearVisible = 
 /*
 功能：动态控制筛选器，仅显示最大年份（本财年）的月份
 返回：1（显示）或 0（隐藏）
@@ -112,7 +112,7 @@ VAR MaxYear =
 RETURN
     IF(CurrentYear = MaxYear, 1, 0)
 
-IsMinPeriodVisible_ThisFY = 
+# IsMinPeriodVisible_ThisFY = 
 /*
 功能：动态控制筛选器，仅显示最大年份（本财年）中除当前财月以外的月份
 逻辑：年份 = 最大年份 且 值 < 最大值（排除当前未完成的财月）
@@ -156,7 +156,7 @@ RETURN
         0   // 不满足：隐藏
     )
 
-IsMaxPeriodVisible_ThisFY = 
+# IsMaxPeriodVisible_ThisFY = 
 /*
 功能：动态控制筛选器，仅显示最大年份（本财年）中除当前财月以外的月份
 逻辑：年份 = 最大年份 且 值 < 最大值（排除当前未完成的财月）

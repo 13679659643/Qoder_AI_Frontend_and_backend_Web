@@ -192,8 +192,8 @@ VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 店铺集合（表变量，供 Inbound/Outbound 去重取单值）──
-VAR __Stores = VALUES('Slicer_Store_Name'[Store_ID])
+// ── 店铺集合一个shop_name对应多个shop_info_id（表变量，供 Inbound/Outbound 去重取单值）──
+VAR __Stores = VALUES('a02_e2e_product_performance_sales_summary_d'[shop_info_id])
 
 // ── 商品标签过滤器（sales 表；UNION+FILTER 保证表类型稳定，避免 IF 退化表变量）──
 VAR __TagFilter_Sales =
@@ -447,8 +447,8 @@ VAR __PeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 // ── 期末日期（LY）：end period LY 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
-// ── 店铺集合（表变量，供 Inbound/Outbound LY 去重取单值）──
-VAR __Stores = VALUES('Slicer_Store_Name'[Store_ID])
+// ── 店铺集合一个shop_name对应多个shop_info_id（表变量，供 Inbound/Outbound LY 去重取单值）──
+VAR __Stores = VALUES('a02_e2e_product_performance_sales_summary_d'[shop_info_id])
 
 // ── 商品标签过滤器（sales 表）──
 VAR __TagFilter_Sales =

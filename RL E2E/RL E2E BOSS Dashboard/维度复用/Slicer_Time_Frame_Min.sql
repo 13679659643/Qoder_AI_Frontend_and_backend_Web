@@ -18,7 +18,7 @@ let
 FROM 
 	    	    (select t1.*
 from indep_rl_dim.dim_t00_bi_fiscal_calendar t1
-where t1.timeframe_max < current_date())
+where t1.timeframe_max < current_date()) t
         ORDER BY ID_Sort DESC
     ")
 in

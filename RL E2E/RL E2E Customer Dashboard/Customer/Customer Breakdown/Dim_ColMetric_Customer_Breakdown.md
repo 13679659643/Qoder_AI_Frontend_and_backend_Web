@@ -123,7 +123,7 @@ DATATABLE(
         // 数据类型: decimal_2dp（小数点后保留2位）
         // 颜色规则: Act=固定黑；vs LY/vs LP=正负零三色
         // ════════════════════════════════════════════════════════════════
-        { 13, "Freq.",        "13-Freq.",        50, 50,  "Freq.", "decimal_2dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 13, "Freq.",        "13-Freq.",        50, 50,  "FRE.", "decimal_2dp",   FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 14, "Freq.",        "14-Freq. vs LY",  50, 200, "vs LY", "delta_pct_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 15, "Freq.",        "15-Freq. vs LP",  50, 300, "vs LP", "delta_pct_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 

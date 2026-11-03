@@ -27,8 +27,10 @@ FROM (
     WHERE 1=1
       AND A.sku_size IS NOT NULL
       AND TRIM(A.sku_size) <> ''
+      AND A.data_type = 'sku'
 ) t
 WHERE t.size_rank IS NOT NULL
+ORDER BY category_sort * 1000000 + COALESCE(size_rank, 0) ASC
 ;")
 in
     源
