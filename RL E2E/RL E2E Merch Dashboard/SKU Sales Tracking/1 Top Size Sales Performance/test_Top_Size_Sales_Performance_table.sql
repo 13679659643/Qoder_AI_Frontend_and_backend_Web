@@ -2,11 +2,11 @@
 -- 测试 SQL: Top Size Sales Performance 表格（Sales Top1~4 + Inventory Top1~4）
 -- 所属模块: RL E2E Merch Dashboard - SKU Sales Tracking - Top Size Sales Performance
 -- 关联方案: Top_Size_Sales Performance_table.md
--- 语法: MySQL 8.0+（CTE / 窗口函数 / 用户变量；低于 8.0 不支持）
+-- 语法: MySQL 8.0+（CTE / 窗口函数；低于 8.0 不支持）
 -- 用途: 验证 Power BI 八个表格视觉对象的数值口径
 --       Sales: SLS Amt% / LP SLS Amt% / vs LP；Inventory: EOH Amt% / LP EOH Amt% / vs LP
 --
--- ★参数区★（修改 @division 后需重新执行 SET 语句及全部八段；单独执行任一段前需先执行 SET）
+-- ★参数区★（直接硬编码，不使用变量；切换筛选时手动修改对应值）
 -- Division:              'WM'（单选，可选 WM / CW / HM / MN，每次只选一个值）
 -- Platform:              'ALL'（全选，等价不筛选，SQL 中不附加条件）
 -- Store Name:            'ALL'（全选，等价不筛选，SQL 中不附加条件）
@@ -19,48 +19,46 @@
 --   1. 两表实际日期字段为 dt（非 data_date），已按数据字典核对
 --   2. net_sales_amt 为 Power Query 取数新增列（数据库不存在），按行级
 --      ROUND(product_qty × sales_price, 6) 等价还原后再聚合
---   3. category 为 NULL / 空字符 / 纯空格时排除（对应 DAX LEN(TRIM()) > 0）
---   4. 排名用 RANK() 竞争排名，与 DAX RANKX(SKIP) 一致；金额并列时同
---      名次 category 同时返回（若并列第 1，则无 rank=2，Top2 段返回空集）
---   5. 占比分母 = category + sku_size_category 层级（窗口 PARTITION 对应
+--   3. ax_class 为 NULL / 空字符 / 纯空格时排除（对应 DAX LEN(TRIM()) > 0）
+--   4. 排名用 ROW_NUMBER()（v1.2 新增 ax_class 升序决胜键，排名唯一，不再并列）；
+--      金额相同时按 ax_class 升序（字母序）决胜
+--   5. 占比分母 = ax_class + sku_size_category 层级（窗口 PARTITION 对应
 --      DAX REMOVEFILTERS(sku_size)）
 --   6. CASE 无 ELSE：行组合在对应期间无记录或金额全为 NULL 时聚合结果
 --      为 NULL，对应 DAX SUM 空集返回 BLANK；占比或分母为空 → 整行过滤
 --      （对应视觉级筛选器「Value 不为空」）
 --   7. vs LP = this % - last %（任一侧为 NULL 则差值为 NULL，对应 DAX
 --      任一期 BLANK 返回 BLANK）；Vs_LP_Bp 为 ×10000 转 bp
---   8. 行序对应 Sort Key（v1.1 两级编码）：L1 分组当期金额降序；L2 组内 size_rank
---      升序——LEFT JOIN indep_rl_dim.dim_t00_size_category_mapping 取
---      MIN(rank)（与 PBI 取数 SQL 同逻辑），未命中映射 COALESCE 999,999 垫底
---      （对应 DAX COALESCE 哨兵值）
+--   8. 行序对应 Sort Key（v1.2 两级编码）：L1 分组当期金额降序，金额相同
+--      按 sku_size_category 升序决胜；L2 组内 size_rank 升序——LEFT JOIN
+--      indep_rl_dim.dim_t00_size_category_mapping 取 MIN(rank)（与 PBI
+--      取数 SQL 同逻辑），未命中映射 COALESCE 999,999 垫底（对应 DAX 哨兵值）
 -- ======================================================================
-
-SET @division := 'WM';
 
 -- ======================================================================
 -- SQL 1/8: Sales Top1（Category Rank = 1）
 -- ======================================================================
 WITH cat_rank AS (
     SELECT
-        category,
+        ax_class,
         SUM(ROUND(product_qty * sales_price, 6))                                AS cat_net_sales_amt,
-        RANK() OVER (ORDER BY SUM(ROUND(product_qty * sales_price, 6)) DESC)    AS cat_rank_no
+        ROW_NUMBER() OVER (ORDER BY SUM(ROUND(product_qty * sales_price, 6)) DESC, ax_class ASC)    AS cat_rank_no
     FROM indep_rl_dw.s02_trade_sku_data_d
     WHERE dt >= '2026-03-29'
       AND dt <= '2026-09-26'
-      AND division = @division
-      AND category IS NOT NULL
-      AND TRIM(category) <> ''
-    GROUP BY category
+      AND division = 'WM'
+      AND ax_class IS NOT NULL
+      AND TRIM(ax_class) <> ''
+    GROUP BY ax_class
 ),
 top_category AS (
-    SELECT category, cat_rank_no, cat_net_sales_amt
+    SELECT ax_class, cat_rank_no, cat_net_sales_amt
     FROM cat_rank
     WHERE cat_rank_no = 1
 ),
 row_amt AS (
     SELECT
-        t.category,
+        t.ax_class,
         t.sku_size_category,
         t.sku_size,
         SUM(CASE WHEN t.dt >= '2026-03-29' AND t.dt <= '2026-09-26'
@@ -68,23 +66,23 @@ row_amt AS (
         SUM(CASE WHEN t.dt >= '2025-03-30' AND t.dt <= '2025-09-27'
                  THEN ROUND(t.product_qty * t.sales_price, 6) END)              AS last_amt
     FROM indep_rl_dw.s02_trade_sku_data_d t
-    WHERE t.division = @division
+    WHERE t.division = 'WM'
       AND ( (t.dt >= '2026-03-29' AND t.dt <= '2026-09-26')
          OR (t.dt >= '2025-03-30' AND t.dt <= '2025-09-27') )
-      AND t.category IN (SELECT category FROM top_category)
-    GROUP BY t.category, t.sku_size_category, t.sku_size
+      AND t.ax_class IN (SELECT ax_class FROM top_category)
+    GROUP BY t.ax_class, t.sku_size_category, t.sku_size
 ),
 pct AS (
     SELECT
         r.*,
-        SUM(r.this_amt) OVER (PARTITION BY r.category, r.sku_size_category)    AS this_denom,
-        SUM(r.last_amt) OVER (PARTITION BY r.category, r.sku_size_category)    AS last_denom
+        SUM(r.this_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)    AS this_denom,
+        SUM(r.last_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)    AS last_denom
     FROM row_amt r
 )
 SELECT
     tc.cat_rank_no        AS Category_Rank,
     tc.cat_net_sales_amt  AS Category_Amt,
-    p.category,
+    p.ax_class,
     p.sku_size_category,
     p.sku_size,
     p.this_amt                                                                  AS SLS_Amt_Value,
@@ -96,7 +94,7 @@ SELECT
                                                                                 AS Vs_LP_Bp
 FROM pct p
 JOIN top_category tc
-  ON p.category = tc.category
+  ON p.ax_class = tc.ax_class
 LEFT JOIN (
     SELECT size, size_category, MIN(rank) AS size_rank
     FROM indep_rl_dim.dim_t00_size_category_mapping
@@ -109,6 +107,7 @@ WHERE p.this_amt IS NOT NULL       -- This Period 有记录且金额非全 NULL�
   AND p.this_denom <> 0            -- 分组分母为空/零 → 占比 BLANK → 行过滤（对应「Value 不为空」）
 ORDER BY
     p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    p.sku_size_category ASC,                                                   -- L1 决胜：金额相同时按 sku_size_category 升序
     COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
@@ -116,25 +115,25 @@ ORDER BY
 -- ======================================================================
 WITH cat_rank AS (
     SELECT
-        category,
+        ax_class,
         SUM(ROUND(product_qty * sales_price, 6))                                AS cat_net_sales_amt,
-        RANK() OVER (ORDER BY SUM(ROUND(product_qty * sales_price, 6)) DESC)    AS cat_rank_no
+        ROW_NUMBER() OVER (ORDER BY SUM(ROUND(product_qty * sales_price, 6)) DESC, ax_class ASC)    AS cat_rank_no
     FROM indep_rl_dw.s02_trade_sku_data_d
     WHERE dt >= '2026-03-29'
       AND dt <= '2026-09-26'
-      AND division = @division
-      AND category IS NOT NULL
-      AND TRIM(category) <> ''
-    GROUP BY category
+      AND division = 'WM'
+      AND ax_class IS NOT NULL
+      AND TRIM(ax_class) <> ''
+    GROUP BY ax_class
 ),
 top_category AS (
-    SELECT category, cat_rank_no, cat_net_sales_amt
+    SELECT ax_class, cat_rank_no, cat_net_sales_amt
     FROM cat_rank
     WHERE cat_rank_no = 2
 ),
 row_amt AS (
     SELECT
-        t.category,
+        t.ax_class,
         t.sku_size_category,
         t.sku_size,
         SUM(CASE WHEN t.dt >= '2026-03-29' AND t.dt <= '2026-09-26'
@@ -142,23 +141,23 @@ row_amt AS (
         SUM(CASE WHEN t.dt >= '2025-03-30' AND t.dt <= '2025-09-27'
                  THEN ROUND(t.product_qty * t.sales_price, 6) END)              AS last_amt
     FROM indep_rl_dw.s02_trade_sku_data_d t
-    WHERE t.division = @division
+    WHERE t.division = 'WM'
       AND ( (t.dt >= '2026-03-29' AND t.dt <= '2026-09-26')
          OR (t.dt >= '2025-03-30' AND t.dt <= '2025-09-27') )
-      AND t.category IN (SELECT category FROM top_category)
-    GROUP BY t.category, t.sku_size_category, t.sku_size
+      AND t.ax_class IN (SELECT ax_class FROM top_category)
+    GROUP BY t.ax_class, t.sku_size_category, t.sku_size
 ),
 pct AS (
     SELECT
         r.*,
-        SUM(r.this_amt) OVER (PARTITION BY r.category, r.sku_size_category)    AS this_denom,
-        SUM(r.last_amt) OVER (PARTITION BY r.category, r.sku_size_category)    AS last_denom
+        SUM(r.this_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)    AS this_denom,
+        SUM(r.last_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)    AS last_denom
     FROM row_amt r
 )
 SELECT
     tc.cat_rank_no        AS Category_Rank,
     tc.cat_net_sales_amt  AS Category_Amt,
-    p.category,
+    p.ax_class,
     p.sku_size_category,
     p.sku_size,
     p.this_amt                                                                  AS SLS_Amt_Value,
@@ -170,7 +169,7 @@ SELECT
                                                                                 AS Vs_LP_Bp
 FROM pct p
 JOIN top_category tc
-  ON p.category = tc.category
+  ON p.ax_class = tc.ax_class
 LEFT JOIN (
     SELECT size, size_category, MIN(rank) AS size_rank
     FROM indep_rl_dim.dim_t00_size_category_mapping
@@ -183,6 +182,7 @@ WHERE p.this_amt IS NOT NULL
   AND p.this_denom <> 0
 ORDER BY
     p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    p.sku_size_category ASC,                                                   -- L1 决胜：金额相同时按 sku_size_category 升序
     COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
@@ -190,25 +190,25 @@ ORDER BY
 -- ======================================================================
 WITH cat_rank AS (
     SELECT
-        category,
+        ax_class,
         SUM(ROUND(product_qty * sales_price, 6))                                AS cat_net_sales_amt,
-        RANK() OVER (ORDER BY SUM(ROUND(product_qty * sales_price, 6)) DESC)    AS cat_rank_no
+        ROW_NUMBER() OVER (ORDER BY SUM(ROUND(product_qty * sales_price, 6)) DESC, ax_class ASC)    AS cat_rank_no
     FROM indep_rl_dw.s02_trade_sku_data_d
     WHERE dt >= '2026-03-29'
       AND dt <= '2026-09-26'
-      AND division = @division
-      AND category IS NOT NULL
-      AND TRIM(category) <> ''
-    GROUP BY category
+      AND division = 'WM'
+      AND ax_class IS NOT NULL
+      AND TRIM(ax_class) <> ''
+    GROUP BY ax_class
 ),
 top_category AS (
-    SELECT category, cat_rank_no, cat_net_sales_amt
+    SELECT ax_class, cat_rank_no, cat_net_sales_amt
     FROM cat_rank
     WHERE cat_rank_no = 3
 ),
 row_amt AS (
     SELECT
-        t.category,
+        t.ax_class,
         t.sku_size_category,
         t.sku_size,
         SUM(CASE WHEN t.dt >= '2026-03-29' AND t.dt <= '2026-09-26'
@@ -216,23 +216,23 @@ row_amt AS (
         SUM(CASE WHEN t.dt >= '2025-03-30' AND t.dt <= '2025-09-27'
                  THEN ROUND(t.product_qty * t.sales_price, 6) END)              AS last_amt
     FROM indep_rl_dw.s02_trade_sku_data_d t
-    WHERE t.division = @division
+    WHERE t.division = 'WM'
       AND ( (t.dt >= '2026-03-29' AND t.dt <= '2026-09-26')
          OR (t.dt >= '2025-03-30' AND t.dt <= '2025-09-27') )
-      AND t.category IN (SELECT category FROM top_category)
-    GROUP BY t.category, t.sku_size_category, t.sku_size
+      AND t.ax_class IN (SELECT ax_class FROM top_category)
+    GROUP BY t.ax_class, t.sku_size_category, t.sku_size
 ),
 pct AS (
     SELECT
         r.*,
-        SUM(r.this_amt) OVER (PARTITION BY r.category, r.sku_size_category)    AS this_denom,
-        SUM(r.last_amt) OVER (PARTITION BY r.category, r.sku_size_category)    AS last_denom
+        SUM(r.this_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)    AS this_denom,
+        SUM(r.last_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)    AS last_denom
     FROM row_amt r
 )
 SELECT
     tc.cat_rank_no        AS Category_Rank,
     tc.cat_net_sales_amt  AS Category_Amt,
-    p.category,
+    p.ax_class,
     p.sku_size_category,
     p.sku_size,
     p.this_amt                                                                  AS SLS_Amt_Value,
@@ -244,7 +244,7 @@ SELECT
                                                                                 AS Vs_LP_Bp
 FROM pct p
 JOIN top_category tc
-  ON p.category = tc.category
+  ON p.ax_class = tc.ax_class
 LEFT JOIN (
     SELECT size, size_category, MIN(rank) AS size_rank
     FROM indep_rl_dim.dim_t00_size_category_mapping
@@ -257,6 +257,7 @@ WHERE p.this_amt IS NOT NULL
   AND p.this_denom <> 0
 ORDER BY
     p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    p.sku_size_category ASC,                                                   -- L1 决胜：金额相同时按 sku_size_category 升序
     COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
@@ -264,25 +265,25 @@ ORDER BY
 -- ======================================================================
 WITH cat_rank AS (
     SELECT
-        category,
+        ax_class,
         SUM(ROUND(product_qty * sales_price, 6))                                AS cat_net_sales_amt,
-        RANK() OVER (ORDER BY SUM(ROUND(product_qty * sales_price, 6)) DESC)    AS cat_rank_no
+        ROW_NUMBER() OVER (ORDER BY SUM(ROUND(product_qty * sales_price, 6)) DESC, ax_class ASC)    AS cat_rank_no
     FROM indep_rl_dw.s02_trade_sku_data_d
     WHERE dt >= '2026-03-29'
       AND dt <= '2026-09-26'
-      AND division = @division
-      AND category IS NOT NULL
-      AND TRIM(category) <> ''
-    GROUP BY category
+      AND division = 'WM'
+      AND ax_class IS NOT NULL
+      AND TRIM(ax_class) <> ''
+    GROUP BY ax_class
 ),
 top_category AS (
-    SELECT category, cat_rank_no, cat_net_sales_amt
+    SELECT ax_class, cat_rank_no, cat_net_sales_amt
     FROM cat_rank
     WHERE cat_rank_no = 4
 ),
 row_amt AS (
     SELECT
-        t.category,
+        t.ax_class,
         t.sku_size_category,
         t.sku_size,
         SUM(CASE WHEN t.dt >= '2026-03-29' AND t.dt <= '2026-09-26'
@@ -290,23 +291,23 @@ row_amt AS (
         SUM(CASE WHEN t.dt >= '2025-03-30' AND t.dt <= '2025-09-27'
                  THEN ROUND(t.product_qty * t.sales_price, 6) END)              AS last_amt
     FROM indep_rl_dw.s02_trade_sku_data_d t
-    WHERE t.division = @division
+    WHERE t.division = 'WM'
       AND ( (t.dt >= '2026-03-29' AND t.dt <= '2026-09-26')
          OR (t.dt >= '2025-03-30' AND t.dt <= '2025-09-27') )
-      AND t.category IN (SELECT category FROM top_category)
-    GROUP BY t.category, t.sku_size_category, t.sku_size
+      AND t.ax_class IN (SELECT ax_class FROM top_category)
+    GROUP BY t.ax_class, t.sku_size_category, t.sku_size
 ),
 pct AS (
     SELECT
         r.*,
-        SUM(r.this_amt) OVER (PARTITION BY r.category, r.sku_size_category)    AS this_denom,
-        SUM(r.last_amt) OVER (PARTITION BY r.category, r.sku_size_category)    AS last_denom
+        SUM(r.this_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)    AS this_denom,
+        SUM(r.last_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)    AS last_denom
     FROM row_amt r
 )
 SELECT
     tc.cat_rank_no        AS Category_Rank,
     tc.cat_net_sales_amt  AS Category_Amt,
-    p.category,
+    p.ax_class,
     p.sku_size_category,
     p.sku_size,
     p.this_amt                                                                  AS SLS_Amt_Value,
@@ -318,7 +319,7 @@ SELECT
                                                                                 AS Vs_LP_Bp
 FROM pct p
 JOIN top_category tc
-  ON p.category = tc.category
+  ON p.ax_class = tc.ax_class
 LEFT JOIN (
     SELECT size, size_category, MIN(rank) AS size_rank
     FROM indep_rl_dim.dim_t00_size_category_mapping
@@ -331,6 +332,7 @@ WHERE p.this_amt IS NOT NULL
   AND p.this_denom <> 0
 ORDER BY
     p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    p.sku_size_category ASC,                                                   -- L1 决胜：金额相同时按 sku_size_category 升序
     COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
@@ -340,45 +342,45 @@ ORDER BY
 -- ======================================================================
 WITH cat_rank AS (
     SELECT
-        category,
+        ax_class,
         SUM(msrp_inv_amt)                                                       AS cat_eoh_amt,
-        RANK() OVER (ORDER BY SUM(msrp_inv_amt) DESC)                            AS cat_rank_no
+        ROW_NUMBER() OVER (ORDER BY SUM(msrp_inv_amt) DESC, ax_class ASC)                            AS cat_rank_no
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d
     WHERE dt = '2026-07-25'
-      AND division = @division
-      AND category IS NOT NULL
-      AND TRIM(category) <> ''
-    GROUP BY category
+      AND division = 'WM'
+      AND ax_class IS NOT NULL
+      AND TRIM(ax_class) <> ''
+    GROUP BY ax_class
 ),
 top_category AS (
-    SELECT category, cat_rank_no, cat_eoh_amt
+    SELECT ax_class, cat_rank_no, cat_eoh_amt
     FROM cat_rank
     WHERE cat_rank_no = 1
 ),
 row_amt AS (
     SELECT
-        t.category,
+        t.ax_class,
         t.sku_size_category,
         t.sku_size,
         SUM(CASE WHEN t.dt = '2026-07-25' THEN t.msrp_inv_amt END)               AS this_amt,
         SUM(CASE WHEN t.dt = '2025-07-26' THEN t.msrp_inv_amt END)               AS last_amt
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d t
-    WHERE t.division = @division
+    WHERE t.division = 'WM'
       AND t.dt IN ('2026-07-25', '2025-07-26')
-      AND t.category IN (SELECT category FROM top_category)
-    GROUP BY t.category, t.sku_size_category, t.sku_size
+      AND t.ax_class IN (SELECT ax_class FROM top_category)
+    GROUP BY t.ax_class, t.sku_size_category, t.sku_size
 ),
 pct AS (
     SELECT
         r.*,
-        SUM(r.this_amt) OVER (PARTITION BY r.category, r.sku_size_category)     AS this_denom,
-        SUM(r.last_amt) OVER (PARTITION BY r.category, r.sku_size_category)     AS last_denom
+        SUM(r.this_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)     AS this_denom,
+        SUM(r.last_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)     AS last_denom
     FROM row_amt r
 )
 SELECT
     tc.cat_rank_no        AS Category_Rank,
     tc.cat_eoh_amt        AS Category_Amt,
-    p.category,
+    p.ax_class,
     p.sku_size_category,
     p.sku_size,
     p.this_amt                                                                  AS EOH_Amt_Value,
@@ -390,7 +392,7 @@ SELECT
                                                                                 AS Vs_LP_Bp
 FROM pct p
 JOIN top_category tc
-  ON p.category = tc.category
+  ON p.ax_class = tc.ax_class
 LEFT JOIN (
     SELECT size, size_category, MIN(rank) AS size_rank
     FROM indep_rl_dim.dim_t00_size_category_mapping
@@ -403,6 +405,7 @@ WHERE p.this_amt IS NOT NULL       -- This 时点有快照记录且金额非全 
   AND p.this_denom <> 0            -- 分组分母为空/零 → 占比 BLANK → 行过滤（对应「Value 不为空」）
 ORDER BY
     p.this_denom DESC,                                                        -- L1 分组当期期末库存金额降序
+    p.sku_size_category ASC,                                                   -- L1 决胜：金额相同时按 sku_size_category 升序
     COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
@@ -410,45 +413,45 @@ ORDER BY
 -- ======================================================================
 WITH cat_rank AS (
     SELECT
-        category,
+        ax_class,
         SUM(msrp_inv_amt)                                                       AS cat_eoh_amt,
-        RANK() OVER (ORDER BY SUM(msrp_inv_amt) DESC)                            AS cat_rank_no
+        ROW_NUMBER() OVER (ORDER BY SUM(msrp_inv_amt) DESC, ax_class ASC)                            AS cat_rank_no
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d
     WHERE dt = '2026-07-25'
-      AND division = @division
-      AND category IS NOT NULL
-      AND TRIM(category) <> ''
-    GROUP BY category
+      AND division = 'WM'
+      AND ax_class IS NOT NULL
+      AND TRIM(ax_class) <> ''
+    GROUP BY ax_class
 ),
 top_category AS (
-    SELECT category, cat_rank_no, cat_eoh_amt
+    SELECT ax_class, cat_rank_no, cat_eoh_amt
     FROM cat_rank
     WHERE cat_rank_no = 2
 ),
 row_amt AS (
     SELECT
-        t.category,
+        t.ax_class,
         t.sku_size_category,
         t.sku_size,
         SUM(CASE WHEN t.dt = '2026-07-25' THEN t.msrp_inv_amt END)               AS this_amt,
         SUM(CASE WHEN t.dt = '2025-07-26' THEN t.msrp_inv_amt END)               AS last_amt
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d t
-    WHERE t.division = @division
+    WHERE t.division = 'WM'
       AND t.dt IN ('2026-07-25', '2025-07-26')
-      AND t.category IN (SELECT category FROM top_category)
-    GROUP BY t.category, t.sku_size_category, t.sku_size
+      AND t.ax_class IN (SELECT ax_class FROM top_category)
+    GROUP BY t.ax_class, t.sku_size_category, t.sku_size
 ),
 pct AS (
     SELECT
         r.*,
-        SUM(r.this_amt) OVER (PARTITION BY r.category, r.sku_size_category)     AS this_denom,
-        SUM(r.last_amt) OVER (PARTITION BY r.category, r.sku_size_category)     AS last_denom
+        SUM(r.this_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)     AS this_denom,
+        SUM(r.last_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)     AS last_denom
     FROM row_amt r
 )
 SELECT
     tc.cat_rank_no        AS Category_Rank,
     tc.cat_eoh_amt        AS Category_Amt,
-    p.category,
+    p.ax_class,
     p.sku_size_category,
     p.sku_size,
     p.this_amt                                                                  AS EOH_Amt_Value,
@@ -460,7 +463,7 @@ SELECT
                                                                                 AS Vs_LP_Bp
 FROM pct p
 JOIN top_category tc
-  ON p.category = tc.category
+  ON p.ax_class = tc.ax_class
 LEFT JOIN (
     SELECT size, size_category, MIN(rank) AS size_rank
     FROM indep_rl_dim.dim_t00_size_category_mapping
@@ -473,6 +476,7 @@ WHERE p.this_amt IS NOT NULL
   AND p.this_denom <> 0
 ORDER BY
     p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    p.sku_size_category ASC,                                                   -- L1 决胜：金额相同时按 sku_size_category 升序
     COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
@@ -480,45 +484,45 @@ ORDER BY
 -- ======================================================================
 WITH cat_rank AS (
     SELECT
-        category,
+        ax_class,
         SUM(msrp_inv_amt)                                                       AS cat_eoh_amt,
-        RANK() OVER (ORDER BY SUM(msrp_inv_amt) DESC)                            AS cat_rank_no
+        ROW_NUMBER() OVER (ORDER BY SUM(msrp_inv_amt) DESC, ax_class ASC)                            AS cat_rank_no
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d
     WHERE dt = '2026-07-25'
-      AND division = @division
-      AND category IS NOT NULL
-      AND TRIM(category) <> ''
-    GROUP BY category
+      AND division = 'WM'
+      AND ax_class IS NOT NULL
+      AND TRIM(ax_class) <> ''
+    GROUP BY ax_class
 ),
 top_category AS (
-    SELECT category, cat_rank_no, cat_eoh_amt
+    SELECT ax_class, cat_rank_no, cat_eoh_amt
     FROM cat_rank
     WHERE cat_rank_no = 3
 ),
 row_amt AS (
     SELECT
-        t.category,
+        t.ax_class,
         t.sku_size_category,
         t.sku_size,
         SUM(CASE WHEN t.dt = '2026-07-25' THEN t.msrp_inv_amt END)               AS this_amt,
         SUM(CASE WHEN t.dt = '2025-07-26' THEN t.msrp_inv_amt END)               AS last_amt
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d t
-    WHERE t.division = @division
+    WHERE t.division = 'WM'
       AND t.dt IN ('2026-07-25', '2025-07-26')
-      AND t.category IN (SELECT category FROM top_category)
-    GROUP BY t.category, t.sku_size_category, t.sku_size
+      AND t.ax_class IN (SELECT ax_class FROM top_category)
+    GROUP BY t.ax_class, t.sku_size_category, t.sku_size
 ),
 pct AS (
     SELECT
         r.*,
-        SUM(r.this_amt) OVER (PARTITION BY r.category, r.sku_size_category)     AS this_denom,
-        SUM(r.last_amt) OVER (PARTITION BY r.category, r.sku_size_category)     AS last_denom
+        SUM(r.this_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)     AS this_denom,
+        SUM(r.last_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)     AS last_denom
     FROM row_amt r
 )
 SELECT
     tc.cat_rank_no        AS Category_Rank,
     tc.cat_eoh_amt        AS Category_Amt,
-    p.category,
+    p.ax_class,
     p.sku_size_category,
     p.sku_size,
     p.this_amt                                                                  AS EOH_Amt_Value,
@@ -530,7 +534,7 @@ SELECT
                                                                                 AS Vs_LP_Bp
 FROM pct p
 JOIN top_category tc
-  ON p.category = tc.category
+  ON p.ax_class = tc.ax_class
 LEFT JOIN (
     SELECT size, size_category, MIN(rank) AS size_rank
     FROM indep_rl_dim.dim_t00_size_category_mapping
@@ -543,6 +547,7 @@ WHERE p.this_amt IS NOT NULL
   AND p.this_denom <> 0
 ORDER BY
     p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    p.sku_size_category ASC,                                                   -- L1 决胜：金额相同时按 sku_size_category 升序
     COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
 
 -- ======================================================================
@@ -550,45 +555,45 @@ ORDER BY
 -- ======================================================================
 WITH cat_rank AS (
     SELECT
-        category,
+        ax_class,
         SUM(msrp_inv_amt)                                                       AS cat_eoh_amt,
-        RANK() OVER (ORDER BY SUM(msrp_inv_amt) DESC)                            AS cat_rank_no
+        ROW_NUMBER() OVER (ORDER BY SUM(msrp_inv_amt) DESC, ax_class ASC)                            AS cat_rank_no
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d
     WHERE dt = '2026-07-25'
-      AND division = @division
-      AND category IS NOT NULL
-      AND TRIM(category) <> ''
-    GROUP BY category
+      AND division = 'WM'
+      AND ax_class IS NOT NULL
+      AND TRIM(ax_class) <> ''
+    GROUP BY ax_class
 ),
 top_category AS (
-    SELECT category, cat_rank_no, cat_eoh_amt
+    SELECT ax_class, cat_rank_no, cat_eoh_amt
     FROM cat_rank
     WHERE cat_rank_no = 4
 ),
 row_amt AS (
     SELECT
-        t.category,
+        t.ax_class,
         t.sku_size_category,
         t.sku_size,
         SUM(CASE WHEN t.dt = '2026-07-25' THEN t.msrp_inv_amt END)               AS this_amt,
         SUM(CASE WHEN t.dt = '2025-07-26' THEN t.msrp_inv_amt END)               AS last_amt
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d t
-    WHERE t.division = @division
+    WHERE t.division = 'WM'
       AND t.dt IN ('2026-07-25', '2025-07-26')
-      AND t.category IN (SELECT category FROM top_category)
-    GROUP BY t.category, t.sku_size_category, t.sku_size
+      AND t.ax_class IN (SELECT ax_class FROM top_category)
+    GROUP BY t.ax_class, t.sku_size_category, t.sku_size
 ),
 pct AS (
     SELECT
         r.*,
-        SUM(r.this_amt) OVER (PARTITION BY r.category, r.sku_size_category)     AS this_denom,
-        SUM(r.last_amt) OVER (PARTITION BY r.category, r.sku_size_category)     AS last_denom
+        SUM(r.this_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)     AS this_denom,
+        SUM(r.last_amt) OVER (PARTITION BY r.ax_class, r.sku_size_category)     AS last_denom
     FROM row_amt r
 )
 SELECT
     tc.cat_rank_no        AS Category_Rank,
     tc.cat_eoh_amt        AS Category_Amt,
-    p.category,
+    p.ax_class,
     p.sku_size_category,
     p.sku_size,
     p.this_amt                                                                  AS EOH_Amt_Value,
@@ -600,7 +605,7 @@ SELECT
                                                                                 AS Vs_LP_Bp
 FROM pct p
 JOIN top_category tc
-  ON p.category = tc.category
+  ON p.ax_class = tc.ax_class
 LEFT JOIN (
     SELECT size, size_category, MIN(rank) AS size_rank
     FROM indep_rl_dim.dim_t00_size_category_mapping
@@ -613,4 +618,5 @@ WHERE p.this_amt IS NOT NULL
   AND p.this_denom <> 0
 ORDER BY
     p.this_denom DESC,                                                        -- L1 分组当期金额降序
+    p.sku_size_category ASC,                                                   -- L1 决胜：金额相同时按 sku_size_category 升序
     COALESCE(sr.size_rank, 999999) ASC;                                       -- L2 组内 size_rank 升序（空值垫底）
