@@ -1,7 +1,7 @@
 # Top Size Sales Performance 表格解决方案
 
-> **版本**: v1.2（字段替换：category → ax_class（英文品类）；Top4 排名新增 ax_class 升序决胜键（排名唯一）；Sort Key L1 分组金额相同时以 sku_size_category 升序决胜）
-> **上一版本**: v1.1
+> **版本**: v1.3（RANK() 替代 RANKX()：使用 RANK() + ORDERBY 多键排序，解决 v1.2 中 tiebreaker 跨上下文不一致导致 rank 显示值波动的问题；代码更简洁）
+> **上一版本**: v1.2
 > **模块**: RL E2E Merch Dashboard - SKU Sales Tracking Tab - Top Size Sales Performance
 > **关联口径**: 口径文档/口径Markdown格式/SKU Sales Tracking.md - 子模块一【Sales】（§1）+ 子模块二【Inventory】（§2）
 > **数据底表（销售类）**: s02_trade_sku_data_d
@@ -122,7 +122,7 @@ Rank 度量值在 ax_class / size category / size 任意层级行均返回所属
 
 排序键 = L1 + L2，升序排序后行序为：分组按当期金额降序（金额大的分组在前，金额相同按 sku_size_category 字母序决胜），每个分组组内 size 行按 size_rank 升序（业务尺码序）。
 
-**v1.2 变更背景**：v1.1 曾为两级编码——L1 分组金额降序 + L2 组内 size_rank 升序。v1.2 按业务指令调整：① 字段 category（战略品类）替换为 ax_class（英文品类）；② Top4 排名新增 ax_class 升序决胜键（金额相同时排名唯一）；③ Sort Key L1 分组金额相同时以 sku_size_category 升序决胜。
+**v1.3 变更背景**：v1.2 使用 RANKX 嵌套 tiebreaker 实现决胜键，但 tiebreaker 依赖上下文导致 rank 显示值波动（视觉级筛选器上下文与表格显示上下文不一致）。v1.3 改用 RANK() + ORDERBY 多键排序，RANK() 通过 ORDERBY 中的列值自动匹配当前行，跨上下文一致，彻底解决 rank 显示值波动问题，且代码更简洁。
 
 **size_rank 来源与空值边界**：取数 SQL `LEFT JOIN dim_t00_size_category_mapping`（按 (sku_size, sku_size_category) 分组取 MIN(rank)）——未命中映射表的尺码为 NULL，排序键以 999,999 哨兵值垫底（组内最后）；多个空 rank 行之间共享哨兵值、相对顺序不确定（属映射表未覆盖的异常数据，建议补映射）。size_rank 取值需 < 1,000,000（超出需调大编码系数）。
 
@@ -164,6 +164,8 @@ Top Size Sales Category Rank =
 //       NOT ISBLANK 无法排除（会占据排名 1）；视觉级 ax_class 筛选器会被候选集的
 //       ALL(ax_class) 移除而失效，故必须在度量值内部用 LEN(TRIM()) > 0 排除
 // 决胜键: 金额相同时按 ax_class 升序（字母序）决胜，确保排名唯一
+// 实现: 使用 RANK() + ORDERBY 多键排序（v1.3），替代 v1.2 的 RANKX 嵌套 tiebreaker，
+//       解决 tiebreaker 跨上下文不一致导致 rank 显示值波动的问题
 // ========================================
 
 // ── This Period 时间区间 ──
@@ -173,13 +175,12 @@ VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 当前行所属 ax_class（层级展开下 ax_class 筛选在任意层级行均存在）──
 VAR __CurrentAxClass = SELECTEDVALUE('s02_trade_sku_data_d'[ax_class])
 
-// ── 排名表：全部有效 ax_class 及其 This Period 销售金额（ax_class 粒度）──
+// ── 候选表：全部有效 ax_class 及其 This Period 销售金额（ax_class 粒度）──
 // 有效 = 非空白且非空字符（LEN(TRIM()) > 0 同时排除 NULL、""、纯空格）
 // ALL(ax_class) 仅移除 ax_class 列筛选；Platform / Store Name / Division 等外部筛选保留
 // 关键：ALL(sku_size_category, sku_size) 必须显式移除表格行残留的尺码筛选，
-//       否则每个候选 ax_class 的金额被限制在当前行尺码内，与 __CurrentAxClassAmt
-//       （ax_class 粒度真实金额）口径不一致，RANKX 将恒返回 1
-VAR __Ranking =
+//       否则每个候选 ax_class 的金额被限制在当前行尺码内，口径不一致
+VAR __RankingTable =
     ADDCOLUMNS(
         FILTER(
             ALL('s02_trade_sku_data_d'[ax_class]),
@@ -189,42 +190,31 @@ VAR __Ranking =
         "@Amt",
             CALCULATE(
                 SUM('s02_trade_sku_data_d'[net_sales_amt]),
-                ALL('s02_trade_sku_data_d'[sku_size_category], 's02_trade_sku_data_d'[sku_size]),  // 收敛到 ax_class 粒度，与 __CurrentAxClassAmt 同口径
+                ALL('s02_trade_sku_data_d'[sku_size_category], 's02_trade_sku_data_d'[sku_size]),
                 's02_trade_sku_data_d'[dt] >= __PeriodMin,
                 's02_trade_sku_data_d'[dt] <= __PeriodMax
             )
     )
 
-// ── 当前行所属 ax_class 的 This Period 销售金额 ──
-// 移除 size 层级筛选，保留 ax_class 筛选与外部筛选，得到 ax_class 粒度金额
-VAR __CurrentAxClassAmt =
-    CALCULATE(
-        SUM('s02_trade_sku_data_d'[net_sales_amt]),
-        ALL('s02_trade_sku_data_d'[sku_size_category], 's02_trade_sku_data_d'[sku_size]),
-        's02_trade_sku_data_d'[dt] >= __PeriodMin,
-        's02_trade_sku_data_d'[dt] <= __PeriodMax
+// ── 用 RANK() 排名：金额降序 + ax_class 升序决胜 ──
+// RANK() 通过 ORDERBY 中的列值自动匹配当前行，跨上下文一致
+// （视觉级筛选器上下文与表格显示上下文返回相同 rank 值）
+VAR __Rank =
+    RANK(
+        DENSE,                          // 并列处理（金额+ax_class 组合唯一，实际无并列）
+        __RankingTable,                 // relation：候选表（已物化）
+        ORDERBY(
+            [@Amt], DESC,               // 第一排序键：金额降序
+            's02_trade_sku_data_d'[ax_class], ASC  // 第二排序键：ax_class 升序决胜
+        )
     )
 
 // 空白/空字符 ax_class 行返回 BLANK（被 Rank = N 视觉级筛选器排除），真实 ax_class 排名从 1 起
-// 决胜键：金额相同时按 ax_class 升序（字母序）排名靠前，确保排名唯一
 RETURN
     IF(
         NOT ISBLANK(__CurrentAxClass)
             && LEN(TRIM(__CurrentAxClass)) > 0,
-        RANKX(
-            __Ranking,
-            [@Amt]
-                + DIVIDE(
-                    RANKX(__Ranking, 's02_trade_sku_data_d'[ax_class], __CurrentAxClass, ASC),
-                    COUNTROWS(__Ranking) + 1
-                ),
-            __CurrentAxClassAmt
-                + DIVIDE(
-                    RANKX(__Ranking, 's02_trade_sku_data_d'[ax_class], __CurrentAxClass, ASC),
-                    COUNTROWS(__Ranking) + 1
-                ),
-            DESC
-        )
+        __Rank
     )
 ```
 
@@ -245,6 +235,8 @@ Top Size Inventory Category Rank =
 // 说明: inv 表无 platform / shop_name 字段，排名不受渠道筛选影响（口径限制见注意事项 1）
 //       空白/空字符 ax_class 在度量值内部排除（LEN(TRIM()) > 0，机制同 Sales Rank）
 // 决胜键: 金额相同时按 ax_class 升序（字母序）决胜，确保排名唯一
+// 实现: 使用 RANK() + ORDERBY 多键排序（v1.3），替代 v1.2 的 RANKX 嵌套 tiebreaker，
+//       解决 tiebreaker 跨上下文不一致导致 rank 显示值波动的问题
 // ========================================
 
 // ── End Period 时间范围（期末时点类）──
@@ -257,11 +249,10 @@ VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 当前行所属 ax_class ──
 VAR __CurrentAxClass = SELECTEDVALUE('s02_inventory_stock_sales_detail_d'[ax_class])
 
-// ── 排名表：全部有效 ax_class 及其期末快照日库存金额（ax_class 粒度）──
+// ── 候选表：全部有效 ax_class 及其期末快照日库存金额（ax_class 粒度）──
 // 有效 = 非空白且非空字符（LEN(TRIM()) > 0；视觉级 ax_class 筛选器会被 ALL(ax_class) 移除而无效）
-// 关键：ALL(sku_size_category, sku_size) 移除表格行残留的尺码筛选，保证候选金额
-//       与 __CurrentAxClassAmt 同为 ax_class 粒度（否则 RANKX 恒返回 1）
-VAR __Ranking =
+// 关键：ALL(sku_size_category, sku_size) 移除表格行残留的尺码筛选，保证候选金额口径一致
+VAR __RankingTable =
     ADDCOLUMNS(
         FILTER(
             ALL('s02_inventory_stock_sales_detail_d'[ax_class]),
@@ -271,40 +262,29 @@ VAR __Ranking =
         "@Amt",
             CALCULATE(
                 SUM('s02_inventory_stock_sales_detail_d'[msrp_inv_amt]),
-                ALL('s02_inventory_stock_sales_detail_d'[sku_size_category], 's02_inventory_stock_sales_detail_d'[sku_size]),  // 收敛到 ax_class 粒度，与 __CurrentAxClassAmt 同口径
+                ALL('s02_inventory_stock_sales_detail_d'[sku_size_category], 's02_inventory_stock_sales_detail_d'[sku_size]),
                 's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
             )
     )
 
-// ── 当前行所属 ax_class 的期末库存金额 ──
-// 移除 size 层级筛选，保留 ax_class 筛选与 Division 筛选
-VAR __CurrentAxClassAmt =
-    CALCULATE(
-        SUM('s02_inventory_stock_sales_detail_d'[msrp_inv_amt]),
-        ALL('s02_inventory_stock_sales_detail_d'[sku_size_category], 's02_inventory_stock_sales_detail_d'[sku_size]),
-        's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate
+// ── 用 RANK() 排名：金额降序 + ax_class 升序决胜 ──
+// RANK() 通过 ORDERBY 中的列值自动匹配当前行，跨上下文一致
+VAR __Rank =
+    RANK(
+        DENSE,
+        __RankingTable,
+        ORDERBY(
+            [@Amt], DESC,
+            's02_inventory_stock_sales_detail_d'[ax_class], ASC
+        )
     )
 
 // 空白/空字符 ax_class 行返回 BLANK（被 Rank = N 视觉级筛选器排除），真实 ax_class 排名从 1 起
-// 决胜键：金额相同时按 ax_class 升序（字母序）排名靠前，确保排名唯一
 RETURN
     IF(
         NOT ISBLANK(__CurrentAxClass)
             && LEN(TRIM(__CurrentAxClass)) > 0,
-        RANKX(
-            __Ranking,
-            [@Amt]
-                + DIVIDE(
-                    RANKX(__Ranking, 's02_inventory_stock_sales_detail_d'[ax_class], __CurrentAxClass, ASC),
-                    COUNTROWS(__Ranking) + 1
-                ),
-            __CurrentAxClassAmt
-                + DIVIDE(
-                    RANKX(__Ranking, 's02_inventory_stock_sales_detail_d'[ax_class], __CurrentAxClass, ASC),
-                    COUNTROWS(__Ranking) + 1
-                ),
-            DESC
-        )
+        __Rank
     )
 ```
 
@@ -839,20 +819,16 @@ VAR __GroupCandidates =
     )
 
 // ── L1 分组排名：按分组金额降序；金额相同时按 sku_size_category 升序决胜 ──
+// 使用 RANK() + ORDERBY 多键排序（v1.3），替代 v1.2 的 RANKX 嵌套 tiebreaker，
+// 跨上下文一致，且代码更简洁
 VAR __GroupRank =
-    RANKX(
+    RANK(
+        DENSE,
         __GroupCandidates,
-        [@GroupValue]
-            + DIVIDE(
-                RANKX(__GroupCandidates, 's02_trade_sku_data_d'[sku_size_category], __SizeCategory, ASC),
-                COUNTROWS(__GroupCandidates) + 1
-            ),
-        __GroupValue
-            + DIVIDE(
-                RANKX(__GroupCandidates, 's02_trade_sku_data_d'[sku_size_category], __SizeCategory, ASC),
-                COUNTROWS(__GroupCandidates) + 1
-            ),
-        DESC
+        ORDERBY(
+            [@GroupValue], DESC,
+            's02_trade_sku_data_d'[sku_size_category], ASC
+        )
     )
 
 // ── L2 组内顺序：size_rank 升序（业务尺码序，事实表取数新增列，直接取列值、无需候选排名迭代）──
@@ -942,20 +918,15 @@ VAR __GroupCandidates =
     )
 
 // ── L1 分组排名：按分组金额降序；金额相同时按 sku_size_category 升序决胜 ──
+// 使用 RANK() + ORDERBY 多键排序（v1.3），替代 v1.2 的 RANKX 嵌套 tiebreaker
 VAR __GroupRank =
-    RANKX(
+    RANK(
+        DENSE,
         __GroupCandidates,
-        [@GroupValue]
-            + DIVIDE(
-                RANKX(__GroupCandidates, 's02_inventory_stock_sales_detail_d'[sku_size_category], __SizeCategory, ASC),
-                COUNTROWS(__GroupCandidates) + 1
-            ),
-        __GroupValue
-            + DIVIDE(
-                RANKX(__GroupCandidates, 's02_inventory_stock_sales_detail_d'[sku_size_category], __SizeCategory, ASC),
-                COUNTROWS(__GroupCandidates) + 1
-            ),
-        DESC
+        ORDERBY(
+            [@GroupValue], DESC,
+            's02_inventory_stock_sales_detail_d'[sku_size_category], ASC
+        )
     )
 
 // ── L2 组内顺序：size_rank 升序（业务尺码序，事实表取数新增列，直接取列值、无需候选排名迭代）──
@@ -1141,7 +1112,7 @@ Top Size Inventory IsEmpty =
 2. **期末时点只取单日**：EOH 系列分子分母取 end period 范围内最后一个快照日的单日值；快照表按日存储，对整段区间求和会把库存重复计数。快照缺数时在 end period 窗口内自动回退到最近一天（口径定义为 this period / last period 最后一天，两者最后一个自然日一致）。
 3. **快照日 REMOVEFILTERS 机制**：__EndPeriodDate 用 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤
 4. **Top4 排名的筛选范围**：Rank 度量值中 ALL(ax_class) 仅移除 ax_class 列筛选，Platform / Store Name（Sales 侧）/ Division 筛选保留，排名是当前筛选组合下的排名；空白与空字符 ax_class（数据中 NULL 与 "" 并存，空字符金额最大）在度量值内部用 LEN(TRIM()) > 0 排除，不参与排名。注意：视觉级 ax_class 筛选器会被候选集的 ALL(ax_class) 移除而无法影响排名，空白排除必须在度量值内部实现。
-5. **并列排名（v1.2 已消除）**：v1.2 新增 ax_class 升序决胜键，金额相同时按 ax_class 字母序排名靠前，确保排名唯一（不再出现并列）。RANKX 内通过嵌套 RANKX 实现二级排序：主键为金额降序，决胜键为 ax_class 升序。
+5. **并列排名（v1.3 已消除）**：v1.3 使用 RANK() + ORDERBY 多键排序，金额相同时按 ax_class 字母序排名靠前，确保排名唯一（不再出现并列）。RANK() 通过 ORDERBY 中的列值自动匹配当前行，跨上下文一致，解决了 v1.2 中 RANKX 嵌套 tiebreaker 导致 rank 显示值波动的问题。
 6. **行显示范围与空值边界**：「Value 不为空」视觉级筛选器排除当期真 BLANK（该组合当期无任何记录）的行；当期有记录但金额极小的行为零值/小值（非 BLANK），占比显示 0%，保留显示并按真实值（0.00x）参与组内升序排序。当期真空但 Last Period 有值的行会被该筛选器排除——若需展示此类行（承载上期信息），应移除该筛选器，由空值垫底规则（注意事项 17）将其排在分组最后，而非依赖零值语义。
 7. **行排序（排序键）**：表格行序由 Sort Key 度量值控制（点击该列升序排序，机制见 §3.5，v1.2 两级编码）：L1 分组按 ax_class + size category 粒度当期金额降序（金额相同时按 sku_size_category 升序决胜），L2 组内按 size_rank 升序（业务尺码序 XXS → XS → S → M、0 → 1 → 2 …——size_rank 为事实表取数新增列，v1.0「需为 sku_size 生成排序列」的待办已落地）；size_rank 为空的行垫底组内最后。
 8. **日期筛选器依赖**：SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min]) 等依赖日期切片器保持单选且必选；切片器未选或多选时时间边界为 BLANK，指标不可用（与看板既有日期筛选器使用方式一致）。
@@ -1149,7 +1120,7 @@ Top Size Inventory IsEmpty =
 10. **DIVIDE 空值保护**：占比分母（该 ax_class + size category 层级金额）为空或 0 时 DIVIDE 返回 BLANK，显示 "-"。
 11. **DAX 语法规范**：文本常量使用双引号，单引号仅用于表名，列名使用方括号；与口径文档存在争议时一切以口径文档为准。
 12. **排名候选集口径一致**：Rank 度量值中 __Ranking 候选集的 @Amt 与 __CurrentAxClassAmt 必须同为 ax_class 粒度（CALCULATE 内显式 ALL(sku_size_category, sku_size) 移除表格行残留的尺码筛选）。上下文转换只添加候选 ax_class 筛选、不清除行残留的 sku_size_category / sku_size 筛选，若候选金额被限制在当前行尺码内而对比值为 ax_class 全尺码金额，RANKX 将恒返回 1，导致视觉级筛选器 Rank = 1 放行全部行。
-13. **Rank 显示值的上下文差异（验证现象）**：视觉级筛选器对 Rank 的取值发生在筛选生效前（筛选器不对自身生效），Top1~Top4 表格按真实排名 1~4 保留行；筛选生效后视觉内仅剩单个 ax_class，此时拖入表格验证的 Rank 显示值在筛选后上下文中重新评估——__Ranking 候选中其余 ax_class 与视觉级组合筛选（ax_class + sku_size_category + sku_size）冲突取 BLANK，唯一保留的 ax_class 在剩余候选中排名第一，故四个表格拖入 Rank 均显示 1。该现象不影响筛选正确性；验证真实排名需临时移除该视觉级筛选器。Rank 为视觉级筛选辅助度量，不建议作为列展示给最终用户。
+13. **Rank 显示值的上下文一致性（v1.3 已修复）**：v1.2 使用 RANKX 嵌套 tiebreaker 时，视觉级筛选器上下文与表格显示上下文中计算的 rank 值不一致（筛选器显示 rank = 2 的行，表格中可能显示 rank = 3）。v1.3 改用 RANK() + ORDERBY，RANK() 通过 ORDERBY 中的列值自动匹配当前行，不依赖"当前值"的上下文计算，跨上下文返回一致的 rank 值。Rank 仍为视觉级筛选辅助度量，不建议作为列展示给最终用户。
 14. **排序键使用限制**：排序键度量必须位于表格值区域才能作为排序依据（无法隐藏，建议置于最后一列并收窄列宽）；编码系数（1e6 / 1）要求 size_rank 取值 < 1,000,000（空值垫底哨兵 999,999 为上限，超出需调大系数）；分组排名无上限约束（乘 1e6 后单调递增即可）。v1.0 的「升序 RANKX 中 BLANK 候选须 FILTER 排除」约束已随组内候选迭代移除而不复存在（组内顺序直接取 size_rank 列值，不再 RANKX）。
 15. **分组并列语义（v1.2）**：组内无并列——sku_size 与 size_rank 一一对应（业务确认），组内排序键天然唯一、无需决胜层；分组金额精确相等时按 sku_size_category 升序决胜（v1.2 新增），确保分组排名唯一；若发现同一分组内多行共享同一 size_rank（非空值哨兵），说明映射表违反一一对应假设或数据异常，需核查 dim_t00_size_category_mapping。
 16. **视觉级度量筛选器污染候选迭代（已修复）**：Rank = N 视觉级筛选器落地为对 (ax_class, sku_size_category, sku_size) 的跨列组合筛选，度量值内部候选迭代（RANKX/ADDCOLUMNS 的上下文转换）与该组合筛选取交集时，**候选会在 RANKX 迭代阶段取 BLANK**，导致名次虚增（实证：XXL 行 PctRank 2→3、Sort Key 1002→1003，仅受影响行出错、其余行全对，取消筛选器后恢复正确——与注意事项 13 的 Rank 显示恒 1 同源）。修复：候选值计算用 REMOVEFILTERS(三列组合) 清除复合筛选（不能只 ALL/REMOVEFILTERS 单列，也不能 REMOVEFILTERS 整表否则连外部筛选一并丢失）+ TREATAS 重建候选组，一次计算物化为列后 FILTER 与 RANKX 共用，消除两阶段不一致。v1.1 后该机制仅保护 L1 分组候选（组内 size 候选迭代已随 L3 改 size_rank 直接取值整体移除）。注意事项 13 的 Rank 恒 1 现象不受此修复影响（Rank 仅作筛选、显示值无需准确）。
