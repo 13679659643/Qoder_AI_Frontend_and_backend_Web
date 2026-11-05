@@ -1,9 +1,9 @@
 let
-    源 = Odbc.Query("dsn=bytehouse_rl", 
+    源 = Odbc.Query(DBConnection, 
     "
 SELECT DISTINCT 
        spu_model
-FROM indep_rl_dw.s02_trade_sku_data_d
+FROM " & DW & ".s02_trade_sku_data_d
 WHERE spu_model IS NOT NULL
   AND TRIM(spu_model) <> ''
 ;")

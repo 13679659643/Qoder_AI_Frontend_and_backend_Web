@@ -1,9 +1,9 @@
 let
-    源 = Odbc.Query("dsn=bytehouse_rl", 
+    源 = Odbc.Query(DBConnection, 
     "
 WITH dim_t00_bi_fiscal_calendar AS (
     SELECT t1.*
-    FROM indep_rl_dim.dim_t00_bi_fiscal_calendar t1
+    FROM " & DIM & ".dim_t00_bi_fiscal_calendar t1
     -- where t1.timeframe_max < current_date()
 ),
 -- ★ 财年小维表：每年只有一行（新增 timeframe_value）
@@ -13,7 +13,7 @@ fiscal_year AS (
         timeframe_value    AS fiscal_year_value,          -- ★ 新增
         timeframe_min      AS fiscal_year_first_day,
         timeframe_max      AS fiscal_year_last_day
-    FROM indep_rl_dim.dim_t00_bi_fiscal_calendar
+    FROM " & DIM & ".dim_t00_bi_fiscal_calendar t1
     WHERE timeframe_id = 'Year'
 )
 SELECT

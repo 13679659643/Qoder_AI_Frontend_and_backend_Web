@@ -1,5 +1,5 @@
 let
-    源 = Odbc.Query("dsn=bytehouse_rl", 
+    源 = Odbc.Query(DBConnection, 
     "
 SELECT DISTINCT 
     division,
@@ -10,7 +10,7 @@ SELECT DISTINCT
         WHEN 'HM' THEN 4 
         ELSE 999 
     END AS division_sort
-FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d
+FROM " & ADS & ".a02_e2e_product_performance_sales_summary_d
 WHERE division IS NOT NULL
 ;")
 in

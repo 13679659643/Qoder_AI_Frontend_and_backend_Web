@@ -1,16 +1,16 @@
 let
-    源 = Odbc.Query("dsn=bytehouse_rl", 
+    源 = Odbc.Query(DBConnection, 
     "
 SELECT 
     A.*,
     B_min.size_rank
-FROM `indep_rl_dw`.s02_inventory_stock_sales_detail_result_d A
+FROM " & DW & ".s02_inventory_stock_sales_detail_result_d A
 LEFT JOIN (
     SELECT 
         size,
         size_category,
         MIN(rank) AS size_rank
-    FROM indep_rl_dim.dim_t00_size_category_mapping
+    FROM " & DIM & ".dim_t00_size_category_mapping
     GROUP BY size, size_category
 ) B_min
   ON A.sku_size = B_min.size

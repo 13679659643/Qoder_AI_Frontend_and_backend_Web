@@ -26,7 +26,7 @@ Emerging Style Identification 是 SKU Sales Tracking Tab 的颜色 × 尺码结�
 | 区域 | 字段  | Sales 矩阵来源                   | Inventory 矩阵来源                   |
 | ---- | ----- | -------------------------------- | ------------------------------------ |
 | 行   | Color | Dim_Sales_color_name[color_name] | Dim_Inventory_color_name[color_name] |
-| 列   | Size  | Dim_Sales_sku_size[sku_size]     | Dim_Inventory_sku_size[sku_size]     |
+| 列   | Size  | Dim_Sales_sku_size[Sales_sku_size]     | Dim_Inventory_sku_size[Inventory_sku_size]     |
 | 值   | 占比  | SLS Amt% Value（SVG 热力呈现）   | EOH Amt% Value（SVG 热力呈现）       |
 
 四张行列维度表（位于 维度复用\维度表\Emerging Style Identification，均取自对应事实表 distinct 值并**过滤空白**——`where 字段 is not null and 字段 <> '' and trim(字段) <> ''`）：
@@ -67,7 +67,7 @@ Emerging Style Identification 是 SKU Sales Tracking Tab 的颜色 × 尺码结�
 
 - 数据底表 `s02_trade_sku_data_d`（SKU 粒度交易表，dt 日粒度）：net_sales_amt 为 Power Query 取数时新增列（`ROUND(product_qty * sales_price, 6) AS net_sales_amt`），业务已确认；维度含 dt、platform、shop_name、division、color_name、sku_size 及其余商品维度
 - 数据底表 `s02_inventory_stock_sales_detail_d`（库存+销售+补货 SKU 模型表，dt 日快照）：msrp_inv_amt（吊牌库存金额）为期末库存金额口径字段；维度含 dt、division、color_name、sku_size 等；**无 platform / shop_name 字段**（渠道筛选不影响库存侧指标，口径限制见注意事项 1）
-- **行列维度表**：两张单列 color 维度表（Dim_Sales_color_name / Dim_Inventory_color_name，取对应事实表 distinct 值且已过滤空白）+ 两张五列 size 维度表（Dim_Sales_sku_size / Dim_Inventory_sku_size：sku_size + 4 个排序列，sku_size 按 global_sort_key 按列排序实现业务尺码序）——维度表 sku_size 值集合 = 事实表全部非空白值；矩阵行列绑定维度表字段，行列值与指标计算经 SELECTEDVALUE + 显式等值桥接传递到事实表（维度表与事实表间是否建立模型关系均可——建立一对多关系时筛选自动传递，不建立时由度量值内部显式桥接，两种建模下度量行为一致）
+- **行列维度表**：两张单列 color 维度表（Dim_Sales_color_name / Dim_Inventory_color_name，取对应事实表 distinct 值且已过滤空白）+ 两张五列 size 维度表（Dim_Sales_sku_size / Dim_Inventory_sku_size：Inventory_sku_size + 4 个排序列，Inventory_sku_size 按 global_sort_key 按列排序实现业务尺码序）——维度表 Inventory_sku_size 值集合 = 事实表全部非空白值；矩阵行列绑定维度表字段，行列值与指标计算经 SELECTEDVALUE + 显式等值桥接传递到事实表（维度表与事实表间是否建立模型关系均可——建立一对多关系时筛选自动传递，不建立时由度量值内部显式桥接，两种建模下度量行为一致）
 - 模型关系：日期筛选器（Slicer_Time_Frame_Min_This / Max_This）为断开维度，时间范围在 DAX 中显式筛选；Platform（Slicer_Platform_Selection）、Store Name（Slicer_Store_Name）、Division（Slicer_Division）与两张事实表一对多关联，筛选自动传递
 - 本模块指标均为占比类，不涉及币种兑换
 - 字段名已逐一核对数据字典（两表日期字段统一为 dt，date 类型）
@@ -133,10 +133,10 @@ Emerging Style Sales SLS Amt% Value =
 // 用途: Sales 矩阵单元格（color 行 × size 列）的销售金额占比——
 //       该 color + sku_size 占该 color 的比例（This Period 区间）
 // 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
-//       Dim_Sales_color_name[color_name] / Dim_Sales_sku_size[sku_size]
-// 口径: 分子：该 color + sku_size 下 sum(net_sales_amt)；
+//       Dim_Sales_color_name[color_name] / Dim_Sales_sku_size[Sales_sku_size]
+// 口径: 分子：该 color + Sales_sku_size 下 sum(net_sales_amt)；
 //       分母：该 color 下 sum(net_sales_amt)，且 size 限定在维度表值范围内
-//       （空白 sku_size 金额不进入分母，矩阵整行占比相加 = 100%）
+//       （空白 Sales_sku_size 金额不进入分母，矩阵整行占比相加 = 100%）
 // 数据底表: s02_trade_sku_data_d
 // 桥接: 行列值经 SELECTEDVALUE 从维度表读取，显式等值桥接事实表；
 //       维度表与事实表是否建立模型关系均可（等值桥接对两种建模一致）
@@ -151,11 +151,11 @@ VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 当前行 / 列值（从维度表读取，非空白）──
 VAR __CurrentColor = SELECTEDVALUE(Dim_Sales_color_name[color_name])
-VAR __CurrentSize = SELECTEDVALUE(Dim_Sales_sku_size[sku_size])
+VAR __CurrentSize = SELECTEDVALUE(Dim_Sales_sku_size[Sales_sku_size])
 // ── 切片器单选：A分类的值还出现在B分类里面，需要加上当前分类的筛选。──
-VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Sales_sku_size[sku_size_category])
+VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Sales_sku_size[Sales_sku_size_category])
 
-// ── 分子：该 color + sku_size This Period 净销售金额（显式等值桥接）──
+// ── 分子：该 color + Sales_sku_size This Period 净销售金额（显式等值桥接）──
 VAR __Numerator =
     CALCULATE(
         SUM('s02_trade_sku_data_d'[net_sales_amt]),
@@ -180,7 +180,7 @@ VAR __Denominator =
         's02_trade_sku_data_d'[color_name] = __CurrentColor,
         TREATAS(
             CALCULATETABLE(
-                VALUES(Dim_Sales_sku_size[sku_size]),
+                VALUES(Dim_Sales_sku_size[Sales_sku_size]),
                 ALLSELECTED(Dim_Sales_sku_size)
             ),
             's02_trade_sku_data_d'[sku_size]
@@ -234,14 +234,14 @@ Emerging Style Sales Is_Matrix_Row =
 // ========================================
 VAR __CurrentColor = SELECTEDVALUE(Dim_Sales_color_name[color_name])
 // ── 切片器单选：A分类的值还出现在B分类里面，需要加上当前分类的筛选。──
-VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Sales_sku_size[sku_size_category])
+VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Sales_sku_size[Sales_sku_size_category])
 
 // 当前筛选上下文下全部可见的 size 列表（维度表值集合）
 // 整表 ALLSELECTED：单列写法剥不掉按列排序 global_sort_key 隐藏筛选，候选集被
 // (sku_size, global_sort_key) 组合筛选钉死在当前列（仅剩 1 个候选），行可见性判定失效
 VAR __AllVisibleSizes = 
     CALCULATETABLE(
-        VALUES(Dim_Sales_sku_size[sku_size]),
+        VALUES(Dim_Sales_sku_size[Sales_sku_size]),
         ALLSELECTED(Dim_Sales_sku_size)
     )
 
@@ -249,7 +249,7 @@ VAR __AllVisibleSizes =
 VAR __HasValidDataInRow =
     MAXX(
         __AllVisibleSizes,
-        VAR __CurrentSize = Dim_Sales_sku_size[sku_size]
+        VAR __CurrentSize = Dim_Sales_sku_size[Sales_sku_size]
 
         // 严格复刻单元格计算逻辑（上下文转换使 Value 读到候选值）
         VAR __CellResult =
@@ -281,9 +281,9 @@ Emerging Style Sales Is_Matrix_Col =
 // 机制: 同 Is_Matrix_Row——MAXX 遍历 ALLSELECTED(Dim_Sales_color_name)，
 //       逐候选严格复刻单元格 Value 计算
 // ========================================
-VAR __CurrentSize = SELECTEDVALUE(Dim_Sales_sku_size[sku_size])
+VAR __CurrentSize = SELECTEDVALUE(Dim_Sales_sku_size[Sales_sku_size])
 // ── 切片器单选：A分类的值还出现在B分类里面，需要加上当前分类的筛选。──
-VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Sales_sku_size[sku_size_category])
+VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Sales_sku_size[Sales_sku_size_category])
 
 // 当前筛选上下文下全部可见的 color 列表（维度表值集合）
 VAR __AllVisibleColors = ALLSELECTED(Dim_Sales_color_name[color_name])
@@ -444,7 +444,7 @@ VAR _URL =
 // 空值单元格按行列可见性决定占位 SVG 或 BLANK
 VAR __IsDetailCell =
     ISINSCOPE(Dim_Sales_color_name[color_name])
-        && ISINSCOPE(Dim_Sales_sku_size[sku_size])
+        && ISINSCOPE(Dim_Sales_sku_size[Sales_sku_size])
 
 RETURN
     IF(
@@ -478,9 +478,9 @@ Emerging Style Inventory EOH Amt% Value =
 // 用途: Inventory 矩阵单元格（color 行 × size 列）的期末库存金额占比——
 //       该 color + sku_size 占该 color 的比例（This Period 最后一天）
 // 依赖: Slicer_Time_Frame_Max_This[TimeFrame_Min] / [TimeFrame_Max]
-//       Dim_Inventory_color_name[color_name] / Dim_Inventory_sku_size[sku_size]
-// 口径: 分子：该 color + sku_size 下 sum(msrp_inv_amt)；分母：该 color 下
-//       sum(msrp_inv_amt)，且 size 限定在维度表值范围内（空白 sku_size
+//       Dim_Inventory_color_name[color_name] / Dim_Inventory_sku_size[Inventory_sku_size]
+// 口径: 分子：该 color + Inventory_sku_size 下 sum(msrp_inv_amt)；分母：该 color 下
+//       sum(msrp_inv_amt)，且 size 限定在维度表值范围内（空白 Inventory_sku_size
 //       金额不进入分母，矩阵整行占比相加 = 100%）；时间范围看 this period
 //       最后一天（实现为 end period 范围内最后一个快照日）
 // 数据底表: s02_inventory_stock_sales_detail_d
@@ -497,10 +497,10 @@ VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 当前行 / 列值（从维度表读取，非空白）──
 VAR __CurrentColor = SELECTEDVALUE(Dim_Inventory_color_name[color_name])
-VAR __CurrentSize = SELECTEDVALUE(Dim_Inventory_sku_size[sku_size])
-VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Inventory_sku_size[sku_size_category])
+VAR __CurrentSize = SELECTEDVALUE(Dim_Inventory_sku_size[Inventory_sku_size])
+VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Inventory_sku_size[Inventory_sku_size_category])
 
-// ── 分子：该 color + sku_size 期末库存金额（快照日单日值，显式等值桥接）──
+// ── 分子：该 color + Inventory_sku_size 期末库存金额（快照日单日值，显式等值桥接）──
 VAR __Numerator =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[msrp_inv_amt]),
@@ -521,7 +521,7 @@ VAR __Denominator =
         's02_inventory_stock_sales_detail_d'[color_name] = __CurrentColor,
         TREATAS(
             CALCULATETABLE(
-                VALUES(Dim_Inventory_sku_size[sku_size]),
+                VALUES(Dim_Inventory_sku_size[Inventory_sku_size]),
                 ALLSELECTED(Dim_Inventory_sku_size)
             ),
             's02_inventory_stock_sales_detail_d'[sku_size]
@@ -572,13 +572,13 @@ Emerging Style Inventory Is_Matrix_Row =
 // ========================================
 VAR __CurrentColor = SELECTEDVALUE(Dim_Inventory_color_name[color_name])
 // ── 切片器单选：A分类的值还出现在B分类里面，需要加上当前分类的筛选。──
-VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Inventory_sku_size[sku_size_category])
+VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Inventory_sku_size[Inventory_sku_size_category])
 
 // 当前筛选上下文下全部可见的 size 列表（维度表值集合）
 // 整表 ALLSELECTED：单列写法剥不掉按列排序 global_sort_key 隐藏筛选，候选集被钉死在当前列
 VAR __AllVisibleSizes =
     CALCULATETABLE(
-        VALUES(Dim_Inventory_sku_size[sku_size]),
+        VALUES(Dim_Inventory_sku_size[Inventory_sku_size]),
         ALLSELECTED(Dim_Inventory_sku_size)
     )
 
@@ -586,7 +586,7 @@ VAR __AllVisibleSizes =
 VAR __HasValidDataInRow =
     MAXX(
         __AllVisibleSizes,
-        VAR __CurrentSize = Dim_Inventory_sku_size[sku_size]
+        VAR __CurrentSize = Dim_Inventory_sku_size[Inventory_sku_size]
 
         VAR __CellResult =
             CALCULATE(
@@ -616,9 +616,9 @@ Emerging Style Inventory Is_Matrix_Col =
 // 使用位置: SVG 度量内部调用（列方向空值抑制的唯一实现途径）
 // 机制: 同 Sales 侧——MAXX 遍历 ALLSELECTED(Dim_Inventory_color_name)
 // ========================================
-VAR __CurrentSize = SELECTEDVALUE(Dim_Inventory_sku_size[sku_size])
+VAR __CurrentSize = SELECTEDVALUE(Dim_Inventory_sku_size[Inventory_sku_size])
 // ── 切片器单选：A分类的值还出现在B分类里面，需要加上当前分类的筛选。──
-VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Inventory_sku_size[sku_size_category])
+VAR __CurrentSkuSizeCategory = SELECTEDVALUE(Dim_Inventory_sku_size[Inventory_sku_size_category])
 
 // 当前筛选上下文下全部可见的 color 列表（维度表值集合）
 VAR __AllVisibleColors = ALLSELECTED(Dim_Inventory_color_name[color_name])
@@ -768,7 +768,7 @@ VAR _URL =
 // ── 6. 行列可见性：隐藏全空行列，保留内部空白占位 ──
 VAR __IsDetailCell =
     ISINSCOPE(Dim_Inventory_color_name[color_name])
-        && ISINSCOPE(Dim_Inventory_sku_size[sku_size])
+        && ISINSCOPE(Dim_Inventory_sku_size[Inventory_sku_size])
 
 RETURN
     IF(
@@ -854,11 +854,11 @@ RETURN
 │                        可视化层（热力矩阵 × 2）                       │
 │  Sales 矩阵:                                                         │
 │    行: Dim_Sales_color_name[color_name]                              │
-│    列: Dim_Sales_sku_size[sku_size]                                  │
+│    列: Dim_Sales_sku_size[Sales_sku_size]                                  │
 │    值: SLS Amt% Value + 图像 URL 条件格式 → SLS Amt% SVG             │
 │  Inventory 矩阵:                                                     │
 │    行: Dim_Inventory_color_name[color_name]                          │
-│    列: Dim_Inventory_sku_size[sku_size]                              │
+│    列: Dim_Inventory_sku_size[Inventory_sku_size]                              │
 │    值: EOH Amt% Value + 图像 URL 条件格式 → EOH Amt% SVG             │
 │  两矩阵: 关闭小计/总计与「显示无数据的项」（空值抑制前提）             │
 └─────────────────────────────────────────────────────────────────────┘
@@ -873,7 +873,7 @@ RETURN
 | 配置项   | 内容                                                                                                |
 | -------- | --------------------------------------------------------------------------------------------------- |
 | 行字段   | Dim_Sales_color_name[color_name]                                                                    |
-| 列字段   | Dim_Sales_sku_size[sku_size]                                                                        |
+| 列字段   | Dim_Sales_sku_size[Sales_sku_size]                                                                        |
 | 值       | [Emerging Style Sales SLS Amt% Value]（列格式 #,##0%）                                              |
 | 条件格式 | 值字段 → 条件格式 → 图像 URL → 绑定 [Emerging Style Sales SLS Amt% SVG]（单元格以热力 SVG 呈现） |
 | 显示元素 | 关闭行小计 / 列总计 / 总计；**关闭「显示无数据的项」**（空值抑制前提，见注意事项 7）          |
@@ -883,7 +883,7 @@ RETURN
 | 配置项   | 内容                                                                                                    |
 | -------- | ------------------------------------------------------------------------------------------------------- |
 | 行字段   | Dim_Inventory_color_name[color_name]                                                                    |
-| 列字段   | Dim_Inventory_sku_size[sku_size]                                                                        |
+| 列字段   | Dim_Inventory_sku_size[Inventory_sku_size]                                                                        |
 | 值       | [Emerging Style Inventory EOH Amt% Value]（列格式 #,##0%）                                              |
 | 条件格式 | 值字段 → 条件格式 → 图像 URL → 绑定 [Emerging Style Inventory EOH Amt% SVG]（单元格以热力 SVG 呈现） |
 | 显示元素 | 关闭行小计 / 列总计 / 总计；**关闭「显示无数据的项」**                                            |

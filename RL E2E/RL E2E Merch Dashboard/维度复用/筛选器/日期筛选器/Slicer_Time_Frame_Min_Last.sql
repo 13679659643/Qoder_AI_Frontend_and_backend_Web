@@ -1,5 +1,5 @@
 let
-    源 = Odbc.Query("dsn=bytehouse_rl", 
+    源 = Odbc.Query(DBConnection, 
     "
 SELECT
     t1.`etl_time`,
@@ -68,12 +68,13 @@ FROM (
 
             ELSE NULL
         END AS `First_Fiscal_Month`
-
-    FROM indep_rl_dim.dim_t00_bi_fiscal_calendar
+    FROM " & DIM & ".dim_t00_bi_fiscal_calendar t1
+    WHERE timeframe_id = 'Year'
+) fiscal_year
 ) t1
 
 -- ★ 自关联：用 First_Fiscal_Month 匹配月维度的 timeframe_value
-LEFT JOIN indep_rl_dim.dim_t00_bi_fiscal_calendar t2
+LEFT JOIN " & DIM & ".dim_t00_bi_fiscal_calendar t2
     ON  t2.`timeframe_label` = '月'
     AND t2.`timeframe_value` = t1.`First_Fiscal_Month`
 WHERE (t1.`TimeFrame_ID` = 'Day' AND t1.`timeframe_value` >='2025-01-01' AND t1.`timeframe_value` < CURDATE()) 

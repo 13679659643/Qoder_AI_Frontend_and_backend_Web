@@ -19,7 +19,7 @@ FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d
 
 
 let
-    源 = Odbc.Query("dsn=bytehouse_rl", 
+    源 = Odbc.Query(DBConnection, 
     "	-- ========================================
 -- SQL: 获取事实表最大日期
 -- 表: indep_rl_ads.a02_e2e_product_performance_sales_summary_d
@@ -35,6 +35,6 @@ SELECT
             '%Y-%m-%d'
         )
     ) AS `Constants_Date_Max`
-FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d")
+FROM " & ADS & ".a02_e2e_product_performance_sales_summary_d")
 in
     源

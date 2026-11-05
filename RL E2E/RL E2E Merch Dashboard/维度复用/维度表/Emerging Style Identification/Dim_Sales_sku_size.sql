@@ -1,9 +1,9 @@
 let
-    源 = Odbc.Query("dsn=bytehouse_rl", 
+    源 = Odbc.Query(DBConnection, 
     "
 SELECT 
-    sku_size_category,
-    sku_size,
+    sku_size_category AS Sales_sku_size_category,
+    sku_size AS Sales_sku_size,
     size_rank,
     category_sort,
     category_sort * 1000000 + COALESCE(size_rank, 0) AS global_sort_key
@@ -13,13 +13,13 @@ FROM (
         A.sku_size,
         B_min.size_rank,
         DENSE_RANK() OVER (ORDER BY A.sku_size_category ASC) AS category_sort
-    FROM indep_rl_dw.s02_trade_sku_data_d A
+    FROM " & DW & ".s02_trade_sku_data_d A
     LEFT JOIN (
         SELECT 
             size,
             size_category,
             MIN(rank) AS size_rank
-        FROM indep_rl_dim.dim_t00_size_category_mapping
+        FROM " & DIM & ".dim_t00_size_category_mapping
         GROUP BY size, size_category
     ) B_min
       ON A.sku_size = B_min.size
@@ -32,5 +32,3 @@ WHERE t.size_rank IS NOT NULL
 ;")
 in
     源
-
-

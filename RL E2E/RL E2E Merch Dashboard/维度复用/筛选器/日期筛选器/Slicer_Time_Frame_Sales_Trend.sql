@@ -1,9 +1,9 @@
 let
-    源 = Odbc.Query("dsn=bytehouse_rl", 
+    源 = Odbc.Query(DBConnection, 
     "
 WITH dim_t00_bi_fiscal_calendar AS (
 select t1.*
-from indep_rl_dim.dim_t00_bi_fiscal_calendar t1
+from " & DIM & ".dim_t00_bi_fiscal_calendar t1
 -- where t1.timeframe_max < current_date()
 )
 SELECT

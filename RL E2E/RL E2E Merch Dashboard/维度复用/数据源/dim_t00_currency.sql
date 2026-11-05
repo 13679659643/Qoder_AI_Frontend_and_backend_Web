@@ -1,11 +1,11 @@
 let
-    源 = Odbc.Query("dsn=bytehouse_rl", 
+    源 = Odbc.Query(DBConnection, 
     "
     SELECT *
-    FROM `indep_rl_dim`.dim_t00_currency
+    FROM " & DIM & ".dim_t00_currency
     WHERE end_year = (
         SELECT MAX(end_year)
-        FROM `indep_rl_dim`.dim_t00_currency
+        FROM " & DIM & ".dim_t00_currency
       )
     ")
 in

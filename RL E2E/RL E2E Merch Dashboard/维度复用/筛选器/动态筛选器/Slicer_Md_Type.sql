@@ -1,5 +1,5 @@
 let
-    源 = Odbc.Query("dsn=bytehouse_rl", 
+    源 = Odbc.Query(DBConnection, 
     "
 SELECT DISTINCT 
        md_type,
@@ -9,7 +9,7 @@ SELECT DISTINCT
          WHEN md_type = '30%OFF' THEN 3
          ELSE 99
        END AS sort_order
-FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d
+FROM " & ADS & ".a02_e2e_product_performance_sales_summary_d
 WHERE md_type IS NOT NULL
   AND md_type <> ''
   AND TRIM(md_type) <> ''
