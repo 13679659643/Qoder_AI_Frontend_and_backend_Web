@@ -27,7 +27,7 @@
 --   2. 占比分母 = 全量合计（对应 DAX ALLSELECTED 六个商品维度——移除视觉对象
 --      内部行维度筛选、保留外部切片器筛选；本参数下外部筛选全选 = 全量）
 --   3. 六种行维度 UNION ALL 一次输出（label / super_season / product_type /
---      category / md_type / division），行维度值来自 trade 侧（= Slicer_ 维度
+--      ax_class / md_type / division），行维度值来自 trade 侧（= Slicer_ 维度
 --      表值域，取自 sales 表 distinct），trade 无记录的维度值不出现在行上，
 --      对齐 PBI 行为
 --   4. 库存类指标按同一维度独立上卷后 LEFT JOIN（inv 侧同维度全量金额，
@@ -54,7 +54,7 @@ trade_agg AS (
         brand,
         super_season,
         product_type,
-        category,
+        ax_class,
         md_type,
         division,
         SUM(CASE WHEN data_date BETWEEN '2026-03-29' AND '2026-07-25'
@@ -75,7 +75,7 @@ trade_agg AS (
             data_date BETWEEN '2026-03-29' AND '2026-07-25'     -- Sales This Period
          OR data_date BETWEEN '2025-03-30' AND '2025-07-26'     -- Sales Last Period（vs LP 基线）
       )
-    GROUP BY brand, super_season, product_type, category, md_type, division
+    GROUP BY brand, super_season, product_type, ax_class, md_type, division
 ),
 
 -- ── inv 侧六维度组合粒度（双期期末快照单日时点）──
@@ -84,7 +84,7 @@ inv_agg AS (
         brand,
         super_season,
         product_type,
-        category,
+        ax_class,
         md_type,
         division,
         SUM(CASE WHEN data_date = '2026-07-25' THEN msrp_inv_amt END)   AS eoh_amt_this,
@@ -92,7 +92,7 @@ inv_agg AS (
         SUM(CASE WHEN data_date = '2026-07-25' THEN inv_qty END)        AS eoh_unit
     FROM indep_rl_ads.a02_e2e_product_performance_inv_summary_d
     WHERE data_date IN ('2026-07-25', '2025-07-26')             -- 仅双期期末快照日（单日，不可区间求和）
-    GROUP BY brand, super_season, product_type, category, md_type, division
+    GROUP BY brand, super_season, product_type, ax_class, md_type, division
 ),
 
 -- ── 占比分母：全量合计（对应 DAX ALLSELECTED 六维度；外部筛选全选 = 全量）──
@@ -168,22 +168,22 @@ rollup AS (
     ) ir ON tr.dim_val = ir.dim_val
 
     UNION ALL
-    -- 行维度: category
-    SELECT 'category', tr.dim_val,
+    -- 行维度: ax_class
+    SELECT 'ax_class', tr.dim_val,
            tr.sls_amt_this, tr.sls_amt_last, tr.sls_unit, tr.ytd_qty, tr.md_amt, tr.msrp_amt,
            ir.eoh_amt_this, ir.eoh_amt_last, ir.eoh_unit
     FROM (
-        SELECT category AS dim_val,
+        SELECT ax_class AS dim_val,
                SUM(sls_amt_this) AS sls_amt_this, SUM(sls_amt_last) AS sls_amt_last,
                SUM(sls_unit)     AS sls_unit,     SUM(ytd_qty)      AS ytd_qty,
                SUM(md_amt)       AS md_amt,       SUM(msrp_amt)     AS msrp_amt
-        FROM trade_agg GROUP BY category
+        FROM trade_agg GROUP BY ax_class
     ) tr
     LEFT JOIN (
-        SELECT category AS dim_val,
+        SELECT ax_class AS dim_val,
                SUM(eoh_amt_this) AS eoh_amt_this, SUM(eoh_amt_last) AS eoh_amt_last,
                SUM(eoh_unit)     AS eoh_unit
-        FROM inv_agg GROUP BY category
+        FROM inv_agg GROUP BY ax_class
     ) ir ON tr.dim_val = ir.dim_val
 
     UNION ALL

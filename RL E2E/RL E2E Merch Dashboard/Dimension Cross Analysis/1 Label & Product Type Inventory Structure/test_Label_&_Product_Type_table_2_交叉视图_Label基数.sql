@@ -23,7 +23,7 @@
 --   2. 占比分母 = 该 Label 柱形内合计（窗口 SUM() OVER (PARTITION BY
 --      Cross_Dimension, Label)，对应 DAX ALLSELECTED 五个交叉维度——移除
 --      图例维度筛选、保留 x 轴 Label 柱形筛选与外部切片器筛选）
---   3. 五种图例维度一次输出（super_season / product_type / category /
+--   3. 五种图例维度一次输出（super_season / product_type / ax_class /
 --      md_type / division），Label 基数视图图例不可切 label 自身
 --   4. 行组合 = trade ∪ inv（UNION ALL 再聚合还原 FULL OUTER 语义）：
 --      PBI 柱形图数据点由度量值非空驱动——SLS_Amt_Pct 为 NULL 的行在
@@ -47,7 +47,7 @@ trade_agg AS (
         brand,
         super_season,
         product_type,
-        category,
+        ax_class,
         md_type,
         division,
         SUM(CASE WHEN data_date BETWEEN '2026-03-29' AND '2026-07-25'
@@ -55,7 +55,7 @@ trade_agg AS (
     FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d
     WHERE platform IN ('JD', 'TM', 'RLE', 'DY')                 -- 对齐 PBI 数据源加载过滤（与切片器无关）
       AND data_date BETWEEN '2026-03-29' AND '2026-07-25'       -- Sales This Period
-    GROUP BY brand, super_season, product_type, category, md_type, division
+    GROUP BY brand, super_season, product_type, ax_class, md_type, division
 ),
 
 -- ── inv 侧六维度组合粒度（This 期末快照单日时点）──
@@ -64,13 +64,13 @@ inv_agg AS (
         brand,
         super_season,
         product_type,
-        category,
+        ax_class,
         md_type,
         division,
         SUM(CASE WHEN data_date = '2026-07-25' THEN msrp_inv_amt END)   AS eoh_amt
     FROM indep_rl_ads.a02_e2e_product_performance_inv_summary_d
     WHERE data_date = '2026-07-25'                              -- This 期末快照日（单日，不可区间求和）
-    GROUP BY brand, super_season, product_type, category, md_type, division
+    GROUP BY brand, super_season, product_type, ax_class, md_type, division
 ),
 
 -- ── trade 长表：五种图例维度 × Label（投影展开，不聚合）──
@@ -79,7 +79,7 @@ trade_long AS (
     UNION ALL
     SELECT 'product_type', brand, product_type, sls_amt FROM trade_agg
     UNION ALL
-    SELECT 'category',     brand, category,     sls_amt FROM trade_agg
+    SELECT 'ax_class',     brand, ax_class,     sls_amt FROM trade_agg
     UNION ALL
     SELECT 'md_type',      brand, md_type,      sls_amt FROM trade_agg
     UNION ALL
@@ -92,7 +92,7 @@ inv_long AS (
     UNION ALL
     SELECT 'product_type', brand, product_type, eoh_amt FROM inv_agg
     UNION ALL
-    SELECT 'category',     brand, category,     eoh_amt FROM inv_agg
+    SELECT 'ax_class',     brand, ax_class,     eoh_amt FROM inv_agg
     UNION ALL
     SELECT 'md_type',      brand, md_type,      eoh_amt FROM inv_agg
     UNION ALL

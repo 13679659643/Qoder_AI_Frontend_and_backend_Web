@@ -1,7 +1,7 @@
 -- ======================================================================
 -- 测试 SQL: Label & Division Table（两段：Division 分组 / Label 分组）
 -- 所属模块: RL E2E Merch Dashboard - Dimension Cross Analysis - Product Type
---           Sales & Inventory Structure【Category × Division/Label】
+--           Sales & Inventory Structure【AX_Class × Division/Label】
 -- 关联方案: Label_&_Division_table.md
 -- 语法: MySQL 8.0+（CTE / 窗口函数）
 -- 结构: SQL 1/2 Division 分组 + SQL 2/2 Label 分组，两段独立执行
@@ -27,17 +27,19 @@
 -- 口径还原说明:
 --   1. 两张 a02 表日期字段为 data_date（非 dt），ISO 字符串比较与日期比较等价
 --   2. 占比分母 = 组内全量合计（窗口 SUM() OVER (PARTITION BY 分组键)，对应
---      DAX ALLSELECTED(Slicer_Category[category])——移除 Category 行筛选、
---      保留 Division / Label 视觉对象筛选器（分组条件）与外部切片器筛选；
---      组内各 Category 的 SLS Amt% / EOH Amt% 之和 = 100%
+--      DAX ALLSELECTED(Slicer_AX_Class)——整表移除 AX_Class 行筛选（含按列排序
+--      隐式带入的排序列筛选；auto-existence：同表共存时只移除值列则排序列筛选
+--      存活，排序键与业务值 1:1 → 占比恒 100%，必须整表移除），保留 Division /
+--      Label 视觉对象筛选器（分组条件）与外部切片器筛选；
+--      组内各 AX_Class 的 SLS Amt% / EOH Amt% 之和 = 100%
 --   3. 对数方式：PBI 页面每个表格的视觉对象筛选器固定一个分组值
 --      （Division 表单选 CW/HM/MN/WM 之一；Label 表单选一个 Label 值）——
---      SQL 结果按分组列筛选该值后，与对应 PBI 表的 Category 行逐行对比
+--      SQL 结果按分组列筛选该值后，与对应 PBI 表的 AX_Class 行逐行对比
 --   4. Label 在事实表中对应 brand 字段（Slicer_Label 值域 = sales 表 brand
 --      distinct，别名 label）
 --   5. 行组合 = trade ∪ inv（UNION ALL 再聚合还原 FULL OUTER 语义）：
---      PBI 表格行由度量值非空驱动，六个指标全为 BLANK 的 Category 行自动
---      隐藏——对数时忽略 SQL 中六个指标全为 NULL 的行；某 Category 仅单一
+--      PBI 表格行由度量值非空驱动，六个指标全为 BLANK 的 AX_Class 行自动
+--      隐藏——对数时忽略 SQL 中六个指标全为 NULL 的行；某 AX_Class 仅单一
 --      期有数据时，无数据期的占比 / 差值列为 NULL（对齐 DAX BLANK "-"）
 --   6. 期末时点只取快照日单日（不可区间求和）；快照当日缺数时 PBI 度量值
 --      回退到对应范围内最近一个快照日，SQL 对比时如发现快照日无数据需
@@ -54,16 +56,16 @@
 
 
 -- ======================================================================
--- SQL 1/2: Division 分组（每个 Division 对应的所有 Category 指标情况，
+-- SQL 1/2: Division 分组（每个 Division 对应的所有 AX_Class 指标情况，
 --          对数时按视觉对象筛选器固定的 division 值筛选本段结果）
 -- ======================================================================
 WITH
--- ── trade 侧 (division, category) 粒度各期聚合（覆盖 This ∪ LP ∪ LY 三区间）──
+-- ── trade 侧 (division, ax_class) 粒度各期聚合（覆盖 This ∪ LP ∪ LY 三区间）──
 -- 条件聚合还原各时间口径；NULL 传播对应 DAX SUM 空值
 trade_agg AS (
     SELECT
         division,
-        category,
+        ax_class,
         SUM(CASE WHEN data_date BETWEEN '2026-03-29' AND '2026-07-25'
                  THEN net_sales_amt END)                        AS sls_amt_this,
         SUM(CASE WHEN data_date BETWEEN '2025-03-30' AND '2025-09-27'
@@ -77,27 +79,27 @@ trade_agg AS (
          OR data_date BETWEEN '2025-03-30' AND '2025-09-27'     -- Last Period（vs LP 基线）
          OR data_date BETWEEN '2025-03-30' AND '2025-07-26'     -- Last Year（vs LY 基线）
       )
-    GROUP BY division, category
+    GROUP BY division, ax_class
 ),
 
--- ── inv 侧 (division, category) 粒度三快照日聚合 ──
+-- ── inv 侧 (division, ax_class) 粒度三快照日聚合 ──
 inv_agg AS (
     SELECT
         division,
-        category,
+        ax_class,
         SUM(CASE WHEN data_date = '2026-07-25' THEN msrp_inv_amt END)   AS eoh_amt_this,
         SUM(CASE WHEN data_date = '2025-09-27' THEN msrp_inv_amt END)   AS eoh_amt_lp,
         SUM(CASE WHEN data_date = '2025-07-26' THEN msrp_inv_amt END)   AS eoh_amt_ly
     FROM indep_rl_ads.a02_e2e_product_performance_inv_summary_d
     WHERE data_date IN ('2026-07-25', '2025-09-27', '2025-07-26')   -- 仅三个快照日（单日，不可区间求和）
-    GROUP BY division, category
+    GROUP BY division, ax_class
 ),
 
 -- ── 行组合 = trade ∪ inv（UNION ALL 再聚合还原 FULL OUTER；单侧 NULL 保留）──
 group_agg AS (
     SELECT
         division,
-        category,
+        ax_class,
         SUM(sls_amt_this)  AS sls_amt_this,
         SUM(sls_amt_lp)    AS sls_amt_lp,
         SUM(sls_amt_ly)    AS sls_amt_ly,
@@ -105,22 +107,22 @@ group_agg AS (
         SUM(eoh_amt_lp)    AS eoh_amt_lp,
         SUM(eoh_amt_ly)    AS eoh_amt_ly
     FROM (
-        SELECT division, category, sls_amt_this, sls_amt_lp, sls_amt_ly,
+        SELECT division, ax_class, sls_amt_this, sls_amt_lp, sls_amt_ly,
                NULL AS eoh_amt_this, NULL AS eoh_amt_lp, NULL AS eoh_amt_ly
         FROM trade_agg
         UNION ALL
-        SELECT division, category, NULL, NULL, NULL,
+        SELECT division, ax_class, NULL, NULL, NULL,
                eoh_amt_this, eoh_amt_lp, eoh_amt_ly
         FROM inv_agg
     ) u
-    GROUP BY division, category
+    GROUP BY division, ax_class
 ),
 
--- ── 组内占比（窗口分母 PARTITION BY division，对应 ALLSELECTED(Category)）──
+-- ── 组内占比（窗口分母 PARTITION BY division，对应 ALLSELECTED(AX_Class)）──
 pct AS (
     SELECT
         division,
-        category,
+        ax_class,
         sls_amt_this / NULLIF(SUM(sls_amt_this) OVER (PARTITION BY division), 0)  AS sls_pct_this,
         sls_amt_lp   / NULLIF(SUM(sls_amt_lp)   OVER (PARTITION BY division), 0)  AS sls_pct_lp,
         sls_amt_ly   / NULLIF(SUM(sls_amt_ly)   OVER (PARTITION BY division), 0)  AS sls_pct_ly,
@@ -132,7 +134,7 @@ pct AS (
 
 SELECT
     division                                                      AS Division,           -- 分组键（对数时筛选视觉对象筛选器固定的值）
-    category                                                      AS Category,
+    ax_class                                                      AS AX_Class,
     sls_pct_this                                                  AS SLS_Amt_Pct,        -- SLS Amt%（0.2634 → PBI 显示 26%）
     CASE WHEN sls_pct_this IS NULL OR sls_pct_lp IS NULL
          THEN NULL ELSE sls_pct_this - sls_pct_lp END             AS SLS_Amt_Pct_vs_LP,  -- vs LP（原始差值，-0.0152 → PBI 显示 -152bp）
@@ -146,20 +148,20 @@ SELECT
 FROM pct
 ORDER BY
     Division ASC,
-    Category ASC;
+    AX_Class ASC;
 
 
 -- ======================================================================
--- SQL 2/2: Label 分组（每个 Label 对应的所有 Category 指标情况，
+-- SQL 2/2: Label 分组（每个 Label 对应的所有 AX_Class 指标情况，
 --          Label 在表中对应 brand 字段；对数时按视觉对象筛选器固定的
 --          label 值筛选本段结果）
 -- ======================================================================
 WITH
--- ── trade 侧 (brand, category) 粒度各期聚合（覆盖 This ∪ LP ∪ LY 三区间）──
+-- ── trade 侧 (brand, ax_class) 粒度各期聚合（覆盖 This ∪ LP ∪ LY 三区间）──
 trade_agg AS (
     SELECT
         brand,
-        category,
+        ax_class,
         SUM(CASE WHEN data_date BETWEEN '2026-03-29' AND '2026-07-25'
                  THEN net_sales_amt END)                        AS sls_amt_this,
         SUM(CASE WHEN data_date BETWEEN '2025-03-30' AND '2025-09-27'
@@ -173,27 +175,27 @@ trade_agg AS (
          OR data_date BETWEEN '2025-03-30' AND '2025-09-27'     -- Last Period（vs LP 基线）
          OR data_date BETWEEN '2025-03-30' AND '2025-07-26'     -- Last Year（vs LY 基线）
       )
-    GROUP BY brand, category
+    GROUP BY brand, ax_class
 ),
 
--- ── inv 侧 (brand, category) 粒度三快照日聚合 ──
+-- ── inv 侧 (brand, ax_class) 粒度三快照日聚合 ──
 inv_agg AS (
     SELECT
         brand,
-        category,
+        ax_class,
         SUM(CASE WHEN data_date = '2026-07-25' THEN msrp_inv_amt END)   AS eoh_amt_this,
         SUM(CASE WHEN data_date = '2025-09-27' THEN msrp_inv_amt END)   AS eoh_amt_lp,
         SUM(CASE WHEN data_date = '2025-07-26' THEN msrp_inv_amt END)   AS eoh_amt_ly
     FROM indep_rl_ads.a02_e2e_product_performance_inv_summary_d
     WHERE data_date IN ('2026-07-25', '2025-09-27', '2025-07-26')   -- 仅三个快照日（单日，不可区间求和）
-    GROUP BY brand, category
+    GROUP BY brand, ax_class
 ),
 
 -- ── 行组合 = trade ∪ inv（UNION ALL 再聚合还原 FULL OUTER；单侧 NULL 保留）──
 group_agg AS (
     SELECT
         brand,
-        category,
+        ax_class,
         SUM(sls_amt_this)  AS sls_amt_this,
         SUM(sls_amt_lp)    AS sls_amt_lp,
         SUM(sls_amt_ly)    AS sls_amt_ly,
@@ -201,22 +203,22 @@ group_agg AS (
         SUM(eoh_amt_lp)    AS eoh_amt_lp,
         SUM(eoh_amt_ly)    AS eoh_amt_ly
     FROM (
-        SELECT brand, category, sls_amt_this, sls_amt_lp, sls_amt_ly,
+        SELECT brand, ax_class, sls_amt_this, sls_amt_lp, sls_amt_ly,
                NULL AS eoh_amt_this, NULL AS eoh_amt_lp, NULL AS eoh_amt_ly
         FROM trade_agg
         UNION ALL
-        SELECT brand, category, NULL, NULL, NULL,
+        SELECT brand, ax_class, NULL, NULL, NULL,
                eoh_amt_this, eoh_amt_lp, eoh_amt_ly
         FROM inv_agg
     ) u
-    GROUP BY brand, category
+    GROUP BY brand, ax_class
 ),
 
--- ── 组内占比（窗口分母 PARTITION BY brand，对应 ALLSELECTED(Category)）──
+-- ── 组内占比（窗口分母 PARTITION BY brand，对应 ALLSELECTED(AX_Class)）──
 pct AS (
     SELECT
         brand,
-        category,
+        ax_class,
         sls_amt_this / NULLIF(SUM(sls_amt_this) OVER (PARTITION BY brand), 0)  AS sls_pct_this,
         sls_amt_lp   / NULLIF(SUM(sls_amt_lp)   OVER (PARTITION BY brand), 0)  AS sls_pct_lp,
         sls_amt_ly   / NULLIF(SUM(sls_amt_ly)   OVER (PARTITION BY brand), 0)  AS sls_pct_ly,
@@ -228,7 +230,7 @@ pct AS (
 
 SELECT
     brand                                                         AS Label,              -- 分组键（brand 字段 = Label 维度，对数时筛选视觉对象筛选器固定的值）
-    category                                                      AS Category,
+    ax_class                                                      AS AX_Class,
     sls_pct_this                                                  AS SLS_Amt_Pct,        -- SLS Amt%（0.2634 → PBI 显示 26%）
     CASE WHEN sls_pct_this IS NULL OR sls_pct_lp IS NULL
          THEN NULL ELSE sls_pct_this - sls_pct_lp END             AS SLS_Amt_Pct_vs_LP,  -- vs LP（原始差值，-0.0152 → PBI 显示 -152bp）
@@ -242,4 +244,4 @@ SELECT
 FROM pct
 ORDER BY
     Label ASC,
-    Category ASC;
+    AX_Class ASC;

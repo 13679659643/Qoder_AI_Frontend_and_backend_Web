@@ -1,11 +1,11 @@
 # Label & Product Type Inventory Structure 表格解决方案
 
-> **版本**: v1.0
+> **版本**: v1.1（商品维度 category → ax_class 字段替换（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §4.1 / §3.2）
 > **模块**: RL E2E Merch Dashboard - Dimension Cross Analysis Tab - Label & Product Type Inventory Structure
 > **关联口径**: 口径文档/口径Markdown格式/Dimension Cross Analysis.md - 子模块一~子模块四（§1~§16）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
 > **数据底表（库存类）**: a02_e2e_product_performance_inv_summary_d
-> **关联维度**: Slicer_Time_Frame_Min_This / Max_This / Min_Last / Max_Last（时间，断开维度）；Slicer_Currency_Selection（币种，断开维度）；Slicer_Label / Slicer_Super_Season / Slicer_Product_Type / Slicer_Category / Slicer_Md_Type / Slicer_Division（商品维度，行字段来源，与双事实表一对多关联）
+> **关联维度**: Slicer_Time_Frame_Min_This / Max_This / Min_Last / Max_Last（时间，断开维度）；Slicer_Currency_Selection（币种，断开维度）；Slicer_Label / Slicer_Super_Season / Slicer_Product_Type / Slicer_AX_Class / Slicer_Md_Type / Slicer_Division（商品维度，行字段来源，与双事实表一对多关联）
 > **筛选影响范围**: date（断开维度，DAX 显式筛选）+ 渠道（Platform + Store Name，仅销售侧）+ 商品维度切片器（与双表已建关系，自动传递）
 
 ---
@@ -20,18 +20,18 @@
 | ----------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------- |
 | 主视图表格 ×1                      | 子模块一（Label 视图）+ 子模块三（Product Type 视图） | 行维度六选一 + 8 列指标（含 2 列 vs LP 附属），两子模块共享同一套度量值 |
 | 交叉柱形图 ×2（Label 基数）        | 子模块二                                              | x 轴 = Label，图例 = 交叉维度五选一，y 轴 = SLS Amt% / EOH Amt%         |
-| 交叉柱形图 ×2（Product Type 基数） | 子模块四                                              | x 轴 = Product Type，图例 = 交叉维度五选一，y 轴 = SLS Amt% / EOH Amt%  |
+| 交叉柱形图 ×2（Super Season 基数） | 子模块四                                              | x 轴 = Super Season，图例 = 交叉维度五选一，y 轴 = SLS Amt% / EOH Amt%  |
 
-- **主视图**（子模块一/三）：行维度在 `Slicer_Label[label]` / `Slicer_Super_Season[super_season]` / `Slicer_Product_Type[product_type]` / `Slicer_Category[category]` / `Slicer_Md_Type[md_type]` / `Slicer_Division[division]` 六个维度表字段中六选一（切换时替换视觉对象行区域字段）。子模块一与子模块三的指标公式、时间口径、附属指标、数据格式完全一致，唯一差异是行维度取值字段，占比分母统一 `ALLSELECTED` 六个维度字段后两视图共享同一套度量值
-- **交叉视图**（子模块二/四）：以基数维度（Label 或 Product Type）为 x 轴，所选商品维度为图例拆分，统计各交叉维度值占单个柱形（该基数维度值）的占比。两个基数视图的交叉维度集合互异（Label 基数可切 product_type，Product Type 基数可切 label，其余 super_season / category / md_type / division 共用），分母的 `ALLSELECTED` 列集合不同，各自独立输出一套度量值
+- **主视图**（子模块一/三）：行维度在 `Slicer_Label[label]` / `Slicer_Super_Season[super_season]` / `Slicer_Product_Type[product_type]` / `Slicer_AX_Class[ax_class]` / `Slicer_Md_Type[md_type]` / `Slicer_Division[division]` 六个维度表字段中六选一（切换时替换视觉对象行区域字段）。子模块一与子模块三的指标公式、时间口径、附属指标、数据格式完全一致，唯一差异是行维度取值字段，占比分母统一 `ALLSELECTED` 六个维度表【整表】后两视图共享同一套度量值
+- **交叉视图**（子模块二/四）：以基数维度（Label 或 Super Season）为 x 轴，所选商品维度为图例拆分，统计各交叉维度值占单个柱形（该基数维度值）的占比。两个基数视图的交叉维度集合互异（Label 基数可切 super_season，Super Season 基数可切 label，其余 product_type / ax_class / md_type / division 共用），分母的 `ALLSELECTED` 列集合不同，各自独立输出一套度量值
 
 ### 1.2 行维度与维度切换
 
 | 视觉对象               | 行 / x 轴 / 图例                              | 来源表.字段                                                                                                                                                                            | 切换方式                               |
 | ---------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 主视图表格             | 行：商品维度六选一                            | Slicer_Label[label] / Slicer_Super_Season[super_season] / Slicer_Product_Type[product_type] / Slicer_Category[category] / Slicer_Md_Type[md_type] / Slicer_Division[division]          | 替换视觉对象行区域字段，度量值层无感知 |
-| 交叉柱形图（子模块二） | x 轴：Label 固定；图例：交叉维度五选一        | x 轴 Slicer_Label[label]；图例 Slicer_Super_Season[super_season] / Slicer_Product_Type[product_type] / Slicer_Category[category] / Slicer_Md_Type[md_type] / Slicer_Division[division] | 图例字段替换                           |
-| 交叉柱形图（子模块四） | x 轴：Product Type 固定；图例：交叉维度五选一 | x 轴 Slicer_Product_Type[product_type]；图例 Slicer_Label[label] / Slicer_Super_Season[super_season] / Slicer_Category[category] / Slicer_Md_Type[md_type] / Slicer_Division[division] | 图例字段替换                           |
+| 主视图表格             | 行：商品维度六选一                            | Slicer_Label[label] / Slicer_Super_Season[super_season] / Slicer_Product_Type[product_type] / Slicer_AX_Class[ax_class] / Slicer_Md_Type[md_type] / Slicer_Division[division]          | 替换视觉对象行区域字段，度量值层无感知 |
+| 交叉柱形图（子模块二） | x 轴：Label 固定；图例：交叉维度五选一        | x 轴 Slicer_Label[label]；图例 Slicer_Super_Season[super_season] / Slicer_Product_Type[product_type] / Slicer_AX_Class[ax_class] / Slicer_Md_Type[md_type] / Slicer_Division[division] | 图例字段替换                           |
+| 交叉柱形图（子模块四） | x 轴：Super Season 固定；图例：交叉维度五选一 | x 轴 Slicer_Super_Season[super_season]；图例 Slicer_Label[label] / Slicer_Product_Type[product_type] / Slicer_AX_Class[ax_class] / Slicer_Md_Type[md_type] / Slicer_Division[division] | 图例字段替换                           |
 
 - **行字段全部取自 Slicer_ 维度表**（非事实表字段）：Slicer_ 维度表与两张事实表均为一对多关联，行维度筛选经模型关系自动传导到 sales 与 inv 两表，库存类指标无需 TREATAS 桥接
 - **Slicer_Label[label] 与事实表 [brand] 关联**：Label 维度值域取自 sales 表 `brand` 字段的 distinct 值（口径中的 "Label / Brand" 维度即 brand 字段，数据字典已由 label 统一更新为 brand）
@@ -95,9 +95,9 @@
 
 ## 2. 现状分析
 
-- 数据底表 `a02_e2e_product_performance_sales_summary_d`（日粒度汇总）：net_sales_amt（净销售金额）、net_sales_qty（净销售数量）、md_net_sales_amt（折扣价净销售金额）、msrp_net_sales_amt（吊牌价净销售金额）；维度含 platform、shop_name 及 brand / super_season / product_type / category / md_type / division 等全部商品维度；日期字段为 data_date（date 类型）；platform 已在数据源层过滤 IN ('JD','TM','RLE','DY')
+- 数据底表 `a02_e2e_product_performance_sales_summary_d`（日粒度汇总）：net_sales_amt（净销售金额）、net_sales_qty（净销售数量）、md_net_sales_amt（折扣价净销售金额）、msrp_net_sales_amt（吊牌价净销售金额）；维度含 platform、shop_name 及 brand / super_season / product_type / ax_class / md_type / division 等全部商品维度；日期字段为 data_date（date 类型）；platform 已在数据源层过滤 IN ('JD','TM','RLE','DY')
 - 数据底表 `a02_e2e_product_performance_inv_summary_d`（日快照）：msrp_inv_amt（库存吊牌价金额，期末库存金额口径）、inv_qty（库存数量，期末库存数量口径）；商品维度字段与 sales 表同名同构；**无 platform / shop_name 字段**（渠道筛选不影响库存侧指标）；日期字段为 data_date（date 类型）
-- 模型关系：Slicer_Label（值域 = sales 表 brand distinct，label 字段）/ Slicer_Super_Season / Slicer_Product_Type / Slicer_Category / Slicer_Md_Type / Slicer_Division 等商品维度切片器与两张事实表均一对多关联，筛选自动传递双表；Slicer_Platform_Selection、Slicer_Store_Name 与 sales 表一对多关联；日期筛选器（Min_This / Max_This / Min_Last / Max_Last）为断开维度，时间范围在 DAX 中显式筛选；Slicer_Currency_Selection 为断开维度
+- 模型关系：Slicer_Label（值域 = sales 表 brand distinct，label 字段）/ Slicer_Super_Season / Slicer_Product_Type / Slicer_AX_Class / Slicer_Md_Type / Slicer_Division 等商品维度切片器与两张事实表均一对多关联，筛选自动传递双表；Slicer_Platform_Selection、Slicer_Store_Name 与 sales 表一对多关联；日期筛选器（Min_This / Max_This / Min_Last / Max_Last）为断开维度，时间范围在 DAX 中显式筛选；Slicer_Currency_Selection 为断开维度
 - Slicer_Time_Frame_Max_This 含 Fiscal_Year_First_Day 字段（按 TimeFrame_Min 落入的财年区间自关联财年日历生成），YTD 区间起点直接读取
 - 字段名已逐一核对数据字典（含 md_net_sales_amt / msrp_net_sales_amt / msrp_inv_amt / inv_qty 等）
 
@@ -126,22 +126,24 @@ Display（格式化显示）
 ←  BLANK 统一显示 "-"
 ```
 
-### 3.2 主视图占比分母机制（ALLSELECTED 六维度）
+### 3.2 主视图占比分母机制（ALLSELECTED 六维度表整表）
 
 口径「单品类占总品类的比例」的分母 = 外部筛选上下文下的全量合计：
 
-- 分母对六个商品维度表字段同时应用 `ALLSELECTED`：行维度当前字段（六选一）的视觉对象内部行筛选被移除，恢复为外部切片器筛选状态；其余五个未上行字段的 ALLSELECTED 为无操作（其上仅有外部切片器筛选，保留不变）
+- 分母对六个商品维度表**整表**同时应用 `ALLSELECTED`：行维度当前维度表（六选一）的视觉对象内部行筛选被移除，恢复为外部切片器筛选状态；其余五个未上行维度表的 ALLSELECTED 为无操作（其上仅有外部切片器筛选，保留不变）
 - ALLSELECTED 与 REMOVEFILTERS 的差异是本方案的关键：REMOVEFILTERS 会移除该列全部筛选（含外部切片器），导致分母脱离业务筛选条件；ALLSELECTED 仅移除视觉对象内部的行 / 图例筛选，保留外部切片器筛选，分母始终是「外部筛选下」的全量合计
-- 行字段从 Slicer_ 维度表拉取，行筛选直接落在维度表字段上，ALLSELECTED 作用于维度表字段即可正确移除；移除后经一对多关系向双事实表正向传导，分母聚合范围自动恢复全量（外部筛选下）
+- 行字段从 Slicer_ 维度表拉取，行筛选直接落在维度表字段上，ALLSELECTED 作用于维度表整表即可正确移除；移除后经一对多关系向双事实表正向传导，分母聚合范围自动恢复全量（外部筛选下）
+- **必须整表移除而不能只移除值列**：值列配置「按列排序」后，视觉对象查询经 auto-existence（同表共存）把排序列隐式并入 GroupBy 并合并为表粒度组合筛选（绑定发生在查询生成阶段）；只移除值列时排序列筛选独自存活——排序键与业务值 1:1（Sort 表内唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，分母与分子聚合范围重合，占比恒 100%（1:1 的指纹；Sort 不唯一则占比异常但非恒 100%）。整表移除同时清掉值列与排序列筛选，分母恢复外部筛选下的全量
 
-### 3.3 交叉视图占比分母机制（基数保留 + 交叉移除）
+### 3.3 交叉视图占比分母机制（基数保留 + 交叉移除整表移除）
 
 口径「以 Label / Product Type 为基数，看所选商品维度在该基数的占比」的分母 = 该基数维度值内合计：
 
-- 实现为：分母仅对**五个交叉维度表字段**应用 ALLSELECTED（移除视觉对象内部的图例维度筛选——图例必为五者之一，其余为无操作），x 轴基数维度（Slicer_Label[label] 或 Slicer_Product_Type[product_type]）的筛选不被触及，分母自然限定在当前柱形的基数维度值内；外部切片器筛选同样保留
+- 实现为：分母仅对**五个交叉维度表整表**应用 ALLSELECTED（移除视觉对象内部的图例维度筛选——图例必为五者之一，其余为无操作），x 轴基数维度（Slicer_Label[label] 或 Slicer_Product_Type[product_type]）的筛选不被触及，分母自然限定在当前柱形的基数维度值内；外部切片器筛选同样保留
 - 该实现与「先移除视觉对象全部字段筛选、保留外部切片器、再重新添加 x 轴当前基数维度值」的思路行为完全等价：基数维度筛选从未被移除，即天然保留当前柱形值，省去移除后重加的显式步骤
-- 子模块二（Label 基数）与子模块四（Product Type 基数）的交叉维度集合互异：Label 基数可切 product_type，Product Type 基数可切 label，二者分母的 ALLSELECTED 列集合不同，无法合并为同一套度量值，各自独立输出
+- 子模块二（Label 基数）与子模块四（Super Season 基数）的交叉维度集合互异：Label 基数可切 super_season，Super Season 基数可切 label，二者分母的 ALLSELECTED 列集合不同，无法合并为同一套度量值，各自独立输出
 - 交叉度量值专用于对应柱形图；柱形图 x 轴无总计柱，无总计分支需求
+- **必须整表移除而不能只移除值列**：同主视图机制（§3.2），按列排序的隐藏筛选传播会导致占比异常
 
 ### 3.4 期末时点与 vs LP
 
@@ -173,10 +175,15 @@ Label & PT Table SLS Amt% Value =
 // 口径: 时间范围看 this period；分子：各维度值下 sum(net_sales_amt)；
 //       分母：sum(net_sales_amt)（占 total 比例）
 // 数据底表: a02_e2e_product_performance_sales_summary_d
-// 分母机制: ALLSELECTED 六个商品维度表字段——移除视觉对象内部的行维度筛选，
-//       保留外部切片器筛选；一次只有一个字段在行上，其余五个字段为无操作，
-//       实现六维度切换一套逻辑通吃；行字段来自维度表，移除后经一对多关系
-//       向事实表正向传导，分母恢复全量（外部筛选下）
+// 分母机制: ALLSELECTED 六个商品维度表【整表】——移除视觉对象内部的行维度筛选，
+//       保留外部切片器筛选；一次只有一个维度表在行上，其余五个维度表整表 ALLSELECTED
+//       为无操作，实现六维度切换一套逻辑通吃；行字段来自维度表，移除后经一对多关系
+//       向事实表正向传导，分母恢复全量（外部筛选下）。必须整表移除而不能只移除值列：
+//       值列配置「按列排序」后，视觉对象查询经 auto-existence（同表共存）把排序列
+//       隐式并入 GroupBy 并合并为表粒度组合筛选（绑定发生在查询生成阶段）；只移除值列时排序列筛选独自存活——排序键与业务值 1:1（Sort 表内唯一），1:1 反推等价于
+//       原值筛选，维度表仍被钉在当前行，分母与分子聚合范围重合，占比恒 100%
+//       （1:1 的指纹；Sort 不唯一则占比异常但非恒 100%）。整表移除同时清掉值列与
+//       排序列筛选，分母恢复外部筛选下的全量
 // 币种: 分子分母为同表同币种金额（底表 CNY），占比不受币种选择影响
 // ========================================
 
@@ -193,16 +200,16 @@ VAR __Numerator =
     )
 
 // ── 分母：外部筛选上下文下的全量 This Period 净销售金额 ──
-// ALLSELECTED 六维度：移除行维度视觉对象内部筛选，保留外部切片器筛选
+// ALLSELECTED 六维度表整表：移除行维度视觉对象内部筛选，保留外部切片器筛选
 VAR __Denominator =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
-        ALLSELECTED('Slicer_Label'[label]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Product_Type'[product_type]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Label'),
+        ALLSELECTED('Slicer_Super_Season'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
@@ -257,16 +264,16 @@ VAR __Numerator =
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LP
     )
 
-// ── 分母：外部筛选上下文下的全量 Last Period 净销售金额（ALLSELECTED 六维度）──
+// ── 分母：外部筛选上下文下的全量 Last Period 净销售金额（ALLSELECTED 六维度表整表）──
 VAR __Denominator =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
-        ALLSELECTED('Slicer_Label'[label]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Product_Type'[product_type]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Label'),
+        ALLSELECTED('Slicer_Super_Season'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LP,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LP
     )
@@ -356,16 +363,16 @@ VAR __Numerator =
         'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate
     )
 
-// ── 分母：外部筛选上下文下的全量期末库存金额（ALLSELECTED 六维度，快照日单日）──
+// ── 分母：外部筛选上下文下的全量期末库存金额（ALLSELECTED 六维度表整表，快照日单日）──
 VAR __Denominator =
     CALCULATE(
         SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
-        ALLSELECTED('Slicer_Label'[label]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Product_Type'[product_type]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Label'),
+        ALLSELECTED('Slicer_Super_Season'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate
     )
 
@@ -422,16 +429,16 @@ VAR __Numerator =
         'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate_LP
     )
 
-// ── 分母：外部筛选上下文下的全量 LP 期末库存金额（ALLSELECTED 六维度）──
+// ── 分母：外部筛选上下文下的全量 LP 期末库存金额（ALLSELECTED 六维度表整表）──
 VAR __Denominator =
     CALCULATE(
         SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
-        ALLSELECTED('Slicer_Label'[label]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Product_Type'[product_type]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Label'),
+        ALLSELECTED('Slicer_Super_Season'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate_LP
     )
 
@@ -756,16 +763,16 @@ VAR __Numerator =
     )
 
 // ── 分母：该 label 内 This Period 净销售金额合计 ──
-// ALLSELECTED 五个交叉维度：移除图例维度视觉对象内部筛选，保留 x 轴 label
+// ALLSELECTED 五个交叉维度表整表：移除图例维度视觉对象内部筛选，保留 x 轴 label
 // 柱形筛选与外部切片器筛选
 VAR __Denominator =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Product_Type'[product_type]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Super_Season'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
@@ -790,7 +797,8 @@ Label & PT Table Cross Label SLS Amt% Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+    // 该行所有度量均为 BLANK() 时，通常会自动隐藏该行（包括层级行），需要所有指标都为 BLANK() 才会自动隐藏该行。
+            BLANK(),
             FORMAT(__Value, "#,##0%")
         )
 ```
@@ -832,11 +840,11 @@ VAR __Numerator =
 VAR __Denominator =
     CALCULATE(
         SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Product_Type'[product_type]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Super_Season'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate
     )
 
@@ -860,39 +868,40 @@ Label & PT Table Cross Label EOH Amt% Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+    // 该行所有度量均为 BLANK() 时，通常会自动隐藏该行（包括层级行），需要所有指标都为 BLANK() 才会自动隐藏该行。
+            BLANK(),
             FORMAT(__Value, "#,##0%")
         )
 ```
 
-### 4.23 Label & PT Table Cross PT SLS Amt% Value（Product Type 基数交叉销售金额占比）
+### 4.23 Label & PT Table Cross PT SLS Amt% Value（Super Season 基数交叉销售金额占比）
 
 ```dax
 Label & PT Table Cross PT SLS Amt% Value =
 // ========================================
 // 度量值: Label & PT Table Cross PT SLS Amt% Value
-// 中文名: Product Type 基数交叉销售金额占比
+// 中文名: Super Season 基数交叉销售金额占比
 // Display Folder: Label & Product Type Inventory Structure\Base Metrics
-// 用途: 以 Product Type 为基数（x 轴），所选交叉维度（图例，含 label）在该
-//       Product Type 内的销售金额占比，专用于子模块四交叉柱形图
-//       （x 轴 = Slicer_Product_Type[product_type]，图例五选一）
+// 用途: 以 Super Season 为基数（x 轴），所选交叉维度（图例，含 label）在该
+//       Super Season 内的销售金额占比，专用于子模块四交叉柱形图
+//       （x 轴 = Slicer_Super_Season[super_season]，图例五选一）
 // 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
 // 口径: 时间范围看 this period；
-//       分子：该 product_type × 交叉维度值下 sum(net_sales_amt)；
-//       分母：该 product_type 下 sum(net_sales_amt)（占单个柱形比例）
+//       分子：该 super_season × 交叉维度值下 sum(net_sales_amt)；
+//       分母：该 super_season 下 sum(net_sales_amt)（占单个柱形比例）
 // 数据底表: a02_e2e_product_performance_sales_summary_d
-// 分母机制: ALLSELECTED 五个交叉维度字段（label / super_season / category /
+// 分母机制: ALLSELECTED 五个交叉维度表整表（label / product_type / ax_class /
 //       md_type / division，含 label——Label 基数视图不可切的维度在此可切），
-//       移除图例维度视觉对象内部筛选，保留 x 轴 product_type 柱形筛选与
+//       移除图例维度视觉对象内部筛选，保留 x 轴 super_season 柱形筛选与
 //       外部切片器筛选；与 Cross Label 视图的 ALLSELECTED 列集合互异
-//      （product_type 与 label 互换位置），故独立成套
+//      （super_season 与 label 互换位置），故独立成套
 // ========================================
 
 // ── This Period 时间区间 ──
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 分子：该 product_type × 交叉维度值 This Period 净销售金额 ──
+// ── 分子：该 super_season × 交叉维度值 This Period 净销售金额 ──
 VAR __Numerator =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
@@ -900,15 +909,15 @@ VAR __Numerator =
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
 
-// ── 分母：该 product_type 内 This Period 净销售金额合计 ──
+// ── 分母：该 super_season 内 This Period 净销售金额合计 ──
 VAR __Denominator =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
-        ALLSELECTED('Slicer_Label'[label]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Label'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
@@ -917,13 +926,13 @@ RETURN
     DIVIDE(__Numerator, __Denominator)
 ```
 
-### 4.24 Label & PT Table Cross PT SLS Amt% Display（Product Type 基数交叉销售金额占比显示）
+### 4.24 Label & PT Table Cross PT SLS Amt% Display（Super Season 基数交叉销售金额占比显示）
 
 ```dax
 Label & PT Table Cross PT SLS Amt% Display =
 // ========================================
 // 度量值: Label & PT Table Cross PT SLS Amt% Display
-// 中文名: Product Type 基数交叉销售金额占比显示
+// 中文名: Super Season 基数交叉销售金额占比显示
 // Display Folder: Label & Product Type Inventory Structure\Formatting
 // 用途: percent_0dp 格式化（百分比整数，不含正号）；BLANK 显示 "-"
 // 依赖: [Label & PT Table Cross PT SLS Amt% Value]
@@ -933,28 +942,29 @@ Label & PT Table Cross PT SLS Amt% Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+    // 该行所有度量均为 BLANK() 时，通常会自动隐藏该行（包括层级行），需要所有指标都为 BLANK() 才会自动隐藏该行。
+            BLANK(),
             FORMAT(__Value, "#,##0%")
         )
 ```
 
-### 4.25 Label & PT Table Cross PT EOH Amt% Value（Product Type 基数交叉期末库存金额占比）
+### 4.25 Label & PT Table Cross PT EOH Amt% Value（Super Season 基数交叉期末库存金额占比）
 
 ```dax
 Label & PT Table Cross PT EOH Amt% Value =
 // ========================================
 // 度量值: Label & PT Table Cross PT EOH Amt% Value
-// 中文名: Product Type 基数交叉期末库存金额占比
+// 中文名: Super Season 基数交叉期末库存金额占比
 // Display Folder: Label & Product Type Inventory Structure\Base Metrics
-// 用途: 以 Product Type 为基数，所选交叉维度（图例，含 label）在该 Product Type
+// 用途: 以 Super Season 为基数，所选交叉维度（图例，含 label）在该 Super Season
 //       内的期末库存金额占比（快照日时点），专用于子模块四交叉柱形图
 // 依赖: Slicer_Time_Frame_Max_This[TimeFrame_Min] / [TimeFrame_Max]
 // 口径: 时间范围看 this period 最后一天（end period 范围内最后一个快照日）；
-//       分子：该 product_type × 交叉维度值下 sum(msrp_inv_amt)；
-//       分母：该 product_type 下 sum(msrp_inv_amt)
+//       分子：该 super_season × 交叉维度值下 sum(msrp_inv_amt)；
+//       分母：该 super_season 下 sum(msrp_inv_amt)
 // 数据底表: a02_e2e_product_performance_inv_summary_d
 // 分母机制: 同 Cross PT SLS Amt%（ALLSELECTED 五交叉维度含 label，
-//       保留 product_type 柱形筛选）；inv 表无渠道字段，不受渠道筛选影响
+//       保留 super_season 柱形筛选）；inv 表无渠道字段，不受渠道筛选影响
 // ========================================
 
 // ── End Period 时间范围（期末时点类）──
@@ -964,22 +974,22 @@ VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 分子：该 product_type × 交叉维度值期末库存金额（快照日单日值）──
+// ── 分子：该 super_season × 交叉维度值期末库存金额（快照日单日值）──
 VAR __Numerator =
     CALCULATE(
         SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
         'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate
     )
 
-// ── 分母：该 product_type 内期末库存金额合计（快照日单日值）──
+// ── 分母：该 super_season 内期末库存金额合计（快照日单日值）──
 VAR __Denominator =
     CALCULATE(
         SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
-        ALLSELECTED('Slicer_Label'[label]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Label'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate
     )
 
@@ -987,13 +997,13 @@ RETURN
     DIVIDE(__Numerator, __Denominator)
 ```
 
-### 4.26 Label & PT Table Cross PT EOH Amt% Display（Product Type 基数交叉期末库存金额占比显示）
+### 4.26 Label & PT Table Cross PT EOH Amt% Display（Super Season 基数交叉期末库存金额占比显示）
 
 ```dax
 Label & PT Table Cross PT EOH Amt% Display =
 // ========================================
 // 度量值: Label & PT Table Cross PT EOH Amt% Display
-// 中文名: Product Type 基数交叉期末库存金额占比显示
+// 中文名: Super Season 基数交叉期末库存金额占比显示
 // Display Folder: Label & Product Type Inventory Structure\Formatting
 // 用途: percent_0dp 格式化（百分比整数，不含正号）；BLANK 显示 "-"
 // 依赖: [Label & PT Table Cross PT EOH Amt% Value]
@@ -1003,7 +1013,8 @@ Label & PT Table Cross PT EOH Amt% Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+    // 该行所有度量均为 BLANK() 时，通常会自动隐藏该行（包括层级行），需要所有指标都为 BLANK() 才会自动隐藏该行。
+            BLANK(),
             FORMAT(__Value, "#,##0%")
         )
 ```
@@ -1130,19 +1141,19 @@ Label & PT Table Cross Label EOH Amt Display =
         )
 ```
 
-### 4.31 Label & PT Table Cross PT SLS Amt Value（Product Type 基数交叉净销售金额，金额附属）
+### 4.31 Label & PT Table Cross PT SLS Amt Value（Super Season 基数交叉净销售金额，金额附属）
 
 ```dax
 Label & PT Table Cross PT SLS Amt Value =
 // ========================================
 // 度量值: Label & PT Table Cross PT SLS Amt Value
-// 中文名: Product Type 基数交叉净销售金额（金额附属，当前币种）
+// 中文名: Super Season 基数交叉净销售金额（金额附属，当前币种）
 // Display Folder: Label & Product Type Inventory Structure\Base Metrics
-// 用途: SLS Amt%（§15）的金额类附属指标——该 product_type × 交叉维度值下
+// 用途: SLS Amt%（§15）的金额类附属指标——该 super_season × 交叉维度值下
 //       This Period 净销售金额绝对值（与占比分子同维度同时间口径），度量值备用
 // 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
 //       Slicer_Currency_Selection[Currency_ExchangeRate]
-// 口径: 时间范围看 this period；该 product_type × 交叉维度下 sum(net_sales_amt)
+// 口径: 时间范围看 this period；该 super_season × 交叉维度下 sum(net_sales_amt)
 // 数据底表: a02_e2e_product_performance_sales_summary_d
 // 币种: 数据底表仅存 CNY，Value 层换算为当前币种金额（原始值 ÷ 汇率）；
 //       RMB 汇率 = 1 时换算前后值相同
@@ -1155,7 +1166,7 @@ VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 币种汇率（RMB = 1；USD 动态取自数仓汇率表）──
 VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
-// ── 该 product_type × 交叉维度值 This Period 净销售金额（原始 CNY）──
+// ── 该 super_season × 交叉维度值 This Period 净销售金额（原始 CNY）──
 VAR __BaseValue =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
@@ -1167,13 +1178,13 @@ RETURN
     DIVIDE(__BaseValue, __ExchangeRate)   // BLANK ÷ 汇率 = BLANK（当期无销售数据返回空）
 ```
 
-### 4.32 Label & PT Table Cross PT SLS Amt Display（Product Type 基数交叉净销售金额显示）
+### 4.32 Label & PT Table Cross PT SLS Amt Display（Super Season 基数交叉净销售金额显示）
 
 ```dax
 Label & PT Table Cross PT SLS Amt Display =
 // ========================================
 // 度量值: Label & PT Table Cross PT SLS Amt Display
-// 中文名: Product Type 基数交叉净销售金额显示
+// 中文名: Super Season 基数交叉净销售金额显示
 // Display Folder: Label & Product Type Inventory Structure\Formatting
 // 用途: currency 格式化（币种符号 + 千分位整数，符号由币种切片器决定）；BLANK 显示 "-"
 // 依赖: [Label & PT Table Cross PT SLS Amt Value], Slicer_Currency_Selection[Currency_Symbol]
@@ -1184,25 +1195,26 @@ Label & PT Table Cross PT SLS Amt Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+    // 该行所有度量均为 BLANK() 时，通常会自动隐藏该行（包括层级行），需要所有指标都为 BLANK() 才会自动隐藏该行。
+            BLANK(),
             __CurrencySymbol & FORMAT(__Value, "#,##0")
         )
 ```
 
-### 4.33 Label & PT Table Cross PT EOH Amt Value（Product Type 基数交叉期末库存金额，金额附属）
+### 4.33 Label & PT Table Cross PT EOH Amt Value（Super Season 基数交叉期末库存金额，金额附属）
 
 ```dax
 Label & PT Table Cross PT EOH Amt Value =
 // ========================================
 // 度量值: Label & PT Table Cross PT EOH Amt Value
-// 中文名: Product Type 基数交叉期末库存金额（金额附属，当前币种）
+// 中文名: Super Season 基数交叉期末库存金额（金额附属，当前币种）
 // Display Folder: Label & Product Type Inventory Structure\Base Metrics
-// 用途: EOH Amt%（§16）的金额类附属指标——该 product_type × 交叉维度值下
+// 用途: EOH Amt%（§16）的金额类附属指标——该 super_season × 交叉维度值下
 //       期末库存金额绝对值（快照日单日时点，与占比分子同维度同时间口径），度量值备用
 // 依赖: Slicer_Time_Frame_Max_This[TimeFrame_Min] / [TimeFrame_Max]
 //       Slicer_Currency_Selection[Currency_ExchangeRate]
 // 口径: 时间范围看 this period 最后一天（end period 范围内最后一个快照日）；
-//       该 product_type × 交叉维度下 sum(msrp_inv_amt)
+//       该 super_season × 交叉维度下 sum(msrp_inv_amt)
 // 数据底表: a02_e2e_product_performance_inv_summary_d
 // 币种: 数据底表仅存 CNY，Value 层换算为当前币种金额（原始值 ÷ 汇率）
 // 说明: inv 表无 platform / shop_name 字段，本指标不受渠道筛选影响
@@ -1218,7 +1230,7 @@ VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 币种汇率（RMB = 1；USD 动态取自数仓汇率表）──
 VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
 
-// ── 该 product_type × 交叉维度值期末库存金额（原始 CNY，快照日单日值）──
+// ── 该 super_season × 交叉维度值期末库存金额（原始 CNY，快照日单日值）──
 VAR __BaseValue =
     CALCULATE(
         SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
@@ -1229,13 +1241,13 @@ RETURN
     DIVIDE(__BaseValue, __ExchangeRate)   // BLANK ÷ 汇率 = BLANK（快照日无库存数据返回空）
 ```
 
-### 4.34 Label & PT Table Cross PT EOH Amt Display（Product Type 基数交叉期末库存金额显示）
+### 4.34 Label & PT Table Cross PT EOH Amt Display（Super Season 基数交叉期末库存金额显示）
 
 ```dax
 Label & PT Table Cross PT EOH Amt Display =
 // ========================================
 // 度量值: Label & PT Table Cross PT EOH Amt Display
-// 中文名: Product Type 基数交叉期末库存金额显示
+// 中文名: Super Season 基数交叉期末库存金额显示
 // Display Folder: Label & Product Type Inventory Structure\Formatting
 // 用途: currency 格式化（币种符号 + 千分位整数，符号由币种切片器决定）；BLANK 显示 "-"
 // 依赖: [Label & PT Table Cross PT EOH Amt Value], Slicer_Currency_Selection[Currency_Symbol]
@@ -1246,7 +1258,8 @@ Label & PT Table Cross PT EOH Amt Display =
     RETURN
         IF(
             ISBLANK(__Value),
-            "-",
+    // 该行所有度量均为 BLANK() 时，通常会自动隐藏该行（包括层级行），需要所有指标都为 BLANK() 才会自动隐藏该行。
+            BLANK(),
             __CurrencySymbol & FORMAT(__Value, "#,##0")
         )
 ```
@@ -1348,12 +1361,12 @@ PT & Product Dimensions Cross IsEmpty =
 | 10 | Label & PT Table MD Value / Display                   | percent_0dp           | 主视图表格                            |
 | 11 | Label & PT Table Cross Label SLS Amt% Value / Display | percent_0dp           | 交叉柱形图（Label 基数）              |
 | 12 | Label & PT Table Cross Label EOH Amt% Value / Display | percent_0dp           | 交叉柱形图（Label 基数）              |
-| 13 | Label & PT Table Cross PT SLS Amt% Value / Display    | percent_0dp           | 交叉柱形图（Product Type 基数）       |
-| 14 | Label & PT Table Cross PT EOH Amt% Value / Display    | percent_0dp           | 交叉柱形图（Product Type 基数）       |
+| 13 | Label & PT Table Cross PT SLS Amt% Value / Display    | percent_0dp           | 交叉柱形图（Super Season 基数）       |
+| 14 | Label & PT Table Cross PT EOH Amt% Value / Display    | percent_0dp           | 交叉柱形图（Super Season 基数）       |
 | 15 | Label & PT Table Cross Label SLS Amt Value / Display  | currency（金额附属）  | 交叉柱形图（Label 基数），备用        |
 | 16 | Label & PT Table Cross Label EOH Amt Value / Display  | currency（金额附属）  | 交叉柱形图（Label 基数），备用        |
-| 17 | Label & PT Table Cross PT SLS Amt Value / Display     | currency（金额附属）  | 交叉柱形图（Product Type 基数），备用 |
-| 18 | Label & PT Table Cross PT EOH Amt Value / Display     | currency（金额附属）  | 交叉柱形图（Product Type 基数），备用 |
+| 17 | Label & PT Table Cross PT SLS Amt Value / Display     | currency（金额附属）  | 交叉柱形图（Super Season 基数），备用 |
+| 18 | Label & PT Table Cross PT EOH Amt Value / Display     | currency（金额附属）  | 交叉柱形图（Super Season 基数），备用 |
 
 - 全部度量值存放于 `_Measures` 隐藏表；Display Folder：`Label & Product Type Inventory Structure\Base Metrics`（Value 层）与 `Label & Product Type Inventory Structure\Formatting`（Display 层）
 
@@ -1378,19 +1391,19 @@ PT & Product Dimensions Cross IsEmpty =
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 视觉对象类型 | 簇状柱形图（堆叠 / 簇状按版面需要选择）                                                                                                                                 |
 | X 轴         | Slicer_Label[label]                                                                                                                                                     |
-| 图例         | 交叉维度五选一：Slicer_Super_Season[super_season] / Slicer_Product_Type[product_type] / Slicer_Category[category] / Slicer_Md_Type[md_type] / Slicer_Division[division] |
+| 图例         | 交叉维度五选一：Slicer_Super_Season[super_season] / Slicer_Product_Type[product_type] / Slicer_AX_Class[ax_class] / Slicer_Md_Type[md_type] / Slicer_Division[division] |
 | Y 轴         | Cross Label SLS Amt% Display（销售金额占比，This Period 区间）                                                                                                          |
 | 建议         | EOH Amt%（快照日时点）另置一个柱形图，Y 轴 = Cross Label EOH Amt% Display；两个指标时间口径不同（区间 vs 快照日），分图呈现避免误读                                     |
 
 > 金额附属：Cross Label SLS Amt / Cross Label EOH Amt（Value / Display）已输出备用，具体绑定（tooltip / 数据标签 / 轴切换）由后续视觉对象配置决定
 
-### 6.3 交叉柱形图（子模块四，Product Type 基数）
+### 6.3 交叉柱形图（子模块四，Super Season 基数）
 
 | 配置项       | 内容                                                                                                                                                      |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 视觉对象类型 | 簇状柱形图（同上）                                                                                                                                        |
-| X 轴         | Slicer_Product_Type[product_type]                                                                                                                         |
-| 图例         | 交叉维度五选一：Slicer_Label[label] / Slicer_Super_Season[super_season] / Slicer_Category[category] / Slicer_Md_Type[md_type] / Slicer_Division[division] |
+| X 轴         | Slicer_Super_Season[super_season]                                                                                                                         |
+| 图例         | 交叉维度五选一：Slicer_Label[label] / Slicer_Product_Type[product_type] / Slicer_AX_Class[ax_class] / Slicer_Md_Type[md_type] / Slicer_Division[division] |
 | Y 轴         | Cross PT SLS Amt% Display；EOH Amt% 另置柱形图 = Cross PT EOH Amt% Display                                                                                |
 
 > 金额附属：Cross PT SLS Amt / Cross PT EOH Amt（Value / Display）已输出备用，具体绑定（tooltip / 数据标签 / 轴切换）由后续视觉对象配置决定
@@ -1471,7 +1484,7 @@ FROM (
 )
 ```
 
-- 窗口 `PARTITION BY label` 对应「占单个柱形」分母；子模块四验证时将分区键换为 product_type、行维度组合对应替换
+- 窗口 `PARTITION BY label` 对应「占单个柱形」分母；子模块四验证时将分区键换为 super_season、行维度组合对应替换
 
 ### 7.4 YTD ST%（行维度 = label 示例，跨双表）
 
@@ -1522,7 +1535,7 @@ WHERE data_date >= '2025-06-29' AND data_date <= '2025-07-05'
 GROUP BY brand, product_type
 ```
 
-- 金额附属与对应占比主指标的分子同维度同时间口径：SLS Amt 为 This Period 区间聚合（上例为 x 轴 label × 图例 product_type）；EOH Amt 为快照日单日聚合（同 7.2 取快照日后，GROUP BY 键为基数维度 + 交叉维度）；子模块四验证时将聚合键中的 brand 换为 product_type、交叉维度对应替换
+- 金额附属与对应占比主指标的分子同维度同时间口径：SLS Amt 为 This Period 区间聚合（上例为 x 轴 label × 图例 product_type）；EOH Amt 为快照日单日聚合（同 7.2 取快照日后，GROUP BY 键为基数维度 + 交叉维度）；子模块四验证时将聚合键中的 brand 换为 super_season、交叉维度对应替换
 - 币种对齐：SQL 结果为原始 CNY 值，Power BI 模型值 = 原始值 ÷ 当前 Currency_ExchangeRate（RMB 汇率 = 1 时直接对比）
 
 ---
@@ -1533,7 +1546,7 @@ GROUP BY brand, product_type
 2. **期末时点口径**：end period 范围 [Max_This[TimeFrame_Min], Max_This[TimeFrame_Max]] 内最后一个有数据的快照日，快照缺数时自动回退到范围内最近一天；快照表按日存储只取单日，对整段区间求和会把库存重复计数；LP 侧同法取 Max_Last 表范围
 3. **YTD ST% 跨双表口径**：分子（sales）为财年第一天至今的区间汇总，分母（inv）为快照日单日值，两者时间口径不同不可混用；YTD 起点 Fiscal_Year_First_Day 为 TimeFrame_Min 落入财年的第一天，财年型时间选项内 TimeFrame_Min 与 TimeFrame_Max 同属一个财年，与口径「end period 所在财年」等价
 4. **Last Period 读取方式**：直接读 Min_Last / Max_Last 筛选器的 TimeFrame_Min / TimeFrame_Max（非 _LY / _LP 字段对称映射），依赖模型中 Last 表与主时间筛选器的既有关系配置
-5. **ALLSELECTED 六维度机制**：行维度六选一，其余五个未上行字段的 ALLSELECTED 为无操作；ALLSELECTED 仅移除视觉对象内部筛选、保留外部切片器筛选，与 REMOVEFILTERS（连外部筛选一并移除）的语义差异是分母正确性的关键
+5. **ALLSELECTED 六维度表整表机制**：行维度六选一，其余五个未上行维度表的 ALLSELECTED 为无操作；ALLSELECTED 仅移除视觉对象内部筛选、保留外部切片器筛选，与 REMOVEFILTERS（连外部筛选一并移除）的语义差异是分母正确性的关键。**必须整表移除而不能只移除值列**：值列配置「按列排序」后，视觉对象查询经 auto-existence（同表共存）把排序列隐式并入 GroupBy 并合并为表粒度组合筛选；只移除值列时排序列筛选独自存活，排序键与业务值 1:1（Sort 表内唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，分母与分子聚合范围重合 → 占比恒 100%（1:1 的指纹；Sort 不唯一则占比异常但非恒 100%）
 6. **行字段必须从 Slicer_ 维度表拉取**：行筛选直接落在维度表字段上，ALLSELECTED(维度表字段) 才能正确移除；若误用事实表字段（如 sales[brand]）作行字段，维度表字段上无视觉对象内部筛选，ALLSELECTED 为无效操作，事实表字段的行筛选不被移除，占比恒 100%
 7. **交叉视图度量值专用性**：Cross Label / Cross PT 度量值分别绑定对应柱形图（x 轴基数维度筛选是分母机制的组成部分）；在无基数维度筛选的上下文中复用时，分母退化为全量占比（等同主视图口径），勿跨视觉对象混用
 8. **MD 空值保护**：吊牌金额（msrp_net_sales_amt）空或 0 时返回 BLANK（显示 "-"），避免 1 − BLANK() = 1（即 100% 折扣）失真
