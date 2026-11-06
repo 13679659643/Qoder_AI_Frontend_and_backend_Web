@@ -17,20 +17,49 @@ FROM (
     LEFT JOIN (
         SELECT 
             size,
-            size_category,
             MIN(rank) AS size_rank
         FROM " & DIM & ".dim_t00_size_category_mapping
-        GROUP BY size, size_category
+        GROUP BY size
     ) B_min
       ON A.sku_size = B_min.size
-     AND A.sku_size_category = B_min.size_category
     WHERE 1=1
       AND A.sku_size IS NOT NULL
       AND TRIM(A.sku_size) <> ''
       AND A.data_type = 'sku'
 ) t
 WHERE t.size_rank IS NOT NULL
-ORDER BY category_sort * 1000000 + COALESCE(size_rank, 0) ASC
+ORDER BY t.category_sort * 1000000 + COALESCE(t.size_rank, 0) ASC
 ;")
 in
     源
+
+
+
+SELECT 
+    sku_size_category AS Inventory_sku_size_category,
+    sku_size AS Inventory_sku_size,
+    size_rank,
+    category_sort,
+    category_sort * 1000000 + COALESCE(size_rank, 0) AS global_sort_key
+FROM (
+    SELECT DISTINCT 
+        A.sku_size_category,
+        A.sku_size,
+        B_min.size_rank,
+        DENSE_RANK() OVER (ORDER BY A.sku_size_category ASC) AS category_sort
+    FROM indep_rl_dw.s02_inventory_stock_sales_detail_result_d A
+    LEFT JOIN (
+        SELECT 
+            size,
+            MIN(rank) AS size_rank
+        FROM indep_rl_dim.dim_t00_size_category_mapping
+        GROUP BY size
+    ) B_min
+      ON A.sku_size = B_min.size
+    WHERE 1=1
+      AND A.sku_size IS NOT NULL
+      AND TRIM(A.sku_size) <> ''
+      AND A.data_type = 'sku'
+) t
+WHERE t.size_rank IS NOT NULL
+ORDER BY t.category_sort * 1000000 + COALESCE(t.size_rank, 0) ASC

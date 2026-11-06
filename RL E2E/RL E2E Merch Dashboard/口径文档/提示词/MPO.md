@@ -112,3 +112,13 @@ D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Da
 我有一个切片器A，用的是Slicer_Time_Frame_Sales_Trend[TimeFrame_Value],受到按钮切片器B Slicer_Time_Frame_Sales_Trend[TimeFrame_ID]的影响，时间粒度只有Week、Month、Year。
 全局区间框定机制，也需要对这个切片器影响，框定其中的值，特殊情况，比如，我的切片器时间粒度是Month，但全局筛选器的时间粒度是day，选择的范围是2027-03-28到2027-04-04，虽然不是整月，但我的切片器A的字段值应该需要包括：2027-03、2027-04，Week、Year粒度也是一样。
 不懂就问。
+
+# MPO第七轮提示词:
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales & Inventory Penetration Trend\Sales_&_Inventory_Table.md
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Merchandise Performance Overview\Sales & Inventory Penetration Trend\Sales_&_Inventory_Trend.md
+修改上述两个文件，符合以下需求就更改不符合就不变。
+字段替换：所有 category 字段引用 → ax_class（度量名称保持不变），涉及到category字段的都改为ax_class字段,但度量名称不要变化，因为我已经在Powerbi中使用的该度量，度量名称变化，我就需要重新配置页面很麻烦，只改里面的度量逻辑就行，注意'Slicer_Category'[category]这里使用的是维度表，相应的ax_class也需要使用Slicer_AX_Class维度表中的值；
+描述文字：所有涉及 category 的描述、注释、注意事项同步更新；
+此外，涉及ALLSELECTED的必须移除整个维度表，因为Power BI 中“按列排序（Sort by Column）”功能的隐藏筛选传播，参考以下说法，提炼总结为注释信息标注在dax中：
+* “强绑定”的引擎术语是 auto-existence（同表共存）：md_type 一旦配置按列排序，视觉对象查询的 GroupBy 就不只是 Slicer_Md_Type[md_type] 一列，Slicer_Md_Type[_Sort] 被隐式带入；同表两列共存于查询时引擎将其合并为表粒度的组合筛选。这就是“为了后台执行排序，同时对两列施加筛选上下文”的底层实现——绑定发生在查询生成阶段，不是计算阶段。
+* 为什么存活的 _Sort 一个筛选就足够钉死分母：因为排序键与业务值是 1:1 对应（sort-by-column 的配置前提就是 Sort 在表内唯一）。删掉 mdtype 筛选后，Sort=Y 独自存活，但 1:1 反推回去等价于 mdtype=X——维度表仍被钉在当前行那一行，经一对多关系向事实表传导，分母与分子的聚合范围完全重合。若 Sort 不唯一（多行共享一个排序值），钉死就只是部分的，现象会变成“占比异常但不是恒 100%”——恒 100% 正是 1:1 的指纹。

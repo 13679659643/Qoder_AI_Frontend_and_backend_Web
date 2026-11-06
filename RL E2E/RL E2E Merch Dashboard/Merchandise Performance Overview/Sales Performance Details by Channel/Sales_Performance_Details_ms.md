@@ -1,6 +1,6 @@
 # Sales Performance Details by Channel 矩阵解决方案
 
-> **版本**: v1.1（期末时点口径调整：end period 最后一天直接取 Slicer_Time_Frame_Max_This 表 TimeFrame_Max 单日过滤，移除「范围内最后一个有数据的快照日」回退模式）
+> **版本**: v1.2（商品维度 category → ax_class 字段替换（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §4.1 / 注意事项 5）。v1.1（期末时点口径调整：end period 最后一天直接取 Slicer_Time_Frame_Max_This 表 TimeFrame_Max 单日过滤，移除「范围内最后一个有数据的快照日」回退模式）
 > **模块**: RL E2E Merch Dashboard - Merchandise Performance Overview Tab - Sales Performance Details by Channel
 > **关联口径**: 口径文档/口径Markdown格式/Merchandise Performance Overview.md - 子模块六：Sales Performance Details by Channel（§33-§41）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
@@ -21,7 +21,7 @@ Sales Performance Details by Channel 是按渠道展开的销售明细矩阵：
   - TTL 列组合：SLS Unit、SLS Amt、vs LP、SLS Amt%、LTD ST%、EOH Unit、AUR、MD
   - 非 TTL 列组合：SLS Unit、SLS Amt、vs LP、Vert. Amt%、Horiz. Amt%、AUR、MD
   - MD（本次新增，12 列每组末位）：1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)，percent_0dp；口径来源为业务新增指令（原口径文档 §33-§41 未含 MD）
-- **行**：商品维度字段六选一拉到矩阵（`brand` / `super_season` / `product_type` / `category` / `md_type` / `division`，均取自 sales 表）
+- **行**：商品维度字段六选一拉到矩阵（`brand` / `super_season` / `product_type` / `ax_class` / `md_type` / `division`，均取自 sales 表）
 
 ### 1.2 路由维度
 
@@ -42,7 +42,7 @@ Sales Performance Details by Channel 是按渠道展开的销售明细矩阵：
 
 **TTL 特殊处理**：度量值中对 [platform] / [shop_name] 应用 ALLSELECTED——移除视觉对象内部的渠道筛选，保留外部切片器（Slicer_Platform_Selection / Slicer_Store_Name 等）的筛选，即 TTL = 外部筛选上下文下的全渠道合计。
 
-**占比分母类别总计**：分母需要移除视觉对象内部的行维度筛选、保留外部切片器。由于行维度六字段一次只用一个，度量值中同时 ALLSELECTED 这六个字段（其余未上行的字段 ALLSELECTED 为无操作），实现对所有商品维度的统计。
+**占比分母类别总计**：分母需要移除视觉对象内部的行形维度筛选、保留外部切片器。由于行维度六字段一次只用一个，度量值中同时 ALLSELECTED 这六个维度表【整表】（其余未上行的维度表整表 ALLSELECTED 为无操作），实现对所有商品维度的统计。
 
 ### 1.3 时间口径
 
@@ -63,7 +63,7 @@ Sales Performance Details by Channel 是按渠道展开的销售明细矩阵：
 
 ## 2. 现状分析
 
-- 数据底表 `a02_e2e_product_performance_sales_summary_d`（日粒度）：net_sales_amt / net_sales_qty / md_net_sales_amt / msrp_net_sales_amt 及全部商品维度字段（brand、super_season、product_type、category、md_type、division、framework、ax_class、category_summary、special_supply、predictive_buy、computed_product_tag）+ platform / shop_name 渠道字段；platform 已在数据源层过滤 IN ('JD','TM','RLE','DY')
+- 数据底表 `a02_e2e_product_performance_sales_summary_d`（日粒度）：net_sales_amt / net_sales_qty / md_net_sales_amt / msrp_net_sales_amt 及全部商品维度字段（brand、super_season、product_type、ax_class、md_type、division、framework、category_summary、special_supply、predictive_buy、computed_product_tag）+ platform / shop_name 渠道字段；platform 已在数据源层过滤 IN ('JD','TM','RLE','DY')
 - 数据底表 `a02_e2e_product_performance_inv_summary_d`（日快照）：msrp_inv_amt / inv_qty，商品维度字段与 sales 表同名同构；**无 platform / shop_name 字段**，渠道筛选不影响库存侧
 - 商品维度字段为 `brand`（品牌标签：W Polo、FJ、CL、PL、CW、M Polo、RRL、HM、Lauren；数据字典已由 label 统一更新为 brand），口径中的 "Label / Brand" 维度即该字段，本方案按 `brand` 实现
 - 列维度表 `Dim_ColMetric_Sales_Performance_Details` 已存在（本目录），含 ChannelGroup / Label / Label_Value / ColName / ColType / Metric_Format / Metric_IsCurrencyAmount / 颜色字段
@@ -126,11 +126,11 @@ Cell Font Color / Cell Background Color
 
 | 指标                     | 分子                                                | 分母                                                                              |
 | ------------------------ | --------------------------------------------------- | --------------------------------------------------------------------------------- |
-| SLS Amt%（TTL 列）       | 当前单元格 SLS Amt（TTL 渠道上下文 + 当前行商品）   | TTL 渠道上下文 + ALLSELECTED 六商品字段（全部行合计）                             |
-| Vert. Amt%（非 TTL 列）  | 当前单元格 SLS Amt（Label_Value 渠道 + 当前行商品） | 同渠道上下文 + ALLSELECTED 六商品字段（该渠道列全部行合计）                       |
+| SLS Amt%（TTL 列）       | 当前单元格 SLS Amt（TTL 渠道上下文 + 当前行商品）   | TTL 渠道上下文 + ALLSELECTED 六商品维度表【整表】（全部行合计）                       |
+| Vert. Amt%（非 TTL 列）  | 当前单元格 SLS Amt（Label_Value 渠道 + 当前行商品） | 同渠道上下文 + ALLSELECTED 六商品维度表【整表】（该渠道列全部行合计）                 |
 | Horiz. Amt%（非 TTL 列） | 当前单元格 SLS Amt（Label_Value 渠道 + 当前行商品） | 当前行商品 + ALLSELECTED([platform]) + ALLSELECTED([shop_name])（该行全渠道合计） |
 
-ALLSELECTED 六商品字段：`brand` / `super_season` / `product_type` / `category` / `md_type` / `division` 同时 ALLSELECTED——一次只有一个字段在矩阵行上，其余字段为无操作；移除视觉对象内部的行维度筛选，保留外部切片器。
+ALLSELECTED 六商品维度表【整表】：`Slicer_Label` / `Slicer_Super_Season` / `Slicer_Product_Type` / `Slicer_AX_Class` / `Slicer_Md_Type` / `Slicer_Division` 同时 ALLSELECTED 整表——一次只有一个维度表在矩阵行上，其余维度表为无操作；移除视觉对象内部的行维度筛选（含按列排序隐式带入的排序列筛选），保留外部切片器。
 
 ### 3.5 inv 侧行维度筛选传递
 
@@ -272,20 +272,23 @@ VAR __MD =
 // 两者公式结构相同，渠道上下文由列位置自动区分：
 //   SLS Amt%（TTL 列）  → 渠道上下文 = TTL（ALLSELECTED platform / shop_name）
 //   Vert. Amt%（非 TTL）→ 渠道上下文 = 对应 Label_Value
-// 分母 ALLSELECTED 六个商品维度字段（brand / super_season / product_type / category / md_type / division）：
-// 一次只有一个字段在矩阵行上，其余字段 ALLSELECTED 为无操作；移除视觉对象内部的行维度筛选，
-// 保留外部切片器，实现对所有商品维度的统计
+// 分母 ALLSELECTED 六个商品维度表【整表】（Slicer_Label / Slicer_Super_Season / Slicer_Product_Type / Slicer_AX_Class / Slicer_Md_Type / Slicer_Division）：
+// 一次只有一个维度表在矩阵行上，其余维度表整表 ALLSELECTED 为无操作；移除视觉对象内部的行维度筛选（含按列排序隐式带入的排序列筛选），
+// 保留外部切片器，实现对所有商品维度的统计。必须整表移除而不能只移除值列：值列配置「按列排序」后，视觉对象查询经 auto-existence（同表共存）
+// 把排序列隐式并入 GroupBy 并合并为表粒度组合筛选（绑定发生在查询生成阶段）；只移除值列时排序列筛选独自存活——排序键与业务值 1:1（Sort 表内唯一），
+// 1:1 反推等价于原值筛选，维度表仍被钉在当前行，分母与分子聚合范围重合，占比恒 100%（1:1 的指纹；Sort 不唯一则占比异常但非恒 100%）。
+// 整表移除同时清掉值列与排序列筛选，分母恢复外部筛选下的全量
 VAR __SLSAmt_Total_Channel =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
         __PlatformCtx,
         __ShopNameCtx,
-        ALLSELECTED('Slicer_Label'[label]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Product_Type'[product_type]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Label'),
+        ALLSELECTED('Slicer_Super_Season'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
@@ -683,8 +686,8 @@ Sales Performance Details Cell Background Color =
 │                        数据源层                                      │
 │  a02_e2e_product_performance_sales_summary_d（销售类，日粒度）       │
 │  字段: data_date, platform, shop_name,                              │
-│        brand, super_season, product_type, category,                 │
-│        md_type, division, framework, ax_class, ...                  │
+│        brand, super_season, product_type, ax_class,                 │
+│        md_type, division, framework, ...                            │
 │        net_sales_amt, net_sales_qty, md_net_sales_amt,              │
 │        msrp_net_sales_amt                                           │
 │  a02_e2e_product_performance_inv_summary_d（库存类，日快照）        │
@@ -741,7 +744,7 @@ Sales Performance Details Cell Background Color =
 │      > [Label] > [ColName]（ChannelGroup_Sort / Label_Sort /        │
 │      ColName_Sort 排序）                                             │
 │  行: sales 表商品维度字段六选一                                      │
-│      (brand / super_season / product_type / category /              │
+│      (brand / super_season / product_type / ax_class /              │
 │       md_type / division)，一次只用一个字段                          │
 │  值: [Sales Performance Details Cell Display]                       │
 │  条件格式: 字体颜色 → Cell Font Color；背景色 → Cell Background     │
@@ -753,10 +756,10 @@ Sales Performance Details Cell Background Color =
 ## 7. 注意事项
 
 1. **Brand 字段说明**：商品维度字段为 `brand`（品牌标签：W Polo、FJ、CL、PL、CW、M Polo、RRL、HM、Lauren），数据字典已由 label 统一更新为 brand，口径中的 "Label / Brand" 维度即该字段，全部 ALLSELECTED / TREATAS 均按 `brand` 实现。
-2. **inv 侧 TREATAS 的原因与替代方案**：六个商品维度行字段取自 sales 表，行筛选只作用于 sales 表本身——sales 侧指标（SLS / vs LP / 占比 / AUR）全部依赖模型自然传递，无显式 DAX。inv 是另一张独立事实表，Power BI 筛选只沿模型关系传递，同名字段之间没有关系不会自动传递；且 sales 与 inv 两表之间最多只能存在一条活动关系，无法覆盖六个可切换的行维度字段，故 inv 侧（EOH Unit、LTD ST% 分母）通过 `TREATAS(VALUES(sales[字段]), inv[字段])` × 六字段显式传递（上行字段传行筛选，未上行字段传外部切片器上下文）。替代方案：六个字段各建 distinct 维度表并与两张事实表分别建 1:N 关系、行维度从维度表字段拉取，行筛选即可由模型自动传递到两张事实表（TREATAS 全部移除，ALLSELECTED 六字段目标同步改为维度表字段）；现有 Slicer_Label / Slicer_Product_Type / Slicer_Category / Slicer_Division 为 distinct 维度表可复用，super_season / md_type 无对应维度表需补建。
+2. **inv 侧 TREATAS 的原因与替代方案**：六个商品维度行字段取自 sales 表，行筛选只作用于 sales 表本身——sales 侧指标（SLS / vs LP / 占比 / AUR）全部依赖模型自然传递，无显式 DAX。inv 是另一张独立事实表，Power BI 筛选只沿模型关系传递，同名字段之间没有关系不会自动传递；且 sales 与 inv 两表之间最多只能存在一条活动关系，无法覆盖六个可切换的行维度字段 ID 字段，故 inv 侧（EOH Unit、LTD ST% 分母）通过 `TREATAS(VALUES(sales[字段]), inv[字段])` × 六字段显式传递（上行字段传行筛选，未上行字段传外部切片器上下文）。替代方案：六个字段各建 distinct 维度表并与两张事实表分别建 1:N 关系、行维度从维度表字段拉取，行筛选即可由模型自动传递到两张事实表（TREATAS 全部移除，ALLSELECTED 六字段目标同步改为维度表字段）；现有 Slicer_Label / Slicer_Product_Type / Slicer_AX_Class / Slicer_Division 为 distinct 维度表可复用，super_season / md_type 无对应维度表需补建。
 3. **TTL 的 ALLSELECTED 语义**：TTL 列对 [platform] / [shop_name] 应用 ALLSELECTED——移除视觉对象内部的渠道筛选，保留外部切片器，即外部筛选上下文下的全渠道合计；不选或多选 Label 时 SELECTEDVALUE 默认 "TTL"。
 4. **非 TTL 列与外部渠道切片器的交集关系**：Platform / Store 列的渠道过滤基于 ALLSELECTED 集与 Label_Value 取交集。如外部 platform 切片器仅选 TM，则 JD 列返回空（外部切片器限定数据范围）。若业务期望明细列不受外部渠道切片器限制，需将 `__PlatformCtx` / `__ShopNameCtx` 中对应分支的 ALLSELECTED 基表改为 ALL——待业务确认。
-5. **占比分母的 ALLSELECTED**：SLS Amt% / Vert. Amt% 分母同时 ALLSELECTED 六个商品维度字段（一次只有一个字段在行上，其余为无操作），移除视觉对象内部行维度筛选、保留外部切片器；Horiz. Amt% 分母不 ALLSELECTED 商品字段（保留行筛选），改为 ALLSELECTED [platform] / [shop_name]（该行全渠道合计）。
+5. **占比分母的 ALLSELECTED（整表写法）**：SLS Amt% / Vert. Amt% 分母同时 ALLSELECTED 六个商品维度表【整表】（一次只有一个维度表在行上，其余为无操作），移除视觉对象内部行维度筛选（含按列排序隐式带入的排序列筛选）、保留外部切片器；Horiz. Amt% 分母不 ALLSELECTED 商品字段（保留行筛选），改为 ALLSELECTED [platform] / [shop_name]（该行全渠道合计）。**必须整表移除而不能只移除值列**：值列配置「按列排序」后，视觉对象查询经 auto-existence（同表共存）把排序列隐式并入 GroupBy 并合并为表粒度组合筛选；只移除值列时排序列筛选独自存活，排序键与业务值 1:1（Sort 表内唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，分母与分子聚合范围重合 → 占比恒 100%（1:1 的指纹；Sort 不唯一则占比异常但非恒 100%）。
 6. **SLS Amt% 与 Vert. Amt% 公式同构**：两者均为「单元格 SLS Amt / 该列渠道全部商品合计」，渠道上下文由列位置（TTL / 非 TTL）自动区分，Act Base Value 中共用同一组变量。
 7. **vs LP 口径**：this period / last period 对比，受 last period 时间筛选器影响；分子通过 `REMOVEFILTERS(Dim 整表) + ChannelGroup = 当前值 + Label_Value = 当前值 + ColType = "SLS Amt"` 三条件重路由取得（同渠道对比，ChannelGroup / Label_Value 标量在 CALCULATE 外捕获后重建筛选）；Last Period 值空或 0 时返回 BLANK。
 8. **LTD ST% 区间起点**：销售区间 = end period 所在财年第一天至 This Period end，起点读 Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day] 财年日历字段（按 TimeFrame_Min 落入的财年区间自关联生成，非固定日期）；分母期末库存金额取 end period 最后一天（Max_This[TimeFrame_Max]）单日值，LTD ST% 仅存在于 TTL 列。
@@ -766,6 +769,6 @@ Sales Performance Details Cell Background Color =
 12. **vs LP 分子重路由必须整表 REMOVEFILTERS 的原因**：矩阵列头三层（ChannelGroup > Label > ColName）在视觉对象查询（SUMMARIZECOLUMNS）中以 GroupBy 组合筛选形式存在，`REMOVEFILTERS(Dim[ColName])` 单列写法无法从组合筛选中剥离 ColName 部分，残留的 ColName（vs LP 列）筛选与新加的 `ColType = "SLS Amt"` 互斥 → Dim 表空集 → 分子始终 BLANK（同坑在 Merchandising Core KPI 已实证沉淀，其注释：矩阵行/列标题保留的筛选器会导致冲突返回 BLANK）；正确模式 = CALCULATE 外捕获 ChannelGroup / Label_Value 标量 + `REMOVEFILTERS(整表)` + 三条件重建（ChannelGroup + Label_Value + ColType 唯一定位单行）。ChannelGroup / Label 层汇总单元格无唯一 ColType → BLANK → 显示 "-"。
 13. **汇率换算分层**：Base Value 层始终保留 RMB 原始值（vs LP 派生计算口径一致）；换算集中在 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1）；Cell Display 只拼接 Currency_Symbol。金额类判定用 Metric_IsCurrencyAmount（本模块无双模式，该字段直接生效）。
 14. **渠道上下文过滤器构造**：`__PlatformCtx` / `__ShopNameCtx` 用 UNION+FILTER 构造（避免 IF/SWITCH 分支退化表变量），作为 CALCULATE 表过滤器统一传入所有 sales 侧聚合，八种聚合（SLS Amt / SLS Unit / MD 双字段 / 渠道合计 / 行合计 / LTD 销售）共用同一渠道上下文。
-15. **字段名已核对数据字典**：net_sales_amt / net_sales_qty / platform / shop_name / brand / super_season / product_type / category / md_type / division（sales 表）；msrp_inv_amt / inv_qty + 同名商品维度（inv 表）；日期字段统一为 data_date（date 类型）。
+15. **字段名已核对数据字典**：net_sales_amt / net_sales_qty / platform / shop_name / brand / super_season / product_type / ax_class / md_type / division（sales 表）；msrp_inv_amt / inv_qty + 同名商品维度（inv 表）；日期字段统一为 data_date（date 类型）。
 16. **DAX 语法规范**：文本常量使用双引号（如 [md_type] = "FP"），单引号仅用于表名，列名使用方括号；与解决方案存在争议时一切以口径文档为准。
 17. **MD 指标（本次新增，12 列，每组末位 ColName_Sort=600）**：1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)，This Period 区间，渠道上下文随列位置（TTL = ALLSELECTED 全渠道；非 TTL = 对应 Label_Value 渠道）；percent_0dp 不含正号；分母（吊牌金额）空或 0 时返回 BLANK（避免 1 - BLANK() = 1 即 100% 折扣伪值，与 Label & Product Type 板块 MD 同款保护）；分子分母同表同币种，折扣率不受币种选择影响（Metric_IsCurrencyAmount = FALSE 不换算）。口径来源为业务新增指令，原口径文档 §33-§41 未含 MD，待口径文档同步补录。

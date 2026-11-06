@@ -1,12 +1,12 @@
 # Sales & Inventory Penetration Trend 柱形图解决方案
 
-> **版本**: v1.3（全部指标叠加全局 this period 区间范围框定：TY 指标 = [Min_This[TimeFrame_Min], Max_This[TimeFrame_Max]]，LY 指标 = 其去年同期 [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]]，与当前柱区间取交集；v1.2 EOH 期末日期直接取 TimeFrame_Max / TimeFrame_Max_LY；v1.1 新增 Inventory 侧四个指标）
+> **版本**: v1.4（商品维度 category → ax_class 字段替换：Slicer_Category → Slicer_AX_Class 维度表（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §3.3 / 注意事项 15）。v1.3（全部指标叠加全局 this period 区间范围框定：TY 指标 = [Min_This[TimeFrame_Min], Max_This[TimeFrame_Max]]，LY 指标 = 其去年同期 [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]]，与当前柱区间取交集；v1.2 EOH 期末日期直接取 TimeFrame_Max / TimeFrame_Max_LY；v1.1 新增 Inventory 侧四个指标）
 > **模块**: RL E2E Merch Dashboard - Merchandise Performance Overview Tab - Sales & Inventory Penetration Trend - Trend 柱形图（板块左侧）
 > **关联方案**: Sales_&_Inventory_Table.md（指标提取来源：§4.1 SLS Amt%、§4.3 SLS Amt TY、§4.7 SLS Amt LY、§4.12 EOH Amt%、§4.14 EOH Amt TY、§4.18 EOH Amt LY；SLS Amt% LY / EOH Amt% LY 表格方案未含，本次新增）
 > **关联口径**: 口径文档/口径Markdown格式/Sales & Inventory Penetration Trend.md §1（SLS Amt%）、§3 / §6（SLS Amt TY / LY）、§10（EOH Amt%）、§12 / §16（EOH Amt TY / LY）；原始口径 §21 / §22 遗留的「Week / Month / Year 和全局时间筛选器的关系」待确认项，本方案以视觉对象筛选度量 + 全局区间框定落地
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
 > **数据底表（库存类）**: a02_e2e_product_performance_inv_summary_d
-> **关联维度**: Slicer_Time_Frame_Sales_Trend（柱形图 X 轴 + 逐柱 TY / LY 区间与期末日期，断开维度）、Slicer_Time_Frame（全局时间粒度）、Slicer_Time_Frame_Min_This / Max_This（**全局 this period 区间：柱子显示范围（IsVisible）+ 全部指标的范围框定**，断开维度）、Slicer_Currency_Selection（币种，断开维度）、Slicer_Label / Slicer_Super_Season / Slicer_Product_Type / Slicer_Category / Slicer_Md_Type / Slicer_Division（商品维度，图例字段六选一，与双事实表一对多关联）
+> **关联维度**: Slicer_Time_Frame_Sales_Trend（柱形图 X 轴 + 逐柱 TY / LY 区间与期末日期，断开维度）、Slicer_Time_Frame（全局时间粒度）、Slicer_Time_Frame_Min_This / Max_This（**全局 this period 区间：柱子显示范围（IsVisible）+ 全部指标的范围框定**，断开维度）、Slicer_Currency_Selection（币种，断开维度）、Slicer_Label / Slicer_Super_Season / Slicer_Product_Type / Slicer_AX_Class / Slicer_Md_Type / Slicer_Division（商品维度，图例字段六选一，与双事实表一对多关联）
 > **参考模版**: 模版复用/字段筛选模版.md §1.1 IsMonthVisible（日期筛选器展示值是否在范围内的写法——柱形图 X 轴为断开维度日期表时，以度量做视觉对象级别筛选限定柱子范围）
 
 ---
@@ -31,7 +31,7 @@
 | 配置项           | 内容                                                                                                                                                                                                                                                      |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | X 轴             | `Slicer_Time_Frame_Sales_Trend[TimeFrame_Value]`（新日期表，断开维度；按 ID_Sort 排序）                                                                                                                                                                 |
-| 图例             | 商品维度字段六选一：`Slicer_Label[label]` / `Slicer_Super_Season[super_season]` / `Slicer_Product_Type[product_type]` / `Slicer_Category[category]` / `Slicer_Md_Type[md_type]` / `Slicer_Division[division]`（替换图例字段，度量值层无感知） |
+| 图例             | 商品维度字段六选一：`Slicer_Label[label]` / `Slicer_Super_Season[super_season]` / `Slicer_Product_Type[product_type]` / `Slicer_AX_Class[ax_class]` / `Slicer_Md_Type[md_type]` / `Slicer_Division[division]`（替换图例字段，度量值层无感知） |
 | Y 轴（值）       | SLS 侧：S&I Trend SLS Amt% TY / LY（占比主指标）、S&I Trend SLS Amt TY / LY（金额）；EOH 侧：S&I Trend EOH Amt% TY / LY（占比主指标）、S&I Trend EOH Amt TY / LY（金额）——按版面组合使用（TY / LY 双图、同图双系列或 tooltip）                          |
 | 视觉对象级别筛选 | `[S&I Trend TimeFrame IsVisible] = 1`（柱子范围限定在全局 this period 区间内 + 粒度一致，见 §3.4）                                                                                                                                                     |
 | 指标全局框定     | 每个指标度量叠加全局 this period 区间（TY = [Min_This[TimeFrame_Min], Max_This[TimeFrame_Max]]；LY = 其去年同期 [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]]），与当前柱范围取交集——可见柱下为无操作（防御性框定），见 §1.3 / 注意事项 9   |
@@ -80,13 +80,13 @@
 
 **SLS Amt% 占比口径（本次关键差异）**：单个商品占**当前柱子时间**的所有商品的比值——分母只覆盖当前柱的时间单位（如 2027-01 柱的分母 = 2027-01 区间内全部商品合计），而非整个 this period 或整个图表范围；各柱占比独立成立，单柱内图例各商品占比之和 = 100%。
 
-**EOH Amt% 占比口径（原始口径 §10）**：根据所筛选维度统计对应 EOH amt 占比——分子：各 label / super_season / product_type / category / md_type / division 下，当前柱 end period 最后一天（TimeFrame_Max）sum(msrp_inv_amt)；分母：当前柱 end period 最后一天 sum(msrp_inv_amt)（ALLSELECTED 六维度）——同为当前柱期末单日值，单柱内图例各商品占比之和 = 100%；LY 版整体替换为当前柱 TimeFrame_Max_LY。
+**EOH Amt% 占比口径（原始口径 §10）**：根据所筛选维度统计对应 EOH amt 占比——分子：各 label / super_season / product_type / ax_class / md_type / division 下，当前柱 end period 最后一天（TimeFrame_Max）sum(msrp_inv_amt)；分母：当前柱 end period 最后一天 sum(msrp_inv_amt)（ALLSELECTED 六维度）——同为当前柱期末单日值，单柱内图例各商品占比之和 = 100%；LY 版整体替换为当前柱 TimeFrame_Max_LY。
 
 ---
 
 ## 2. 现状分析
 
-- 数据底表 `a02_e2e_product_performance_sales_summary_d`（日粒度）：net_sales_amt（净销售金额）；维度含 platform、shop_name 及 brand / super_season / product_type / category / md_type / division 等全部商品维度；日期字段为 data_date（date 类型）；platform 已在数据源层过滤 IN ('JD','TM','RLE','DY')
+- 数据底表 `a02_e2e_product_performance_sales_summary_d`（日粒度）：net_sales_amt（净销售金额）；维度含 platform、shop_name 及 brand / super_season / product_type / ax_class / md_type / division 等全部商品维度；日期字段为 data_date（date 类型）；platform 已在数据源层过滤 IN ('JD','TM','RLE','DY')
 - 数据底表 `a02_e2e_product_performance_inv_summary_d`（日快照）：msrp_inv_amt（库存吊牌价金额，期末库存金额口径）、inv_qty（库存数量）；商品维度字段与 sales 表同名同构；**无 platform / shop_name 字段**（渠道筛选不影响 EOH 侧指标）；日期字段为 data_date（date 类型）
 - `Slicer_Time_Frame_Sales_Trend`（新日期表，本板块表格方案引入）：单表含 TimeFrame_ID（Week / Month / Year，Day / Quarter 已在 Power Query 过滤）、TimeFrame_Value（X 轴字段）、TimeFrame_Min / TimeFrame_Max（逐柱 TY 区间与期末日期）、TimeFrame_Min_LY / TimeFrame_Max_LY（逐柱 LY 区间与 LY 期末日期，表内预计算）、ID_Sort（排序）等字段；与事实表及全局日期筛选器均为**断开维度**，时间过滤全部由度量内 data_date 谓词显式完成
 - 全局日期体系（同页签其余模块共用）：`Slicer_Time_Frame`（主时间筛选器，含 TimeFrame_ID 粒度）、`Slicer_Time_Frame_Min_This` / `Max_This`（this period 区间端点表，经模型关系由主筛选器驱动，**两表均含 TimeFrame_Min / TimeFrame_Max / TimeFrame_Min_LY / TimeFrame_Max_LY 字段**）——this period = [Min_This[TimeFrame_Min], Max_This[TimeFrame_Max]]（TY 框定区间），其去年同期 = [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]]（LY 框定区间），粒度 = SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])
@@ -112,8 +112,8 @@ Value 度量（8 个：SLS Amt TY / LY、SLS Amt% TY / LY、EOH Amt TY / LY、EO
 ←  EOH 侧（期末时点类）：逐柱取 TimeFrame_Max / TimeFrame_Max_LY（end period 最后一天）
    直接单日过滤 inv 表（单日同样满足全局区间框定）
 ←  图例维度筛选经维度表 1:N 关系自动传导（无需 TREATAS）
-←  SLS Amt% / EOH Amt% 分母：ALLSELECTED 六个商品维度表字段（移除图例视觉筛选，
-   保留外部切片器）× 当前柱时间范围（SLS 为柱区间、EOH 为柱期末单日）
+←  SLS Amt% / EOH Amt% 分母：ALLSELECTED 六个商品维度表【整表】（移除图例视觉筛选
+   ——含按列排序隐式带入的排序列筛选，保留外部切片器）× 当前柱时间范围（SLS 为柱区间、EOH 为柱期末单日）
    → 单个商品占当前柱时间所有商品的比值
 ←  currency 4 个（SLS Amt / EOH Amt 各 TY / LY）Value 层完成汇率换算
    （原始 CNY ÷ Currency_ExchangeRate）——柱形图 Y 轴需数值度量，
@@ -144,15 +144,16 @@ IsVisible 视觉对象筛选度量（1 个）
 | EOH Amt% LY | 当前柱 LY 期末（TimeFrame_Max_LY，∈ 全局 LY 区间）× 图例商品维度 sum(msrp_inv_amt) | ALLSELECTED 六表 +**当前柱 LY 期末单日（∈ 全局 LY 区间）** sum(msrp_inv_amt) |
 
 ```dax
-ALLSELECTED('Slicer_Label'[label]),
-ALLSELECTED('Slicer_Super_Season'[super_season]),
-ALLSELECTED('Slicer_Product_Type'[product_type]),
-ALLSELECTED('Slicer_Category'[category]),
-ALLSELECTED('Slicer_Md_Type'[md_type]),
-ALLSELECTED('Slicer_Division'[division])
+ALLSELECTED('Slicer_Label'),
+ALLSELECTED('Slicer_Super_Season'),
+ALLSELECTED('Slicer_Product_Type'),
+ALLSELECTED('Slicer_AX_Class'),
+ALLSELECTED('Slicer_Md_Type'),
+ALLSELECTED('Slicer_Division')
 ```
 
-- 分母对六个商品维度表字段同时 `ALLSELECTED`：图例当前字段（六选一）的视觉对象内部图例筛选被移除，恢复为外部切片器筛选状态；其余五个未上图例字段的 ALLSELECTED 为无操作——**无论图例切换到哪个维度，一个度量即可覆盖六个维度**
+- 分母对六个商品维度表**整表**同时 `ALLSELECTED('Slicer_XXX')`：图例当前维度表（六选一）的视觉对象内部图例筛选被移除，恢复为外部切片器筛选状态；其余五个未上图例维度表的整表 ALLSELECTED 为无操作——**无论图例切换到哪个维度，一个度量即可覆盖六个维度**
+- **必须整表移除而不能只移除值列（按列排序的隐藏筛选传播）**：值列配置「按列排序（Sort by Column）」后，视觉对象查询经 auto-existence（同表共存）把排序列隐式并入 GroupBy，同表两列合并为表粒度的组合筛选（绑定发生在查询生成阶段，不是计算阶段）——只 `ALLSELECTED('表'[值列])` 时排序列筛选独自存活，排序键与业务值 1:1（Sort 在表内唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，分母与分子的聚合范围完全重合 → **占比恒 100%（1:1 的指纹）**；Sort 不唯一则仅部分钉死，现象为「占比异常但不是恒 100%」。整表移除同时清掉值列与排序列筛选，分母才能恢复全量
 - **与表格方案占比分母范围差异**：表格方案分母 = 单选所选期间全量（整个 this period / 所选期末）；本方案分母 = **当前柱时间范围**（SLS 为柱区间、EOH 为柱期末单日）——同一图例商品在不同柱子的占比分母不同，单柱内图例各商品占比之和 = 100%
 - ALLSELECTED 仅移除视觉对象内部图例筛选、保留外部切片器（与 REMOVEFILTERS 的语义差异是分母正确性的关键，同 Label & PT / 表格方案沉淀）
 - SLS Amt% 分子分母同为 sales 侧（同受渠道筛选，比率语义不受影响）；EOH Amt% 分子分母同为 inv 侧（**均不受渠道筛选**，inv 表无渠道字段）
@@ -299,9 +300,10 @@ S&I Trend SLS Amt% TY Value =
 //       分母范围由「单选所选期间全量」改为「当前柱时间单位全量」
 //       （原始口径 §1：单品类占总品类的比例 → 逐柱独立成立，单柱内图例占比之和 = 100%）
 // 数据底表: a02_e2e_product_performance_sales_summary_d
-// 分母机制: ALLSELECTED 六个商品维度表字段——移除视觉对象内部的图例维度筛选，
-//       保留外部切片器筛选；一次只有一个字段在图例上，其余五个字段为无操作，
-//       实现六维度图例切换一套逻辑通吃；分母时间范围 = 当前柱 TY 区间 ∩ 全局 TY 区间
+// 分母机制: ALLSELECTED 六个商品维度表【整表】——移除视觉对象内部的图例维度筛选
+//       （含按列排序隐式带入的排序列筛选），保留外部切片器筛选；一次只有一个
+//       维度表在图例上，其余五个表的整表 ALLSELECTED 为无操作，实现六维度图例
+//       切换一套逻辑通吃；分母时间范围 = 当前柱 TY 区间 ∩ 全局 TY 区间
 // 币种: 分子分母为同表同币种金额（底表 CNY），占比不受币种选择影响
 // 说明: sales 侧指标，分子分母同受渠道筛选，比率语义不受影响
 // 数据类型: percent_0dp；数据格式: #,##0%（不含正号，度量值静态格式）
@@ -326,15 +328,21 @@ VAR __Numerator =
     )
 
 // ── 分母：当前柱 TY 区间内全部商品合计（移除图例筛选，保留外部切片器）──
+// ALLSELECTED 整表移除（不能只移除值列）：值列配置「按列排序」后，视觉对象查询经
+// auto-existence（同表共存）把排序列隐式并入 GroupBy 并合并为表粒度组合筛选（绑定发
+// 生在查询生成阶段）；只移除值列时排序列筛选独自存活——排序键与业务值 1:1（Sort 表内
+// 唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，分母与分子聚合范围重合，占比
+// 恒 100%（1:1 的指纹；Sort 不唯一则占比异常但非恒 100%）。整表移除同时清掉值列与
+// 排序列筛选，分母恢复外部筛选下的全量
 VAR __Denominator =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
-        ALLSELECTED('Slicer_Label'[label]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Product_Type'[product_type]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Label'),
+        ALLSELECTED('Slicer_Super_Season'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax,
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __ThisMin,
@@ -364,7 +372,7 @@ S&I Trend SLS Amt% LY Value =
 // 全局框定说明: LY 数据位于去年，取全局 this period 区间的去年同期框定
 //       （直接套当前区间会把 LY 值全部清空）
 // 数据底表: a02_e2e_product_performance_sales_summary_d
-// 分母机制: 同 S&I Trend SLS Amt% TY Value（ALLSELECTED 六维度 + 柱 LY 区间 ∩ 全局 LY 区间）
+// 分母机制: 同 S&I Trend SLS Amt% TY Value（ALLSELECTED 六维度整表 + 柱 LY 区间 ∩ 全局 LY 区间）
 // 币种: 分子分母为同表同币种金额（底表 CNY），占比不受币种选择影响
 // 数据类型: percent_0dp；数据格式: #,##0%（不含正号，度量值静态格式）
 // ========================================
@@ -388,15 +396,20 @@ VAR __Numerator =
     )
 
 // ── 分母：当前柱 LY 区间内全部商品合计（移除图例筛选，保留外部切片器）──
+// ALLSELECTED 整表移除（不能只移除值列）：按列排序的 auto-existence（同表共存）会把
+// 排序列隐式并入 GroupBy 并合并为表粒度组合筛选；只移除值列时排序列筛选独自存活——
+// 排序键与业务值 1:1（Sort 表内唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，
+// 分母与分子聚合范围重合，占比恒 100%（1:1 的指纹；Sort 不唯一则占比异常但非恒
+// 100%）。整表移除同时清掉值列与排序列筛选，分母恢复外部筛选下的全量
 VAR __Denominator =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
-        ALLSELECTED('Slicer_Label'[label]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Product_Type'[product_type]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Label'),
+        ALLSELECTED('Slicer_Super_Season'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMinLY,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMaxLY,
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __ThisMinLY,
@@ -523,7 +536,7 @@ S&I Trend EOH Amt% TY Value =
 //       （全局 this period 区间范围框定，分子分母同时叠加）
 // 口径: 提取自 Sales_&_Inventory_Table.md §4.12（EOH Amt% Value），DAX 结构一致；
 //       分母期末日期由「所选期间回退快照日」改为「当前柱 TimeFrame_Max」
-//       （原始口径 §10：分子 = 各 label / super_season / product_type / category /
+//       （原始口径 §10：分子 = 各 label / super_season / product_type / ax_class /
 //        md_type / division 下，看所选时间范围 end period 最后一天，sum(msrp_inv_amt)；
 //        分母 = 看所选时间范围 end period 最后一天，sum(msrp_inv_amt)——
 //        逐柱独立成立，单柱内图例占比之和 = 100%）
@@ -531,9 +544,10 @@ S&I Trend EOH Amt% TY Value =
 // 期末机制: __EndPeriodDate = 当前柱所在行 TimeFrame_Max（直接单日过滤，
 //       分子分母共用同一期末日期，v1.2 调整无快照日回退；
 //       该单日 ∈ 全局 TY 区间，可见柱下必然满足，防御性框定）
-// 分母机制: ALLSELECTED 六个商品维度表字段——移除视觉对象内部的图例维度筛选，
-//       保留外部切片器筛选；一次只有一个字段在图例上，其余五个字段为无操作，
-//       实现六维度图例切换一套逻辑通吃
+// 分母机制: ALLSELECTED 六个商品维度表【整表】——移除视觉对象内部的图例维度筛选
+//       （含按列排序隐式带入的排序列筛选），保留外部切片器筛选；一次只有一个
+//       维度表在图例上，其余五个表的整表 ALLSELECTED 为无操作，实现六维度图例
+//       切换一套逻辑通吃
 // 币种: 分子分母为同表同币种金额（底表 CNY），占比不受币种选择影响
 // 说明: inv 表无渠道字段，本指标分子分母均不受渠道筛选影响
 // 数据类型: percent_0dp；数据格式: #,##0%（不含正号，度量值静态格式）
@@ -556,15 +570,21 @@ VAR __Numerator =
     )
 
 // ── 分母：当前柱期末全部商品合计（移除图例筛选，保留外部切片器）──
+// ALLSELECTED 整表移除（不能只移除值列）：值列配置「按列排序」后，视觉对象查询经
+// auto-existence（同表共存）把排序列隐式并入 GroupBy 并合并为表粒度组合筛选（绑定发
+// 生在查询生成阶段）；只移除值列时排序列筛选独自存活——排序键与业务值 1:1（Sort 表内
+// 唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，分母与分子聚合范围重合，占比
+// 恒 100%（1:1 的指纹；Sort 不唯一则占比异常但非恒 100%）。整表移除同时清掉值列与
+// 排序列筛选，分母恢复外部筛选下的全量
 VAR __Denominator =
     CALCULATE(
         SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
-        ALLSELECTED('Slicer_Label'[label]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Product_Type'[product_type]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Label'),
+        ALLSELECTED('Slicer_Super_Season'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate,
         'a02_e2e_product_performance_inv_summary_d'[data_date] >= __ThisMin,
         'a02_e2e_product_performance_inv_summary_d'[data_date] <= __ThisMax
@@ -595,7 +615,7 @@ S&I Trend EOH Amt% LY Value =
 //       （直接套当前区间会把 LY 值全部清空）
 // 数据底表: a02_e2e_product_performance_inv_summary_d
 // 期末机制: 同 EOH Amt% TY（直接单日过滤，分子分母共用同一 LY 期末日期）
-// 分母机制: 同 EOH Amt% TY（ALLSELECTED 六维度 + 当前柱 LY 期末单日 ∈ 全局 LY 区间）
+// 分母机制: 同 EOH Amt% TY（ALLSELECTED 六维度整表 + 当前柱 LY 期末单日 ∈ 全局 LY 区间）
 // 币种: 分子分母为同表同币种金额（底表 CNY），占比不受币种选择影响
 // 说明: inv 表无渠道字段，本指标分子分母均不受渠道筛选影响
 // 数据类型: percent_0dp；数据格式: #,##0%（不含正号，度量值静态格式）
@@ -618,15 +638,20 @@ VAR __Numerator =
     )
 
 // ── 分母：当前柱 LY 期末全部商品合计（移除图例筛选，保留外部切片器）──
+// ALLSELECTED 整表移除（不能只移除值列）：按列排序的 auto-existence（同表共存）会把
+// 排序列隐式并入 GroupBy 并合并为表粒度组合筛选；只移除值列时排序列筛选独自存活——
+// 排序键与业务值 1:1（Sort 表内唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，
+// 分母与分子聚合范围重合，占比恒 100%（1:1 的指纹；Sort 不唯一则占比异常但非恒
+// 100%）。整表移除同时清掉值列与排序列筛选，分母恢复外部筛选下的全量
 VAR __Denominator =
     CALCULATE(
         SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
-        ALLSELECTED('Slicer_Label'[label]),
-        ALLSELECTED('Slicer_Super_Season'[super_season]),
-        ALLSELECTED('Slicer_Product_Type'[product_type]),
-        ALLSELECTED('Slicer_Category'[category]),
-        ALLSELECTED('Slicer_Md_Type'[md_type]),
-        ALLSELECTED('Slicer_Division'[division]),
+        ALLSELECTED('Slicer_Label'),
+        ALLSELECTED('Slicer_Super_Season'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
         'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDateLY,
         'a02_e2e_product_performance_inv_summary_d'[data_date] >= __ThisMinLY,
         'a02_e2e_product_performance_inv_summary_d'[data_date] <= __ThisMaxLY
@@ -726,8 +751,8 @@ RETURN
 │                        数据源层                                      │
 │  a02_e2e_product_performance_sales_summary_d（销售类，日粒度）       │
 │  字段: data_date, platform, shop_name,                              │
-│        brand, super_season, product_type, category,                 │
-│        md_type, division, framework, ax_class, ...                  │
+│        brand, super_season, product_type, ax_class,                 │
+│        md_type, division, framework, ...                            │
 │        net_sales_amt                                                │
 │  a02_e2e_product_performance_inv_summary_d（库存类，日快照）        │
 │  字段: data_date + 同名商品维度（无渠道字段）,                       │
@@ -749,7 +774,7 @@ RETURN
 │  - SLS 侧：逐柱区间求 sum(net_sales_amt)              │   │ ┌────────────────────┐
 │  - EOH 侧：逐柱 TimeFrame_Max / Max_LY 单日过滤       │   │ │ 全局日期体系        │
 │    取 sum(msrp_inv_amt)                                │   │ │ Slicer_Time_Frame  │
-│  - SLS Amt% / EOH Amt% 分母 ALLSELECTED 六商品维度表   │   │ │ [TimeFrame_ID]     │
+│  - SLS Amt% / EOH Amt% 分母 ALLSELECTED 六商品维度表（整表移除）    │   │ │ [TimeFrame_ID]     │
 │    × 当前柱时间范围（区间 / 期末单日）                  │   │ │ + Min_This /       │
 │  - currency 4 个含汇率换算 ÷ ExchangeRate             │   │ │ Max_This（this     │
 └──────────────────────────┬────────────────────────────┘   │ │ period：柱子范围 + │
@@ -782,7 +807,7 @@ RETURN
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 视觉对象类型     | 簇状柱形图（或堆叠，按版面需要）                                                                                                                                                                                                                                |
 | X 轴             | `Slicer_Time_Frame_Sales_Trend[TimeFrame_Value]`；排序：将该列的「排序依据列」设为 `ID_Sort`（自然时间顺序，避免 "2027 Week14" 类文本乱序）                                                                                                                 |
-| 图例             | 商品维度字段六选一（`Slicer_Label[label]` / `Slicer_Super_Season[super_season]` / `Slicer_Product_Type[product_type]` / `Slicer_Category[category]` / `Slicer_Md_Type[md_type]` / `Slicer_Division[division]`，切换时替换图例字段，度量值层无感知） |
+| 图例             | 商品维度字段六选一（`Slicer_Label[label]` / `Slicer_Super_Season[super_season]` / `Slicer_Product_Type[product_type]` / `Slicer_AX_Class[ax_class]` / `Slicer_Md_Type[md_type]` / `Slicer_Division[division]`，切换时替换图例字段，度量值层无感知） |
 | Y 轴（值）       | 主指标`S&I Trend SLS Amt% TY Value`；`S&I Trend SLS Amt TY Value` / `SLS Amt LY Value` / `SLS Amt% LY Value` 按版面组合使用（TY / LY 双图对比、同图多值或 tooltip）                                                                                     |
 | 视觉对象级别筛选 | 筛选器窗格（本视觉对象）→`[S&I Trend TimeFrame IsVisible]` **为 1**                                                                                                                                                                                    |
 
@@ -845,7 +870,7 @@ WHERE c.timeframe_id = 'Month'
 GROUP BY c.timeframe_value, s.brand
 ```
 
-- 窗口 `PARTITION BY bar` 对应**当前柱时间全量**分母（ALLSELECTED 六维度 + 逐柱区间 ∩ 全局区间）；换图例维度验证时将 brand 替换为对应维度字段
+- 窗口 `PARTITION BY bar` 对应**当前柱时间全量**分母（ALLSELECTED 六维度整表 + 逐柱区间 ∩ 全局区间）；换图例维度验证时将 brand 替换为对应维度字段
 - JOIN 条件 `data_date BETWEEN c.timeframe_min AND c.timeframe_max` 将销售行归入所属柱（粒度限定 Month，财月区间互斥不重叠）；柱子集合已限定在全局 this period 内（8.1），故柱区间内的数据天然满足全局框定（可见柱下框定为无操作）
 
 ### 8.3 SLS Amt% LY（逐柱 × 图例商品维度）
@@ -913,7 +938,7 @@ GROUP BY c.timeframe_value, i.brand
 4. **全局时间体系**：This Period = data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]——Min_This 与 Max_This 两表共同构成一个时间区间，同时驱动柱子显示范围（IsVisible）与全部指标的数据范围（区间框定）。
 5. **逐柱「当前值」与编辑交互（关键配置）**：每根柱子经 X 轴行上下文将日期表筛选到当前柱所在行，SELECTEDVALUE 逐柱取 TY / LY 区间与期末日期。**Slicer_Time_Frame_Sales_Trend 单选切片器（表格侧日期）对两张柱形图的编辑交互必须设为「无」**，否则切片器会把 X 轴过滤为单柱、趋势失效；该切片器对 Sales / Inventory 明细表保持开启（表格方案依赖）。
 6. **柱形图 → 明细表联动（口径落地）**：原始口径「明细表表格列受左边柱状图影响」——两张图对明细表交叉筛选保持开启：点击柱子传导 `TimeFrame_Value` 筛选，明细表度量 SELECTEDVALUE 读取点击柱所在行（天然单值，与表格方案的单选模式兼容，表格 TY / LY 随点击柱行联动）。清除柱子选择后表格回到单选切片器的选择。
-7. **占比分母范围（与表格方案的关键差异）**：本方案分母 = **当前柱时间范围**内全部商品（SLS Amt% 为当前柱区间、EOH Amt% 为当前柱期末单日；ALLSELECTED 六维度），单柱内图例各商品占比之和 = 100%；表格方案分母 = 单选所选期间全量 / 所选期末。同一商品同一时间在图 / 表中的占比语义不同，需业务知悉。
+7. **占比分母范围（与表格方案的关键差异）**：本方案分母 = **当前柱时间范围**内全部商品（SLS Amt% 为当前柱区间、EOH Amt% 为当前柱期末单日；ALLSELECTED 六维度整表移除），单柱内图例各商品占比之和 = 100%；表格方案分母 = 单选所选期间全量 / 所选期末。同一商品同一时间在图 / 表中的占比语义不同，需业务知悉。
 8. **EOH 期末日期口径（v1.2 调整）**：end period 最后一天 = 当前柱所在行 `TimeFrame_Max`（LY 版 = `TimeFrame_Max_LY`），度量直接以 `inv[data_date] = __EndPeriodDate` 单日过滤——语义贴合口径原文、免逐柱全表扫描（性能更优）；原「区间内最后一个有数据的快照日」回退模式已移除。边界：当前柱为**进行中的时间单位**（TimeFrame_Max 在未来，如未结束的当月）或该日快照未产出时，该柱 EOH 类指标返回 BLANK（口径忠实：期末未到无期末值），与 SLS 侧（区间已有部分数据）形成「销售有值、库存为空」的展示；如业务需展示最近可得快照，可改回 `CALCULATE(MAX(inv[data_date]), REMOVEFILTERS(inv), 区间谓词)` 回退模式，需业务确认。
 9. **全局 this period 区间框定（v1.3 新增）**：全部 8 个指标度量叠加全局区间约束——TY 指标用 `data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]`（全局 This Period），LY 指标用其去年同期 `[Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]]`（两表均含该预计算字段）——**LY 数据位于去年，直接套当前 this period 区间会把 LY 值全部清空，故取对应 LY 区间**。可见柱（IsVisible = 1）下柱区间 ⊆ 全局区间，框定为无操作（防御性）——语义上全局时间筛选器约束每一个指标，视觉筛选之外二次保证数据范围。全局日期未选择时 __ThisMin / __ThisMax 为 BLANK，度量返回空（与其他模块一致，实际页面全局筛选器通常有默认选择）。
 10. **inv 表无渠道字段**：EOH 侧 4 个指标（EOH Amt / EOH Amt% 各 TY / LY）分子分母均不受渠道筛选影响（inv 表无 platform / shop_name）；SLS 侧 4 个指标均受渠道筛选影响（sales 侧）——图 / 表口径一致，需业务知悉。
@@ -921,6 +946,6 @@ GROUP BY c.timeframe_value, i.brand
 12. **币种与汇率**：底表金额仅存 CNY；currency 4 个（SLS Amt / EOH Amt 各 TY / LY）在 Value 层换算（RMB 汇率 = 1 时值不变）；SLS Amt% / EOH Amt% 分子分母同表同币种相除，占比不受币种选择影响。
 13. **财年日历**：TimeFrame 为财年日历（月柱 2027-01 的 TimeFrame_Min / Max 为财月区间，如 [2026-12-28, 2027-01-24]；LY 为表内预计算去年同期区间）——验证与取数一律以日期表区间为准，勿按自然月硬编码。
 14. **X 轴排序**：TimeFrame_Value 含 "2026 Week14" / "2027-01" / "2027" 等混合格式文本，天然排序不可靠——将该列「排序依据列」设为 `ID_Sort`（行唯一、随时间递增）。
-15. **图例字段必须从 Slicer_ 维度表拉取**：图例筛选直接落在维度表字段上，`ALLSELECTED(维度表字段)` 才能正确移除；若误用事实表字段（如 sales[brand] / inv[brand]）作图例，维度表字段上无视觉对象内部筛选，ALLSELECTED 为无效操作，事实表字段的图例筛选不被移除，占比恒 100%。
+15. **图例字段必须从 Slicer_ 维度表拉取**：图例筛选直接落在维度表上，`ALLSELECTED(维度表整表)` 才能连同按列排序隐式带入的排序列筛选一并正确移除（只移除值列时，auto-existence 使排序列筛选独自存活，排序键与业务值 1:1 反推等价于原值筛选，维度表被钉在当前行，占比恒 100%）；若误用事实表字段（如 sales[brand] / inv[brand]）作图例，维度表上无视觉对象内部筛选，ALLSELECTED 为无效操作，事实表字段的图例筛选不被移除，占比恒 100%。
 16. **未选择兜底**：全局 this period 未选择时 IsVisible 返回 1（全部柱显示，含全部粒度——参照模版兜底逻辑）；指标层全局框定此时为 BLANK，度量返回空；实际页面全局日期筛选器通常有默认选择，属边界行为。
 17. **口径与语法**：口径文档中定义的所有指标必须遵守其数据类型与数据格式，与解决方案存在争议时一切以口径文档为准；DAX 文本常量使用双引号，单引号仅用于表名，列名使用方括号。

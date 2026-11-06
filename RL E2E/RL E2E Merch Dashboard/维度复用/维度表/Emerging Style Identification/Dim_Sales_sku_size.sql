@@ -17,13 +17,11 @@ FROM (
     LEFT JOIN (
         SELECT 
             size,
-            size_category,
             MIN(rank) AS size_rank
         FROM " & DIM & ".dim_t00_size_category_mapping
-        GROUP BY size, size_category
+        GROUP BY size
     ) B_min
       ON A.sku_size = B_min.size
-     AND A.sku_size_category = B_min.size_category
     WHERE 1=1
       AND A.sku_size IS NOT NULL
       AND TRIM(A.sku_size) <> ''
