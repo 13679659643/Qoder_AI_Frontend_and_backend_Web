@@ -9,8 +9,8 @@
 --       SQL 1/4 总计行（无分组——ISINSCOPE 全 FALSE，分子分母同范围）
 --       SQL 2/4 字段参数单选 Model（spu_model 分组）
 --       SQL 3/4 字段参数多选 Model + Subclass（spu_model + ax_sub_class 分组）
---       SQL 4/4 字段参数全选五维（spu_model + ax_sub_class + season +
---              category + sku_size 分组，明细级组合）
+--       SQL 4/4 字段参数全选五维（spu_model + ax_sub_class + product_type +
+--              ax_class + sku_size 分组，明细级组合）
 --
 -- ★参数区★（当前为字面量直嵌，修改参数时对四段全文替换对应日期 / 维度值）
 -- 渠道 Button_Store_Name: 'TTL'（六店铺实际值 IN：TM / JD / RLE_CN / DY_Family /
@@ -28,7 +28,7 @@
 --   1. 两张 s02 表日期字段为 dt（非 data_date）；trade 表 net_sales_amt 为
 --      PBI 模型内 Power Query 行级列（ROUND(product_qty × sales_price, 6)），
 --      数据库无此列，SQL 按行级乘积还原后聚合；product_qty 直接聚合
---   2. 行值域 = trade WHERE category = 'Handbags' 的分组列 DISTINCT（全期，
+--   2. 行值域 = trade WHERE ax_class = 'Handbags' 的分组列 DISTINCT（全期，
 --      不受时间 / 渠道限制——dt 与渠道均在度量值 CALCULATE 内显式施加，
 --      不参与行值域生成）；inv 侧纯库存组合（trade 无记录）不在行值域，
 --      PBI 页面无对应行，SQL 经值域 LEFT JOIN 天然排除；若模型加载层含
@@ -72,7 +72,7 @@ trade_total AS (
         SUM(CASE WHEN dt BETWEEN '2026-03-29' AND '2026-07-25'
                  THEN product_qty END)                             AS sls_unit_this
     FROM indep_rl_dw.s02_trade_sku_data_d
-    WHERE category = 'Handbags'
+    WHERE ax_class = 'Handbags'
       AND shop_name IN ('TM', 'JD', 'RLE_CN', 'DY_Family', 'DY_W', 'DY_M')
       AND (
             dt BETWEEN '2026-03-29' AND '2026-07-25'              -- This Period
@@ -85,7 +85,7 @@ inv_total AS (
         SUM(CASE WHEN dt = '2025-07-26' THEN stock_inv_qty END)    AS eoh_unit_lp,
         SUM(CASE WHEN dt = '2026-07-25' THEN msrp_inv_amt END)     AS inv_amt_this
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d
-    WHERE category = 'Handbags'
+    WHERE ax_class = 'Handbags'
       AND dt IN ('2026-07-25', '2025-07-26')
 )
 SELECT
@@ -118,7 +118,7 @@ WITH
 dim_values AS (
     SELECT DISTINCT spu_model
     FROM indep_rl_dw.s02_trade_sku_data_d
-    WHERE category = 'Handbags'
+    WHERE ax_class = 'Handbags'
 ),
 trade_agg AS (
     SELECT
@@ -130,7 +130,7 @@ trade_agg AS (
         SUM(CASE WHEN dt BETWEEN '2026-03-29' AND '2026-07-25'
                  THEN product_qty END)                             AS sls_unit_this
     FROM indep_rl_dw.s02_trade_sku_data_d
-    WHERE category = 'Handbags'
+    WHERE ax_class = 'Handbags'
       AND shop_name IN ('TM', 'JD', 'RLE_CN', 'DY_Family', 'DY_W', 'DY_M')
       AND (
             dt BETWEEN '2026-03-29' AND '2026-07-25'              -- This Period
@@ -145,7 +145,7 @@ inv_agg AS (
         SUM(CASE WHEN dt = '2025-07-26' THEN stock_inv_qty END)    AS eoh_unit_lp,
         SUM(CASE WHEN dt = '2026-07-25' THEN msrp_inv_amt END)     AS inv_amt_this
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d
-    WHERE category = 'Handbags'
+    WHERE ax_class = 'Handbags'
       AND dt IN ('2026-07-25', '2025-07-26')
     GROUP BY spu_model
 )
@@ -184,7 +184,7 @@ WITH
 dim_values AS (
     SELECT DISTINCT spu_model, ax_sub_class
     FROM indep_rl_dw.s02_trade_sku_data_d
-    WHERE category = 'Handbags'
+    WHERE ax_class = 'Handbags'
 ),
 trade_agg AS (
     SELECT
@@ -197,7 +197,7 @@ trade_agg AS (
         SUM(CASE WHEN dt BETWEEN '2026-03-29' AND '2026-07-25'
                  THEN product_qty END)                             AS sls_unit_this
     FROM indep_rl_dw.s02_trade_sku_data_d
-    WHERE category = 'Handbags'
+    WHERE ax_class = 'Handbags'
       AND shop_name IN ('TM', 'JD', 'RLE_CN', 'DY_Family', 'DY_W', 'DY_M')
       AND (
             dt BETWEEN '2026-03-29' AND '2026-07-25'              -- This Period
@@ -213,7 +213,7 @@ inv_agg AS (
         SUM(CASE WHEN dt = '2025-07-26' THEN stock_inv_qty END)    AS eoh_unit_lp,
         SUM(CASE WHEN dt = '2026-07-25' THEN msrp_inv_amt END)     AS inv_amt_this
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d
-    WHERE category = 'Handbags'
+    WHERE ax_class = 'Handbags'
       AND dt IN ('2026-07-25', '2025-07-26')
     GROUP BY spu_model, ax_sub_class
 )
@@ -251,22 +251,22 @@ ORDER BY dv.spu_model IS NULL, dv.spu_model, dv.ax_sub_class IS NULL, dv.ax_sub_
 
 -- ======================================================================
 -- SQL 4/4: 五维明细分组（对齐字段参数切片器全选五个字段的矩阵行——
---          spu_model + ax_sub_class + season + category + sku_size
---          组合，SKU 级明细行；category 列经 Handbags 前置筛选恒为
+--          spu_model + ax_sub_class + product_type + ax_class + sku_size
+--          组合，SKU 级明细行；ax_class 列经 Handbags 前置筛选恒为
 --          'Handbags'，输出仅作对数定位）
 -- ======================================================================
 WITH
 dim_values AS (
-    SELECT DISTINCT spu_model, ax_sub_class, season, category, sku_size
+    SELECT DISTINCT spu_model, ax_sub_class, product_type, ax_class, sku_size
     FROM indep_rl_dw.s02_trade_sku_data_d
-    WHERE category = 'Handbags'
+    WHERE ax_class = 'Handbags'
 ),
 trade_agg AS (
     SELECT
         spu_model,
         ax_sub_class,
-        season,
-        category,
+        product_type,
+        ax_class,
         sku_size,
         SUM(CASE WHEN dt BETWEEN '2026-03-29' AND '2026-07-25'
                  THEN ROUND(product_qty * sales_price, 6) END)     AS sls_amt_this,
@@ -275,35 +275,35 @@ trade_agg AS (
         SUM(CASE WHEN dt BETWEEN '2026-03-29' AND '2026-07-25'
                  THEN product_qty END)                             AS sls_unit_this
     FROM indep_rl_dw.s02_trade_sku_data_d
-    WHERE category = 'Handbags'
+    WHERE ax_class = 'Handbags'
       AND shop_name IN ('TM', 'JD', 'RLE_CN', 'DY_Family', 'DY_W', 'DY_M')
       AND (
             dt BETWEEN '2026-03-29' AND '2026-07-25'              -- This Period
          OR dt BETWEEN '2025-03-30' AND '2025-07-26'              -- Last Period（vs LP 基线）
       )
-    GROUP BY spu_model, ax_sub_class, season, category, sku_size
+    GROUP BY spu_model, ax_sub_class, product_type, ax_class, sku_size
 ),
 inv_agg AS (
     SELECT
         spu_model,
         ax_sub_class,
-        season,
-        category,
+        product_type,
+        ax_class,
         sku_size,
         SUM(CASE WHEN dt = '2026-07-25' THEN stock_inv_qty END)    AS eoh_unit_this,
         SUM(CASE WHEN dt = '2025-07-26' THEN stock_inv_qty END)    AS eoh_unit_lp,
         SUM(CASE WHEN dt = '2026-07-25' THEN msrp_inv_amt END)     AS inv_amt_this
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d
-    WHERE category = 'Handbags'
+    WHERE ax_class = 'Handbags'
       AND dt IN ('2026-07-25', '2025-07-26')
-    GROUP BY spu_model, ax_sub_class, season, category, sku_size
+    GROUP BY spu_model, ax_sub_class, product_type, ax_class, sku_size
 )
 SELECT
     'detail_5dim'                                                   AS Row_Dimension,
     dv.spu_model                                                    AS SP_Model,
     dv.ax_sub_class                                                 AS AX_Sub_Class,
-    dv.season                                                       AS Season,
-    dv.category                                                     AS Category,
+    dv.product_type                                                       AS Season,
+    dv.ax_class                                                     AS Category,
     dv.sku_size                                                     AS SKU_Size,
     t.sls_amt_this                                                  AS SLS_Amt_RMB,
     t.sls_amt_this
@@ -327,16 +327,16 @@ FROM dim_values dv
 LEFT JOIN trade_agg t
     ON dv.spu_model    <=> t.spu_model
    AND dv.ax_sub_class <=> t.ax_sub_class
-   AND dv.season       <=> t.season
-   AND dv.category     <=> t.category
+   AND dv.product_type       <=> t.product_type
+   AND dv.ax_class     <=> t.ax_class
    AND dv.sku_size     <=> t.sku_size
 LEFT JOIN inv_agg   i
     ON dv.spu_model    <=> i.spu_model
    AND dv.ax_sub_class <=> i.ax_sub_class
-   AND dv.season       <=> i.season
-   AND dv.category     <=> i.category
+   AND dv.product_type       <=> i.product_type
+   AND dv.ax_class     <=> i.ax_class
    AND dv.sku_size     <=> i.sku_size
 ORDER BY dv.spu_model IS NULL, dv.spu_model,
          dv.ax_sub_class IS NULL, dv.ax_sub_class,
-         dv.season IS NULL, dv.season,
+         dv.product_type IS NULL, dv.product_type,
          dv.sku_size IS NULL, dv.sku_size;
