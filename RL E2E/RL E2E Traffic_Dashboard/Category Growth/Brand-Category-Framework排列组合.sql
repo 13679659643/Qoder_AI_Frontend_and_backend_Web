@@ -109,9 +109,9 @@
 	    `Level 3`;
 
 数据样式：
-Scenario_Type	Scenario_Sort	Total	Level 1	Level 2	Level 3	ID_Sort
-Brand->Category->Framework	1	Total	CL	""	""	1110001
-Brand->Category->Framework	1	Total	CW	""	""	1210001
-Brand->Category->Framework	1	Total	HM	""	""	1310001
-Category->Brand->Framework	3	Total	Pants	M Polo	Complementary	4010001
+Scenario_Type				Scenario_Sort	Total	Level 1	Level 2	Level 3			ID_Sort
+Brand->Category->Framework	1				Total	CL		""		""				1110001
+Brand->Category->Framework	1				Total	CW		""		""				1210001
+Brand->Category->Framework	1				Total	HM		""		""				1310001
+Category->Brand->Framework	3				Total	Pants	M Polo	Complementary	4010001
 ......

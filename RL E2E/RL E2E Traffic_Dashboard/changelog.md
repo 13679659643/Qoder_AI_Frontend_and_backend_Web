@@ -149,3 +149,22 @@
 ### 子板块：Controllable Ads format breakdown — 直通车
 
 ---
+
+### 子板块：KPIs Measure — 引力魔方 / 直通车
+
+## [2026-11-09 17:44] 新增 — 层级矩阵 Parent% 直接父级花费占比
+
+- **模块**: New Acquisition > KPIs Measure
+- **任务**: 为引力魔方及直通车矩阵新增子项占直接父类的 Parent%
+- **操作**: 修改
+- **变更内容**:
+  - 新增 `Parent% 引力魔方 Value`、`Parent% 引力魔方 Display`，适配 `Total → customer_type → crowed_layer → crowed_type` 四级矩阵。
+  - 新增 `Parent% 直通车 Value`、`Parent% 直通车 Display`，适配 `Total → customer_type → category → keyword_type → keyword_name` 五级矩阵。
+  - 最深层优先 `ISINSCOPE` 判定；分母通过 `ALLSELECTED` 恢复当前层及下级的外部选择，保留祖先分组、平台、店铺、日期及转化周期。
+  - 保留已有常量 Total 首层，不新增字段；Total 与原生总计均约定非零 Cost 时为 100%，分母为零或空时为空。
+  - 补充逐层分母对照、示例、矩阵配置与验收清单；纠正文档中直通车 Cost% 仍写为旧 `plan_name / REMOVEFILTERS` 的说明。
+  - 既有 28 个 DAX 定义保持不变，包括 Cost%、IsZero 及分组 Top10 度量。
+- **关联文件**: `New Acquisition/KPIs Measure/KPIs_Measure_solution.md`
+- **备注**: 静态检查及 20 条层级规则模拟通过；未连接 Power BI DAX 引擎执行，Top10 对实际矩阵父级小计及外层集合的影响仍需报表验收。
+
+---

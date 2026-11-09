@@ -13,7 +13,8 @@ LEFT JOIN (
     GROUP BY size
 ) B_min
   ON A.sku_size = B_min.size
-where 1=1 AND A.data_type = 'spu'
+where 1=1 " & DateRange & "
+AND A.data_type = 'spu'
 ;"),
     更改的类型 = Table.TransformColumnTypes(源,{{"dt", type date}})
 in

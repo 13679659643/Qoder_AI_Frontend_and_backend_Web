@@ -11,10 +11,10 @@
 
 ## 1. 需求理解
 
-实现 New Acquisition 看板中 9 个指标的卡片图展示：
+实现 New Acquisition 看板中 9 个基础指标，并支持引力魔方、直通车层级矩阵及各自的 Parent% 指标：
 
-- **适用场景**：卡片图（无 X 轴，无矩阵行上下文），每个指标独立编写 Value / Display 度量
-- **口径**：一切以口径文档 New Acquisition实际使用版本.md 为准
+- **适用场景**：基础指标用于卡片图及矩阵；Parent% 用于层级矩阵，各自提供 Value / Display 度量
+- **口径**：原有指标以口径文档 New Acquisition实际使用版本.md 为准；Parent% 按“当前项 Cost ÷ 直接父级 Cost”计算，层级及分母范围见第 6.9 节
 - **时间筛选**：使用 `Slicer_Time_Frame_Min`、`Slicer_Time_Frame_Max`（断开维度，SELECTEDVALUE），全局日期筛选
 - **汇率方向**：人民币转美元，金额类指标**除以** `Currency_ExchangeRate`（RMB=1, USD=7）
 - **数据底表分布**：
@@ -885,6 +885,140 @@ Cost 直通车 Rank =
 // Cost% 使用矩阵视觉总额作分母；部署后按第 3 节验证小计、总计及筛选器的共同作用。
 ```
 
+### 2.15 Parent% — 引力魔方／触点
+
+当前项 Cost ÷ 直接父级 Cost；实际为四级矩阵：`Total → customer_type → crowed_layer → crowed_type`。首层使用报表现有、值全部为字符串 `Total` 的字段。分母只恢复当前层级及其下级字段的外部选择，不移除祖先层级定位。数据类型为 `percent_1dp`，Display Folder 为 `KPIs Measure`。
+
+```dax
+Parent% 引力魔方 Value =
+    VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+    VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+    RETURN
+        CALCULATE(
+            VAR __Numerator =
+                SUM('a05_e2e_paid_media_crowed_data_d'[cost_amt])
+            VAR __Denominator =
+                // 末级的祖先也在作用域中，因此必须先判断最深层。
+                SWITCH(
+                    TRUE(),
+                    ISINSCOPE('a05_e2e_paid_media_crowed_data_d'[crowed_type]),
+                        CALCULATE(
+                            SUM('a05_e2e_paid_media_crowed_data_d'[cost_amt]),
+                            ALLSELECTED(
+                                'a05_e2e_paid_media_crowed_data_d'[crowed_type]
+                            )
+                        ),
+                    ISINSCOPE('a05_e2e_paid_media_crowed_data_d'[crowed_layer]),
+                        CALCULATE(
+                            SUM('a05_e2e_paid_media_crowed_data_d'[cost_amt]),
+                            ALLSELECTED(
+                                'a05_e2e_paid_media_crowed_data_d'[crowed_layer],
+                                'a05_e2e_paid_media_crowed_data_d'[crowed_type]
+                            )
+                        ),
+                    ISINSCOPE('a05_e2e_paid_media_crowed_data_d'[customer_type]),
+                        CALCULATE(
+                            SUM('a05_e2e_paid_media_crowed_data_d'[cost_amt]),
+                            ALLSELECTED(
+                                'a05_e2e_paid_media_crowed_data_d'[customer_type],
+                                'a05_e2e_paid_media_crowed_data_d'[crowed_layer],
+                                'a05_e2e_paid_media_crowed_data_d'[crowed_type]
+                            )
+                        ),
+                    __Numerator
+                )
+            RETURN
+                DIVIDE(__Numerator, __Denominator),
+            'a05_e2e_paid_media_crowed_data_d'[channel] IN {"引力魔方", "触点"},
+            'a05_e2e_paid_media_crowed_data_d'[data_date] >= __TimeMin,
+            'a05_e2e_paid_media_crowed_data_d'[data_date] <= __TimeMax
+        )
+```
+
+```dax
+Parent% 引力魔方 Display =
+    VAR __Value = [Parent% 引力魔方 Value]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            BLANK(),
+            FORMAT(__Value, "#,##0.0%;-#,##0.0%;0.0%")
+        )
+```
+
+### 2.16 Parent% — 直通车／快车
+
+当前项 Cost ÷ 直接父级 Cost；实际为五级矩阵：`Total → customer_type → category → keyword_type → keyword_name`。首层使用报表现有、值全部为字符串 `Total` 的字段。`plan_name` 不属于当前矩阵行层级，不移除其外部筛选。同名关键词在不同父组分别计算占比，同一父组内跨计划的同名关键词沿用基础 Cost 聚合。数据类型为 `percent_1dp`，Display Folder 为 `KPIs Measure`。
+
+```dax
+Parent% 直通车 Value =
+    VAR __TimeMin = SELECTEDVALUE(Slicer_Time_Frame_Min[TimeFrame_Min])
+    VAR __TimeMax = SELECTEDVALUE(Slicer_Time_Frame_Max[TimeFrame_Max])
+    RETURN
+        CALCULATE(
+            VAR __Numerator =
+                SUM('a05_e2e_paid_media_keyword_data_d'[cost_amt])
+            VAR __Denominator =
+                // 末级的祖先也在作用域中，因此必须先判断最深层。
+                SWITCH(
+                    TRUE(),
+                    ISINSCOPE('a05_e2e_paid_media_keyword_data_d'[keyword_name]),
+                        CALCULATE(
+                            SUM('a05_e2e_paid_media_keyword_data_d'[cost_amt]),
+                            ALLSELECTED(
+                                'a05_e2e_paid_media_keyword_data_d'[keyword_name]
+                            )
+                        ),
+                    ISINSCOPE('a05_e2e_paid_media_keyword_data_d'[keyword_type]),
+                        CALCULATE(
+                            SUM('a05_e2e_paid_media_keyword_data_d'[cost_amt]),
+                            ALLSELECTED(
+                                'a05_e2e_paid_media_keyword_data_d'[keyword_type],
+                                'a05_e2e_paid_media_keyword_data_d'[keyword_name]
+                            )
+                        ),
+                    ISINSCOPE('a05_e2e_paid_media_keyword_data_d'[category]),
+                        CALCULATE(
+                            SUM('a05_e2e_paid_media_keyword_data_d'[cost_amt]),
+                            ALLSELECTED(
+                                'a05_e2e_paid_media_keyword_data_d'[category],
+                                'a05_e2e_paid_media_keyword_data_d'[keyword_type],
+                                'a05_e2e_paid_media_keyword_data_d'[keyword_name]
+                            )
+                        ),
+                    ISINSCOPE('a05_e2e_paid_media_keyword_data_d'[customer_type]),
+                        CALCULATE(
+                            SUM('a05_e2e_paid_media_keyword_data_d'[cost_amt]),
+                            ALLSELECTED(
+                                'a05_e2e_paid_media_keyword_data_d'[customer_type],
+                                'a05_e2e_paid_media_keyword_data_d'[category],
+                                'a05_e2e_paid_media_keyword_data_d'[keyword_type],
+                                'a05_e2e_paid_media_keyword_data_d'[keyword_name]
+                            )
+                        ),
+                    __Numerator
+                )
+            RETURN
+                DIVIDE(__Numerator, __Denominator),
+            'a05_e2e_paid_media_keyword_data_d'[channel] IN {"直通车", "快车"},
+            'a05_e2e_paid_media_keyword_data_d'[data_date] >= __TimeMin,
+            'a05_e2e_paid_media_keyword_data_d'[data_date] <= __TimeMax
+        )
+```
+
+```dax
+Parent% 直通车 Display =
+    VAR __Value = [Parent% 直通车 Value]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            BLANK(),
+            FORMAT(__Value, "#,##0.0%;-#,##0.0%;0.0%")
+        )
+```
+
+两个 Value 均直接使用人民币 `cost_amt`，分子、分母共享外层的日期和渠道筛选，不执行汇率转换。总计约定为总计 Cost ÷ 自身：非零时为 100%，总计为 0 或空时为空；分母为 0 或空时不返回无穷大。逐层分母、外部选择及 Top10 边界详见第 6.9 节。
+
 ---
 
 ## 3. 度量值清单与 Display Folder
@@ -909,6 +1043,12 @@ Cost 直通车 Rank =
 | 16   | Cost% 直通车 Display           | KPIs Measure   | 直通车花费占比格式化显示       | percent_1dp          | 否         |
 | 17   | ROI 直通车 Value               | KPIs Measure   | 直通车 ROI 值（#13）           | decimal_1dp          | 否         |
 | 18   | ROI 直通车 Display             | KPIs Measure   | 直通车 ROI 格式化显示          | decimal_1dp          | 否         |
+| 19   | Parent% 引力魔方 Value         | KPIs Measure   | 引力魔方当前项占直接父级 Cost  | percent_1dp          | 否         |
+| 20   | Parent% 引力魔方 Display       | KPIs Measure   | 引力魔方父级占比格式化显示     | percent_1dp          | 否         |
+| 21   | Parent% 直通车 Value           | KPIs Measure   | 直通车当前项占直接父级 Cost    | percent_1dp          | 否         |
+| 22   | Parent% 直通车 Display         | KPIs Measure   | 直通车父级占比格式化显示       | percent_1dp          | 否         |
+
+Parent% 的 Value 为数值型，可直接放入矩阵并设置模型格式 `#,##0.0%;-#,##0.0%;0.0%`；若沿用现有 Display 展示方式，则放入对应 Display。两个方式任选其一，均不替换现有 Cost% 列。
 
 ---
 
@@ -1058,14 +1198,15 @@ Cost 直通车 Rank =
 | #6~#9 引力魔方 | a05_e2e_paid_media_crowed_data_d  | 下钻表，无 page_type 筛选     |
 | #10~#13 直通车 | a05_e2e_paid_media_keyword_data_d | 下钻表，无 page_type 筛选     |
 
-### 6.4 Cost% 分母移除行维度（#8、#12）
+### 6.4 Cost% 与 Parent% 的分母区别
 
-#8 和 #12 的分母是"该广告点位合计"，需要移除所有行维度：
+现有 Cost% 的分母不保留当前行的父级定位，各层级均与模块 Total 比较；两个原有实现的外部行字段筛选语义不同：
 
-- **#8 引力魔方**：`REMOVEFILTERS(crowed_layer, crowed_type, customer_type)`
-- **#12 直通车**：`REMOVEFILTERS(customer_type, category, plan_name, keyword_name)`
+- **#8 引力魔方**：`REMOVEFILTERS(crowed_layer, crowed_type, customer_type)`，移除这三个字段的行定位及外部筛选。
+- **#12 直通车**：`ALLSELECTED(customer_type, category, keyword_type, keyword_name)`，恢复当前矩阵外层选择，以该入选范围的视觉总额作分母；当前行层级不含 `plan_name`。
+- **Parent%**：两个模块均按当前层级，用 `ALLSELECTED` 恢复当前层及下级字段的外部选择，保留祖先定位，分母为当前直接父级范围的 Cost。
 
-卡片图场景下无行维度，REMOVEFILTERS 不影响结果；但保证将来用于矩阵/表格时也能正确计算占比。
+原有 Cost% 度量代码不调整。由于引力魔方 Cost% 会清除行字段外部筛选，当存在这些筛选时，`customer_type` 层的 Parent% 不保证与原有 Cost% 一致；无行字段外部限制时，二者在该层的分母均为模块 Total。
 
 ### 6.5 平台渠道映射（#7、#11）
 
@@ -1103,3 +1244,83 @@ TM 和 JD 平台的渠道存在映射关系：
 - "DAX 语法规范"示例：`[is_controllable_channel] = 1`（整数）
 
 本方案子模块二/四/五的 9 个指标均不涉及 `is_controllable_channel` 筛选（仅子模块三 #2~#5 涉及），故无影响。
+
+### 6.9 Parent% 的矩阵层级、配置与验证
+
+#### 6.9.1 分母逐层对照
+
+Parent% 不是“末级除以固定的某个分组”，也不是所有行统一除以 Total。矩阵处于哪个层级，就计算该节点占直接父节点的花费比例。
+
+**引力魔方／触点**：保留常量 `Total` 首层，其下三级行字段来自 `a05_e2e_paid_media_crowed_data_d`。
+
+| 当前行层级 | 分子 | 分母保留的祖先定位 | 分母恢复外部选择的字段 |
+|---|---|---|---|
+| `Total`，第一级 | Total Cost | Total 自身 | 不另移除字段，非零时 100% |
+| `customer_type`，第二级 | 当前新老客 Cost | 当前 Total | `customer_type`、`crowed_layer`、`crowed_type` |
+| `crowed_layer`，第三级 | 当前人群层级 Cost | 当前 Total + `customer_type` | `crowed_layer`、`crowed_type` |
+| `crowed_type`，第四级 | 当前人群名称 Cost | 当前 Total + `customer_type + crowed_layer` | `crowed_type` |
+| 矩阵原生总计，若开启 | 总计 Cost | 总计自身 | 不另移除字段，非零时 100% |
+
+**直通车／快车**：保留常量 `Total` 首层，其下四级行字段来自 `a05_e2e_paid_media_keyword_data_d`。
+
+| 当前行层级 | 分子 | 分母保留的祖先定位 | 分母恢复外部选择的字段 |
+|---|---|---|---|
+| `Total`，第一级 | Total Cost | Total 自身 | 不另移除字段，非零时 100% |
+| `customer_type`，第二级 | 当前新老客 Cost | 当前 Total | `customer_type`、`category`、`keyword_type`、`keyword_name` |
+| `category`，第三级 | 当前分类 Cost | 当前 Total + `customer_type` | `category`、`keyword_type`、`keyword_name` |
+| `keyword_type`，第四级 | 当前关键词类型 Cost | 当前 Total + `customer_type + category` | `keyword_type`、`keyword_name` |
+| `keyword_name`，第五级 | 当前关键词 Cost | 当前 Total + `customer_type + category + keyword_type` | `keyword_name` |
+| 矩阵原生总计，若开启 | 总计 Cost | 总计自身 | 不另移除字段，非零时 100% |
+
+`Total` 是报表中真实存在的行字段，每行都为字符串 `Total`，不是矩阵自动生成的原生总计。保留该字段即可，不新增同名计算列，也不额外筛选事实表中的预汇总记录。
+
+在 `Total` 行上，下级业务字段的 `ISINSCOPE` 都为 FALSE，两个度量会进入默认分支，以当前 Cost 除以自身；原生总计若开启，也按同样约定处理。因为两者的结果规则相同，不需要额外引用 Total 字段来区分；在下级行中，Total 的上下文一直保留，不加入 `ALLSELECTED` 清除列表。
+
+`ISINSCOPE` 从最深层向最浅层判断；不能用 `HASONEVALUE` 替代层级判定，因为 Total 恒为单值，其他父级也可能被切片器筛选到单值，但这不代表当前正在展示该级明细。真实数据中的空父级值也仍是分组成员，不据此跳过层级。
+
+#### 6.9.2 具体交叉点示例
+
+以下为便于对数的示意金额，不是生产数据；假设没有额外行字段筛选，且各组 Cost 可加总。
+
+| 模块 | 当前行 | 当前 Cost | 直接父级 Cost | 模块 Total Cost | Parent% | Cost% |
+|---|---|---:|---:|---:|---:|---:|
+| 引力魔方 | New | 200 | 500 | 500 | 40.0% | 40.0% |
+| 引力魔方 | New → OA | 80 | 200 | 500 | 40.0% | 16.0% |
+| 引力魔方 | New → OA → 人群A | 20 | 80 | 500 | 25.0% | 4.0% |
+| 直通车 | New | 200 | 500 | 500 | 40.0% | 40.0% |
+| 直通车 | New → 分类A | 80 | 200 | 500 | 40.0% | 16.0% |
+| 直通车 | New → 分类A → 品牌词 | 40 | 80 | 500 | 50.0% | 8.0% |
+| 直通车 | New → 分类A → 品牌词 → 关键词A | 10 | 40 | 500 | 25.0% | 2.0% |
+
+例如直通车末级的 25% 是 `10 / 40`，不是 `10 / 80`、`10 / 200` 或 `10 / 500`。折叠到品牌词时，该父节点本身显示 `40 / 80 = 50%`，不把子项的 Parent% 相加作为父级结果。
+
+#### 6.9.3 外部筛选与 Top10
+
+- 两个 Parent% 均保留平台、店铺、转化周期及本期日期口径；行字段的切片器、页面筛选等外部选择由 `ALLSELECTED` 保留。
+- 分母恢复的是当前层及以下字段的外部集合，祖先层级的当前分组筛选不清除；同名人群或关键词不会跨父组混算。
+- 直通车的 `plan_name` 如作为外部筛选存在，继续生效；同一父组内跨计划的同名关键词仍按当前筛选范围聚合。
+- Parent% 不调用 Rank、Top10 Show Row 或 IsZero 度量，不新增一套独立的 Top10 分母，也不修改现有视觉筛选条件。
+- 视觉级 Top10 等筛选可能影响矩阵外层入选集合及父级小计。不能仅因为 DAX 未显式调用 Top10，就认定分母一定不受其影响；必须在实际矩阵对比直接父级 Cost。
+- 未隐藏子项、父子金额可加总且分母非零时，同一父级的全部直接子项 Parent% 合计应为 100%。Top10 或其他视觉筛选只显示部分子项时，不强制要求屏幕可见子项占比合计为 100%。
+
+#### 6.9.4 矩阵配置
+
+1. 引力魔方行顺序固定为 `Total → customer_type → crowed_layer → crowed_type`，共四级；直通车固定为 `Total → customer_type → category → keyword_type → keyword_name`，共五级。首层使用报表已有的常量 Total 字段。
+2. 在各自矩阵值区域新增对应的 `Parent% ... Value` 或 `Parent% ... Display`，视觉名称设为 `Parent%`，原有 Cost、Cost%、ROI 保留。
+3. Value 设置一位小数百分比，排序或条件格式引用 Value；Display 沿用本方案的文本展示风格，空值继续返回空白。
+4. 使用“展开所有下一级”或逐组展开，保留祖先上下文；不要直接跳到末级而把不同父组的同名成员合并展示。
+5. 不新增模型关系，不替换行字段来源，不修改现有 IsZero 和分组 Top10 配置。若改用独立维表字段，必须同步修改 `ISINSCOPE` 和 `ALLSELECTED` 的字段引用。
+6. 如行字段在模型中配置了额外的“按列排序”列，需要将对应排序列同步纳入该层的 `ALLSELECTED`；本方案未虚构当前文件未定义的排序字段。
+
+#### 6.9.5 验证清单
+
+- 先折叠到真实的 Total 首层，非零 Cost 时 Parent% 为 100.0%；再展开到 `customer_type`，确认分母为该 Total 行的 Cost。若启用原生总计，单独核对其约定结果，勿把两者混为同一个层级。
+- 先关闭视觉级 Top10，按第 6.9.2 节逐层核对“当前行 Cost ÷ 直接父级 Cost”，检查业务下级不是统一除以 Total。
+- 展开、折叠各级，确认父级 Parent% 根据其父级重新计算，不累加子项百分比。
+- 为两个父组设置同名末级成员，验证各用自己的父级 Cost 作分母。
+- 在行字段切片器中只保留部分成员，核对分母为该外部选择下的直接父级范围；引力魔方 Parent% 与原有 Cost% 的筛选差异见第 6.4 节。
+- 重新开启现有分组 Top10、字段有效性和 IsZero 筛选，对照父级 Cost、小计、总计，检查父级金额是否受视觉入选集合影响。
+- 分子为 0、分母非零时显示 0.0%；分子为空时为空；分母为 0 或空时为空；总计非零时 100.0%，总计为 0 或空时为空。
+- 切换人民币／美元，Parent% 不变；切换本期日期、平台、店铺或转化周期，分子分母在同一口径下更新。
+
+验证状态：已核对原有 28 个 DAX 定义保持不变，四个新增 Value/Display 定义及代码围栏完整；两个 Value 的层级判定顺序和各分支字段集合检查通过。20 条本地规则模拟覆盖常量 Total、原生总计、直接父级、同名子项、外部选择及零空值，结果通过；这些模拟不是 DAX 引擎测试。尚未连接 Power BI 模型执行，尤其是 Top10 与矩阵小计的共同作用需在实际报表中验收。
