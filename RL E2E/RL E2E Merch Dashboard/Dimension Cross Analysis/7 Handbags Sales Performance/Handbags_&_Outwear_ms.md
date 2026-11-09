@@ -19,7 +19,7 @@ Handbags Sales Performance 是 Handbags/Outerwear 前置品类筛选下的 Model
 - **行**：Slicer_Spu_Model[spu_model]（唯一行维度；维度表与两张事实表均一对多关联，行筛选自动传导，无需显式 DAX 处理行维度传递）
 - **列**：三层结构 ChannelGroup（仅 Store）> Label（TTL + 6 店铺）> ColName（指标列），共 31 列
   - TTL 列组合（7 列）：SLS Unit、SLS Amt、SLS Amt%、Amt vs LP、ST%、EOH、EOH vs LP
-  - 各店铺列组合（6 店铺 × 4 列，组合完全一致）：SLS Unit、SLS Amt、SLS Amt%、vs LP
+  - 各店铺列组合（6 店铺 × 4 列，组合完全一致）：SLS Unit、SLS Amt、SLS Amt%、Amt% vs LP
 - **行可见性**：Display 层 BLANK 一律返回 BLANK()（不返回 "-"）——矩阵检测到该行全部度量值均为 BLANK() 时自动隐藏该行（含层级行），无需 IsEmpty 视觉级筛选器
 
 ### 1.2 路由维度
@@ -27,7 +27,7 @@ Handbags Sales Performance 是 Handbags/Outerwear 前置品类筛选下的 Model
 | 路由维度 | 来源 | 类型 | 说明 |
 | -------- | ---- | ---- | ---- |
 | 渠道 | Dim_ColMetric_Handbags&Outwear_Sales_ms 的 Label_Value | 断开列维度 | 过滤事实表 [shop_name]；Label_Value = "TTL" 时走 ALLSELECTED 全店铺合计 |
-| 指标 | Dim_ColMetric_Handbags&Outwear_Sales_ms 的 ColType | 断开列维度 | 8 种：SLS Unit / SLS Amt / SLS Amt% / Amt vs LP / ST% / EOH / EOH vs LP / vs LP |
+| 指标 | Dim_ColMetric_Handbags&Outwear_Sales_ms 的 ColType | 断开列维度 | 8 种：SLS Unit / SLS Amt / SLS Amt% / Amt vs LP / ST% / EOH / EOH vs LP / Amt% vs LP |
 | 行维度 | Slicer_Spu_Model[spu_model] | 维度表字段（一对多关系 × 2） | 行筛选经模型关系自动传导到 trade / inv 双表（Slicer_Spu_Model 与两张事实表均一对多关系）；占比分母移除行维度筛选用 ALLSELECTED 整表（见 3.4） |
 
 **Label → 事实表实际值映射**（已核对 Slicer_Store_Name）：
@@ -45,8 +45,8 @@ Handbags Sales Performance 是 Handbags/Outerwear 前置品类筛选下的 Model
 
 | 口径 | 时间范围 | 适用指标 |
 | ---- | -------- | -------- |
-| This Period（区间类） | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] | SLS Unit、SLS Amt、SLS Amt% 分子分母、Amt vs LP 分子、vs LP this 侧占比分子分母、ST% 销售侧 |
-| Last Period（vs LP 基线，区间类） | dt ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] | Amt vs LP 分母、vs LP last 侧占比分子分母 |
+| This Period（区间类） | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] | SLS Unit、SLS Amt、SLS Amt% 分子分母、Amt vs LP 分子、Amt% vs LP this 侧占比分子分母、ST% 销售侧 |
+| Last Period（vs LP 基线，区间类） | dt ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] | Amt vs LP 分母、Amt% vs LP last 侧占比分子分母 |
 | End Period This（期末时点类） | end period 最后一天 = Slicer_Time_Frame_Max_This[TimeFrame_Max]（直接单日过滤） | EOH、EOH vs LP this 侧、ST% 库存侧 |
 | End Period LP（期末时点类） | end period LP 最后一天 = Slicer_Time_Frame_Max_Last[TimeFrame_Max]（直接单日过滤） | EOH vs LP 分母 |
 
@@ -87,7 +87,7 @@ Act Base Value / LY Base Value
        （Act 覆盖 5 种基础指标；LY 按 vs LP 类 ColType 返回对应 LP 基线）
     ↓
 Base Value（总路由）
-    ←  vs LP 三种派生（Amt vs LP / vs LP / EOH vs LP）：
+    ←  vs LP 三种派生（Amt vs LP / Amt% vs LP / EOH vs LP）：
        分子经整表 REMOVEFILTERS + 三条件重路由取同渠道基础指标列，
        分母取 LY Base Value，派生比值 / 差值
        其余 5 种 ColType 直接取 Act Base Value
@@ -123,7 +123,7 @@ Cell Font Color / Cell Background Color
 | ST% | trade + inv | This 区间 / This 快照单日 | SLS Amt /（SLS Amt + 期末库存金额 msrp_inv_amt）（§46） | percent_0dp |
 | EOH | inv | This 快照单日 | sum(stock_inv_qty)（§47） | integer |
 | EOH vs LP | inv | 双期快照单日 | EOH This / EOH LP - 1（§47 附属） | percent_0dp |
-| vs LP | trade | This / Last 区间 | SLS Amt% This - SLS Amt% Last（差值，×10000 转 bp 在 Display 层）（§45 附属） | integer_bp |
+| Amt% vs LP | trade | This / Last 区间 | SLS Amt% This - SLS Amt% Last（差值，×10000 转 bp 在 Display 层）（§45 附属） | integer_bp |
 
 ### 3.4 SLS Amt% 占比分母（ALLSELECTED 整表）
 
@@ -273,11 +273,11 @@ Handbags & Outwear Sales LY Base Value =
 // ========================================
 // 度量值: Handbags & Outwear Sales LY Base Value
 // Display Folder: Handbags Sales Performance\Base Metrics
-// 用途: vs LP 三种派生指标（Amt vs LP / vs LP / EOH vs LP）的 Last Period 基线，
+// 用途: vs LP 三种派生指标（Amt vs LP / Amt% vs LP / EOH vs LP）的 Last Period 基线，
 //       按 ColType 路由返回对应 LP 值：
-//       - "Amt vs LP" → LP SLS Amt（区间汇总，原始 CNY）
-//       - "vs LP"     → LP SLS Amt%（LP 分子 / LP 分母，分母 ALLSELECTED 整表同构）
-//       - "EOH vs LP" → LP EOH（LP 期末快照日单日时点）
+//       - "Amt vs LP"   → LP SLS Amt（区间汇总，原始 CNY）
+//       - "Amt% vs LP"  → LP SLS Amt%（LP 分子 / LP 分母，分母 ALLSELECTED 整表同构）
+//       - "EOH vs LP"   → LP EOH（LP 期末快照日单日时点）
 //       渠道上下文与 Act Base Value 完全一致（同列同渠道对比）
 // 说明: 仅在 Base Value 总路由的 vs LP 类分支中被调用；
 //       Last Period 直接读 Slicer_Time_Frame_Min_Last / Max_Last 筛选器
@@ -320,7 +320,7 @@ VAR __SLSAmt_Last =
         's02_trade_sku_data_d'[dt] <= __PeriodMax_LY
     )
 
-// ═══ LP SLS Amt%（vs LP 分母；分母 ALLSELECTED 整表，与 This 侧同构）═══
+// ═══ LP SLS Amt%（Amt% vs LP 分母；分母 ALLSELECTED 整表，与 This 侧同构）═══
 VAR __SLSAmt_Total_LP =
     CALCULATE(
         SUM('s02_trade_sku_data_d'[net_sales_amt]),
@@ -342,7 +342,7 @@ RETURN
     SWITCH(
         __ColType,
         "Amt vs LP", __SLSAmt_Last,    // LP SLS Amt（区间汇总）
-        "vs LP",     __SLSAmtPct_LP,   // LP SLS Amt%（区间占比）
+        "Amt% vs LP", __SLSAmtPct_LP,   // LP SLS Amt%（区间占比）
         "EOH vs LP", __EOHUnit_LP,     // LP EOH（快照日单日）
         BLANK()
     )
@@ -356,13 +356,13 @@ Handbags & Outwear Sales Base Value =
 // 度量值: Handbags & Outwear Sales Base Value
 // Display Folder: Handbags Sales Performance\Base Metrics
 // 用途: 总路由，按 ColType 分发
-//       - vs LP 三种派生（Amt vs LP / vs LP / EOH vs LP）→ 分子重路由 + LY 基线派生
+//       - vs LP 三种派生（Amt vs LP / Amt% vs LP / EOH vs LP）→ 分子重路由 + LY 基线派生
 //       - 其余 5 种 ColType → 直接取 Act Base Value
 //
 // vs LP 分子重路由机制（整表 REMOVEFILTERS + 三条件重建）:
 //   矩阵列头三层（ChannelGroup > Label > ColName）在视觉对象查询（SUMMARIZECOLUMNS）中
 //   以 GroupBy 组合筛选形式存在，REMOVEFILTERS(Dim[ColName]) 单列写法无法从组合筛选中
-//   剥离 ColName 部分——ColName（vs LP 类列）筛选残留，与新加的基础 ColType 互斥
+//   剥离 ColName 部分——ColName（Amt% vs LP 类列）筛选残留，与新加的基础 ColType 互斥
 //   → Dim 表空集 → 分子始终 BLANK（同坑已在 Merchandising Core KPI / Sales Performance
 //   Details 实证沉淀）
 //   正确做法：CALCULATE 外先捕获当前列 ChannelGroup / Label_Value 标量值，
@@ -370,26 +370,26 @@ Handbags & Outwear Sales Base Value =
 //   基础 ColType 三条件重建，唯一定位同渠道的基础指标列取分子
 //
 // 派生口径:
-//   Amt vs LP → SLS Amt This / SLS Amt Last - 1（比值，分子分母均原始 CNY，不受币种影响）
-//   vs LP     → SLS Amt% This - SLS Amt% Last（差值原始小数，×10000 转 bp 在 Display 层）
-//   EOH vs LP → EOH This / EOH LP - 1（双期快照日单日时点值的变化率）
+//   Amt vs LP   → SLS Amt This / SLS Amt Last - 1（比值，分子分母均原始 CNY，不受币种影响）
+//   Amt% vs LP  → SLS Amt% This - SLS Amt% Last（差值原始小数，×10000 转 bp 在 Display 层）
+//   EOH vs LP   → EOH This / EOH LP - 1（双期快照日单日时点值的变化率）
 //
 // 空值规则: LP 值为空或 0 时比值类返回 BLANK；差值类任一侧为空返回 BLANK
 // ========================================
     VAR __ColType = SELECTEDVALUE('Dim_ColMetric_Handbags&Outwear_Sales_ms'[ColType])
     VAR __IsVsLPType =
-        __ColType IN {"Amt vs LP", "vs LP", "EOH vs LP"}
+        __ColType IN {"Amt vs LP", "Amt% vs LP", "EOH vs LP"}
 
     // ── vs LP 分子：当前列渠道上下文下的 This Period 基础指标值 ──
     // 先捕获标量再清筛选：整表 REMOVEFILTERS 后按三条件重建，避免组合筛选残留互斥
-    // 基础 ColType 映射：Amt vs LP → SLS Amt；vs LP → SLS Amt%；EOH vs LP → EOH
+    // 基础 ColType 映射：Amt vs LP → SLS Amt；Amt% vs LP → SLS Amt%；EOH vs LP → EOH
     VAR __ChannelGroup = SELECTEDVALUE('Dim_ColMetric_Handbags&Outwear_Sales_ms'[ChannelGroup])
     VAR __LabelValue = SELECTEDVALUE('Dim_ColMetric_Handbags&Outwear_Sales_ms'[Label_Value])
     VAR __BaseColType =
         SWITCH(
             __ColType,
             "Amt vs LP", "SLS Amt",
-            "vs LP",     "SLS Amt%",
+            "Amt% vs LP", "SLS Amt%",
             "EOH vs LP", "EOH"
         )
     VAR __BaseValue_This =
@@ -422,8 +422,8 @@ Handbags & Outwear Sales Base Value =
                     BLANK(),
                     DIVIDE(__BaseValue_This, __BaseValue_Last) - 1
                 ),
-            // vs LP = This% - Last%（占比差值，原始小数）
-            "vs LP",
+            // Amt% vs LP = This% - Last%（占比差值，原始小数）
+            "Amt% vs LP",
                 IF(
                     ISBLANK(__BaseValue_This) || ISBLANK(__BaseValue_Last),
                     BLANK(),
@@ -498,7 +498,7 @@ Handbags & Outwear Sales Cell Display =
 //   currency    → __CurrencySymbol & FORMAT(__Value, "#,##0")（SLS Amt，符号由币种切片器决定）
 //   percent_0dp → FORMAT(__Value, "#,##0%") 百分比整数，不含正号（SLS Amt% / ST% /
 //                 Amt vs LP / EOH vs LP）
-//   integer_bp  → FORMAT(__Value * 10000, "#,##0") & "bp"（vs LP，占比差值 ×10000 转 bp，
+//   integer_bp  → FORMAT(__Value * 10000, "#,##0") & "bp"（Amt% vs LP，占比差值 ×10000 转 bp，
 //                 负数自带负号，零值 0bp）
 // 扩展格式（口径文档未定义，按参考方案 Sales_Performance_Details_ms 保留，
 // 当前无列使用，便于后续快速调整）:
@@ -581,7 +581,7 @@ Handbags & Outwear Sales Cell Font Color =
 //
 // 颜色规则:
 //   1. 全部基础指标列（SLS Unit / SLS Amt / SLS Amt% / ST% / EOH）固定 #252423 → "fixed_black"
-//   2. vs LP 类（Amt vs LP / vs LP / EOH vs LP，比率为正/负/零三色）→ "pos_neg_zero"
+//   2. vs LP 类（Amt vs LP / Amt% vs LP / EOH vs LP，比率为正/负/零三色）→ "pos_neg_zero"
 // ========================================
     VAR __Value = [Handbags & Outwear Sales Cell Value]
     VAR __ColorRule = SELECTEDVALUE('Dim_ColMetric_Handbags&Outwear_Sales_ms'[Metric_ColorRule], "fixed_default")
@@ -723,15 +723,15 @@ Handbags & Outwear Sales Cell Background Color =
 1. **表名与度量值名含 "&" 字符**：`Dim_ColMetric_Handbags&Outwear_Sales_ms` 及 `Handbags & Outwear Sales ...` 系列度量值在 DAX 中引用必须加单引号，例如 `'Dim_ColMetric_Handbags&Outwear_Sales_ms'[ColType]`。
 2. **行维度双表关系传导（建模前提）**：行维度为 Slicer_Spu_Model[spu_model]，需与 s02_trade_sku_data_d、s02_inventory_stock_sales_detail_d **均建立一对多关系（共享维度模式）**——行筛选自动传导到两张事实表，全部指标（trade 侧 + inv 侧）无需任何显式行维度传递 DAX；若模型中 Slicer_Spu_Model 未与 inv 表建关系，inv 侧指标需回退 TREATAS 桥接（`TREATAS(VALUES('s02_trade_sku_data_d'[spu_model]), 's02_inventory_stock_sales_detail_d'[spu_model])`，参考 Sales Performance Details 注意事项 2 的共享维度替代方案）。
 3. **SLS Amt% 分母必须 ALLSELECTED 整表**：Slicer_Spu_Model 含 sort_order 排序字段，spu_model 通过"按列排序（Sort by Column）"绑定 sort_order——矩阵行按 spu_model 分组时查询会同时按 spu_model + sort_order 组合分组，`ALLSELECTED('Slicer_Spu_Model'[spu_model])` 单列写法无法剥离 sort_order 部分的组合筛选（行维度筛选残留 → 分母恒等于分子 → 占比恒 100%）；必须使用 `ALLSELECTED('Slicer_Spu_Model')` 整表写法恢复整表外部筛选状态。不使用 REMOVEFILTERS——其会移除列上全部筛选器（含外部显式筛选），前置筛选直接配置于 trade[category] 列的场景下会误删。
-4. **vs LP 分子重路由必须整表 REMOVEFILTERS**：矩阵列头三层在视觉对象查询（SUMMARIZECOLUMNS）中以 GroupBy 组合筛选形式存在，`REMOVEFILTERS(Dim[ColName])` 单列写法无法剥离 ColName 部分，残留的 vs LP 类列筛选与新加的基础 ColType 互斥 → Dim 表空集 → 分子始终 BLANK；正确模式 = CALCULATE 外捕获 ChannelGroup / Label_Value 标量 + `REMOVEFILTERS(整表)` + 三条件重建（ChannelGroup + Label_Value + 基础 ColType 唯一定位单行）。ChannelGroup / Label 层汇总单元格无唯一 ColType → BLANK → Display 返回 BLANK()。
+4. **vs LP 分子重路由必须整表 REMOVEFILTERS**：矩阵列头三层在视觉对象查询（SUMMARIZECOLUMNS）中以 GroupBy 组合筛选形式存在，`REMOVEFILTERS(Dim[ColName])` 单列写法无法剥离 ColName 部分，残留的 Amt% vs LP 类列筛选与新加的基础 ColType 互斥 → Dim 表空集 → 分子始终 BLANK；正确模式 = CALCULATE 外捕获 ChannelGroup / Label_Value 标量 + `REMOVEFILTERS(整表)` + 三条件重建（ChannelGroup + Label_Value + 基础 ColType 唯一定位单行）。ChannelGroup / Label 层汇总单元格无唯一 ColType → BLANK → Display 返回 BLANK()。
 5. **前置品类关系传导（建模前提）与总计行语义**：行维度经 Slicer_Spu_Model → trade / inv、品类经 Slicer_Category → trade / inv 双侧一对多关系自动传导，度量值内零行维度 / 品类硬编码（无 TREATAS、无 IN 清单）——后续品类 / 行维度调整仅需修改视觉对象筛选器与维度表配置；若模型中 Slicer_Category 未与 inv 建关系，需在 inv 侧 3 处聚合（__EOHUnit / __InvAmt_End / __EOHUnit_LP）回退显式条件 `inv[category] IN {...}`。总计行无 spu_model 行分组，trade / inv 两侧均为品类全量——行值域 Slicer_Spu_Model 仅 3 个 model，品类下其余 model 计入总计但不展示明细行（总计 ≠ 明细行之和）；业务若需总计 = 展示行之和，关闭矩阵总计行即可。
 6. **inv 表无渠道字段**：s02_inventory_stock_sales_detail_d 无 shop_name / platform，渠道上下文不作用于 inv 侧——EOH / EOH vs LP / ST% 库存侧不受渠道列影响；三者仅存在于 TTL 列（无跨渠道列对比问题），ST% 分子分母渠道口径不对称为模型物理限制，业务需知悉。
 7. **Display 层 BLANK 返回 BLANK()（本模块特有）**：不返回 "-"——矩阵检测到该行全部度量值均为 BLANK() 时自动隐藏该行（含层级行，需所有指标均为 BLANK()），行可见性由矩阵原生机制承担，无需 IsEmpty 视觉级筛选器；代价是单元格级空值与行级隐藏不可区分（业务已确认接受）。
 8. **期末时点口径**：期末日期 = end period 最后一天（This = `SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])`、LP = `SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])`，直接单日过滤——两张日期表均为断开维度，读值不随行维度 / 切片器上下文漂移）；快照表按日存储只取单日，对整段区间求和会重复计数库存；该日快照缺数时指标为空，不回退取范围内最近一天（与口径「end period 最后一天」一致）。
 9. **net_sales_amt 列来源**：模型内为 Power Query 行级计算列（ROUND(product_qty × sales_price, 6)），数据库无此列——测试 SQL 验证时按行级乘积还原，不可直接引用数据库 net_sales_amt（若底表存在同名字段以取数 SQL 为准核对）。
-10. **vs LP 空值规则**：Amt vs LP / EOH vs LP 在 LP 侧 BLANK 或 0 时返回 BLANK（避免除零与失真变化率；EOH vs LP 另在 this 侧 BLANK 时返回 BLANK）；vs LP（bp 差值）任一侧 BLANK 返回 BLANK（避免单侧缺失产生失真差值）；×10000 转 bp 在 Display 层实现，Value 层保持原始差值小数。
+10. **vs LP 空值规则**：Amt vs LP / EOH vs LP 在 LP 侧 BLANK 或 0 时返回 BLANK（避免除零与失真变化率；EOH vs LP 另在 this 侧 BLANK 时返回 BLANK）；Amt% vs LP（bp 差值）任一侧 BLANK 返回 BLANK（避免单侧缺失产生失真差值）；×10000 转 bp 在 Display 层实现，Value 层保持原始差值小数。
 11. **'Outwear' 笔误已确认**：口径文档子模块十的 'Outwear' 为笔误，底表实际值为 'Outerwear'；前置筛选由视觉对象筛选器（Slicer_Category[category] IN ("Handbags", "Outerwear")）承担，经双侧关系传导生效，度量值内无品类硬编码。
-12. **汇率换算分层**：Base Value 层始终保留 CNY 原始值（vs LP 派生计算口径一致）；换算集中在 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1）；Cell Display 只拼接 Currency_Symbol。金额类判定用 Metric_IsCurrencyAmount；Amt vs LP / vs LP / EOH vs LP 为派生比率，分子分母同币种不换算。
+12. **汇率换算分层**：Base Value 层始终保留 CNY 原始值（vs LP 派生计算口径一致）；换算集中在 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1）；Cell Display 只拼接 Currency_Symbol。金额类判定用 Metric_IsCurrencyAmount；Amt vs LP / Amt% vs LP / EOH vs LP 为派生比率，分子分母同币种不换算。
 13. **渠道上下文过滤器构造**：`__ShopNameCtx` 用 UNION+FILTER 构造（IF 分支返回表表达式会被降级为标量，禁用——项目内已两次实证），作为 CALCULATE 表过滤器统一传入所有 trade 侧聚合；TTL = ALLSELECTED（外部筛选上下文下的全店铺合计），非 TTL = Label_Value 精确匹配（与外部店铺切片器取交集，外部仅选 TM 时 JD 列返回空）。
 14. **口径与语法**：口径文档中定义的所有指标必须遵守其数据类型与数据格式（percent_0dp 不含正号、integer_bp ×10000 转 bp、currency 币种符号 + 千分位整数），与解决方案存在争议时一切以口径文档为准；DAX 文本常量使用双引号，单引号仅用于表名，列名使用方括号，例如：`[category] IN {"Handbags", "Outerwear"}`。
-15. **测试 SQL**：test_Handbags_&_Outwear_ms.sql（本目录，MySQL 8.0+，字面量直嵌不支持变量，两段独立执行）——段 1 TTL 7 指标（行 = spu_model）、段 2 六店铺 4 指标（行 = Store × spu_model，Store 列区分）；NULL 语义逐项对齐 DAX（占比分子 NULL 输出 0 / Amt vs LP 的 this NULL 按 0 处理 / ST% 单侧 NULL 按 0 / vs LP 输出原始差值小数，×10000 转 bp 在 Display 层）；参数区见文件头注释（This / Last Period 区间与双期快照日，修改时全文替换）。
+15. **测试 SQL**：test_Handbags_&_Outwear_ms.sql（本目录，MySQL 8.0+，字面量直嵌不支持变量，两段独立执行）——段 1 TTL 7 指标（行 = spu_model）、段 2 六店铺 4 指标（行 = Store × spu_model，Store 列区分）；NULL 语义逐项对齐 DAX（占比分子 NULL 输出 0 / Amt vs LP 的 this NULL 按 0 处理 / ST% 单侧 NULL 按 0 / Amt% vs LP 输出原始差值小数，×10000 转 bp 在 Display 层）；参数区见文件头注释（This / Last Period 区间与双期快照日，修改时全文替换）。

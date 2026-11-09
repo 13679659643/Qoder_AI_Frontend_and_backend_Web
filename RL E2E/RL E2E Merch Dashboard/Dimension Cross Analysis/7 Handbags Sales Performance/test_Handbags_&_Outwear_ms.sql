@@ -14,7 +14,7 @@
 -- 文件结构（两段独立执行）:
 --   段 1: TTL 列 7 指标（SLS Unit / SLS Amt / SLS Amt% / Amt vs LP / ST% / EOH / EOH vs LP）
 --         行 = spu_model（Slicer_Spu_Model 值域三值）
---   段 2: 六 Store 列 4 指标（SLS Unit / SLS Amt / SLS Amt% / vs LP bp 差值）
+--   段 2: 六 Store 列 4 指标（SLS Unit / SLS Amt / SLS Amt% / Amt% vs LP bp 差值）
 --         行 = Store × spu_model（18 行，Store_Label 列区分）
 --
 -- 对数要点:
@@ -35,7 +35,7 @@
 --      Amt vs LP: LP NULL 或 0 → NULL；this NULL 按 0 处理（对齐 DIVIDE(BLANK,x)=0 → -1）
 --      ST%: 双侧 NULL → NULL；单侧 NULL 按 0（对齐加法 BLANK 当 0）
 --      EOH vs LP: 任一侧 NULL 或 LP 侧 0 → NULL
---      vs LP(bp): 任一侧占比 NULL → NULL；输出原始差值小数（页面 ×10000 转 bp:
+--      Amt% vs LP(bp): 任一侧占比 NULL → NULL；输出原始差值小数（页面 ×10000 转 bp:
 --      -0.0152 → -152bp）
 --   8. 对数假设无外部渠道切片器筛选（TTL / 店铺列均按全量口径）；若页面存在
 --      外部 Slicer_Store_Name 筛选，两侧需同步收窄
@@ -219,7 +219,7 @@ SELECT
     pct_this                           AS sls_amt_pct,   -- SLS Amt%
     CASE WHEN pct_this IS NULL OR pct_lp IS NULL THEN NULL
          ELSE pct_this - pct_lp
-    END                                AS vs_lp           -- vs LP（bp 差值原始小数，页面 ×10000 转 bp）
+    END                                AS amt_pct_vs_lp  -- Amt% vs LP（bp 差值原始小数，页面 ×10000 转 bp）
 FROM pct_base
 ORDER BY FIELD(store_label, 'Tmall', 'JD', 'RLE', 'DY_Family', 'DY_W', 'DY_MN'),
          FIELD(spu_model, 'Polo Play', 'Polo ID', 'Polo Blaze');

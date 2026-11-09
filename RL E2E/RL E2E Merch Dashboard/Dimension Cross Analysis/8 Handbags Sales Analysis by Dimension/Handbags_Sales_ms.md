@@ -840,7 +840,16 @@ Handbags Sales IsEmpty =
         1
     )
 ```
-
+### 4.18 字段参数
+```dax
+Field_Parameter_Store_Name = {
+    ("spu_model", NAMEOF('s02_trade_sku_data_d'[spu_model]), 0, "Model"),
+    ("ax_sub_class", NAMEOF('s02_trade_sku_data_d'[ax_sub_class]), 1, "Subclass"),
+    ("season", NAMEOF('s02_trade_sku_data_d'[season]), 2, "Season"),
+    ("category", NAMEOF('s02_trade_sku_data_d'[category]), 3, "Category"),
+    ("sku_size", NAMEOF('s02_trade_sku_data_d'[sku_size]), 4, "Size")
+}
+```
 ---
 
 ## 5. 度量值清单
