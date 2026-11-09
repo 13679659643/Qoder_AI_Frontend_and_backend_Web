@@ -2,7 +2,7 @@
 -- 测试 SQL: Item Stockout Table（两段：SPU 维度 / SKU 维度）
 -- 所属模块: RL E2E Merch Dashboard - Dimension Cross Analysis - Item
 --           Stockout & Slow Mover Alert【单列主键 Top 100 双表格】
--- 关联方案: Item_Stockout_Table.md（v2.4）
+-- 关联方案: Item_Stockout_Table.md（v2.5）
 -- 语法: MySQL 8.0+（CTE / 窗口函数 / GROUP_CONCAT）
 -- 结构: SQL 1/2 SPU 维度（GROUP BY spu_id）+ SQL 2/2 SKU 维度
 --       （GROUP BY sku_id），两段独立执行；每段按 SLS Amt 降序 +
@@ -29,6 +29,14 @@
 -- end period 所在财年第一天:     '2026-03-29'（YTD SLS Unit 起点
 --                                  ['2026-03-29', '2026-07-25']——本参数下
 --                                  与 This Period 重合，YTD = This Period）
+-- 近四周区间（Weeks     dt ∈ ['2026-06-28', '2026-07-25']（截止日期
+-- Cover 分母，v2.5）:             '2026-07-25' = end period 最后一天，往前推
+--                                  28 天含截止日，起点 = 截止日期 − 27 天；
+--                                  日均销售数量 = 窗口内 SUM(product_qty) ÷ 28；
+--                                  起点晚于 This Period 起点 '2026-03-29'，
+--                                  窗口完整落在 trade_base 值域内（若调整参数后
+--                                  近四周起点早于 This Period 起点，需同步放宽
+--                                  trade_base 的 dt 下界）
 --
 -- 口径还原说明:
 --   1. 两张 s02 表日期字段为 dt（String 存储，ISO 格式，字符串比较与
@@ -63,10 +71,13 @@
 --   8. MD 空值行为：行级乘积任一字段 NULL 的行不计入分子分母
 --      （CASE 拦截对齐 DAX SUMX IF）；分母为 0 或任一侧 NULL → 输出
 --      NULL（对齐 DAX 显式拦截，避免 1 - NULL = 1 虚高 100%）
---   9. ST% / Weeks Cover 跨双口径：销售侧 This Period 区间（分子 /
---      分母），库存侧快照日单日——分母加法任一侧 NULL 按 0（对齐 DAX
---      算术 BLANK 当 0）；销售侧 NULL → 整体 NULL（DIVIDE 分子 BLANK）；
---      销售数量为 0 时 Weeks Cover 输出 NULL（DIVIDE 拦截）
+--   9. ST% / Weeks Cover 跨双口径：ST% 销售侧 This Period 区间，库存侧快照日
+--      单日——分母加法任一侧 NULL 按 0（对齐 DAX 算术 BLANK 当 0）；销售侧
+--      NULL → 整体 NULL（DIVIDE 分子 BLANK）。Weeks Cover 分母 v2.5 改为近
+--      四周日均销售数量：截止日期 = end period 最后一天（快照日），窗口 =
+--      [截止日期 − 27 天, 截止日期] 含截止日共 28 天，日均 = 窗口内
+--      SUM(product_qty) ÷ 28；日均为 0 / 窗口无销售记录（NULL）时输出
+--      NULL（DIVIDE 拦截）
 --  10. Rank = DENSE_RANK() OVER (ORDER BY sls_amt_this DESC, 主键 ASC)
 --      ——两键决胜对齐 PBI Rank（金额降序 + 主键字母序，名次唯一，
 --      Top 100 恰好 100 行）；ORDER BY + LIMIT 100 对齐 PBI 表格行集与
@@ -130,6 +141,8 @@ trade_agg AS (
         SUM(ROUND(product_qty * sales_price, 6))                                          AS sls_amt_this,
         SUM(product_qty)                                                                  AS sls_unit_this,
         SUM(CASE WHEN dt BETWEEN '2026-06-28' AND '2026-07-25'
+                 THEN product_qty END)                                                    AS sls_unit_4w,     -- 近四周窗口（v2.5 Weeks Cover 分母；本参数下与 MTD 区间数值重合，口径独立）
+        SUM(CASE WHEN dt BETWEEN '2026-06-28' AND '2026-07-25'
                  THEN product_qty END)                                                    AS mtd_sls_unit,
         SUM(CASE WHEN dt BETWEEN '2026-03-29' AND '2026-07-25'
                  THEN product_qty END)                                                    AS ytd_sls_unit,
@@ -174,9 +187,9 @@ SELECT
     i.eoh_unit                                                                            AS EOH_Unit,
     i.in_trans_unit                                                                       AS In_Transit_Unit,
     CASE
-        WHEN t.sls_unit_this IS NULL OR t.sls_unit_this = 0 THEN NULL
-        ELSE (COALESCE(i.eoh_unit, 0) + COALESCE(i.in_trans_unit, 0)) / t.sls_unit_this
-    END                                                                                   AS Weeks_Cover,
+        WHEN t.sls_unit_4w IS NULL OR t.sls_unit_4w = 0 THEN NULL
+        ELSE (COALESCE(i.eoh_unit, 0) + COALESCE(i.in_trans_unit, 0)) / (t.sls_unit_4w / 28)
+    END                                                                                   AS Weeks_Cover,       -- v2.5 分母 = 近四周日均销售数量（窗口 sum ÷ 28）
     t.mtd_sls_unit                                                                        AS MTD_SLS_Unit,
     t.ytd_sls_unit                                                                        AS YTD_SLS_Unit,
     CASE
@@ -252,6 +265,8 @@ trade_agg AS (
         SUM(ROUND(product_qty * sales_price, 6))                                          AS sls_amt_this,
         SUM(product_qty)                                                                  AS sls_unit_this,
         SUM(CASE WHEN dt BETWEEN '2026-06-28' AND '2026-07-25'
+                 THEN product_qty END)                                                    AS sls_unit_4w,     -- 近四周窗口（v2.5 Weeks Cover 分母；本参数下与 MTD 区间数值重合，口径独立）
+        SUM(CASE WHEN dt BETWEEN '2026-06-28' AND '2026-07-25'
                  THEN product_qty END)                                                    AS mtd_sls_unit,
         SUM(CASE WHEN dt BETWEEN '2026-03-29' AND '2026-07-25'
                  THEN product_qty END)                                                    AS ytd_sls_unit,
@@ -294,9 +309,9 @@ SELECT
     i.eoh_unit                                                                            AS EOH_Unit,
     i.in_trans_unit                                                                       AS In_Transit_Unit,
     CASE
-        WHEN t.sls_unit_this IS NULL OR t.sls_unit_this = 0 THEN NULL
-        ELSE (COALESCE(i.eoh_unit, 0) + COALESCE(i.in_trans_unit, 0)) / t.sls_unit_this
-    END                                                                                   AS Weeks_Cover,
+        WHEN t.sls_unit_4w IS NULL OR t.sls_unit_4w = 0 THEN NULL
+        ELSE (COALESCE(i.eoh_unit, 0) + COALESCE(i.in_trans_unit, 0)) / (t.sls_unit_4w / 28)
+    END                                                                                   AS Weeks_Cover,       -- v2.5 分母 = 近四周日均销售数量（窗口 sum ÷ 28）
     t.mtd_sls_unit                                                                        AS MTD_SLS_Unit,
     t.ytd_sls_unit                                                                        AS YTD_SLS_Unit,
     CASE

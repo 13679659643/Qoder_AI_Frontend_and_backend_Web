@@ -1,6 +1,6 @@
 # Item Stockout_Table 解决方案
 
-> **版本**: v2.4
+> **版本**: v2.5
 > **模块**: RL E2E Merch Dashboard - Dimension Cross Analysis Tab - Item Stockout & Slow Mover Alert
 > **关联口径**: 口径文档/口径Markdown格式/Dimension Cross Analysis.md - 子模块七（§21~§33）
 > **数据底表（销售/属性类）**: s02_trade_sku_data_d
@@ -9,6 +9,7 @@
 > **筛选影响范围**: dt（断开维度，DAX 显式筛选）+ Platform / Store Name（模型关系自动传导）+ 其余与两张事实表已建关系的商品维度切片器
 >
 > **版本记录**:
+> v2.5（2026-11-09）——Weeks Cover 分母口径调整（业务确认）：由 This Period 区间销售数量改为近四周日均销售数量——截止日期 = end period 最后一天（TimeFrame_Max），窗口 = 截止日期往前推 28 天（含截止日共 28 天，起点 = 截止日期 − 27 天），日均 = 窗口内 sum(product_qty) ÷ 28；度量名称不变（Item Stockout Weeks Cover Value / Display），分子（期末库存 + 在途，快照日单日）不变；测试 SQL 同步调整（trade_agg 新增近四周条件聚合 sls_unit_4w，Weeks_Cover 分母改用 日均 = sls_unit_4w / 28）；窗口起点日期算术经 DATEVALUE 转换 + FORMAT 回 yyyy-MM-dd 文本实现（TimeFrame_Max 为文本格式，直接 - 27 因文本无法隐式转数值报错）
 > v2.4（2026-10-30）——SPU 表分支 inv 类指标（EOH / In-transit / Replenishment / Weeks Cover 分子 / ST% 库存加项 / Alert / Available Sizes / Product Tag）取数源整体切换为 s02_inventory_stock_sales_detail_d_spu（数仓 SPU 粒度预聚合表：快照日每 spu 单行，sku_size 为预拼接串逗号分隔）；Alert 判定修订（业务确认）：oos_tag = "1" → 缺货，computed_product_tag = 'slow mover' → 滞销，其他情况返回 BLANK（v2.3"其他"类别废止），SPU 分支新表直判（最高预警级别聚合废止），SKU 分支由 CALCULATETABLE 整表物化 + FILTER 迭代简化为 MAX 标量聚合（单行退化行值）；Available Sizes SPU 分支直读预拼接 sku_size（VALUES + CONCATENATEX + inv_qty > 0 过滤废止）；SKU 表分支全部保持原状
 > v2.3（2026-10-23）——Alert 判定规则修订（业务确认）：缺货 = oos_tag = "1"（String 字面量），滞销 = computed_product_tag = 'slow mover'，其他 = 有记录但两条件均不成立；两条件 SKU 级互斥（SKU 单行免优先级判定），SPU 粒度按最高预警级别聚合（缺货 > 滞销 > 其他）；输出测试 SQL（test_Item_Stockout_Table.sql，两段：SPU / SKU）
 > v2.2（2026-10-23）——Rank 回退 relation 用法 + 行筛选改原生 TopN 列筛选器：v2.1 无 relation 写法被引擎拒绝（省略 relation 时 ORDERBY 仅允许简单列引用，CALCULATE 度量表达式排序键报错"已省略 RANK 的关系参数，并且其 ORDERBY 子句包含非引用列表达式"）——按度量值排名必须显式指定 relation；卡顿真正根源为「Rank 介于 1 与 100」度量筛选器（迫使引擎对全部主键分组逐组求值 Rank，每组物化一次候选集，O(行数 × 候选集)）——改为「spu_id/sku_id 前 100 个（按 SLS Amt Value 降序）」原生列筛选器（引擎单遍取 TopN，Rank 仅对可见 100 行求值，候选表跨行共享缓存）
@@ -45,7 +46,7 @@
 | 2    | SLS Units            | §22     | This Period（区间）    | 该 spu_id/sku_id 下 sum(product_qty)                                                                                                    | integer →`#,##0`             |
 | 3    | EOH                  | §23     | End Period（期末时点） | 该 spu_id/sku_id 下 sum(stock_inv_qty)（快照日单日）                                                                                    | integer →`#,##0`             |
 | 4    | In-transit Inventory | §24     | End Period（期末时点） | 该 spu_id/sku_id 下 sum(in_trans_inv_qty)（快照日单日）                                                                                 | integer →`#,##0`             |
-| 5    | Weeks Cover          | §25     | 跨双口径               | (sum(stock_inv_qty) + sum(in_trans_inv_qty)) / sum(product_qty)；库存侧看 end period 最后一天，销售侧 this period 区间                  | decimal_1dp →`#,##0.0`       |
+| 5    | Weeks Cover          | §25     | 跨双口径               | (sum(stock_inv_qty) + sum(in_trans_inv_qty)) / (近四周日均销售数量)；分子看 end period 最后一天（快照日单日），分母 = 截止日期（end period 最后一天）往前推 28 天（含截止日）的 sum(product_qty) ÷ 28（v2.5） | decimal_1dp →`#,##0.0`       |
 | 6    | MTD SLS Unit         | §26     | 财月至今（区间）       | end period 所在财月第一天至 end period 最后一天 sum(product_qty)                                                                        | integer →`#,##0`             |
 | 7    | YTD SLS Unit         | §27     | 财年至今（区间）       | end period 所在财年第一天至 end period 最后一天 sum(product_qty)                                                                        | integer →`#,##0`             |
 | 8    | ST%                  | §28     | 跨双口径               | sales.sum(product_qty) / (sales.sum(product_qty) + inv.sum(stock_inv_qty))；数量口径                                                    | percent_0dp →`#,##0%`        |
@@ -96,8 +97,9 @@
 
 | 口径                     | 时间范围                                                                                                                                  | 适用指标                                                                                                      |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| This Period（区间类）    | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                                              | SLS Amt、SLS Units、AUR、MD、ST% 销售侧、Weeks Cover 分母、Top 100 排序金额、trade 侧属性字段的"最新日期"判定 |
+| This Period（区间类）    | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                                              | SLS Amt、SLS Units、AUR、MD、ST% 销售侧、Top 100 排序金额、trade 侧属性字段的"最新日期"判定 |
 | End Period（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个有数据的快照日** | EOH、In-transit、Replenishment、Alert、Available Sizes、Product Tag、Weeks Cover 分子、ST% 库存侧             |
+| 近四周（滚动 28 天区间，v2.5） | dt ∈ [Slicer_Time_Frame_Max_This[TimeFrame_Max] − 27 天, Slicer_Time_Frame_Max_This[TimeFrame_Max]]（截止日期 = end period 最后一天，含截止日共 28 天） | Weeks Cover 分母（日均销售数量 = 窗口内 sum(product_qty) ÷ 28）                                               |
 | MTD（财月至今区间）      | dt ∈ [Slicer_Time_Frame_Max_This[Fiscal_Month_First_Day], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                                     | MTD SLS Unit                                                                                                  |
 | YTD（财年至今区间）      | dt ∈ [Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                                      | YTD SLS Unit                                                                                                  |
 
@@ -674,14 +676,17 @@ Item Stockout Weeks Cover Value =
 // 度量值: Item Stockout Weeks Cover Value
 // 中文名: 库存周转周数
 // Display Folder: Item Stockout & Slow Mover Alert\Base Metrics
-// 用途: 当前行主键的库存周转周数（(期末库存 + 在途) / This Period 销售数量），
+// 用途: 当前行主键的库存周转周数（(期末库存 + 在途) / 近四周日均销售数量），
 //       跨 trade + inv 双表，主键粒度，单度量双表通用
-// 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
-//       （销售侧区间）；Slicer_Time_Frame_Max_This[TimeFrame_Min] / [TimeFrame_Max]
-//       （库存侧期末时点）
-// 口径: 销售数量看 this period 区间 sum(product_qty)；库存相关看 end period
-//       最后一天 sum(stock_inv_qty) + sum(in_trans_inv_qty)；
-//       (库存 + 在途) / 销售数量
+// 依赖: Slicer_Time_Frame_Max_This[TimeFrame_Min] / [TimeFrame_Max]（库存侧
+//       期末时点范围）；Slicer_Time_Frame_Max_This[TimeFrame_Max]（截止日期——
+//       库存侧快照日与近四周窗口终点同源）
+// 口径（v2.5 调整，业务确认）: 分母由 This Period 区间销售数量改为近四周日均
+//       销售数量——截止日期 = end period 最后一天（TimeFrame_Max），窗口 =
+//       截止日期往前推 28 天（含截止日共 28 天，起点 = TimeFrame_Max − 27 天），
+//       日均 = 窗口内 sum(product_qty) ÷ 28；
+//       分子不变：end period 最后一天 sum(stock_inv_qty) + sum(in_trans_inv_qty)
+//       （快照日单日）；(库存 + 在途) / 日均销售数量
 // 口径修正: 原始口径计算指标列分子分母写反，以业务定义为准（分子库存+在途，
 //       分母销售数量——口径 §25 修正记录）
 // 数据底表: s02_trade_sku_data_d（分母）；分子 SPU 表分支 =
@@ -689,12 +694,9 @@ Item Stockout Weeks Cover Value =
 //       s02_inventory_stock_sales_detail_d（原状）
 // 行维度传递: 分母行分组（主键单列）筛选自动传导；分子 TREATAS 主键单列 +
 //       IF 标量双分支
-// 边界: 销售数量为 0 或 BLANK 时返回 BLANK（DIVIDE 拦截，避免失真周数）
+// 边界: 日均销售数量为 0 或 BLANK（窗口内无销售记录）时返回 BLANK
+//       （DIVIDE 拦截，避免失真周数）
 // ========================================
-
-// ── This Period 时间区间（销售侧分母）──
-VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
-VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── End Period This 时间范围（库存侧期末时点）──
 VAR __EndPeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Min])
@@ -731,16 +733,20 @@ VAR __InvUnits =
         )
     )
 
-// ── 分母：This Period 净销售数量（行分组筛选自动传导）──
-VAR __SlsUnits =
+// ── 近四周窗口：截止日期往前推 28 天（含截止日共 28 天，起点 = 截止日期 − 27 天）──
+VAR __FourWeekStart = __EndPeriodDate - 27
+
+// ── 分母：近四周日均净销售数量（窗口内 sum ÷ 28；行分组筛选自动传导；
+//    窗口内无销售记录时 SUM 为 BLANK → BLANK / 28 = BLANK）──
+VAR __DailyAvgSlsUnits =
     CALCULATE(
         SUM('s02_trade_sku_data_d'[product_qty]),
-        's02_trade_sku_data_d'[dt] >= __PeriodMin,
-        's02_trade_sku_data_d'[dt] <= __PeriodMax
-    )
+        's02_trade_sku_data_d'[dt] >= __FourWeekStart,
+        's02_trade_sku_data_d'[dt] <= __EndPeriodDate
+    ) / 28
 
 RETURN
-    DIVIDE(__InvUnits, __SlsUnits)   // 分母 0 / BLANK → BLANK
+    DIVIDE(__InvUnits, __DailyAvgSlsUnits)   // 分母 0 / BLANK → BLANK
 ```
 
 ### 4.12 Item Stockout Weeks Cover Display（库存周转周数显示）
@@ -1881,7 +1887,7 @@ RETURN
 | MTD / YTD SLS Unit               | 条件聚合 dt ∈ [财月首日 '2026-06-28' / 财年首日 '2026-03-29', '2026-07-25']（本参数下 YTD 与 This Period 重合）                                                              |
 | EOH / In-transit / Replenishment | inv 侧按主键单列 GROUP BY，WHERE dt = 快照日 '2026-07-25'；不附加渠道条件（inv 无渠道字段）；SPU 段改查 s02_inventory_stock_sales_detail_d_spu（data_type = 'spu' 预聚合行，直接取单行值，v2.4）                                                              |
 | ST%                              | 销售侧数量与库存侧数量按主键各自聚合后相除（分母加法 NULL 按 0，销售侧 NULL → 整体 NULL）                                                                                    |
-| Weeks Cover                      | 分子库存 + 在途（快照日，NULL 按 0）与分母销售数量（this period）相除；分母 0 / NULL → NULL                                                                                  |
+| Weeks Cover                      | 分子库存 + 在途（快照日，NULL 按 0）与分母近四周日均销售数量（v2.5：[快照日 − 27 天, 快照日] 28 天窗口 sum(product_qty) ÷ 28，trade_agg 行级条件聚合 sls_unit_4w）相除；分母 0 / NULL（窗口无销售记录）→ NULL           |
 | Alert                            | 缺货 = oos_tag = '1'（String）；滞销 = computed_product_tag = 'slow mover'；其他情况 NULL（v2.4 起不再输出 '其他'）；SPU 段直取 spu 预聚合表单行判定（无优先级聚合），SKU 段取 inv 表单行直判；无对应表行 → NULL |
 | Available Sizes                  | SPU 段直取 spu 预聚合表 sku_size 预拼接串（逗号分隔，原样输出）；SKU 段 GROUP_CONCAT(DISTINCT CASE WHEN inv_qty > 0 THEN sku_size END ORDER BY ...) 顿号拼接                                                                                          |
 | 属性字段（trade 六字段）         | trade_maxdt（主键 MAX(dt)）+ trade_attr：最新日期当天 distinct 值 GROUP_CONCAT(DISTINCT NULLIF(TRIM(字段), '') ORDER BY ...) 顿号拼接                                         |
@@ -1907,7 +1913,7 @@ RETURN
 10. **期末时点口径**：This 期末快照日 = end period 范围内最后一个有数据的日期（快照缺数自动回退）；快照表按日存储只取单日，对整段区间求和会重复计数库存
 11. **net_sales_amt 列来源**：模型内为 Power Query 行级计算列（ROUND(product_qty × sales_price, 6)），数据库无此列——测试 SQL 验证时按行级乘积还原
 12. **MD 空值拦截**：分子分母行级乘积对任一字段 NULL 的行不计入（直接算术相乘会把 BLANK 当 0，无折扣价行 MD 虚高 100%）；分母为 0 或任一侧 BLANK 时整体返回 BLANK（1 - BLANK = 1 失真，必须显式拦截）
-13. **ST% 数量口径 / Weeks Cover 分子分母方向**：均为口径文档已确认修正项（§28 金额→数量、§25 原始公式写反以业务定义为准），不可回退
+13. **ST% 数量口径 / Weeks Cover 分子分母方向 / Weeks Cover 分母口径（v2.5）**：均为业务已确认修正项（§28 金额→数量、§25 原始公式写反以业务定义为准，不可回退）；v2.5 起 Weeks Cover 分母由 This Period 区间销售数量改为近四周日均销售数量——截止日期 = end period 最后一天（TimeFrame_Max），窗口含截止日共 28 天（起点 = 截止日期 − 27 天），日均 = 窗口 sum(product_qty) ÷ 28，度量名称不变
 14. **MTD / YTD 起点**：读 Slicer_Time_Frame_Max_This 表 Fiscal_Month_First_Day / Fiscal_Year_First_Day 字段，终点 TimeFrame_Max（口径 §26 / §27 指定）
 15. **RANK / ORDERBY 版本要求**：Power BI Desktop 2022 年 9 月及以后版本
 16. **总计行为**：总计行不做特判，交由表格视觉对象默认生成（总计行主键为 BLANK，Rank / 属性度量返回 BLANK，数值指标为全量聚合）
