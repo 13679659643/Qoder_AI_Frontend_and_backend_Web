@@ -256,6 +256,35 @@
 
 ---
 
+## [2026-11-10 16:34] 修改 — 明确 ODBC 方言入口并修正数据库兼容边界
+
+- **模块**: Media Mix / 数据模型
+- **任务**: 排查版本 B 的 collect_list(struct) 报错并处理独立审查发现
+- **操作**: 修改
+- **变更内容**:
+  - 明确当前 ODBC 后端拒绝 collect_list(struct)，不能使用 Hive/Spark 版本 B；连接特征指向 Doris，确认产品后选用不依赖 struct 数组聚合的完整版本 C。
+  - 版本 B 的 scope_members 和 summary_base 各 UNION 分支补齐同名别名，保持原字面量与汇总范围不变。
+  - MySQL 最低版本标注改为 8.0.17，以匹配 utf8mb4_0900_bin 的实际引入版本。
+- **关联文件**: `Media Mix/Dim_Media_Mix_Channel_MySQL_Hive_Spark.md`
+- **备注**: 当前 ODBC 中版本 B 的失败不代表已在 Hive/Spark 原生引擎完成测试；版本 C 仍待该连接实际执行确认。
+
+---
+
+## [2026-11-10 16:20] 新建 — 渠道维度 SQL 的 MySQL / Hive / Spark / Doris 方言兼容方案
+
+- **模块**: Media Mix / 数据模型
+- **任务**: 替换 Dim_Media_Mix_Channel 的 ClickHouse 专用语法，保持原始逻辑与输出字段
+- **操作**: 新建
+- **变更内容**:
+  - 新增 MySQL 8.0+、Hive 4.1+ / Spark SQL 3.x+、Doris 3.x 三段独立完整查询；区分 MySQL ODBC 协议与实际后端引擎。
+  - indexOf 改为 CASE，countIf 改为条件 SUM；按 Scope_ID / Channel_ID 取最小 Channel_Sort 后有序拼接，替换元组与数组 lambda。
+  - 保留 15 项固定渠道映射、新增 RTB 顺延、11 个 Scope 范围、11 条 SUMMARY 文案以及最终 11 列结构；不新增 Cost 筛选。
+  - 显式保留原 ClickHouse CHAR(8203) 实际输出字节 0B，并说明 MySQL 聚合长度、大小写/尾随空格比较、NULL 排序和并列 PK 边界。
+- **关联文件**: `Media Mix/Dim_Media_Mix_Channel_MySQL_Hive_Spark.md`
+- **备注**: 原始方案不修改；634 项本地静态及算法断言通过，含 500 组合成 Scope 等价对比。未连接目标数据库，需实际解析、执行及 Power BI 刷新验收。
+
+---
+
 ## [2026-07-02 16:00] 修改 — Media Mix 矩阵方案 v2.0 口径填充 + Cost% 分母路由升级 + 格式修正
 
 - **模块**: Media Mix
