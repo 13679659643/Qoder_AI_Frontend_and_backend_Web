@@ -4,12 +4,12 @@
 
 在 Power BI Desktop 中使用原生**表格**和四个切片器，实现以下交互，不依赖数据库、Excel、自定义视觉对象或外部服务。
 
-| 控件 | 作用 | Demo 选项 | 选择方式 |
-|---|---|---|---|
-| A：展示行维度 | 改变表格按什么字段分组，而不是筛选某几个成员 | 门店、区域、店铺类型 | 单选 |
-| B：展示指标 | 改变表格展示哪些业务指标列 | 净销售额、总销售额、净销售额/总销售额 | 多选 |
-| C：排序指标 | 决定按哪个业务指标排列当前行 | 候选受 B 限制 | 单选 |
-| D：排序方向 | 决定业务指标升序或降序 | 升序、降序 | 单选 |
+| 控件          | 作用                                         | Demo 选项                             | 选择方式 |
+| ------------- | -------------------------------------------- | ------------------------------------- | -------- |
+| A：展示行维度 | 改变表格按什么字段分组，而不是筛选某几个成员 | 门店、区域、店铺类型                  | 单选     |
+| B：展示指标   | 改变表格展示哪些业务指标列                   | 净销售额、总销售额、净销售额/总销售额 | 多选     |
+| C：排序指标   | 决定按哪个业务指标排列当前行                 | 候选受 B 限制                         | 单选     |
+| D：排序方向   | 决定业务指标升序或降序                       | 升序、降序                            | 单选     |
 
 例如：A 选“门店”，B 选“净销售额、总销售额”，C 选“总销售额”，D 选“降序”，表格按门店汇总，只展示这两个业务指标，并按总销售额从高到低排列。
 
@@ -65,14 +65,14 @@
 
 共 6 张表、11 个度量、6 个视觉对象：
 
-| 对象 | 用途 | 是否关联事实表 |
-|---|---|---|
-| `Dim_Demo_Store` | 门店属性，提供三个可切换的行维度 | 是 |
-| `Fact_Demo_Sales` | 12 条虚构明细记录 | 事实表 |
-| `Param_Demo_Row` | A 的行字段参数 | 否 |
-| `Param_Demo_Metric` | B 的度量字段参数 | 否 |
-| `Slicer_Demo_SortMetric` | C 的排序指标选项 | 否 |
-| `Slicer_Demo_SortDirection` | D 的排序方向选项 | 否 |
+| 对象                             | 用途                             | 是否关联事实表 |
+| -------------------------------- | -------------------------------- | -------------- |
+| `Dim_Demo_Store`               | 门店属性，提供三个可切换的行维度 | 是             |
+| `Fact_Demo_Sales`              | 12 条虚构明细记录                | 事实表         |
+| `O：Param_Demo_Row`            | A 的行字段参数                   | 否             |
+| `O：Param_Demo_Metric`         | B 的度量字段参数                 | 否             |
+| `O：Slicer_Demo_SortMetric`    | C 的排序指标选项                 | 否             |
+| `O：Slicer_Demo_SortDirection` | D 的排序方向选项                 | 否             |
 
 数据关系只有一条：
 
@@ -173,11 +173,11 @@ Demo Net Gross Ratio =
     DIVIDE([Demo Net Sales], [Demo Gross Sales])
 ```
 
-| 度量 | 模型格式 | Display Folder |
-|---|---|---|
-| `Demo Net Sales` | `#,##0.00` | `Demo/Base` |
-| `Demo Gross Sales` | `#,##0.00` | `Demo/Base` |
-| `Demo Net Gross Ratio` | `0.0%` | `Demo/Base` |
+| 度量                     | 模型格式     | Display Folder |
+| ------------------------ | ------------ | -------------- |
+| `Demo Net Sales`       | `#,##0.00` | `Demo/Base`  |
+| `Demo Gross Sales`     | `#,##0.00` | `Demo/Base`  |
+| `Demo Net Gross Ratio` | `0.0%`     | `Demo/Base`  |
 
 保持度量返回数值，不使用 `FORMAT()` 将它们转换成文本，避免数值排序和总计行为改变。
 
@@ -189,13 +189,13 @@ Demo Net Gross Ratio =
 
 ### 5.1 A：行维度字段参数
 
-1. 新建字段参数，名称填 `Param_Demo_Row`。
+1. 新建字段参数，名称填 `O：Param_Demo_Row`。
 2. 依次选入 `Dim_Demo_Store` 的 `Store_Name`、`Region`、`Store_Type`。
 3. 勾选“将切片器添加到此页面”，完成创建。
 4. 将参数表公式替换为以下完整表达式。
 
 ```dax
-Param_Demo_Row =
+O：Param_Demo_Row =
     {
         ("门店", NAMEOF('Dim_Demo_Store'[Store_Name]), 10),
         ("区域", NAMEOF('Dim_Demo_Store'[Region]), 20),
@@ -205,25 +205,25 @@ Param_Demo_Row =
 
 创建后，在模型视图按列职责重命名三列，保留原列及元数据，不删除后重建：
 
-| 生成列职责 | 最终列名 |
-|---|---|
-| 第一列，参数显示名称 | `Row_Label` |
+| 生成列职责                 | 最终列名       |
+| -------------------------- | -------------- |
+| 第一列，参数显示名称       | `Row_Label`  |
 | 第二列，字段引用，通常隐藏 | `Row_Fields` |
-| 第三列，参数顺序，通常隐藏 | `Row_Order` |
+| 第三列，参数顺序，通常隐藏 | `Row_Order`  |
 
-将 `Row_Label` 按 `Row_Order` 排序，切片器字段使用 `Param_Demo_Row[Row_Label]`。
+将 `Row_Label` 按 `Row_Order` 排序，切片器字段使用 `O：Param_Demo_Row[Row_Label]`。
 
 A 开启单选，初始选“门店”；关闭全选选项，并隐藏清除选择按钮，避免无筛选状态被字段参数解释为所有字段。
 
 ### 5.2 B：展示指标字段参数
 
-1. 新建字段参数，名称填 `Param_Demo_Metric`。
+1. 新建字段参数，名称填 `O：Param_Demo_Metric`。
 2. 依次选入三个显式度量 `Demo Net Sales`、`Demo Gross Sales`、`Demo Net Gross Ratio`。
 3. 勾选“将切片器添加到此页面”，完成创建。
 4. 将参数表公式替换为以下表达式。
 
 ```dax
-Param_Demo_Metric =
+O：Param_Demo_Metric =
     {
         ("净销售额", NAMEOF('Fact_Demo_Sales'[Demo Net Sales]), 10),
         ("总销售额", NAMEOF('Fact_Demo_Sales'[Demo Gross Sales]), 20),
@@ -233,13 +233,13 @@ Param_Demo_Metric =
 
 按同样方式重命名三列：
 
-| 生成列职责 | 最终列名 |
-|---|---|
-| 参数显示名称 | `Metric_Label` |
-| 字段引用 | `Metric_Fields` |
-| 参数顺序 | `Metric_Order` |
+| 生成列职责   | 最终列名          |
+| ------------ | ----------------- |
+| 参数显示名称 | `Metric_Label`  |
+| 字段引用     | `Metric_Fields` |
+| 参数顺序     | `Metric_Order`  |
 
-将 `Metric_Label` 按 `Metric_Order` 排序。B 使用 `Param_Demo_Metric[Metric_Label]`，关闭单选，关闭“按住 Ctrl 才能多选”，初始选中净销售额、总销售额。
+将 `Metric_Label` 按 `Metric_Order` 排序。B 使用 `O：Param_Demo_Metric[Metric_Label]`，关闭单选，关闭“按住 Ctrl 才能多选”，初始选中净销售额、总销售额。
 
 `Metric_Order` 的 10、20、30 同时用作此 Demo 的稳定指标标识，与 C 表一一对应。不要为了改变显示顺序只改 B 或只改 C。
 
@@ -254,7 +254,7 @@ Param_Demo_Metric =
 通过“新建表”创建普通断开参数表：
 
 ```dax
-Slicer_Demo_SortMetric =
+O：Slicer_Demo_SortMetric =
     DATATABLE(
         "Metric_ID", INTEGER,
         "Metric_Label", STRING,
@@ -267,12 +267,12 @@ Slicer_Demo_SortMetric =
     )
 ```
 
-`Metric_Label` 按 `Metric_Sort` 排序。C 使用 `Slicer_Demo_SortMetric[Metric_Label]`，开启单选，初始选“净销售额”。不与 B 参数表建立关系。
+`Metric_Label` 按 `Metric_Sort` 排序。C 使用 `O：Slicer_Demo_SortMetric[Metric_Label]`，开启单选，初始选“净销售额”。不与 B 参数表建立关系。
 
 ### 6.2 D：排序方向
 
 ```dax
-Slicer_Demo_SortDirection =
+O：Slicer_Demo_SortDirection =
     DATATABLE(
         "Direction_ID", STRING,
         "Direction_Label", STRING,
@@ -284,7 +284,7 @@ Slicer_Demo_SortDirection =
     )
 ```
 
-`Direction_Label` 按 `Direction_Sort` 排序。D 使用 `Slicer_Demo_SortDirection[Direction_Label]`，开启单选，初始选“降序”。
+`Direction_Label` 按 `Direction_Sort` 排序。D 使用 `O：Slicer_Demo_SortDirection[Direction_Label]`，开启单选，初始选“降序”。
 
 A、C、D 可使用经典列表/下拉切片器；若改用按钮切片器，为保证严格单选需同时开启 Single select 与 Force selection，但 Force selection 不会修复被 B 排除的旧选择。
 
@@ -295,11 +295,11 @@ A、C、D 可使用经典列表/下拉切片器；若改用按钮切片器，为
 ### 7.1 C 候选项是否可用
 
 ```dax
-Demo Sort Metric Available =
+Demo Sort Metric Available = 
     VAR __CandidateID =
-        SELECTEDVALUE(Slicer_Demo_SortMetric[Metric_ID])
+        SELECTEDVALUE('O：Slicer_Demo_SortMetric'[Metric_ID])
     VAR __AllowedIDs =
-        VALUES(Param_Demo_Metric[Metric_Order])
+        VALUES('O：Param_Demo_Metric'[Metric_Order])
     RETURN
         IF(
             NOT ISBLANK(__CandidateID)
@@ -318,9 +318,9 @@ Demo Sort Metric Available =
 ```dax
 Demo Effective Sort Metric ID =
     VAR __AllowedIDs =
-        VALUES(Param_Demo_Metric[Metric_Order])
+        VALUES('O：Slicer_Demo_SortMetric'[Metric_ID])
     VAR __RequestedID =
-        SELECTEDVALUE(Slicer_Demo_SortMetric[Metric_ID])
+        SELECTEDVALUE('O：Slicer_Demo_SortMetric'[Metric_ID])
     VAR __RequestedIsAllowed =
         NOT ISBLANK(__RequestedID)
             && __RequestedID IN __AllowedIDs
@@ -328,19 +328,19 @@ Demo Effective Sort Metric ID =
         IF(
             __RequestedIsAllowed,
             __RequestedID,
-            MINX(__AllowedIDs, Param_Demo_Metric[Metric_Order])
+            MINX(__AllowedIDs, 'O：Slicer_Demo_SortMetric'[Metric_ID])
         )
 ```
 
 回退优先级为净销售额 → 总销售额 → 比值，仅在 B 当前包含的指标中选择。
 
-| B 已选 | C 原选择 | 实际排序指标 |
-|---|---|---|
-| 净销售额、总销售额 | 总销售额 | 总销售额 |
-| 净销售额、总销售额 | 比值，旧选择 | 净销售额 |
-| 总销售额 | 净销售额，旧选择 | 总销售额 |
-| 比值 | 未选择 | 比值 |
-| 清除 B，三个指标都有效 | 总销售额 | 总销售额 |
+| B 已选                 | C 原选择         | 实际排序指标 |
+| ---------------------- | ---------------- | ------------ |
+| 净销售额、总销售额     | 总销售额         | 总销售额     |
+| 净销售额、总销售额     | 比值，旧选择     | 净销售额     |
+| 总销售额               | 净销售额，旧选择 | 总销售额     |
+| 比值                   | 未选择           | 比值         |
+| 清除 B，三个指标都有效 | 总销售额         | 总销售额     |
 
 不要让排序度量直接使用 C 的 `SELECTEDVALUE` 而跳过本度量，否则旧选择可能继续按 B 未展示的指标排序。
 
@@ -361,10 +361,10 @@ Demo Sort Value =
 
 ```dax
 Demo Sort Blank Flag =
-    IF(ISBLANK([Demo Sort Value]), 1, 0)
+    IF(ISBLANK([Demo Sort Value]), 0, 1)
 ```
 
-它作为排序的第一关键字：非空为 0、空为 1，始终升序，保证空值不会在业务升序时跑到最前。
+它作为排序的第一关键字：非空为 1、空为 0，始终升序，保证空值不会在业务升序时跑到最前。
 
 ### 7.5 将业务方向转换为统一的升序比较值
 
@@ -372,7 +372,7 @@ Demo Sort Blank Flag =
 Demo Sort Signed Value =
     VAR __Value = [Demo Sort Value]
     VAR __Direction =
-        SELECTEDVALUE(Slicer_Demo_SortDirection[Direction_ID], "DESC")
+        SELECTEDVALUE('O：Slicer_Demo_SortDirection'[Direction_ID], "DESC")
     RETURN
         IF(
             ISBLANK(__Value),
@@ -395,39 +395,39 @@ Demo Row Tie Key =
 ### 7.7 排序序号
 
 ```dax
-Demo Row Rank =
+Demo Row Rank = 
     VAR __OneRowDimension =
-        HASONEVALUE(Param_Demo_Row[Row_Order])
+        HASONEVALUE('O：Param_Demo_Row'[​Row_Order])
     RETURN
         IF(
             NOT __OneRowDimension,
             BLANK(),
             SWITCH(
                 TRUE(),
-                ISINSCOPE(Dim_Demo_Store[Store_Name]),
+                ISINSCOPE('Dim_Demo_Store'[Store_Name]),
                     RANK(
                         DENSE,
-                        ALLSELECTED(Dim_Demo_Store[Store_Name]),
+                        ALLSELECTED('Dim_Demo_Store'[Store_Name]),
                         ORDERBY(
                             [Demo Sort Blank Flag], ASC,
                             [Demo Sort Signed Value], ASC,
                             [Demo Row Tie Key], ASC
                         )
                     ),
-                ISINSCOPE(Dim_Demo_Store[Region]),
+                ISINSCOPE('Dim_Demo_Store'[Region]),
                     RANK(
                         DENSE,
-                        ALLSELECTED(Dim_Demo_Store[Region]),
+                        ALLSELECTED('Dim_Demo_Store'[Region]),
                         ORDERBY(
                             [Demo Sort Blank Flag], ASC,
                             [Demo Sort Signed Value], ASC,
                             [Demo Row Tie Key], ASC
                         )
                     ),
-                ISINSCOPE(Dim_Demo_Store[Store_Type]),
+                ISINSCOPE('Dim_Demo_Store'[Store_Type]),
                     RANK(
                         DENSE,
-                        ALLSELECTED(Dim_Demo_Store[Store_Type]),
+                        ALLSELECTED('Dim_Demo_Store'[Store_Type]),
                         ORDERBY(
                             [Demo Sort Blank Flag], ASC,
                             [Demo Sort Signed Value], ASC,
@@ -455,10 +455,10 @@ Demo Row Rank =
 ### 7.8 排序状态卡
 
 ```dax
-Demo Sort Status =
+Demo Sort Status = 
     VAR __EffectiveID = [Demo Effective Sort Metric ID]
     VAR __RequestedID =
-        SELECTEDVALUE(Slicer_Demo_SortMetric[Metric_ID])
+        SELECTEDVALUE('O：Slicer_Demo_SortMetric'[Metric_ID])
     VAR __MetricLabel =
         SWITCH(
             __EffectiveID,
@@ -467,7 +467,7 @@ Demo Sort Status =
             30, "净销售额/总销售额"
         )
     VAR __Direction =
-        SELECTEDVALUE(Slicer_Demo_SortDirection[Direction_ID], "DESC")
+        SELECTEDVALUE('O：Slicer_Demo_SortDirection'[Direction_ID], "DESC")
     VAR __DirectionLabel = IF(__Direction = "ASC", "升序", "降序")
     VAR __Notice =
         SWITCH(
@@ -478,7 +478,7 @@ Demo Sort Status =
         )
     RETURN
         IF(
-            NOT HASONEVALUE(Param_Demo_Row[Row_Order]),
+            NOT HASONEVALUE('O：Param_Demo_Row'[​Row_Order]),
             "请在 A 中单选一个行维度。",
             __Notice
                 & "当前按「" & __MetricLabel & "」" & __DirectionLabel
@@ -494,11 +494,11 @@ Demo Sort Status =
 
 插入原生“表格”，按以下顺序放入字段：
 
-| 顺序 | 字段 | 操作 |
-|---|---|---|
-| 1 | `[Demo Row Rank]` | 此视觉对象中重命名为“排序序号”，格式整数 |
-| 2 | `Param_Demo_Row[Row_Label]` | 作为字段参数使用，实际展开成一个行分组字段 |
-| 3 | `Param_Demo_Metric[Metric_Label]` | 作为字段参数使用，实际展开成 B 选中的业务度量 |
+| 顺序 | 字段                                   | 操作                                          |
+| ---- | -------------------------------------- | --------------------------------------------- |
+| 1    | `[Demo Row Rank]`                    | 此视觉对象中重命名为“排序序号”，格式整数    |
+| 2    | `O：Param_Demo_Row[Row_Label]`       | 作为字段参数使用，实际展开成一个行分组字段    |
+| 3    | `O：Param_Demo_Metric[Metric_Label]` | 作为字段参数使用，实际展开成 B 选中的业务度量 |
 
 字段井必须使用已识别的字段参数，不是把第二列的 `NAMEOF` 字符串作为普通文本放入表格。正确效果是看到门店 A、门店 B 等成员及真实金额，而不是看到“门店”“净销售额”作为重复的数据记录。
 
@@ -513,12 +513,12 @@ Demo Sort Status =
 
 ### 8.2 A、B、C、D 初始状态
 
-| 切片器 | 字段 | 设置 | 初始选中 |
-|---|---|---|---|
-| A | `Param_Demo_Row[Row_Label]` | 单选、关闭全选、隐藏清除按钮 | 门店 |
-| B | `Param_Demo_Metric[Metric_Label]` | 多选、无需 Ctrl | 净销售额、总销售额 |
-| C | `Slicer_Demo_SortMetric[Metric_Label]` | 单选、视觉筛选 Available = 1 | 净销售额 |
-| D | `Slicer_Demo_SortDirection[Direction_Label]` | 单选 | 降序 |
+| 切片器 | 字段                                              | 设置                         | 初始选中           |
+| ------ | ------------------------------------------------- | ---------------------------- | ------------------ |
+| A      | `O：Param_Demo_Row[Row_Label]`                  | 单选、关闭全选、隐藏清除按钮 | 门店               |
+| B      | `O：Param_Demo_Metric[Metric_Label]`            | 多选、无需 Ctrl              | 净销售额、总销售额 |
+| C      | `O：Slicer_Demo_SortMetric[Metric_Label]`       | 单选、视觉筛选 Available = 1 | 净销售额           |
+| D      | `O：Slicer_Demo_SortDirection[Direction_Label]` | 单选                         | 降序               |
 
 先设置 B，再选 C，避免初始化时选中 B 未包含的指标。最后保存 PBIX，以保存初始选择；参数表中的某个“默认值”字段本身不会自动完成切片器选中操作。
 
@@ -526,13 +526,13 @@ Demo Sort Status =
 
 在“格式 → 编辑交互”中按下表配置。Filter 表示漏斗筛选图标，None 表示不交互图标。
 
-| 来源视觉对象 | A | B | C | D | 主表格 | 状态卡 |
-|---|---|---|---|---|---|---|
-| A | — | None | None | None | Filter | Filter |
-| B | None | — | **Filter** | None | **Filter** | **Filter** |
-| C | None | **None** | — | None | **Filter** | **Filter** |
-| D | None | None | None | — | **Filter** | **Filter** |
-| 主表格 | None | None | None | None | — | None |
+| 来源视觉对象 | A    | B              | C                | D    | 主表格           | 状态卡           |
+| ------------ | ---- | -------------- | ---------------- | ---- | ---------------- | ---------------- |
+| A            | —   | None           | None             | None | Filter           | Filter           |
+| B            | None | —             | **Filter** | None | **Filter** | **Filter** |
+| C            | None | **None** | —               | None | **Filter** | **Filter** |
+| D            | None | None           | None             | —   | **Filter** | **Filter** |
+| 主表格       | None | None           | None             | None | —               | None             |
 
 B 即使已经能控制主表格的指标列，也仍需对 C 和状态卡开启 Filter，否则这些视觉中的度量可能读不到 B 的选择。
 
@@ -554,27 +554,27 @@ C、D 是断开表，选择不会过滤销售事实记录，但其选择必须�
 
 ### 9.1 门店级汇总
 
-| 门店 | 区域 | 店铺类型 | 净销售额 | 总销售额 | 比值 |
-|---|---|---|---:|---:|---:|
-| 门店A | 华东 | 直营店 | 900.00 | 1,200.00 | 75.0% |
-| 门店B | 华东 | 加盟店 | 800.00 | 1,000.00 | 80.0% |
-| 门店C | 华南 | 直营店 | 900.00 | 1,500.00 | 60.0% |
-| 门店D | 华南 | 加盟店 | 500.00 | 800.00 | 62.5% |
-| 门店E | 华北 | 直营店 | 0.00 | 200.00 | 0.0% |
-| 门店F | 华北 | 加盟店 | 0.00 | 0.00 | 空白 |
-| 总计 | — | — | **3,100.00** | **4,700.00** | **66.0%** |
+| 门店  | 区域 | 店铺类型 |           净销售额 |           总销售额 |            比值 |
+| ----- | ---- | -------- | -----------------: | -----------------: | --------------: |
+| 门店A | 华东 | 直营店   |             900.00 |           1,200.00 |           75.0% |
+| 门店B | 华东 | 加盟店   |             800.00 |           1,000.00 |           80.0% |
+| 门店C | 华南 | 直营店   |             900.00 |           1,500.00 |           60.0% |
+| 门店D | 华南 | 加盟店   |             500.00 |             800.00 |           62.5% |
+| 门店E | 华北 | 直营店   |               0.00 |             200.00 |            0.0% |
+| 门店F | 华北 | 加盟店   |               0.00 |               0.00 |            空白 |
+| 总计  | —   | —       | **3,100.00** | **4,700.00** | **66.0%** |
 
 总计比值为 `3100 / 4700 ≈ 65.9574%`，按一位小数显示为 66.0%。
 
 ### 9.2 区域与店铺类型汇总
 
-| 分组字段 | 分组成员 | 净销售额 | 总销售额 | 比值 |
-|---|---|---:|---:|---:|
-| 区域 | 华东 | 1,700.00 | 2,200.00 | 77.3% |
-| 区域 | 华南 | 1,400.00 | 2,300.00 | 60.9% |
-| 区域 | 华北 | 0.00 | 200.00 | 0.0% |
-| 店铺类型 | 直营店 | 1,800.00 | 2,900.00 | 62.1% |
-| 店铺类型 | 加盟店 | 1,300.00 | 1,800.00 | 72.2% |
+| 分组字段 | 分组成员 | 净销售额 | 总销售额 |  比值 |
+| -------- | -------- | -------: | -------: | ----: |
+| 区域     | 华东     | 1,700.00 | 2,200.00 | 77.3% |
+| 区域     | 华南     | 1,400.00 | 2,300.00 | 60.9% |
+| 区域     | 华北     |     0.00 |   200.00 |  0.0% |
+| 店铺类型 | 直营店   | 1,800.00 | 2,900.00 | 62.1% |
+| 店铺类型 | 加盟店   | 1,300.00 | 1,800.00 | 72.2% |
 
 直营店比值为 `1800 / 2900`，不是门店 A、C、E 比值的平均数。切换到店铺类型后，以净销售额排序与以比值排序，首行会发生变化。
 
@@ -582,26 +582,26 @@ C、D 是断开表，选择不会过滤销售事实记录，但其选择必须�
 
 验证每一行时，B 必须包含 C 对应指标。
 
-| C 指标 | D 方向 | 预期门店顺序 |
-|---|---|---|
-| 净销售额 | 降序 | A → C → B → D → E → F |
-| 净销售额 | 升序 | E → F → D → B → A → C |
-| 总销售额 | 降序 | C → A → B → D → E → F |
-| 总销售额 | 升序 | F → E → D → B → A → C |
-| 比值 | 降序 | B → A → D → C → E → F |
-| 比值 | 升序 | E → C → D → A → B → F |
+| C 指标   | D 方向 | 预期门店顺序               |
+| -------- | ------ | -------------------------- |
+| 净销售额 | 降序   | A → C → B → D → E → F |
+| 净销售额 | 升序   | E → F → D → B → A → C |
+| 总销售额 | 降序   | C → A → B → D → E → F |
+| 总销售额 | 升序   | F → E → D → B → A → C |
+| 比值     | 降序   | B → A → D → C → E → F |
+| 比值     | 升序   | E → C → D → A → B → F |
 
 每种情况排序序号都应显示连续的 1～6。D 选择降序时，序号本身仍是升序，不能再将视觉序号排序改成降序。
 
 ### 9.4 A 切换后的排序结果
 
-| A | C | D | 预期行顺序 |
-|---|---|---|---|
-| 区域 | 净销售额 | 降序 | 华东 → 华南 → 华北 |
-| 区域 | 总销售额 | 降序 | 华南 → 华东 → 华北 |
-| 区域 | 比值 | 升序 | 华北 → 华南 → 华东 |
-| 店铺类型 | 净销售额 | 降序 | 直营店 → 加盟店 |
-| 店铺类型 | 比值 | 降序 | 加盟店 → 直营店 |
+| A        | C        | D    | 预期行顺序           |
+| -------- | -------- | ---- | -------------------- |
+| 区域     | 净销售额 | 降序 | 华东 → 华南 → 华北 |
+| 区域     | 总销售额 | 降序 | 华南 → 华东 → 华北 |
+| 区域     | 比值     | 升序 | 华北 → 华南 → 华东 |
+| 店铺类型 | 净销售额 | 降序 | 直营店 → 加盟店     |
+| 店铺类型 | 比值     | 降序 | 加盟店 → 直营店     |
 
 ## 10. 验收清单
 
@@ -654,18 +654,18 @@ ORDER BY Dim_Demo_Store[Store_Name] ASC
 
 ## 11. 排错与使用边界
 
-| 现象 | 检查项 |
-|---|---|
-| B 选两个指标，C 仍能正常选择三个 | B → C 是否为 Filter；Available 是否放在 C 视觉筛选且等于 1；是否只剩旧选择被保留显示 |
-| C 切换导致 B 或表格只剩一个指标 | 是否误建了 B/C 关系，或误用同一个参数表同时承载 B 和 C |
-| 状态卡变化但表格顺序不变 | 表格是否仍按排序序号升序；C/D → 表格是否开启 Filter |
-| 排名全为 1 或每组重新从 1 开始 | 是否额外放了静态分组字段，或给源行字段添加了隐藏排序列，或 A 实际变为多选 |
-| 提示字段参数列属于复合键 | 是否直接读取了参数显示名称；按方案改用整数顺序列 |
-| 表格显示 NAMEOF 字符串而非实际字段 | 是否通过“新建参数 → 字段”创建，是否保留字段参数元数据 |
-| 总计比值不对 | 是否用了逐行比值平均，或将度量转成文本后另行聚合 |
-| 比值为空的 F 门店没有显示 | 是否移除了排序序号列，或新增了空值隐藏筛选 |
-| 比值为空的 F 门店跑到最前 | 是否遗漏 `Demo Sort Blank Flag`，或直接用金额式数值排序而未处理空值 |
-| 改 B 后 C 的勾选没有自动变化 | 原生选择状态限制；检查实际排序与状态卡，不用勾选外观替代有效性校验 |
+| 现象                               | 检查项                                                                                |
+| ---------------------------------- | ------------------------------------------------------------------------------------- |
+| B 选两个指标，C 仍能正常选择三个   | B → C 是否为 Filter；Available 是否放在 C 视觉筛选且等于 1；是否只剩旧选择被保留显示 |
+| C 切换导致 B 或表格只剩一个指标    | 是否误建了 B/C 关系，或误用同一个参数表同时承载 B 和 C                                |
+| 状态卡变化但表格顺序不变           | 表格是否仍按排序序号升序；C/D → 表格是否开启 Filter                                  |
+| 排名全为 1 或每组重新从 1 开始     | 是否额外放了静态分组字段，或给源行字段添加了隐藏排序列，或 A 实际变为多选             |
+| 提示字段参数列属于复合键           | 是否直接读取了参数显示名称；按方案改用整数顺序列                                      |
+| 表格显示 NAMEOF 字符串而非实际字段 | 是否通过“新建参数 → 字段”创建，是否保留字段参数元数据                              |
+| 总计比值不对                       | 是否用了逐行比值平均，或将度量转成文本后另行聚合                                      |
+| 比值为空的 F 门店没有显示          | 是否移除了排序序号列，或新增了空值隐藏筛选                                            |
+| 比值为空的 F 门店跑到最前          | 是否遗漏 `Demo Sort Blank Flag`，或直接用金额式数值排序而未处理空值                 |
+| 改 B 后 C 的勾选没有自动变化       | 原生选择状态限制；检查实际排序与状态卡，不用勾选外观替代有效性校验                    |
 
 本方案不使用动态计算列做排名：计算列只在模型刷新时更新，不能响应切片器。字段参数计算表本身是静态配置，动态部分来自查询时的筛选上下文和度量。
 
@@ -692,8 +692,8 @@ ORDER BY Dim_Demo_Store[Store_Name] ASC
 
 ### 12.3 交付记录
 
-| 版本 | 内容 | 范围 |
-|---|---|---|
+| 版本 | 内容                                                         | 范围                                   |
+| ---- | ------------------------------------------------------------ | -------------------------------------- |
 | v1.0 | 新建动态行维度、动态指标、受限排序指标及升降序联动 Demo 方案 | 本文件，含 6 张表、11 个度量及验收步骤 |
 
 本次只交付方案文档；实际模型/报表应用后的变更日志路径应在实施时单独确定。
