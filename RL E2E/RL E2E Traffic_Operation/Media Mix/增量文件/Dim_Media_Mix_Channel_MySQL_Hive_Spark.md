@@ -62,7 +62,23 @@ SET SESSION group_concat_max_len = 16777216;
 此处 `utf8mb4_0900_bin` 从 MySQL 8.0.17 起提供，是二进制 NO PAD 排序规则，避免默认不区分大小写、忽略尾随空格的比较改变 DISTINCT、名称排名或 Scope 去重结果；更早的 MySQL 8.0 小版本不能直接执行本段。
 
 ```sql
+-- ============================================================================
+-- 整体思路（CTE 管线）：
+--   channel_source  去重渠道维度，并用嵌套 CASE 复刻 ClickHouse indexOf 的固定 RTB 顺序
+--   rtb_offset      统计每平台'未枚举 RTB'数量 N，得到顺延步长 10*N
+--   detail_data     计算明细基础排序（已枚举 RTB=顺序*10；未枚举 RTB 从 500 起按名称追加）
+--   detail_sorted   非 RTB 明细统一加 RTB_Offset，得到明细最终排序
+--   scope_members   11 个汇总 Scope 各自收集底层明细成员
+--   scope_first     每个 (Scope_ID, Channel_ID) 取最小排序值去重
+--   dynamic_scope   按排序值有序拼接成员 ID 为 '|' 分隔字符串（各引擎语法不同）
+--   summary_base    11 条写死的 SUMMARY 汇总行
+--   summary_data    SUMMARY 关联动态 Scope（无成员则空字符串）
+--   最终 SELECT     明细+SUMMARY 合并、SUMMARY 再加偏移、打 Channel_PK 输出 11 列
+-- 三段 SQL 仅数据库方言不同，业务逻辑与输出字段均与 ClickHouse 基准完全一致。
+-- ============================================================================
 WITH channel_source AS (
+    -- 嵌套 CASE 复刻 ClickHouse 的 indexOf([...], channel)：命中固定 RTB 渠道返回日报顺序 1~N，
+    -- 未命中返回 0（标记为'未枚举'，后续按名称升序追加）。
     SELECT d.platform, d.channel, d.channel_type,
         CASE
             WHEN d.platform = 'TM' AND d.channel_type = 'RTB' THEN
@@ -81,8 +97,12 @@ WITH channel_source AS (
             ELSE 0
         END AS RTB_Order
     FROM (
+        -- 先按 platform/channel/channel_type 去重，保证后续统计的是渠道数而非事实记录数。
         SELECT DISTINCT platform, channel, channel_type
         FROM (
+            -- CONVERT(... USING utf8mb4) COLLATE utf8mb4_0900_bin：强制二进制 NO PAD 排序规则，
+            -- 避免 MySQL 默认不区分大小写/忽略尾随空格的比较改变 DISTINCT、名称排名与 Scope 去重；
+            -- utf8mb4_0900_bin 自 MySQL 8.0.17 起提供，更早小版本不能执行本段。
             SELECT
                 CONVERT(platform USING utf8mb4) COLLATE utf8mb4_0900_bin AS platform,
                 CONVERT(channel USING utf8mb4) COLLATE utf8mb4_0900_bin AS channel,
@@ -94,12 +114,17 @@ WITH channel_source AS (
             AND channel_type IN ('JCGP', 'RTB', '品销宝', 'Brandzone', 'Branzone')
     ) d
 ),
+-- SUM(CASE WHEN ... THEN 1 ELSE 0 END) 复刻 ClickHouse countIf：按平台统计未枚举 RTB 渠道数 N，
+-- 乘 10 得顺延步长 RTB_Offset=10*N，供非 RTB 明细与所有 SUMMARY 整体后移。
 rtb_offset AS (
     SELECT platform,
         SUM(CASE WHEN channel_type = 'RTB' AND RTB_Order = 0 THEN 1 ELSE 0 END) * 10 AS RTB_Offset
     FROM channel_source
     GROUP BY platform
 ),
+-- 明细基础排序：已枚举 RTB=顺序*10（10,20,...）；未枚举 RTB 从 500 起按名称升序每项 +10。
+-- 所有按名称升序的窗口都用 CASE WHEN channel IS NULL THEN 1 ELSE 0 END 把 NULL 排到末尾，
+-- 对齐 ClickHouse 默认 NULL 末尾顺序。非 RTB 的 510/1010 是顺延前基础值，detail_sorted 再加偏移。
 detail_data AS (
     SELECT d.platform AS Platform,
         CASE d.platform WHEN 'TM' THEN 1 WHEN 'JD' THEN 2 END AS Platform_Sort,
@@ -150,6 +175,8 @@ detail_data AS (
         END AS Parent_Channel_ID
     FROM channel_source d
 ),
+-- 仅非 RTB 明细加 RTB_Offset（RTB 明细已在 500 段内自然排好）；COALESCE 把无偏移平台的 NULL 取 0。
+-- 此处用尚未覆盖为平台 Total 的父级标识识别 RTB 明细，明细最终排序在此定稿供 Scope 与输出共用。
 detail_sorted AS (
     SELECT d.Platform, d.Platform_Sort, d.Channel,
         CASE WHEN d.Parent_Channel_ID IN ('TM_RTB Total', 'JD_RTB Total') THEN d.Channel_Sort
@@ -160,6 +187,7 @@ detail_sorted AS (
     FROM detail_data d
     LEFT JOIN rtb_offset o ON d.Platform = o.platform
 ),
+-- 11 个 UNION ALL 分支：每个汇总 Scope 按其口径收集底层明细成员（同一 ID 可归属多个 Scope）。
 scope_members AS (
     SELECT 'TM_RTB Total' AS Scope_ID, Channel_ID, Channel_Sort
     FROM detail_sorted WHERE Platform = 'TM' AND Parent_Channel_ID = 'TM_RTB Total'
@@ -193,6 +221,8 @@ scope_members AS (
     SELECT 'JD_Total 不含JCGP', Channel_ID, Channel_Sort
     FROM detail_sorted WHERE Platform = 'JD' AND Parent_Channel_ID NOT IN ('JD_JCGP Total', 'UNKNOWN')
 ),
+-- 关键去重：同一 Scope 内同一 Channel_ID 可能对应多个排序值，取 MIN(Channel_Sort) 定位首次出现。
+-- 等价于原 ClickHouse 'arraySort(排序元组) → arrayMap 取 ID → arrayDistinct 按首次出现去重'。
 scope_first AS (
     SELECT Scope_ID, Channel_ID, MIN(Channel_Sort) AS First_Sort
     FROM scope_members
@@ -200,10 +230,13 @@ scope_first AS (
 ),
 dynamic_scope AS (
     SELECT Scope_ID AS Channel_ID,
+        -- MySQL 有序字符串聚合：GROUP_CONCAT(表达式 ORDER BY ... SEPARATOR '|')，分隔符用 SEPARATOR 关键字。
+        -- 入参已在 scope_first 去重，无需 DISTINCT；默认 group_concat_max_len=1024 字节，须先在同会话调大以防截断。
         GROUP_CONCAT(Channel_ID ORDER BY First_Sort, Channel_ID SEPARATOR '|') AS Summary_Scope
     FROM scope_first
     GROUP BY Scope_ID
 ),
+-- 11 条写死的 SUMMARY 行：Channel_Sort 为 500 的倍数（JD 扩展汇总用 501），Summary_Scope 置空待动态匹配。
 summary_base AS (
     SELECT 'TM' AS Platform, 1 AS Platform_Sort, 'RTB Total' AS Channel, 500 AS Channel_Sort, 'RTB Total' AS Channel_Label,
         'TM平台-RTB合计：直通车 + 引力魔方 + 全站推/万象台 + 超级短视频 之和' AS Channel_Description, 'SUMMARY' AS Channel_Type,
@@ -219,6 +252,7 @@ summary_base AS (
     UNION ALL SELECT 'JD', 2, 'Total', 2500, 'Total ', 'JD平台-全渠道合计：RTB Total + Brandzone + JCGP Total，即 JD 平台所有渠道总和', 'SUMMARY', 'JD_Total', NULL, 'JD_Total'
     UNION ALL SELECT 'JD', 2, 'Total 不含JCGP', 3000, 'Total 不含JCGP ', 'JD平台-全渠道合计（剔除JCGP）：Total - JCGP Total，纯效果类渠道（RTB类）合计', 'SUMMARY', 'JD_Total 不含JCGP', NULL, 'JD_Total 不含JCGP'
 ),
+-- SUMMARY 关联动态 Scope；COALESCE(..., '') 保证无成员的汇总行 Scope 为空字符串而非 NULL。
 summary_data AS (
     SELECT s.Platform, s.Platform_Sort, s.Channel, s.Channel_Sort, s.Channel_Label,
         s.Channel_Description, s.Channel_Type, s.Channel_ID,
@@ -226,10 +260,13 @@ summary_data AS (
     FROM summary_base s
     LEFT JOIN dynamic_scope d ON s.Channel_ID = d.Channel_ID
 )
+-- 最终输出：明细排序已定稿，此处仅给所有 SUMMARY 行加 RTB_Offset，再按 Platform_Sort,Channel_Sort 打 Channel_PK。
+-- Parent_Channel_ID 统一强制为 TM_Total / JD_Total，不输出中间分类父级；JD 标签追加的控制字符见各版本 CHAR 注释。
 SELECT
     ROW_NUMBER() OVER (ORDER BY Platform_Sort, Channel_Sort) AS Channel_PK,
     Platform, Platform_Sort, Channel, Channel_Sort,
     CASE WHEN Platform = 'TM' THEN Channel_Label
+        -- CHAR(11 USING utf8mb4) 保留原 ClickHouse CHAR(8203) 的实际字节 0x0B（8203 溢出 UInt8 后为 11），仅 JD 标签追加。
         ELSE CONCAT(Channel_Label, CHAR(11 USING utf8mb4)) END AS Channel_Label,
     Channel_Description, Channel_Type, Channel_ID, Summary_Scope,
     CASE WHEN Platform = 'TM' THEN 'TM_Total' ELSE 'JD_Total' END AS Parent_Channel_ID
@@ -255,7 +292,23 @@ ORDER BY Platform_Sort, Channel_Sort;
 先按每个 ID 的最小排序值构造 struct，再对聚合结果排序，最后取 `member_id` 数组。不能直接 `concat_ws('|', collect_set(Channel_ID))`，也不能仅在聚合前 `ORDER BY`：这些写法不能保证最终 Scope 顺序。各 UNION 分支显式保持相同列名，避免 Hive 的联合查询 schema 校验差异。
 
 ```sql
+-- ============================================================================
+-- 整体思路（CTE 管线）：
+--   channel_source  去重渠道维度，并用嵌套 CASE 复刻 ClickHouse indexOf 的固定 RTB 顺序
+--   rtb_offset      统计每平台'未枚举 RTB'数量 N，得到顺延步长 10*N
+--   detail_data     计算明细基础排序（已枚举 RTB=顺序*10；未枚举 RTB 从 500 起按名称追加）
+--   detail_sorted   非 RTB 明细统一加 RTB_Offset，得到明细最终排序
+--   scope_members   11 个汇总 Scope 各自收集底层明细成员
+--   scope_first     每个 (Scope_ID, Channel_ID) 取最小排序值去重
+--   dynamic_scope   按排序值有序拼接成员 ID 为 '|' 分隔字符串（各引擎语法不同）
+--   summary_base    11 条写死的 SUMMARY 汇总行
+--   summary_data    SUMMARY 关联动态 Scope（无成员则空字符串）
+--   最终 SELECT     明细+SUMMARY 合并、SUMMARY 再加偏移、打 Channel_PK 输出 11 列
+-- 三段 SQL 仅数据库方言不同，业务逻辑与输出字段均与 ClickHouse 基准完全一致。
+-- ============================================================================
 WITH channel_source AS (
+    -- 嵌套 CASE 复刻 ClickHouse 的 indexOf([...], channel)：命中固定 RTB 渠道返回日报顺序 1~N，
+    -- 未命中返回 0（标记为'未枚举'，后续按名称升序追加）。
     SELECT d.platform, d.channel, d.channel_type,
         CASE
             WHEN d.platform = 'TM' AND d.channel_type = 'RTB' THEN
@@ -274,6 +327,7 @@ WITH channel_source AS (
             ELSE 0
         END AS RTB_Order
     FROM (
+        -- 先按 platform/channel/channel_type 去重，保证后续统计的是渠道数而非事实记录数。
         SELECT DISTINCT platform, channel, channel_type
         FROM `indep_rl_ads`.a05_e2e_paid_media_channel_data_d
         WHERE platform IN ('JD', 'TM')
@@ -281,12 +335,17 @@ WITH channel_source AS (
             AND channel_type IN ('JCGP', 'RTB', '品销宝', 'Brandzone', 'Branzone')
     ) d
 ),
+-- SUM(CASE WHEN ... THEN 1 ELSE 0 END) 复刻 ClickHouse countIf：按平台统计未枚举 RTB 渠道数 N，
+-- 乘 10 得顺延步长 RTB_Offset=10*N，供非 RTB 明细与所有 SUMMARY 整体后移。
 rtb_offset AS (
     SELECT platform,
         SUM(CASE WHEN channel_type = 'RTB' AND RTB_Order = 0 THEN 1 ELSE 0 END) * 10 AS RTB_Offset
     FROM channel_source
     GROUP BY platform
 ),
+-- 明细基础排序：已枚举 RTB=顺序*10（10,20,...）；未枚举 RTB 从 500 起按名称升序每项 +10。
+-- 所有按名称升序的窗口都用 CASE WHEN channel IS NULL THEN 1 ELSE 0 END 把 NULL 排到末尾，
+-- 对齐 ClickHouse 默认 NULL 末尾顺序。非 RTB 的 510/1010 是顺延前基础值，detail_sorted 再加偏移。
 detail_data AS (
     SELECT d.platform AS Platform,
         CASE d.platform WHEN 'TM' THEN 1 WHEN 'JD' THEN 2 END AS Platform_Sort,
@@ -337,6 +396,8 @@ detail_data AS (
         END AS Parent_Channel_ID
     FROM channel_source d
 ),
+-- 仅非 RTB 明细加 RTB_Offset（RTB 明细已在 500 段内自然排好）；COALESCE 把无偏移平台的 NULL 取 0。
+-- 此处用尚未覆盖为平台 Total 的父级标识识别 RTB 明细，明细最终排序在此定稿供 Scope 与输出共用。
 detail_sorted AS (
     SELECT d.Platform, d.Platform_Sort, d.Channel,
         CASE WHEN d.Parent_Channel_ID IN ('TM_RTB Total', 'JD_RTB Total') THEN d.Channel_Sort
@@ -347,6 +408,7 @@ detail_sorted AS (
     FROM detail_data d
     LEFT JOIN rtb_offset o ON d.Platform = o.platform
 ),
+-- 11 个 UNION ALL 分支：每个汇总 Scope 按其口径收集底层明细成员（同一 ID 可归属多个 Scope）。
 scope_members AS (
     SELECT 'TM_RTB Total' AS Scope_ID, Channel_ID, Channel_Sort
     FROM detail_sorted WHERE Platform = 'TM' AND Parent_Channel_ID = 'TM_RTB Total'
@@ -380,11 +442,16 @@ scope_members AS (
     SELECT 'JD_Total 不含JCGP' AS Scope_ID, Channel_ID, Channel_Sort
     FROM detail_sorted WHERE Platform = 'JD' AND Parent_Channel_ID NOT IN ('JD_JCGP Total', 'UNKNOWN')
 ),
+-- 关键去重：同一 Scope 内同一 Channel_ID 可能对应多个排序值，取 MIN(Channel_Sort) 定位首次出现。
+-- 等价于原 ClickHouse 'arraySort(排序元组) → arrayMap 取 ID → arrayDistinct 按首次出现去重'。
 scope_first AS (
     SELECT Scope_ID, Channel_ID, MIN(Channel_Sort) AS First_Sort
     FROM scope_members
     GROUP BY Scope_ID, Channel_ID
 ),
+-- Hive/Spark 无有序字符串聚合函数，改用'排序 struct 数组'思路：
+-- COLLECT_LIST 把每个成员聚合成 NAMED_STRUCT('sort_key', First_Sort, 'member_id', Channel_ID)，
+-- SORT_ARRAY 按 struct 字段顺序（先 sort_key 再 member_id）升序排序，得到有序成员数组 Members。
 sorted_scope AS (
     SELECT Scope_ID,
         SORT_ARRAY(COLLECT_LIST(NAMED_STRUCT('sort_key', First_Sort, 'member_id', Channel_ID))) AS Members
@@ -393,9 +460,12 @@ sorted_scope AS (
     GROUP BY Scope_ID
 ),
 dynamic_scope AS (
+    -- Members.member_id 是'数组<struct> 的字段投影'，一次性取出所有成员的 member_id 组成数组；
+    -- CONCAT_WS('|', 数组) 再用 '|' 连接。不能直接 concat_ws('|', collect_set(...))，那样无法保证顺序。
     SELECT Scope_ID AS Channel_ID, CONCAT_WS('|', Members.member_id) AS Summary_Scope
     FROM sorted_scope
 ),
+-- 11 条写死的 SUMMARY 行：Channel_Sort 为 500 的倍数（JD 扩展汇总用 501），Summary_Scope 置空待动态匹配。
 summary_base AS (
     SELECT 'TM' AS Platform, 1 AS Platform_Sort, 'RTB Total' AS Channel, 500 AS Channel_Sort, 'RTB Total' AS Channel_Label,
         'TM平台-RTB合计：直通车 + 引力魔方 + 全站推/万象台 + 超级短视频 之和' AS Channel_Description, 'SUMMARY' AS Channel_Type,
@@ -441,6 +511,7 @@ summary_base AS (
         'JD平台-全渠道合计（剔除JCGP）：Total - JCGP Total，纯效果类渠道（RTB类）合计' AS Channel_Description, 'SUMMARY' AS Channel_Type,
         'JD_Total 不含JCGP' AS Channel_ID, NULL AS Summary_Scope, 'JD_Total 不含JCGP' AS Parent_Channel_ID
 ),
+-- SUMMARY 关联动态 Scope；COALESCE(..., '') 保证无成员的汇总行 Scope 为空字符串而非 NULL。
 summary_data AS (
     SELECT s.Platform, s.Platform_Sort, s.Channel, s.Channel_Sort, s.Channel_Label,
         s.Channel_Description, s.Channel_Type, s.Channel_ID,
@@ -448,10 +519,13 @@ summary_data AS (
     FROM summary_base s
     LEFT JOIN dynamic_scope d ON s.Channel_ID = d.Channel_ID
 )
+-- 最终输出：明细排序已定稿，此处仅给所有 SUMMARY 行加 RTB_Offset，再按 Platform_Sort,Channel_Sort 打 Channel_PK。
+-- Parent_Channel_ID 统一强制为 TM_Total / JD_Total，不输出中间分类父级；JD 标签追加的控制字符见各版本 CHAR 注释。
 SELECT
     ROW_NUMBER() OVER (ORDER BY Platform_Sort, Channel_Sort) AS Channel_PK,
     Platform, Platform_Sort, Channel, Channel_Sort,
     CASE WHEN Platform = 'TM' THEN Channel_Label
+        -- Hive/Spark 的字符函数是 CHR（不是 CHAR）；CHR(11) 同样保留原 ClickHouse CHAR(8203) 的实际字节 0x0B。
         ELSE CONCAT(Channel_Label, CHR(11)) END AS Channel_Label,
     Channel_Description, Channel_Type, Channel_ID, Summary_Scope,
     CASE WHEN Platform = 'TM' THEN 'TM_Total' ELSE 'JD_Total' END AS Parent_Channel_ID
@@ -475,7 +549,23 @@ ORDER BY Platform_Sort, Channel_Sort;
 Doris 的分隔符位于第二个参数，不能写 MySQL 的 `SEPARATOR`。先在 scope_first 去重，避免依赖 `DISTINCT + ORDER BY` 组合的版本差异。此段不适用于真正的 MySQL 5.7，也不将所有 MySQL 协议数据库视为 Doris。
 
 ```sql
+-- ============================================================================
+-- 整体思路（CTE 管线）：
+--   channel_source  去重渠道维度，并用嵌套 CASE 复刻 ClickHouse indexOf 的固定 RTB 顺序
+--   rtb_offset      统计每平台'未枚举 RTB'数量 N，得到顺延步长 10*N
+--   detail_data     计算明细基础排序（已枚举 RTB=顺序*10；未枚举 RTB 从 500 起按名称追加）
+--   detail_sorted   非 RTB 明细统一加 RTB_Offset，得到明细最终排序
+--   scope_members   11 个汇总 Scope 各自收集底层明细成员
+--   scope_first     每个 (Scope_ID, Channel_ID) 取最小排序值去重
+--   dynamic_scope   按排序值有序拼接成员 ID 为 '|' 分隔字符串（各引擎语法不同）
+--   summary_base    11 条写死的 SUMMARY 汇总行
+--   summary_data    SUMMARY 关联动态 Scope（无成员则空字符串）
+--   最终 SELECT     明细+SUMMARY 合并、SUMMARY 再加偏移、打 Channel_PK 输出 11 列
+-- 三段 SQL 仅数据库方言不同，业务逻辑与输出字段均与 ClickHouse 基准完全一致。
+-- ============================================================================
 WITH channel_source AS (
+    -- 嵌套 CASE 复刻 ClickHouse 的 indexOf([...], channel)：命中固定 RTB 渠道返回日报顺序 1~N，
+    -- 未命中返回 0（标记为'未枚举'，后续按名称升序追加）。
     SELECT d.platform, d.channel, d.channel_type,
         CASE
             WHEN d.platform = 'TM' AND d.channel_type = 'RTB' THEN
@@ -494,6 +584,7 @@ WITH channel_source AS (
             ELSE 0
         END AS RTB_Order
     FROM (
+        -- 先按 platform/channel/channel_type 去重，保证后续统计的是渠道数而非事实记录数。
         SELECT DISTINCT platform, channel, channel_type
         FROM `indep_rl_ads`.a05_e2e_paid_media_channel_data_d
         WHERE platform IN ('JD', 'TM')
@@ -501,12 +592,17 @@ WITH channel_source AS (
             AND channel_type IN ('JCGP', 'RTB', '品销宝', 'Brandzone', 'Branzone')
     ) d
 ),
+-- SUM(CASE WHEN ... THEN 1 ELSE 0 END) 复刻 ClickHouse countIf：按平台统计未枚举 RTB 渠道数 N，
+-- 乘 10 得顺延步长 RTB_Offset=10*N，供非 RTB 明细与所有 SUMMARY 整体后移。
 rtb_offset AS (
     SELECT platform,
         SUM(CASE WHEN channel_type = 'RTB' AND RTB_Order = 0 THEN 1 ELSE 0 END) * 10 AS RTB_Offset
     FROM channel_source
     GROUP BY platform
 ),
+-- 明细基础排序：已枚举 RTB=顺序*10（10,20,...）；未枚举 RTB 从 500 起按名称升序每项 +10。
+-- 所有按名称升序的窗口都用 CASE WHEN channel IS NULL THEN 1 ELSE 0 END 把 NULL 排到末尾，
+-- 对齐 ClickHouse 默认 NULL 末尾顺序。非 RTB 的 510/1010 是顺延前基础值，detail_sorted 再加偏移。
 detail_data AS (
     SELECT d.platform AS Platform,
         CASE d.platform WHEN 'TM' THEN 1 WHEN 'JD' THEN 2 END AS Platform_Sort,
@@ -557,6 +653,8 @@ detail_data AS (
         END AS Parent_Channel_ID
     FROM channel_source d
 ),
+-- 仅非 RTB 明细加 RTB_Offset（RTB 明细已在 500 段内自然排好）；COALESCE 把无偏移平台的 NULL 取 0。
+-- 此处用尚未覆盖为平台 Total 的父级标识识别 RTB 明细，明细最终排序在此定稿供 Scope 与输出共用。
 detail_sorted AS (
     SELECT d.Platform, d.Platform_Sort, d.Channel,
         CASE WHEN d.Parent_Channel_ID IN ('TM_RTB Total', 'JD_RTB Total') THEN d.Channel_Sort
@@ -567,6 +665,7 @@ detail_sorted AS (
     FROM detail_data d
     LEFT JOIN rtb_offset o ON d.Platform = o.platform
 ),
+-- 11 个 UNION ALL 分支：每个汇总 Scope 按其口径收集底层明细成员（同一 ID 可归属多个 Scope）。
 scope_members AS (
     SELECT 'TM_RTB Total' AS Scope_ID, Channel_ID, Channel_Sort
     FROM detail_sorted WHERE Platform = 'TM' AND Parent_Channel_ID = 'TM_RTB Total'
@@ -600,6 +699,8 @@ scope_members AS (
     SELECT 'JD_Total 不含JCGP', Channel_ID, Channel_Sort
     FROM detail_sorted WHERE Platform = 'JD' AND Parent_Channel_ID NOT IN ('JD_JCGP Total', 'UNKNOWN')
 ),
+-- 关键去重：同一 Scope 内同一 Channel_ID 可能对应多个排序值，取 MIN(Channel_Sort) 定位首次出现。
+-- 等价于原 ClickHouse 'arraySort(排序元组) → arrayMap 取 ID → arrayDistinct 按首次出现去重'。
 scope_first AS (
     SELECT Scope_ID, Channel_ID, MIN(Channel_Sort) AS First_Sort
     FROM scope_members
@@ -607,10 +708,13 @@ scope_first AS (
 ),
 dynamic_scope AS (
     SELECT Scope_ID AS Channel_ID,
+        -- Doris 有序字符串聚合：GROUP_CONCAT(表达式, 分隔符 ORDER BY ...)，分隔符 '|' 是第二个位置参数，
+        -- 不支持 MySQL 的 SEPARATOR 关键字；入参已在 scope_first 去重，无需 DISTINCT，避免 DISTINCT+ORDER BY 版本差异。
         GROUP_CONCAT(Channel_ID, '|' ORDER BY First_Sort, Channel_ID) AS Summary_Scope
     FROM scope_first
     GROUP BY Scope_ID
 ),
+-- 11 条写死的 SUMMARY 行：Channel_Sort 为 500 的倍数（JD 扩展汇总用 501），Summary_Scope 置空待动态匹配。
 summary_base AS (
     SELECT 'TM' AS Platform, 1 AS Platform_Sort, 'RTB Total' AS Channel, 500 AS Channel_Sort, 'RTB Total' AS Channel_Label,
         'TM平台-RTB合计：直通车 + 引力魔方 + 全站推/万象台 + 超级短视频 之和' AS Channel_Description, 'SUMMARY' AS Channel_Type,
@@ -626,6 +730,7 @@ summary_base AS (
     UNION ALL SELECT 'JD', 2, 'Total', 2500, 'Total ', 'JD平台-全渠道合计：RTB Total + Brandzone + JCGP Total，即 JD 平台所有渠道总和', 'SUMMARY', 'JD_Total', NULL, 'JD_Total'
     UNION ALL SELECT 'JD', 2, 'Total 不含JCGP', 3000, 'Total 不含JCGP ', 'JD平台-全渠道合计（剔除JCGP）：Total - JCGP Total，纯效果类渠道（RTB类）合计', 'SUMMARY', 'JD_Total 不含JCGP', NULL, 'JD_Total 不含JCGP'
 ),
+-- SUMMARY 关联动态 Scope；COALESCE(..., '') 保证无成员的汇总行 Scope 为空字符串而非 NULL。
 summary_data AS (
     SELECT s.Platform, s.Platform_Sort, s.Channel, s.Channel_Sort, s.Channel_Label,
         s.Channel_Description, s.Channel_Type, s.Channel_ID,
@@ -633,10 +738,13 @@ summary_data AS (
     FROM summary_base s
     LEFT JOIN dynamic_scope d ON s.Channel_ID = d.Channel_ID
 )
+-- 最终输出：明细排序已定稿，此处仅给所有 SUMMARY 行加 RTB_Offset，再按 Platform_Sort,Channel_Sort 打 Channel_PK。
+-- Parent_Channel_ID 统一强制为 TM_Total / JD_Total，不输出中间分类父级；JD 标签追加的控制字符见各版本 CHAR 注释。
 SELECT
     ROW_NUMBER() OVER (ORDER BY Platform_Sort, Channel_Sort) AS Channel_PK,
     Platform, Platform_Sort, Channel, Channel_Sort,
     CASE WHEN Platform = 'TM' THEN Channel_Label
+        -- CHAR(11) 保留原 ClickHouse CHAR(8203) 的实际字节 0x0B（8203 溢出 UInt8 后为 11），仅 JD 标签追加。
         ELSE CONCAT(Channel_Label, CHAR(11)) END AS Channel_Label,
     Channel_Description, Channel_Type, Channel_ID, Summary_Scope,
     CASE WHEN Platform = 'TM' THEN 'TM_Total' ELSE 'JD_Total' END AS Parent_Channel_ID

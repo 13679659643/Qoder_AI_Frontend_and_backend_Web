@@ -256,6 +256,19 @@
 
 ---
 
+## [2026-11-10 18:43] 修改 — 为渠道维度方言兼容 SQL 补充函数与思路注释（不改逻辑）
+
+- **模块**: Media Mix / 数据模型
+- **任务**: 按用户要求为不同版本 SQL 补充必要注释，聚焦不常见函数与思路说明，禁止修改逻辑
+- **操作**: 修改
+- **变更内容**:
+  - `Dim_Media_Mix_Channel_Apache Doris 3.x.md`：新增 35 行整行 `--` 注释（CTE 管线总览、indexOf→CASE、countIf→条件 SUM、MIN 去重等价、RTB_Offset 顺延、NULL 末尾排序、Doris 位置分隔符 GROUP_CONCAT、CHAR(11) 字节保留）。
+  - `增量文件/Dim_Media_Mix_Channel_MySQL_Hive_Spark.md`：A/B/C 三段共新增 108 行注释；公共逻辑注释一致，方言特有函数分别注释（MySQL CONVERT/COLLATE utf8mb4_0900_bin、GROUP_CONCAT SEPARATOR、CHAR(11 USING)；Hive/Spark SORT_ARRAY/COLLECT_LIST/NAMED_STRUCT、Members.member_id 投影、CONCAT_WS、CHR(11)；Doris 位置分隔符 GROUP_CONCAT、CHAR(11)）。
+- **关联文件**: `Media Mix/Dim_Media_Mix_Channel_Apache Doris 3.x.md`、`Media Mix/增量文件/Dim_Media_Mix_Channel_MySQL_Hive_Spark.md`
+- **备注**: 仅插入整行注释，未改任何代码字符；校验脚本剥离 sql 围栏内 `--` 注释行后与备份原文逐字一致（ordinal 比较，185 / 702 行原内容完整保留），证明逻辑、输出字段、字面量均未变动。仍未连接目标数据库执行。
+
+---
+
 ## [2026-11-10 16:34] 修改 — 明确 ODBC 方言入口并修正数据库兼容边界
 
 - **模块**: Media Mix / 数据模型
