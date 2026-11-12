@@ -260,11 +260,11 @@ Freq. Value                             ← = DIVIDE(_Net Pay Order Cnt Base Act
 Customer No. Display                    ← integer 格式 #,##0
 Customer No. vs LY Display              ← percent_1dp 格式 #,##0.0%（不含正号）
 Customer% Display                       ← percent_1dp 格式 #,##0.0%（不含正号）
-Customer% vs LY Display                 ← integer_pts 格式 #,##0pts;-#,##0pts;0pts（差值，不含正号）
+Customer% vs LY Display                 ← integer_bp 格式 #,##0bp;-#,##0bp;0bp（差值，不含正号）
 SLS Display                             ← currency 格式 __CurrencySymbol & FORMAT(__Value, "#,##0")
 SLS vs LY Display                       ← percent_1dp 格式 #,##0.0%（不含正号）
 SLS% Display                            ← percent_1dp 格式 #,##0.0%（不含正号）
-SLS% vs LY Display                      ← integer_pts 格式 #,##0pts;-#,##0pts;0pts（不含正号）
+SLS% vs LY Display                      ← integer_bp 格式 #,##0bp;-#,##0bp;0bp（差值，不含正号）
 ACV Display                             ← currency 格式 __CurrencySymbol & FORMAT(__Value, "#,##0")
 AUR Display                             ← currency 格式 __CurrencySymbol & FORMAT(__Value, "#,##0")
 UPT Display                             ← integer 格式 #,##0
@@ -301,17 +301,17 @@ Freq. Display                           ← decimal_1dp 格式 #,##0.0
 | 1    | Customer No.           | count(distinct user_id)                                                                                                                             | integer     | `#,##0`                   |
 | 2    | Customer No. vs LY     | 今年 / 去年 - 1                                                                                                                                     | percent_1dp | `#,##0.0%`                |
 | 3    | % of Total (Customer%) | 分子：count(distinct user_id) where customer_tier=T1-T5；分母：count(distinct user_id) where customer_tier in T1-T5（与分子对称，Total = 五行加总） | percent_1dp | `#,##0.0%`                |
-| 4    | Customer% vs LY        | 今年 - 去年（差值，×100 转 pts）                                                                                                                   | integer_pts | `#,##0pts;-#,##0pts;0pts` |
+| 4    | Customer% vs LY        | 今年 - 去年（差值，×10000 转 bp）   | integer_bp | `#,##0bp;-#,##0bp;0bp` |
 | 5    | SLS (in K)             | Step1（end period 当月框定 user_id）+ Step2（所选时间范围 sum(net_pay_amt)），÷1000，÷汇率                                                        | currency    | `#,##0`（拼接货币符号）   |
 | 6    | SLS vs LY              | 今年 / 去年 - 1                                                                                                                                     | percent_1dp | `#,##0.0%`                |
 | 7    | % of Total (SLS%)      | 分子：按期末 Tier 圈人后跨历史 Tier 聚合；分母：逐个外部选中 Tier 复用分子后加总                                                                    | percent_1dp | `#,##0.0%`                |
-| 8    | SLS % vs LY            | 今年 - 去年（差值，×100 转 pts）                                                                                                                   | integer_pts | `#,##0pts;-#,##0pts;0pts` |
+| 8    | SLS % vs LY            | 今年 - 去年（差值，×10000 转 bp）        | integer_bp | `#,##0bp;-#,##0bp;0bp` |
 | 9    | ACV                    | 分子：SLS（Step1+Step2 同指标 5）；分母：end period 当月 count(distinct user_id)                                                                    | currency    | `#,##0`（拼接货币符号）   |
 | 10   | AUR                    | 分子：Step1+Step2 sum(net_pay_amt)；分母：Step1+Step2 sum(net_pay_qty)                                                                              | currency    | `#,##0`（拼接货币符号）   |
 | 11   | UPT                    | 分子：Step1+Step2 sum(net_pay_qty)；分母：Step1+Step2 sum(net_pay_order_cnt)                                                                        | integer     | `#,##0`                   |
 | 12   | Freq.                  | 分子：Step1+Step2 sum(net_pay_order_cnt)；分母：end period 当月 count(distinct user_id)                                                             | decimal_1dp | `#,##0.0`                 |
 
-> **YOY 格式说明**：口径文档指标 2 / 6 数据格式为 `#,##0.0%`（percent_1dp，不含正号），指标 4 / 8 数据格式为 `#,##0pts;-#,##0pts;0pts`（integer_pts，差值 ×100 转 pts，不含正号）。本方案严格遵循口径文档，所有 YOY Display 不含正号。
+> **YOY 格式说明**：口径文档指标 2 / 6 数据格式为 `#,##0.0%`（percent_1dp，不含正号），指标 4 / 8 数据格式为 `#,##0bp;-#,##0bp;0bp`（integer_bp，差值 ×10000 转 bp，不含正号）。本方案严格遵循口径文档，所有 YOY Display 不含正号。
 
 ---
 
@@ -1304,7 +1304,7 @@ Freq. Value =
 > - integer → `#,##0`（千分位整数）
 > - percent_1dp → `#,##0.0%`（百分比一位小数，不含正号）
 > - currency → `__CurrencySymbol & FORMAT(__Value, "#,##0")`（拼接货币符号）
-> - integer_pts → `FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")`（不含正号）
+> - integer_bp → `FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")`（差值，不含正号）
 > - decimal_1dp → `#,##0.0`（小数一位，千分位）
 >
 > BLANK 显示为 "-"。
@@ -1379,15 +1379,15 @@ Customer% vs LY Display =
 // Display Folder: Formatting
 // 用途: 指标 4 — 买家人数占比YOY（格式化显示）
 // 依赖: [Customer% vs LY Value]
-// 数据格式: integer_pts → #,##0pts;-#,##0pts;0pts（不含正号）
-// 注: 口径文档指标 4 明确定义为差值 pts 格式（当期值 − 同期值，展示时 ×100 转 pts），不含正号
+// 数据格式: integer_bp → #,##0bp;-#,##0bp;0bp（差值，不含正号）
+// 注: 口径文档指标 4 明确定义为差值 bp 格式（当期值 − 同期值，展示时 ×10000 转 bp），不含正号
 // ========================================
     VAR __Value = [Customer% vs LY Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value * 100, "#,##0.00pts;-#,##0.00pts;0pts")
+            FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")
         )
 ```
 
@@ -1463,16 +1463,16 @@ SLS% vs LY Display =
 // Display Folder: Formatting
 // 用途: 指标 8 — 净销售额占比YOY（格式化显示）
 // 依赖: [SLS% vs LY Value]
-// 数据格式: integer_pts → #,##0pts;-#,##0pts;0pts（不含正号）
-// 转换: Value（小数差值）× 100 转 pts
-// 注: 口径文档第 177 行明确"直接使用 FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")"
+// 数据格式: delta_bp → #,##0bp;-#,##0bp;0bp（不含正号）
+// 转换: Value（小数差值）× 10000 转 bp
+// 注: 口径文档第 177 行明确"直接使用 FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")"
 // ========================================
     VAR __Value = [SLS% vs LY Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value * 100, "#,##0.00pts;-#,##0.00pts;0pts")
+            FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")
         )
 ```
 
@@ -1836,10 +1836,10 @@ SLS% vs LY Value Cell SVG Icon =
 10. **YOY 派生的"去年"定义（关键逻辑）**：
 
     - Customer No. vs LY / SLS vs LY: 今年 / 去年 - 1（百分比变化，percent_1dp 不含正号）
-    - Customer% vs LY: 今年 - 去年（差值，×100 转 pts，integer_pts 不含正号）
-    - SLS % vs LY: 今年 - 去年（差值，×100 转 pts，integer_pts 不含正号）
+    - Customer% vs LY: 今年 - 去年（差值，×100000 转 bp，integer_bp 不含正号）
+    - SLS % vs LY: 今年 - 去年（差值，×10000 转 bp，integer_bp 不含正号）
     - "去年"：Customer 类指标采用 LY end period 当月偏移（`Last_Fiscal_Month_Min_LY/Max_LY`）；SLS 类指标采用 LY Step1（`Last_Fiscal_Month_*_LY` 框定 user_id）+ LY Step2（`TimeFrame_Min_LY/TimeFrame_Max_LY` 所选时间范围聚合）双区间偏移
-11. **YOY 数据格式不含正号（关键差异）**：口径文档指标 2 / 6 数据格式为 `#,##0.0%`（percent_1dp，不含正号），指标 4 / 8 数据格式为 `#,##0pts;-#,##0pts;0pts`（integer_pts，差值 ×100 转 pts，不含正号）。本方案严格遵循口径文档，所有 YOY Display 不含正号。这与参考文件 LY_Last_Purchase_Time_Table.md 的 YOY 处理一致。
+11. **YOY 数据格式不含正号（关键差异）**：口径文档指标 2 / 6 数据格式为 `#,##0.0%`（percent_1dp，不含正号），指标 4 / 8 数据格式为 `#,##0bp;-#,##0bp;0bp`（integer_bp，差值 ×10000 转 bp，不含正号）。本方案严格遵循口径文档，所有 YOY Display 不含正号。这与参考文件 LY_Last_Purchase_Time_Table.md 的 YOY 处理一致。
 12. **SLS % vs LY 的 pts 转换**：口径文档第 177 行明确"直接使用 FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")"。Value 度量返回原始差值（小数），Display 度量乘以 100 转 pts。
 13. **分母为零或 BLANK 处理**：
 

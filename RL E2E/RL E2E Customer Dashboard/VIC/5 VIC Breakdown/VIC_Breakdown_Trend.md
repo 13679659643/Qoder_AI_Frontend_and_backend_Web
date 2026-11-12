@@ -40,7 +40,7 @@
 | Metric_ID | 指标     | 原格式      | 新格式      | 格式串                                                       | 示例               |
 | --------- | -------- | ----------- | ----------- | ------------------------------------------------------------ | ------------------ |
 | 1, 23     | SLS Act  | currency    | currency_k  | `__CurrencySymbol & FORMAT(__Value / 1000, "#,##0") & "k"` | ¥1k / $5k / ¥12k |
-| 4, 26     | SLS% Act | percent_0dp | percent_0dp | `FORMAT(__Value, "0%")`                                    | 45% / 62%          |
+| 4, 26     | SLS% Act | percent_0dp | percent_0dp | `FORMAT(__Value, "#,##0.0%%")`                                    | 45% / 62%          |
 
 > **currency_k 格式说明**：将 SLS 金额（已按 FXRate 换算为 RMB 或 USD）除以 1000 后保留整数，拼接货币符号 + "k" 后缀。例如 ¥1234 → "¥1k"，$5678 → "$6k"。
 > **percent_0dp 格式说明**：SLS% 为比率，FORMAT 为 0% 不保留小数。例如 0.4567 → "46%"。分子保留净额口径，可能为负，不额外裁剪到 0~1。
@@ -124,7 +124,7 @@ IsTimeFrameVisible VIC Breakdown（辅助度量 — X 轴视觉对象级别筛�
 | 格式类型    | 格式串                                                       | 示例       | 适用指标                                      |
 | ----------- | ------------------------------------------------------------ | ---------- | --------------------------------------------- |
 | currency_k  | `__CurrencySymbol & FORMAT(__Value / 1000, "#,##0") & "k"` | ¥1k / $5k | SLS Act (New VIC) / SLS Act (Retention VIC)   |
-| percent_0dp | `FORMAT(__Value, "0%")`                                    | 46% / 62%  | SLS% Act (New VIC) / SLS% Act (Retention VIC) |
+| percent_0dp | `FORMAT(__Value, "#,##0.0%%")`                                    | 46% / 62%  | SLS% Act (New VIC) / SLS% Act (Retention VIC) |
 
 ---
 
@@ -401,12 +401,12 @@ SLS% Trend Display (New VIC) =
 // Display Folder: VIC Breakdown Trend
 // 用途: New VIC SLS% 格式化显示
 // 依赖: [SLS% Trend Value (New VIC)]
-// 格式类型: percent_0dp → FORMAT(__Value, "0%")
+// 格式类型: percent_0dp → FORMAT(__Value, "#,##0.0%%")
 // 示例: 46% / 62%
 // ========================================
     VAR __Value = [SLS% Trend Value (New VIC)]
     RETURN
-        IF(ISBLANK(__Value), "-", FORMAT(__Value, "0%"))
+        IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0.0%%"))
 ```
 
 ---
@@ -631,12 +631,12 @@ SLS% Trend Display (Retention VIC) =
 // Display Folder: VIC Breakdown Trend
 // 用途: Retention VIC SLS% 格式化显示
 // 依赖: [SLS% Trend Value (Retention VIC)]
-// 格式类型: percent_0dp → FORMAT(__Value, "0%")
+// 格式类型: percent_0dp → FORMAT(__Value, "#,##0.0%%")
 // 示例: 46% / 62%
 // ========================================
     VAR __Value = [SLS% Trend Value (Retention VIC)]
     RETURN
-        IF(ISBLANK(__Value), "-", FORMAT(__Value, "0%"))
+        IF(ISBLANK(__Value), "-", FORMAT(__Value, "#,##0.0%%"))
 ```
 
 ---
@@ -799,7 +799,7 @@ Retention VIC 的 Quarter 验证只替换 Step 1 的 VIC 标记；Step 2 不再�
    - 比率类（SLS% Act，Metric_ID=4/26）不除（分子分母同币种抵消，SLS% 占比不除）
    - 货币符号从 Slicer_Currency_Selection[Currency_Symbol] 读取（默认 "¥"，USD 时为 "$"）
 6. **currency_k 格式**：SLS 金额除以 1000 后保留整数，拼接货币符号 + "k"。例如 ¥1234 → "¥1k"，$5678 → "$6k"。若未来需要更精细的小数位，可调整 FORMAT 串为 "#,##0.0" 等。
-7. **percent_0dp 格式**：SLS% 为比率，FORMAT "0%" 不保留小数。例如 0.4567 → "46%"。分子保留净额，可能为负，不额外裁剪范围。若未来需要小数位，可调整为 "0.0%"。
+7. **percent_0dp 格式**：SLS% 为比率，FORMAT "#,##0.0%%" 不保留小数。例如 0.4567 → "46%"。分子保留净额，可能为负，不额外裁剪范围。若未来需要小数位，可调整为 "0.0%"。
 8. **会员模式与员工筛选**：两档事实均为 `is_member=0`；Member 通过 `KEEPFILTERS` 要求注册日期非空且不晚于当前柱原财月末，TTL 不追加注册限制且保留已有筛选。会员无唯一选值默认 TTL；员工始终使用 `VALUES` + `IN` 当前可见集合，不设固定默认 Yes。日期转换与空值边界见 §3、§7。
 9. **与主表的对齐边界**：主表 Metric_ID 4/26 的有效全客分母返回 `__TTL_SLS`。Trend 同样采用期间正金额行分母，Quarter VIC 分子为两步、Month 为行级筛选。主表聚合期间起点来自 Min 表、终点来自 Max 表；Trend 读取每个 X 轴时间点自身区间并保留全局日期保护，会员截止只取当前柱最后财月末。本次仅 Act，不新增 LY/LP；除会员筛选外，其余有效逻辑均以现有代码为准。
 10. **行维度自动传递**：柱形图若配置图例（platform / shop_info_id 等）或小多图，事实表分组字段由模型自动传递筛选上下文，DAX 无需显式处理。

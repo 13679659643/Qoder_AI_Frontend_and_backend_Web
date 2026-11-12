@@ -245,7 +245,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value, "#,##0%")
+        FORMAT(__Value, "#,##0.0%")
     )
 ```
 
@@ -306,7 +306,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value, "#,##0%")
+        FORMAT(__Value, "#,##0.0%")
     )
 ```
 
@@ -637,7 +637,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value, "#,##0%")
+        FORMAT(__Value, "#,##0.0%")
     )
 ```
 
@@ -795,7 +795,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value, "#,##0%")
+        FORMAT(__Value, "#,##0.0%")
     )
 ```
 
@@ -999,7 +999,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value, "#,##0%")
+        FORMAT(__Value, "#,##0.0%")
     )
 ```
 
@@ -1033,7 +1033,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value, "#,##0%")
+        FORMAT(__Value, "#,##0.0%")
     )
 ```
 
@@ -1151,7 +1151,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value, "#,##0%")
+        FORMAT(__Value, "#,##0.0%")
     )
 ```
 
@@ -1214,7 +1214,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value, "#,##0%")
+        FORMAT(__Value, "#,##0.0%")
     )
 ```
 
@@ -1475,7 +1475,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value, "#,##0%")
+        FORMAT(__Value, "#,##0.0%")
     )
 ```
 
@@ -1608,7 +1608,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value, "#,##0%")
+        FORMAT(__Value, "#,##0.0%")
     )
 
 ```
@@ -1771,7 +1771,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value, "#,##0%")
+        FORMAT(__Value, "#,##0.0%")
     )
 ```
 
@@ -1805,7 +1805,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value, "#,##0%")
+        FORMAT(__Value, "#,##0.0%")
     )
 ```
 

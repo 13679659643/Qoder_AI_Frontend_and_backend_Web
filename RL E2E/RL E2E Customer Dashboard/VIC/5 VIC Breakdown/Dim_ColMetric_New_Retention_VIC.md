@@ -28,7 +28,7 @@ Dim_ColMetric_New_Retention_VIC =
 //   ColName_Sort           Level 3 排序（同组内 Act=100, vs LY=200, vs LP=300, vs Store=400）
 //   ColType                列类型标识：Act / vs LY / vs LP / vs Store
 //   Metric_Format          单一格式字段（严格对应口径文档数据类型）
-//                          取值: currency / delta_pct_0dp / percent_0dp / delta_pts / currency_decimal_1dp / decimal_1dp
+//                          取值: currency / delta_pct_0dp / percent_0dp / delta_bp / currency_decimal_1dp / decimal_1dp
 //   Metric_ColorRule       字体颜色规则：fixed_black / pos_neg_zero
 //   Metric_ColorPositive   正值颜色（pos_neg_zero 规则使用）
 //   Metric_ColorNegative   负值颜色（pos_neg_zero 规则使用）
@@ -41,7 +41,7 @@ Dim_ColMetric_New_Retention_VIC =
 //   decimal_1dp           → `#,##0.0`                                                  小数一位小数千分位（UPT / Freq.）
 //   percent_0dp           → `#,##0%`                                                   百分比整数，不含正号（SLS%）
 //   delta_pct_0dp         → `IF(__Value>0,"+","") & FORMAT(__Value,"#,##0%")`          百分比整数变化，含正号（vs LY / vs LP / vs Store）
-//   delta_pts             → `+#,##0pts;-#,##0pts;0pts`                                 基点（pts），含正负号，值×100 转 pts 在 Cell Display 中实现（SLS% vs LY / SLS% vs LP）
+//   delta_bp             → `+#,##0bp;-#,##0bp;0bp`                                 基点（bp），含正负号，值×10000 转 bp 在 Cell Display 中实现（SLS% vs LY / SLS% vs LP）
 //
 // 同名区分机制（ColName 加 Metric_ID 前缀）:
 //   Power BI Sort by Column 要求同名字段只能绑定一个排序值，
@@ -85,8 +85,8 @@ DATATABLE(
         // 口径: 分子 net_pay_amt(is_new_vic=1) / 分母 net_pay_amt(is_new_vic in (0,1))
         // 颜色规则: Act=固定黑；vs LY/vs LP=正负零三色
         { 4,  "New VIC", "SLS%",  "4-SLS%",          10, 20, 100, "Act",              "percent_0dp",          "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 5,  "New VIC", "SLS%",  "5-SLS% vs LY",    10, 20, 200, "vs LY",            "delta_pts",            "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 6,  "New VIC", "SLS%",  "6-SLS% vs LP",    10, 20, 300, "vs LP",            "delta_pts",            "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 5,  "New VIC", "SLS%",  "5-SLS% vs LY",    10, 20, 200, "vs LY",            "delta_bp",            "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 6,  "New VIC", "SLS%",  "6-SLS% vs LP",    10, 20, 300, "vs LP",            "delta_bp",            "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ── KPI 分组 3：ACV（New VIC）— 客单价（4 列）
         // 口径: 分子 SLS(is_new_vic=1) / 分母 count(distinct user_id)(is_new_vic=1)
@@ -140,8 +140,8 @@ DATATABLE(
         // 口径: 分子 net_pay_amt(is_retention_vic=1) / 分母 net_pay_amt(is_retention_vic in (0,1))
         // 颜色规则: Act=固定黑；vs LY/vs LP=正负零三色
         { 26, "Retention VIC", "SLS%",  "26-SLS%",          20, 20, 100, "Act",              "percent_0dp",          "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 27, "Retention VIC", "SLS%",  "27-SLS% vs LY",    20, 20, 200, "vs LY",            "delta_pts",            "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 28, "Retention VIC", "SLS%",  "28-SLS% vs LP",    20, 20, 300, "vs LP",            "delta_pts",            "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 27, "Retention VIC", "SLS%",  "27-SLS% vs LY",    20, 20, 200, "vs LY",            "delta_bp",            "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 28, "Retention VIC", "SLS%",  "28-SLS% vs LP",    20, 20, 300, "vs LP",            "delta_bp",            "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ── KPI 分组 3：ACV（Retention VIC）— 客单价（4 列）
         // 口径: 分子 SLS(is_retention_vic=1) / 分母 count(distinct user_id)(is_retention_vic=1)

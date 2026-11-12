@@ -22,7 +22,7 @@ Dim_ColMetric_VIC_KPIs =
 //   ColName_Sort           Level 2 排序（同组内 Act=100, vs LY=200, vs LP=300, TAR=400, Share=500, Share vs LY=600, Share vs LP=700）
 //   ColType                列类型标识：Act / vs LY / vs LP / TAR ACH% Monthly / TAR ACH% Yearly / TAR ACH% / Share / Share vs LY / Share vs LP
 //   Metric_Format          单一格式字段（严格对应口径文档数据类型）
-//                          取值: integer / percent_1dp / delta_pct_1dp / delta_pts
+//                          取值: integer / percent_1dp / delta_pct_1dp / delta_bp
 //   Metric_ColorRule       字体颜色规则：fixed_black / pos_neg_zero / fixed_default
 //   Metric_ColorPositive   正值颜色（pos_neg_zero 规则使用）
 //   Metric_ColorNegative   负值颜色（pos_neg_zero 规则使用）
@@ -34,6 +34,8 @@ Dim_ColMetric_VIC_KPIs =
 //   percent_1dp     → `#,##0.0%`                           百分比一位小数，不含正号（TAR ACH% / VIC Retention% / Share / Retention VIC No. vs LY）
 //   delta_pct_1dp   → `IF(__Value>0,"+","") & FORMAT(__Value,"#,##0.0%")`  百分比变化，含正号（数量类 vs LY / vs LP）
 //   delta_pts       → `+#,##0pts;-#,##0pts;0pts`           基点（pts），含正负号，值×100 转 pts 在 Cell Display 中实现
+//   integer_bp      → `#,##0bp;-#,##0bp;0bp`             差值（bp），不含正号（数量类 vs LY / vs LP）
+//   delta_bp        → `+#,##0bp;-#,##0bp;0bp`           基点（bp），含正负号，值×10000 转 bp 在 Cell Display 中实现
 //
 // 注: 不存在 percent_1dp_signed / percent_1dp_nosign 两个格式。
 //     所有"不含正号的百分比"统一为 percent_1dp；
@@ -82,8 +84,8 @@ DATATABLE(
         // 颜色规则: Act=固定黑；vs LY/vs LP=正负零三色；TAR ACH%=正负零三色
         // ════════════════════════════════════════════════════════════════
         { 6,  "VIC Retention%",   "6-VIC Retention%",            20, 100, "Act",              "percent_1dp",  "fixed_black",   "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 7,  "VIC Retention%",   "7-VIC Retention% vs LY",     20, 200, "vs LY",            "delta_pts",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 8,  "VIC Retention%",   "8-VIC Retention% vs LP",     20, 300, "vs LP",            "delta_pts",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 7,  "VIC Retention%",   "7-VIC Retention% vs LY",     20, 200, "vs LY",            "delta_bp",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 8,  "VIC Retention%",   "8-VIC Retention% vs LP",     20, 300, "vs LP",            "delta_bp",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 9,  "VIC Retention%",   "9-VIC Retention% TAR ACH%",  20, 420, "TAR ACH%",         "percent_1dp",  "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
@@ -97,8 +99,8 @@ DATATABLE(
         { 12, "T4-5 Upgrade No.", "12-T4-5 Upgrade No. vs LP",           30, 300, "vs LP",       "delta_pct_1dp","pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 13, "T4-5 Upgrade No.", "13-T4-5 Upgrade No. TAR ACH%",        30, 420, "TAR ACH%",    "percent_1dp",  "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 14, "T4-5 Upgrade No.", "14-T4-5 Upgrade No. Share",           30, 500, "Share",       "percent_1dp",  "fixed_default", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 15, "T4-5 Upgrade No.", "15-T4-5 Upgrade No. Share vs LY",     30, 600, "Share vs LY", "delta_pts",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 16, "T4-5 Upgrade No.", "16-T4-5 Upgrade No. Share vs LP",     30, 700, "Share vs LP", "delta_pts",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 15, "T4-5 Upgrade No.", "15-T4-5 Upgrade No. Share vs LY",     30, 600, "Share vs LY", "delta_bp",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 16, "T4-5 Upgrade No.", "16-T4-5 Upgrade No. Share vs LP",     30, 700, "Share vs LP", "delta_bp",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // 分组 4：Retention VIC No. — 留存 VIC 人数（6 列）
@@ -111,8 +113,8 @@ DATATABLE(
         { 18, "Retention VIC No.", "18-Retention VIC No. vs LY",           40, 200, "vs LY",       "percent_1dp",  "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 19, "Retention VIC No.", "19-Retention VIC No. vs LP",           40, 300, "vs LP",       "delta_pct_1dp","pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 20, "Retention VIC No.", "20-Retention VIC No. Share",           40, 500, "Share",       "percent_1dp",  "fixed_default", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 21, "Retention VIC No.", "21-Retention VIC No. Share vs LY",     40, 600, "Share vs LY", "delta_pts",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 22, "Retention VIC No.", "22-Retention VIC No. Share vs LP",     40, 700, "Share vs LP", "delta_pts",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 21, "Retention VIC No.", "21-Retention VIC No. Share vs LY",     40, 600, "Share vs LY", "delta_bp",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 22, "Retention VIC No.", "22-Retention VIC No. Share vs LP",     40, 700, "Share vs LP", "delta_bp",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // 分组 5：Direct VIC No. — 直接买成 VIC 人数（6 列）
@@ -124,7 +126,7 @@ DATATABLE(
         { 24, "Direct VIC No.",    "24-Direct VIC No. vs LY",           50, 200, "vs LY",       "delta_pct_1dp","pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 25, "Direct VIC No.",    "25-Direct VIC No. vs LP",           50, 300, "vs LP",       "delta_pct_1dp","pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 26, "Direct VIC No.",    "26-Direct VIC No. Share",           50, 500, "Share",       "percent_1dp",  "fixed_default", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 27, "Direct VIC No.",    "27-Direct VIC No. Share vs LY",     50, 600, "Share vs LY", "delta_pts",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 28, "Direct VIC No.",    "28-Direct VIC No. Share vs LP",     50, 700, "Share vs LP", "delta_pts",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" }
+        { 27, "Direct VIC No.",    "27-Direct VIC No. Share vs LY",     50, 600, "Share vs LY", "delta_bp",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 28, "Direct VIC No.",    "28-Direct VIC No. Share vs LP",     50, 700, "Share vs LP", "delta_bp",    "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" }
     }
 )

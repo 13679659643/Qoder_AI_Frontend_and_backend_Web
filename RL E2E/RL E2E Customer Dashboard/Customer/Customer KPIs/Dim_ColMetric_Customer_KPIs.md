@@ -23,7 +23,7 @@ Dim_ColMetric_Customer_KPIs =
 //   ColName_Sort           Level 2 排序（同组内 Act=100, vs LY=200, vs LP=300, Monthly TAR=400, Yearly TAR=410）
 //   ColType                列类型标识：Act / vs LY / vs LP / TAR ACH% Monthly / TAR ACH% Yearly
 //   Metric_Format          单一格式字段（严格对应口径文档数据类型）
-//                          取值: integer / percent_1dp / delta_pct_1dp / delta_pts
+//                          取值: integer / percent_1dp / delta_pct_1dp / delta_bp / integer_bp / delta_bp
 //   Metric_ColorRule       字体颜色规则：fixed_black / pos_neg_zero / fixed_default
 //   Metric_ColorPositive   正值颜色（pos_neg_zero 规则使用）
 //   Metric_ColorNegative   负值颜色（pos_neg_zero 规则使用）
@@ -34,7 +34,9 @@ Dim_ColMetric_Customer_KPIs =
 //   integer         → `#,##0`                              整数千分位（DCom New Customer No. Act）
 //   percent_1dp     → `#,##0.0%`                           百分比一位小数，不含正号（DCom New Customer% Act / 4 个 TAR ACH%）
 //   delta_pct_1dp   → `IF(__Value>0,"+","") & FORMAT(__Value,"#,##0.0%")`  百分比变化，含正号（Customer No. vs LY / vs LP）
-//   delta_pts       → `+#,##0pts;-#,##0pts;0pts`           基点（pts），含正负号，值×100 转 pts 在 Cell Display 中实现（Customer% vs LY / vs LP）
+//   delta_bp       → `+#,##0pts;-#,##0pts;0pts`           基点（pts），含正负号，值×100 转 pts 在 Cell Display 中实现（Customer% vs LY / vs LP）
+//   integer_bp      → `#,##0bp;-#,##0bp;0bp`             差值（bp），不含正号（数量类 vs LY / vs LP）
+//   delta_bp        → `+#,##0bp;-#,##0bp;0bp`           基点（bp），含正负号，值×10000 转 bp 在 Cell Display 中实现（Customer% vs LY / vs LP）
 //
 // 同名区分机制（ColName 加 Metric_ID 前缀）:
 //   Power BI Sort by Column 要求同名字段只能绑定一个排序值，
@@ -78,8 +80,8 @@ DATATABLE(
         // 颜色规则: Act=默认色；vs LY/vs LP=正负零三色；TAR ACH% Monthly/TAR ACH% Yearly=正负零三色
         // ════════════════════════════════════════════════════════════════
         { 6,  "Customer%",    "6-DCom New Customer%",               20, 100, "Act",              "percent_1dp",   "fixed_black", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 7,  "Customer%",    "7-DCom New Customer% vs LY",        20, 200, "vs LY",            "delta_pts",     "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 8,  "Customer%",    "8-DCom New Customer% vs LP",        20, 300, "vs LP",            "delta_pts",     "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 7,  "Customer%",    "7-DCom New Customer% vs LY",        20, 200, "vs LY",            "delta_bp",     "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 8,  "Customer%",    "8-DCom New Customer% vs LP",        20, 300, "vs LP",            "delta_bp",     "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 9,  "Customer%",    "9-Customer% Monthly TAR ACH%",      20, 400, "TAR ACH% Monthly", "percent_1dp",   "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 10, "Customer%",    "10-Customer% Yearly TAR ACH%",      20, 410, "TAR ACH% Yearly",  "percent_1dp",   "pos_neg_zero",  "#1A9018", "#D64550", "#E1C233", "#5F6165" }
     }

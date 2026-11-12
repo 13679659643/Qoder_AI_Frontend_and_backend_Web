@@ -705,9 +705,9 @@ DCom Member SLS% Net percent_1dp =
 
 ### 指标 3.1：DCom Member SLS% vs LY（Net）— 占比同比
 
-> 比率类派生 · 今年 - 去年（差值，×100 转 pts）· 按 data_date 聚合
-> 两种 Display 格式：delta_pts（含正号）/ integer_pts（不含正号）
-> Value 度量返回原始差值（小数），Display 度量乘以 100 转 pts
+> 比率类派生 · 今年 - 去年（差值，×100 转 bp）· 按 data_date 聚合
+> 两种 Display 格式：delta_bp（含正号）/ integer_bp（不含正号）
+> Value 度量返回原始差值（小数），Display 度量乘以 100 转 bp
 
 ### 4.24 DCom Member SLS% Net LY Value
 
@@ -774,16 +774,16 @@ DCom Member SLS% Net vs LY delta_pts =
 // Display Folder: Member
 // 用途: DCom会员净销售额占比 Net 同比 格式化显示（含正号）
 // 依赖: [DCom Member SLS% Net vs LY Value]
-// 格式类型: delta_pts → 增减基点整数，含正负号，值×100 转 pts
-//   格式串: FORMAT(__Value * 100, "+#,##0pts;-#,##0pts;0pts")
-//   示例: +120pts / -80pts / 0pts
+// 格式类型: delta_bp → 增减基点整数，含正负号，值×100 转 bp
+//   格式串: FORMAT(__Value * 10000, "+#,##0bp;-#,##0bp;0bp")
+//   示例: +120bp / -80bp / 0bp
 // ========================================
     VAR __Value = [DCom Member SLS% Net vs LY Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value * 100, "+#,##0pts;-#,##0pts;0pts")
+            FORMAT(__Value * 10000, "+#,##0bp;-#,##0bp;0bp")
         )
 ```
 
@@ -796,16 +796,16 @@ DCom Member SLS% Net vs LY integer_pts =
 // Display Folder: Member
 // 用途: DCom会员净销售额占比 Net 同比 格式化显示（不含正号）
 // 依赖: [DCom Member SLS% Net vs LY Value]
-// 格式类型: integer_pts → 整数，千分位整数 pts，不含正号
-//   格式串: FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")
-//   示例: 120pts / -80pts / 0pts
+// 格式类型: integer_pts → 整数，千分位整数 bp，不含正号
+//   格式串: FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")
+//   示例: 120bp / -80bp / 0bp
 // ========================================
     VAR __Value = [DCom Member SLS% Net vs LY Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")
+            FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")
         )
 ```
 
@@ -813,8 +813,8 @@ DCom Member SLS% Net vs LY integer_pts =
 
 ### 指标 3.2：DCom Member SLS% vs LP（Net）— 占比环比
 
-> 比率类派生 · 当期 - 上期（差值，×100 转 pts）· 按 data_date 聚合
-> 两种 Display 格式：delta_pts / integer_pts
+> 比率类派生 · 当期 - 上期（差值，×100 转 bp）· 按 data_date 聚合
+> 两种 Display 格式：delta_bp / integer_bp
 
 ### 4.28 DCom Member SLS% Net LP Value
 
@@ -881,16 +881,16 @@ DCom Member SLS% Net vs LP delta_pts =
 // Display Folder: Member
 // 用途: DCom会员净销售额占比 Net 环比 格式化显示（含正号）
 // 依赖: [DCom Member SLS% Net vs LP Value]
-// 格式类型: delta_pts → 增减基点整数，含正负号，值×100 转 pts
-//   格式串: FORMAT(__Value * 100, "+#,##0pts;-#,##0pts;0pts")
-//   示例: +120pts / -80pts / 0pts
+// 格式类型: delta_pts → 增减基点整数，含正负号，值×100 转 bp
+//   格式串: FORMAT(__Value * 10000, "+#,##0bp;-#,##0bp;0bp")
+//   示例: +120bp / -80bp / 0bp
 // ========================================
     VAR __Value = [DCom Member SLS% Net vs LP Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value * 100, "+#,##0pts;-#,##0pts;0pts")
+            FORMAT(__Value * 10000, "+#,##0bp;-#,##0bp;0bp")
         )
 ```
 
@@ -903,16 +903,16 @@ DCom Member SLS% Net vs LP integer_pts =
 // Display Folder: Member
 // 用途: DCom会员净销售额占比 Net 环比 格式化显示（不含正号）
 // 依赖: [DCom Member SLS% Net vs LP Value]
-// 格式类型: integer_pts → 整数，千分位整数 pts，不含正号
-//   格式串: FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")
-//   示例: 120pts / -80pts / 0pts
+// 格式类型: integer_pts → 整数，千分位整数 bp，不含正号
+//   格式串: FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")
+//   示例: 120bp / -80bp / 0bp
 // ========================================
     VAR __Value = [DCom Member SLS% Net vs LP Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")
+            FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")
         )
 ```
 
@@ -1324,16 +1324,16 @@ DCom Member SLS% Demand vs LY delta_pts =
 // Display Folder: Member
 // 用途: DCom会员销售额占比 Demand 同比 格式化显示（含正号）
 // 依赖: [DCom Member SLS% Demand vs LY Value]
-// 格式类型: delta_pts → 增减基点整数，含正负号，值×100 转 pts
-//   格式串: FORMAT(__Value * 100, "+#,##0pts;-#,##0pts;0pts")
-//   示例: +120pts / -80pts / 0pts
+// 格式类型: delta_bp → 增减基点整数，含正负号，值×100 转 bp
+//   格式串: FORMAT(__Value * 10000, "+#,##0bp;-#,##0bp;0bp")
+//   示例: +120bp / -80bp / 0bp
 // ========================================
     VAR __Value = [DCom Member SLS% Demand vs LY Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value * 100, "+#,##0pts;-#,##0pts;0pts")
+            FORMAT(__Value * 10000, "+#,##0bp;-#,##0bp;0bp")
         )
 ```
 
@@ -1346,16 +1346,16 @@ DCom Member SLS% Demand vs LY integer_pts =
 // Display Folder: Member
 // 用途: DCom会员销售额占比 Demand 同比 格式化显示（不含正号）
 // 依赖: [DCom Member SLS% Demand vs LY Value]
-// 格式类型: integer_pts → 整数，千分位整数 pts，不含正号
-//   格式串: FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")
-//   示例: 120pts / -80pts / 0pts
+// 格式类型: integer_bp → 整数，千分位整数 bp，不含正号
+//   格式串: FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")
+//   示例: 120bp / -80bp / 0bp
 // ========================================
     VAR __Value = [DCom Member SLS% Demand vs LY Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")
+            FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")
         )
 ```
 
@@ -1431,16 +1431,16 @@ DCom Member SLS% Demand vs LP delta_pts =
 // Display Folder: Member
 // 用途: DCom会员销售额占比 Demand 环比 格式化显示（含正号）
 // 依赖: [DCom Member SLS% Demand vs LP Value]
-// 格式类型: delta_pts → 增减基点整数，含正负号，值×100 转 pts
-//   格式串: FORMAT(__Value * 100, "+#,##0pts;-#,##0pts;0pts")
-//   示例: +120pts / -80pts / 0pts
+// 格式类型: delta_bp → 增减基点整数，含正负号，值×100 转 bp
+//   格式串: FORMAT(__Value * 10000, "+#,##0bp;-#,##0bp;0bp")
+//   示例: +120bp / -80bp / 0bp
 // ========================================
     VAR __Value = [DCom Member SLS% Demand vs LP Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value * 100, "+#,##0pts;-#,##0pts;0pts")
+            FORMAT(__Value * 10000, "+#,##0bp;-#,##0bp;0bp")
         )
 ```
 
@@ -1453,17 +1453,35 @@ DCom Member SLS% Demand vs LP integer_pts =
 // Display Folder: Member
 // 用途: DCom会员销售额占比 Demand 环比 格式化显示（不含正号）
 // 依赖: [DCom Member SLS% Demand vs LP Value]
-// 格式类型: integer_pts → 整数，千分位整数 pts，不含正号
-//   格式串: FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")
-//   示例: 120pts / -80pts / 0pts
+// 格式类型: integer_bp → 整数，千分位整数 bp，不含正号
+//   格式串: FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")
+//   示例: 120bp / -80bp / 0bp
 // ========================================
     VAR __Value = [DCom Member SLS% Demand vs LP Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-            FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")
+            FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")
         )
+```
+
+## 指标 6：bp x10000— (柱形和折线中需要先对度量x10000，再数据格式化：#,##0bp;-#,##0bp;0bp)
+
+```dax
+DCom Member SLS% Net vs LY Value bp = [DCom Member SLS% Net vs LY Value] * 10000
+```
+
+```dax
+DCom Member SLS% Net vs LP Value bp = [DCom Member SLS% Net vs LP Value] * 10000
+```
+
+```dax
+DCom Member SLS% Demand vs LY Value bp = [DCom Member SLS% Demand vs LY Value] * 10000
+```
+
+```dax
+DCom Member SLS% Demand vs LP Value bp = [DCom Member SLS% Demand vs LP Value] * 10000
 ```
 
 ---

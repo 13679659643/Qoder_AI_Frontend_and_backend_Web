@@ -43,7 +43,7 @@
 | 原格式        | 新格式      | 格式串                                               | 示例            |
 | ------------- | ----------- | ---------------------------------------------------- | --------------- |
 | delta_pct_1dp | percent_1dp | `FORMAT(__Value, "#,##0.0%")`                      | 14.5% / -3.2%   |
-| delta_pts     | integer_pts | `FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")` | 120pts / -80pts |
+| delta_bp     | integer_bp | `FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")` | 120bp / -80bp |
 
 > 去掉正号前缀 `IF(__Value>0,"+","")`，直接使用 FORMAT 输出不含正号的格式。
 
@@ -151,7 +151,7 @@ IsTimeFrameVisible VIC Trend（辅助度量 — X 轴视觉对象级别筛选器
 | ----------- | ---------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------- |
 | integer     | `FORMAT(__Value, "#,##0")`                         | 1,234           | VIC No. / T4-5 Upgrade No.                                                             |
 | percent_1dp | `FORMAT(__Value, "#,##0.0%")`                      | 14.5% / -3.2%   | VIC No. vs LY/LP / VIC Retention% / T4-5 Upgrade No. vs LY/LP / T4-5 Upgrade No. Share |
-| integer_pts | `FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")` | 120pts / -80pts | VIC Retention% vs LY / vs LP                                                           |
+| integer_bp | `FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")` | 120bp / -80bp | VIC Retention% vs LY / vs LP                                                           |
 
 ---
 
@@ -942,19 +942,19 @@ VIC Retention% vs LY Trend Display =
 // Display Folder: VIC Trend
 // 用途: VIC Retention% 同比差值 格式化显示
 // 依赖: [VIC Retention% vs LY Trend Value]
-// 格式类型: integer_pts → FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")（不含正号）
-// 示例: 120pts / -80pts / 0pts
+// 格式类型: integer_bp → FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")（不含正号）
+// 示例: 120bp / -80bp / 0bp
 // ========================================
     VAR __Value = [VIC Retention% vs LY Trend Value]
     RETURN
-        IF(ISBLANK(__Value), "-", FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts"))
+        IF(ISBLANK(__Value), "-", FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp"))
 ```
 
 ---
 
 ### 指标 8：VIC Retention% vs LP（Metric_ID=8）
 
-> 比率类 vs LP · Act - LP（差值） · 格式: integer_pts（不含正号）
+> 比率类 vs LP · Act - LP（差值） · 格式: integer_bp（不含正号）
 
 ### 4.21 VIC Retention% vs LP Trend Value
 
@@ -983,12 +983,12 @@ VIC Retention% vs LP Trend Display =
 // Display Folder: VIC Trend
 // 用途: VIC Retention% 环比差值 格式化显示
 // 依赖: [VIC Retention% vs LP Trend Value]
-// 格式类型: integer_pts → FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")（不含正号）
-// 示例: 120pts / -80pts / 0pts
+// 格式类型: integer_bp → FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")（不含正号）
+// 示例: 120bp / -80bp / 0bp
 // ========================================
     VAR __Value = [VIC Retention% vs LP Trend Value]
     RETURN
-        IF(ISBLANK(__Value), "-", FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts"))
+        IF(ISBLANK(__Value), "-", FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp"))
 ```
 
 ---
@@ -1295,7 +1295,7 @@ TTL VIC 下，新增条件中的 `__IsMemberFilter <> 1` 为 TRUE，整个注册
 5. **格式调整（不含正号）**：
 
    - 原 delta_pct_1dp（+14.5% / -3.2%）→ 新 percent_1dp（14.5% / -3.2%），使用 `FORMAT(__Value, "#,##0.0%")`
-   - 原 delta_pts（+120pts / -80pts）→ 新 integer_pts（120pts / -80pts），使用 `FORMAT(__Value * 100, "#,##0pts;-#,##0pts;0pts")`
+   - 原 delta_bp（+120bp / -80bp）→ 新 integer_bp（120bp / -80bp），使用 `FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp")`
    - 去掉正号前缀 `IF(__Value>0,"+","")`，直接用 FORMAT 的正负数格式串实现
 6. **is_member / is_employee 双重筛选**：2026-09-21 重构，2026-09-22 仅本文件补充 Member VIC 注册日期非空要求：TTL VIC（IsMember=0）仍筛 `is_member = 0`（保留 `register_date <= DATE(9999,12,31)`，空注册日期仍放行）；Member VIC（IsMember=1）筛 `is_member = 0`，且 `register_date` 非空并 `<= X 轴 end period 末日`（Act/LY/LP 各取对应期末日 Last_Fiscal_Month_Max/_LY/_LP）；默认 is_employee=1（Yes）。
 7. **Share 类分母**：Metric_ID=14（T4-5 Upgrade No. Share）的分母使用 X 轴 end period 当月 is_vic=1 的 DISTINCTCOUNT，等价于 [VIC No. Trend Act Value]。与 VIC Retention% 的 end period 当月 last_fy_net_pay_amt 分母不同。

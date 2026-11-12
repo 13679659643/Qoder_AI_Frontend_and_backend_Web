@@ -1539,6 +1539,10 @@ VIC Breakdown Cell Display =
                 "delta_bp_1dp",
                     IF(__Value > 0, "+", "") & FORMAT(__Value, "#,##0.0") & "bp",// +120.5bp / -80.0bp
 
+                // 5.4 __Value 为小数，需 ×10000 转换为 bp（整数）
+                "integer_bp",
+                    FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp"),        // 120bp / -80bp                   
+
                 // ─── 默认 ───────────────────────────────────────────────────
                 FORMAT(__Value, "#,##0.00")
             )

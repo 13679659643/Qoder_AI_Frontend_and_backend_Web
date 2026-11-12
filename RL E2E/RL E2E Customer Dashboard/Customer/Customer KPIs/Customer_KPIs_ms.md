@@ -1098,6 +1098,8 @@ Customer KPIs Cell Display =
                     IF(ROUND(__Value * 100, 2) > 0, "+", "") & FORMAT(__Value * 100, "#,##0.00pts;-#,##0.00pts;0.00pts"), // +120.50pts
                 "delta_bp",
                     IF(ROUND(__Value * 10000, 0) > 0, "+", "") & FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp"),       // +1200bp
+                "integer_bp",
+                    FORMAT(__Value * 10000, "#,##0bp;-#,##0bp;0bp"),       // 1200bp
                 // ─── 默认 ─────────────────────────────────
                 FORMAT(__Value, "#,##0.00")
             )

@@ -40,10 +40,10 @@ Class x Label Drilldown 是 Customer Tab 的品类下钻模块，共 **14 个指
 | 2  | Net_SLS | Class x Label | category_summary | All | currency | #,##0 |
 | 3  | New Customer%（按人数） | Class x Label | category_summary | New/TTL | percent_0dp | #,##0% |
 | 4  | TTL Customer%（按人数） | Class x Label | category_summary | TTL | percent_0dp | #,##0% |
-| 5  | ±%（按人数） | Class x Label | category_summary | Delta | delta_pts | +#,##0pts;-#,##0pts;0pts |
+| 5  | ±%（按人数） | Class x Label | category_summary | Delta | delta_bp | +#,##0bp;-#,##0bp;0bp |
 | 6  | New Customer%（按金额） | Class x Label | category_summary | New/TTL | percent_0dp | #,##0% |
 | 7  | TTL Customer%（按金额） | Class x Label | category_summary | TTL | percent_0dp | #,##0% |
-| 8  | ±%（按金额） | Class x Label | category_summary | Delta | delta_pts | +#,##0pts;-#,##0pts;0pts |
+| 8  | ±%（按金额） | Class x Label | category_summary | Delta | delta_bp | +#,##0bp;-#,##0bp;0bp |
 | 9  | Net_New_Customer No. | Product | product_id | New | integer | #,##0 |
 | 10 | Net_New_SLS | Product | product_id | New | currency | #,##0 |
 | 11 | Net_TTL_Customer No. | Product | product_id | All | integer | #,##0 |
@@ -57,7 +57,7 @@ Class x Label Drilldown 是 Customer Tab 的品类下钻模块，共 **14 个指
 - **New**：Step1（本期有消费的新客候选）：`a03` `data_date ∈ slicer 区间 AND is_member = 0 AND SUM(net_pay_amt) > 0`；Step2（第一财月的老客排除集）：`a03` `data_date ∈ start_period AND is_member = 0 AND SUM(lp_12m_net_pay_amt) > 0`；New user_id 集 = `EXCEPT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id]))`；再在 `t05` slicer 区间内对该集合 `TREATAS` 后聚合
 - **Existing**：Step1 同 New，但与 Step2 取 `INTERSECT`（本期消费者中第一财月已识别的老客，`lp_12m_net_pay_amt > 0`）；再在 `t05` slicer 区间内对该集合 `TREATAS` 后聚合
 - **百分比分母**：`t05` slicer 区间聚合，`ALLSELECTED(category_summary)` 移除图表维度，保留外部筛选
-- **Delta**：New Customer% - TTL Customer%，值 × 100 转 pts
+- **Delta**：New Customer% - TTL Customer%，值 × 10000 转 bp
 
 > 注：Step1/Step2 内部按 `user_id + shop_info_id` 聚合做 SUM 判定，最终各自 `SUMMARIZE(..., [user_id])` 去重到 user_id 级再 EXCEPT/INTERSECT；两步区间不同、不可合并（参考：维度复用/新客 No. 模板详解.md）。New + Existing = Step1（本期消费者总数），两者互补。
 
@@ -109,14 +109,14 @@ VAR __StartPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Min[First_Fiscal_Month_Ma
 | `integer` | `FORMAT(__Value, "#,##0")` | 1,234 | Net_Customer No. / Net_New_Customer No. / Net_TTL_Customer No. / Net_Existing_Customer No. |
 | `currency` | `__CurrencySymbol & FORMAT(__ValueInCurrency, "#,##0")` | ¥1,000 / $143 | Net_SLS / Net_New_SLS / TTL_SLS / Net_Existing_SLS |
 | `percent_0dp` | `FORMAT(__Value, "#,##0%")` | 30% / -5% | New Customer% / TTL Customer%（按人数/按金额） |
-| `delta_pts` | `FORMAT(__Value * 100, "+#,##0pts;-#,##0pts;0pts")` | +120pts / -80pts | ±%（按人数/按金额） |
+| `delta_bp` | `FORMAT(__Value * 10000, "+#,##0bp;-#,##0bp;0bp")` | +120bp / -80bp | ±%（按人数/按金额） |
 
 ### 3.4 汇率换算规则
 
 - 数据底表存储 RMB 原始值
 - `Slicer_Currency_Selection` 提供 `Currency_ExchangeRate`（RMB=1, USD=7）和 `Currency_Symbol`（¥ / $）
 - **换算时机**：在 Display 层对金额类指标换算 `RMB ÷ Currency_ExchangeRate`
-- 百分比 / delta_pts 为无量纲比率，不涉及汇率换算
+- 百分比 / delta_bp 为无量纲比率，不涉及汇率换算
 
 ---
 
@@ -362,7 +362,7 @@ RETURN
 // 度量值: ±% by No. Value
 // 用途: 新客占比 - 全客占比（按人数）
 // 计算: [New Customer% by No. Value] - [TTL Customer% by No. Value]
-// 数据格式: delta_pts（Display 层 × 100 转 pts）
+// 数据格式: delta_bp（Display 层 × 10000 转 bp）
 // ========================================
 VAR __NewPct = [New Customer% by No. Value]
 VAR __TTLPct = [TTL Customer% by No. Value]
@@ -381,15 +381,15 @@ RETURN
 ±% by No. Display =
 // ========================================
 // 度量值: ±% by No. Display
-// 用途: 按 delta_pts 格式化（基点，含正负号，值×100 转 pts）
-// 格式: +120pts / -80pts / 0pts
+// 用途: 按 delta_bp 格式化（基点，含正负号，值×10000 转 bp）
+// 格式: +120bp / -80bp / 0bp
 // ========================================
 VAR __Value = [±% by No. Value]
 RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value * 100, "+#,##0pts;-#,##0pts;0pts")
+        FORMAT(__Value * 10000, "+#,##0bp;-#,##0bp;0bp")
     )
 ```
 
@@ -540,7 +540,7 @@ RETURN
 // 度量值: ±% by Amt Value
 // 用途: 新客占比 - 全客占比（按金额）
 // 计算: [New Customer% by Amt Value] - [TTL Customer% by Amt Value]
-// 数据格式: delta_pts（Display 层 × 100 转 pts）
+// 数据格式: delta_bp（Display 层 × 10000 转 bp）
 // ========================================
 VAR __NewPct = [New Customer% by Amt Value]
 VAR __TTLPct = [TTL Customer% by Amt Value]
@@ -562,7 +562,7 @@ RETURN
     IF(
         ISBLANK(__Value),
         "-",
-        FORMAT(__Value * 100, "+#,##0pts;-#,##0pts;0pts")
+        FORMAT(__Value * 10000, "+#,##0bp;-#,##0bp;0bp")
     )
 ```
 
@@ -1140,14 +1140,14 @@ ToolTips 01 = "New Customer% - TTL Customer%"
 | 6 | New Customer% by No. Display | Display | #,##0% | 百分比整数不含正号 |
 | 7 | TTL Customer% by No. Value | Value | percent_0dp | TTL 买家人数 / 全客买家人数 |
 | 8 | TTL Customer% by No. Display | Display | #,##0% | 百分比整数不含正号 |
-| 9 | ±% by No. Value | Value | delta_pts | New% - TTL%（按人数） |
-| 10 | ±% by No. Display | Display | +#,##0pts | 基点含正负号 |
+| 9 | ±% by No. Value | Value | delta_bp | New% - TTL%（按人数） |
+| 10 | ±% by No. Display | Display | +#,##0bp | 基比含正负号 |
 | 11 | New Customer% by Amt Value | Value | percent_0dp | New 净销售额 / TTL 净销售额 |
 | 12 | New Customer% by Amt Display | Display | #,##0% | 百分比整数不含正号 |
 | 13 | TTL Customer% by Amt Value | Value | percent_0dp | TTL 净销售额 / 全客净销售额 |
 | 14 | TTL Customer% by Amt Display | Display | #,##0% | 百分比整数不含正号 |
-| 15 | ±% by Amt Value | Value | delta_pts | New% - TTL%（按金额） |
-| 16 | ±% by Amt Display | Display | +#,##0pts | 基点含正负号 |
+| 15 | ±% by Amt Value | Value | delta_bp | New% - TTL%（按金额） |
+| 16 | ±% by Amt Display | Display | +#,##0bp | 基比含正负号 |
 | 17 | Net_New_Customer No. Value | Value | integer | New 买家人数 by product_id |
 | 18 | Net_New_Customer No. Display | Display | #,##0 | 整数千分位 |
 | 19 | Net_New_SLS Value | Value | currency | New 净销售额 by product_id |
@@ -1200,9 +1200,9 @@ ToolTips 01 = "New Customer% - TTL Customer%"
 7. **汇率换算分层处理**：
    - Value 度量始终保留 RMB 原始值
    - Display 度量对金额类指标按 `DIVIDE(__Value, Currency_ExchangeRate)` 换算
-   - 百分比 / delta_pts 为无量纲比率，不涉及汇率换算
+   - 百分比 / delta_bp 为无量纲比率，不涉及汇率换算
 
-8. **delta_pts 转换规则**：值 × 100 转 pts（基点），格式 `+#,##0pts;-#,##0pts;0pts`，含正负号。如 New Customer% = 0.30，TTL Customer% = 0.25，差值 = 0.05，× 100 = 5pts，显示为 `+5pts`。
+8. **delta_bp 转换规则**：值 × 10000 转 bp（基点），格式 `+#,##0bp;-#,##0bp;0bp`，含正负号。如 New Customer% = 0.30，TTL Customer% = 0.25，差值 = 0.05，× 10000 = 5bp，显示为 `+5bp`。
 
 9. **BLANK 处理**：所有 Display 度量在 Value 为 BLANK 时显示 `"-"`，避免空白单元格影响可读性。
 
