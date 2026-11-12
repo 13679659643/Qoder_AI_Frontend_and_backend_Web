@@ -528,3 +528,40 @@
 - **备注**: 按用户要求简化验证，仅作必要文本核对；未在 Power BI 模型中实测，实际数值需在相同筛选下与 SQL 对照。
 
 ---
+
+## [2026-11-12 14:45] DAX 修改 — VIC Segment 新增 VIC (T1-T3) / Total 两行汇总行
+
+- **模块**: VIC（4 VIC Segment）
+- **任务**: VIC Segment 表格新增首行 VIC (T1-T3)（汇总 T1-T3）与末行 Total（汇总 T1-T5）；汇总行 Tier ID 在事实表 customer_tier 无对应值，需 DAX 显式显示处理
+- **操作**: 修改
+- **变更内容**:
+  - `DIM_Row_VIC_Tier` 计算表：新增第 5 列 `Row Type`（Detail/Group/Total）及两行汇总行——{"VIC (T1-T3)", "VIC (T1-T3)", ..., 5, "Group"}、{"Total", "Total", ..., 60, "Total"}；明细行 T1-T5 数据与 Indicator Order 不变，排序扩展为 5/10-50/60
+  - `_Customer No. Base Act/LY`（4.1.1/4.1.2）：单步 CALCULATE 追加 `REMOVEFILTERS('DIM_Row_VIC_Tier'[Row Label])` + `'DIM_Row_VIC_Tier'[Tier ID] IN __ChildTiers` Tier 作用域
+  - `_SLS Base Act/LY`、`_Net Pay Qty Base Act/LY`、`_Net Pay Order Cnt Base Act/LY`（4.1.5/4.1.6/4.1.9/4.1.10/4.1.11/4.1.12）：Step1 CALCULATETABLE 追加同上 Tier 作用域（__TierUsers 即子 Tier 用户并集）；Step2 不变
+  - `_SLS Total Base Act/LY`（4.1.7/4.1.8）：ALLSELECTED 迭代范围由 `NOT ISBLANK([Tier ID])` 改为 `[Row Type] = "Detail"`，排除汇总行防止占比分母重复加总
+  - `_Customer Total Base Act/LY`（4.1.3/4.1.4）及全部 12 对 Value/Display 度量值、SVG Icon 度量值：名称与公式不变，自动继承
+  - 文档：头部 revised 行、§1 行维度/§1.3/§3.3/§4.1 共用模式说明、§7 注意事项 item 20（切片器/视觉筛选/内置总计/卡片上下文/排序/跨 Tier 用户/分母迭代 7 项边界）、§9 汇总行核对要点
+- **关联文件**:
+  - `VIC/4 VIC Segment/DIM_Row_VIC_Tier.md`
+  - `VIC/4 VIC Segment/VIC_Segment_Table.md`
+- **备注**:
+  - 核心机制：汇总行 Tier ID 与 customer_tier 1:N 无匹配，须先 REMOVEFILTERS(Row Label) 解除行筛选再施加 Tier ID IN 子集，直接加 IN 会因同表 auto-existence 交集为空导致汇总行空白
+  - Tier 切片器须保持在事实表 customer_tier 上；表格视觉对象需关闭内置总计；未在 Power BI 模型中实测，数值需按 §9 核对要点验收
+
+
+## [2026-11-12 15:40] DAX 修改 — VIC Segment 汇总行 Tier 作用域二次修订（废弃表变量，改用事实表布尔筛选）
+
+- **模块**: VIC（4 VIC Segment）
+- **任务**: 用户反馈按 14:45 方案粘贴后仍报"函数要求参数使用一个表表达式，实际使用的却是字符串或数值表达式"（_ChildTiers 不是有效的表）
+- **操作**: 修改
+- **变更内容**:
+  - 根因：14:45 版 `VAR __ChildTiers = SWITCH(... { "T1" ... }, ... VALUES(...), { __TierID })` 依赖 SWITCH 返回表 + 表构造器内嵌变量，兼容性差，`__ChildTiers` 未成为表即触发报错
+  - 8 个 Base 度量值（4.1.1/4.1.2/4.1.5/4.1.6/4.1.9/4.1.10/4.1.11/4.1.12）：删除 `__ChildTiers` 表变量；Tier 圈选处改为 `REMOVEFILTERS('DIM_Row_VIC_Tier')`（整表解除 Row Label 行筛选）+ `KEEPFILTERS(SWITCH(TRUE(), ...))`，子 Tier 范围以 IN 常量列表布尔表达式直接施加于事实表 `a03_e2e_customer_data_m[customer_tier]`，并与外部切片器取交集；SWITCH 仅返回布尔，全部构造均为模型已验证用法（KEEPFILTERS/REMOVEFILTERS/布尔 IN）
+  - 语义不变：明细行 = 当前 Tier；VIC (T1-T3) = T1-T3；Total = T1-T5；无 Tier 上下文 = 不施加 Tier 筛选（卡片口径与旧行为完全一致，优于一版回退 VALUES 的近似）
+  - 文档同步：头部 revised 15:40 行；§1.3/§3.3/§4.1/§7 注意事项 item 20（(b)(d) 按整表 REMOVEFILTERS、TRUE() 分支更新）
+- **关联文件**:
+  - `VIC/4 VIC Segment/VIC_Segment_Table.md`
+- **备注**:
+  - 建议先单独粘贴 `_Customer No. Base Act` 验证编译通过，编译通过后再批量替换其余 7 个度量值（Step1 结构与 4.1.1 的 CALCULATE 结构同构）
+  - 未在 Power BI 模型中实测
+

@@ -7,6 +7,8 @@
 > revised: 2026-09-21（会员筛选统一为事实表 is_member=0；Member VIC 通过 KEEPFILTERS 追加 register_date<=对应本期/LY 最后财月末，单步计算与 Step1/Step2 均生效；不改变指标公式，不保留旧逻辑块注释）
 > revised: 2026-09-22 15:19（Member VIC 要求 register_date 非空且不晚于原截止日；12 个 Base 的 20 处 KEEPFILTERS 同步，含单步、Step1/Step2 及占比分母；TTL VIC 原 OR 放行分支、筛选交集、Act/LY 截止日及其他公式保持不变）
 > revised: 2026-09-22 17:27（SUM 类统一按 end period Tier 归属：Step1 保留 Tier 圈人，Step2 移除历史 Tier 限制；SLS/Qty/OrderCnt Act/LY 同步，SLS Total 逐个外部选中 Tier 复用分子加总；人数、其他筛选与派生公式不变，不保留旧逻辑块注释）
+> revised: 2026-11-12 14:45（新增两行汇总行：首行 VIC (T1-T3) 汇总 T1-T3、末行 Total 汇总 T1-T5；DIM_Row_VIC_Tier 新增 Row Type 列与两行汇总行，其 Tier ID 在事实表 customer_tier 无对应值；8 个 Base 度量值（4.1.1/4.1.2/4.1.5/4.1.6/4.1.9/4.1.10/4.1.11/4.1.12）新增 Tier 作用域；4.1.7/4.1.8 SLS Total 迭代仅取 Row Type=Detail 行防重复加总；4.1.3/4.1.4 与全部 Value/Display 层度量值名称及公式结构不变）
+> revised: 2026-11-12 15:40（Tier 作用域二次修订：废弃 __ChildTiers 表变量——SWITCH 返回表 + 表构造器内嵌变量在部分环境报"函数要求参数使用一个表表达式，实际使用的却是字符串或数值表达式"；改为 REMOVEFILTERS('DIM_Row_VIC_Tier') 整表解除行筛选 + KEEPFILTERS(SWITCH(TRUE(),...)) 布尔筛选直接作用于事实表 customer_tier，SWITCH 仅返回布尔、IN 列表均为常量，全部为模型已验证构造；语义与一版一致：明细行 = 当前 Tier，VIC (T1-T3) = T1-T3，Total = T1-T5，无 Tier 上下文 = 不施加 Tier 筛选（卡片口径与旧行为完全一致））
 > type: 度量值开发 + 表格可视化
 > 口径来源: 口径文档/VIC Segment.md（子模块四 VIC Segment，12 个指标，指标 0 为行维度本身）
 > 参考实现: VIC/LY Last Purchase Time/LY_Last_Purchase_Time_Table.md（表格 + 每指标独立 Value/Display 范式，无 SWITCH 路由，无 x 轴时间处理）
@@ -19,7 +21,10 @@
 为 Customer Dashboard - VIC Tab 实现 VIC Segment 表格：
 
 - **视觉对象**：Table（表格），非 Matrix
-- **行维度**：`DIM_Row_VIC_Tier[Row Label]`（T1 (≧ 200K) ~ T5 (< 5K)，图片展示行标签；`Tier ID` 为与事实表 customer_tier 的 1:N 关系关联列）
+- **行维度**：`DIM_Row_VIC_Tier[Row Label]`（VIC (T1-T3) 汇总 + T1 (≧ 200K) ~ T5 (< 5K) + Total 汇总，共 7 行，图片展示行标签，按 Indicator Order 排序；`Tier ID` 为与事实表 customer_tier 的 1:N 关系关联列）
+  - 2026-11-12 新增两行汇总行：首行 **VIC (T1-T3)** 汇总 T1-T3、末行 **Total** 汇总 T1-T5。两行的 Tier ID（"VIC (T1-T3)"/"Total"）在事实表 customer_tier 无对应值，1:N 关系不会产生事实筛选，由各 Base 度量值的 Tier 作用域显式处理（见 4.1 节说明）
+  - DIM_Row_VIC_Tier 新增 `Row Type` 列（Detail / Group / Total）：4.1.7/4.1.8 的 SLS Total 分母迭代仅取 Detail 行，避免汇总行重复加总；4.1.3/4.1.4 的 ALLSELECTED 中汇总行 Tier ID 无事实匹配，分母不受影响
+  - Tier 切片器保持在事实表 customer_tier 字段上（切片器含"(空白)"项）；不要将切片器改挂 DIM_Row_VIC_Tier 字段，否则汇总行会进入切片器选项、且选中部分明细 Tier 时汇总行被过滤隐藏
   - DIM_Row_VIC_Tier 与 a03_e2e_customer_data_m 表模型关系为 1:N，Customer 人数和 SUM 类 Step1 由关系自动按期末 Tier 分组；SUM 类 Step2 显式移除 Tier 筛选，按已圈定用户聚合
   - `platform`、`shop_info_id` 分组维度直接拉取事实表字段实现自动传递，模型自动传递筛选，DAX 无需显式处理
 - **无 x 轴**：表格视觉无列维度，不需要处理 x 轴上的当前时间
@@ -75,6 +80,8 @@
 > **聚合粒度**: `platform, shop_info_id` 分组维度由表字段自动传递，DAX 无需显式处理
 
 `customer_tier`（通过 DIM_Row_VIC_Tier）只用于 Customer 人数和 SUM 类 Step1 的期末分层；SUM 类 Step2 移除 Tier 筛选，并保留已圈定用户集合。`platform`、`shop_info_id` 在两步均保留原筛选。
+
+> **2026-11-12 汇总行扩展（同日 15:40 二次修订）**：VIC (T1-T3) / Total 两行的 Tier ID 在事实表 customer_tier 无对应值，模型关系不会为其自动传递筛选。8 个 Base 度量值统一以 `REMOVEFILTERS('DIM_Row_VIC_Tier')` + `KEEPFILTERS(SWITCH(TRUE(), ...))` 显式施加 Tier 作用域：REMOVEFILTERS 先解除 Row Label 行筛选（否则同表 auto-existence 会使"VIC (T1-T3)"行与子 Tier 筛选的交集为空、汇总行整体空白）；KEEPFILTERS 再把子 Tier 范围以布尔表达式直接施加于事实表 customer_tier，并与外部切片器取交集——明细行限定 `customer_tier = 当前 Tier`（等价于原 1:N 关系行筛选），VIC (T1-T3) 行限定 `IN {T1,T2,T3}`，Total 行限定 `IN {T1-T5}`，无 Tier 上下文（卡片图）不施加 Tier 筛选。SWITCH 仅返回布尔、IN 列表均为常量，不构造表变量（表变量方案曾报"需要表表达式却得到字符串/数值表达式"，已废弃）。
 
 ### 1.4 关键特殊逻辑四：SLS 类指标的 Step 1 + Step 2 口径（分步计算，不能合并）
 
@@ -281,7 +288,7 @@ Freq. Display                           ← decimal_1dp 格式 #,##0.0
 | Slicer_Time_Frame_Min/Max（Step2 LY 所选时间范围）  | SELECTEDVALUE 读取`TimeFrame_Min_LY`（Min 表）/ `TimeFrame_Max_LY`（Max 表）           | `data_date >= __PeriodMin_LY AND data_date <= __PeriodMax_LY`（LY Step2）                                                                                               |
 | Slicer_Is_Employee_Selection                        | 断开维度，SELECTEDVALUE 读取`IsEmployee_Code`                                            | `a03_e2e_customer_data_m[is_employee] in __IsEmployeeFilter`                                                                                                            |
 | IsMemberFilter                                      | 断开维度，SELECTEDVALUE 读取`IsMember`，默认 0                                           | 事实表固定`is_member = 0`；Member VIC 用 KEEPFILTERS 追加 `register_date 非空且 <= 对应本期/LY 最后财月末`，单步及 Step1/Step2 均生效                                 |
-| DIM_Row_VIC_Tier                                    | 1:N 模型关系；视觉对象筛选：Tier ≠ 空白（排除未分层买家，保占比类分母 tier 范围 = T1-T5） | Customer 人数与 SUM 类 Step1 保留 Tier；SUM 类 Step2 移除维度表及事实表 Tier 筛选。Customer Total 保留原 ALLSELECTED；SLS Total 按 ALLSELECTED 非空 Tier 逐行复用分子加总 |
+| DIM_Row_VIC_Tier                                    | 1:N 模型关系；视觉对象筛选：Tier ≠ 空白（排除未分层买家，保占比类分母 tier 范围 = T1-T5）；新增 Row Type 列区分 Detail/Group/Total（2026-11-12） | Customer 人数与 SUM 类 Step1 由 REMOVEFILTERS+KEEPFILTERS(SWITCH(...)) Tier 作用域显式施加（明细行等价 1:N 自动传递；汇总行 VIC (T1-T3)=T1-T3、Total=T1-T5，均作用于事实表 customer_tier 并与切片器取交集）；SUM 类 Step2 移除维度表及事实表 Tier 筛选。Customer Total 保留原 ALLSELECTED（汇总行 Tier ID 无事实匹配，分母不变）；SLS Total 按 ALLSELECTED 中 Row Type=Detail 行逐行复用分子加总 |
 | Slicer_Currency_Selection                           | 断开维度，SELECTEDVALUE 读取`Currency_ExchangeRate`、`Currency_Symbol`                 | 金额类指标 ÷`Currency_ExchangeRate`；Display 拼接 `Currency_Symbol`                                                                                                  |
 | 事实表分组字段（platform / shop_info_id）           | 表格行直接拉取，模型自动传递筛选                                                           | Step1/Step2 均保留自动传递（分组维度）                                                                                                                                    |
 
@@ -322,6 +329,8 @@ Freq. Display                           ← decimal_1dp 格式 #,##0.0
 > 私有度量值（下划线前缀），放 Base Metrics 文件夹，供对外 Value 层调用，避免重复代码。
 > Act = 本期区间，LY = LY 区间。分两类口径（2026-09-12 修订）：4.1.1~4.1.4（Customer 类）为单步 end period 当月口径；4.1.5~4.1.12（SLS / Qty / OrderCnt 类）为 Step1（end period 当月框定 user_id）+ Step2（所选时间范围聚合）分步口径，两步时间范围不同不能合并。
 > 4 个 Customer Base 单步与 6 个 SLS/Qty/OrderCnt Base 双步共 16 处直接事实表筛选；2 个 SLS Total Base 逐 Tier 复用 SLS Base，继承相同规则：统一 `is_member = 0`，配合 `KEEPFILTERS(__IsMemberFilter = 0 || (NOT ISBLANK(register_date) && register_date <= 对应财月末))`。TTL 保留原 OR 放行分支，不新增非空或截止日限制；Member 要求日期非空且不晚于原截止日，并与已有注册日期筛选取交集。Act/LY 各取自身财月末，Step1/Step2 使用同一对应期注册截止日。
+>
+> **2026-11-12 汇总行 Tier 作用域（8 个 Base 度量值共用模式，同日 15:40 二次修订）**：4.1.1/4.1.2（单步 Customer）与 4.1.5/4.1.6/4.1.9/4.1.10/4.1.11/4.1.12（Step1 圈人）统一新增 `__TierID` 变量，并在 Tier 圈选处追加 `REMOVEFILTERS('DIM_Row_VIC_Tier')` + `KEEPFILTERS(SWITCH(TRUE(), ...))`（布尔表达式直接作用于事实表 `a03_e2e_customer_data_m[customer_tier]`）：明细行（T1-T5）限定 `customer_tier = 当前 Tier`，等价于原 1:N 关系行筛选；汇总行 VIC (T1-T3) 限定 `customer_tier IN {T1,T2,T3}`、Total 限定 `IN {T1-T5}`，均与事实表 customer_tier 切片器取交集；无 Tier 行上下文（如卡片图）不施加 Tier 筛选，与旧行为一致。REMOVEFILTERS 必须先行——否则同表 auto-existence 会使汇总行与子 Tier 筛选的交集为空。不构造表变量（SWITCH 仅返回布尔、IN 列表均为常量，规避"需要表表达式"的兼容性报错）。Step2 已有 REMOVEFILTERS('DIM_Row_VIC_Tier')，无需改动。4.1.3/4.1.4 无需改动（ALLSELECTED 中汇总行 Tier ID 无事实匹配，分母口径不变）。4.1.7/4.1.8 迭代范围由 NOT ISBLANK([Tier ID]) 改为 [Row Type] = "Detail"。
 
 #### 4.1.1 _Customer No. Base Act（买家人数本期基础值，单步 end period 口径）
 
@@ -348,6 +357,11 @@ _Customer No. Base Act =
     VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
+    // ── 行维度 Tier 作用域（2026-11-12 新增汇总行；同日 15:40 二次修订，不再构造表变量）──
+    // 明细行 = 当前 Tier；VIC (T1-T3) = T1+T2+T3；Total = T1-T5；无 Tier 上下文 = 不施加 Tier 筛选
+    // 子 Tier 范围由下方 REMOVEFILTERS('DIM_Row_VIC_Tier') + KEEPFILTERS(SWITCH(...)) 以布尔表达式
+    // 直接施加于事实表 customer_tier（SWITCH 仅返回布尔、IN 列表均为常量，规避表类型变量的兼容性问题）
+    VAR __TierID = SELECTEDVALUE('DIM_Row_VIC_Tier'[Tier ID])
 
     RETURN
         CALCULATE(
@@ -362,7 +376,20 @@ _Customer No. Base Act =
             ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __PeriodMin,
-            'a03_e2e_customer_data_m'[data_date] <= __PeriodMax
+            'a03_e2e_customer_data_m'[data_date] <= __PeriodMax,
+            // 行维度 Tier 作用域：REMOVEFILTERS 解除 Row Label 行筛选（规避同表 auto-existence 交集为空）；
+            // KEEPFILTERS 将子 Tier 范围直接施加于事实表 customer_tier 并与外部切片器取交集；
+            // SWITCH 仅返回布尔、IN 列表均为常量（不构造表变量，兼容性最好）
+            REMOVEFILTERS('DIM_Row_VIC_Tier'),
+            KEEPFILTERS(
+                SWITCH(
+                    TRUE(),
+                    __TierID = "VIC (T1-T3)", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3" },
+                    __TierID = "Total", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3", "T4", "T5" },
+                    ISBLANK(__TierID), TRUE(),
+                    'a03_e2e_customer_data_m'[customer_tier] = __TierID
+                )
+            )
         )
 ```
 
@@ -389,6 +416,11 @@ _Customer No. Base LY =
     VAR __LYMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
+    // ── 行维度 Tier 作用域（2026-11-12 新增汇总行；同日 15:40 二次修订，不再构造表变量）──
+    // 明细行 = 当前 Tier；VIC (T1-T3) = T1+T2+T3；Total = T1-T5；无 Tier 上下文 = 不施加 Tier 筛选
+    // 子 Tier 范围由下方 REMOVEFILTERS('DIM_Row_VIC_Tier') + KEEPFILTERS(SWITCH(...)) 以布尔表达式
+    // 直接施加于事实表 customer_tier（SWITCH 仅返回布尔、IN 列表均为常量，规避表类型变量的兼容性问题）
+    VAR __TierID = SELECTEDVALUE('DIM_Row_VIC_Tier'[Tier ID])
 
     RETURN
         CALCULATE(
@@ -403,7 +435,19 @@ _Customer No. Base LY =
             ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __LYMin,
-            'a03_e2e_customer_data_m'[data_date] <= __LYMax
+            'a03_e2e_customer_data_m'[data_date] <= __LYMax,
+            // 行维度 Tier 作用域：REMOVEFILTERS 解除 Row Label 行筛选；KEEPFILTERS 将子 Tier 范围
+            // 直接施加于事实表 customer_tier 并与外部切片器取交集；SWITCH 仅返回布尔、IN 列表均为常量
+            REMOVEFILTERS('DIM_Row_VIC_Tier'),
+            KEEPFILTERS(
+                SWITCH(
+                    TRUE(),
+                    __TierID = "VIC (T1-T3)", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3" },
+                    __TierID = "Total", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3", "T4", "T5" },
+                    ISBLANK(__TierID), TRUE(),
+                    'a03_e2e_customer_data_m'[customer_tier] = __TierID
+                )
+            )
         )
 ```
 
@@ -533,8 +577,13 @@ _SLS Base Act =
     VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
+    // ── 行维度 Tier 作用域（2026-11-12 新增汇总行；同日 15:40 二次修订，不再构造表变量）──
+    // 明细行 = 当前 Tier；VIC (T1-T3) = T1+T2+T3；Total = T1-T5；无 Tier 上下文 = 不施加 Tier 筛选
+    // 子 Tier 范围由下方 REMOVEFILTERS('DIM_Row_VIC_Tier') + KEEPFILTERS(SWITCH(...)) 以布尔表达式
+    // 直接施加于事实表 customer_tier（SWITCH 仅返回布尔、IN 列表均为常量，规避表类型变量的兼容性问题）
+    VAR __TierID = SELECTEDVALUE('DIM_Row_VIC_Tier'[Tier ID])
 
-    // ── Step 1: end period 当月，按当前行 customer_tier 框定 user_id 集合 ──
+    // ── Step 1: end period 当月，按 Tier 作用域框定 user_id 集合 ──
     VAR __TierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
@@ -548,7 +597,20 @@ _SLS Base Act =
             ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin,
-            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax
+            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax,
+            // 行维度 Tier 作用域：REMOVEFILTERS 解除 Row Label 行筛选（规避同表 auto-existence 交集为空）；
+            // KEEPFILTERS 将子 Tier 范围直接施加于事实表 customer_tier 并与外部切片器取交集；
+            // SWITCH 仅返回布尔、IN 列表均为常量（不构造表变量，兼容性最好）；__TierUsers 即子 Tier 用户并集
+            REMOVEFILTERS('DIM_Row_VIC_Tier'),
+            KEEPFILTERS(
+                SWITCH(
+                    TRUE(),
+                    __TierID = "VIC (T1-T3)", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3" },
+                    __TierID = "Total", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3", "T4", "T5" },
+                    ISBLANK(__TierID), TRUE(),
+                    'a03_e2e_customer_data_m'[customer_tier] = __TierID
+                )
+            )
         )
 
     // ── Step 2: 该 user_id 集合在所选时间范围的 sum(net_pay_amt) ──
@@ -609,8 +671,13 @@ _SLS Base LY =
     VAR __EndPeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
+    // ── 行维度 Tier 作用域（2026-11-12 新增汇总行；同日 15:40 二次修订，不再构造表变量）──
+    // 明细行 = 当前 Tier；VIC (T1-T3) = T1+T2+T3；Total = T1-T5；无 Tier 上下文 = 不施加 Tier 筛选
+    // 子 Tier 范围由下方 REMOVEFILTERS('DIM_Row_VIC_Tier') + KEEPFILTERS(SWITCH(...)) 以布尔表达式
+    // 直接施加于事实表 customer_tier（SWITCH 仅返回布尔、IN 列表均为常量，规避表类型变量的兼容性问题）
+    VAR __TierID = SELECTEDVALUE('DIM_Row_VIC_Tier'[Tier ID])
 
-    // ── Step 1: LY end period 当月，按当前行 customer_tier 框定 user_id 集合 ──
+    // ── Step 1: LY end period 当月，按 Tier 作用域框定 user_id 集合 ──
     VAR __TierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
@@ -624,7 +691,19 @@ _SLS Base LY =
             ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin_LY,
-            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax_LY
+            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax_LY,
+            // 行维度 Tier 作用域：REMOVEFILTERS 解除 Row Label 行筛选；KEEPFILTERS 将子 Tier 范围
+            // 直接施加于事实表 customer_tier 并与外部切片器取交集；SWITCH 仅返回布尔、IN 列表均为常量
+            REMOVEFILTERS('DIM_Row_VIC_Tier'),
+            KEEPFILTERS(
+                SWITCH(
+                    TRUE(),
+                    __TierID = "VIC (T1-T3)", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3" },
+                    __TierID = "Total", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3", "T4", "T5" },
+                    ISBLANK(__TierID), TRUE(),
+                    'a03_e2e_customer_data_m'[customer_tier] = __TierID
+                )
+            )
         )
 
     // ── Step 2: 该 user_id 集合在 LY 所选时间范围的 sum(net_pay_amt) ──
@@ -671,7 +750,8 @@ _SLS Total Base Act =
     VAR __SelectedTiers =
         FILTER(
             ALLSELECTED('DIM_Row_VIC_Tier'),
-            NOT ISBLANK('DIM_Row_VIC_Tier'[Tier ID])
+            // 2026-11-12：仅迭代明细行（Row Type=Detail），排除 VIC (T1-T3)/Total 汇总行，避免重复加总
+            'DIM_Row_VIC_Tier'[Row Type] = "Detail"
         )
 
     RETURN
@@ -700,7 +780,8 @@ _SLS Total Base LY =
     VAR __SelectedTiers =
         FILTER(
             ALLSELECTED('DIM_Row_VIC_Tier'),
-            NOT ISBLANK('DIM_Row_VIC_Tier'[Tier ID])
+            // 2026-11-12：仅迭代明细行（Row Type=Detail），排除 VIC (T1-T3)/Total 汇总行，避免重复加总
+            'DIM_Row_VIC_Tier'[Row Type] = "Detail"
         )
 
     RETURN
@@ -743,8 +824,13 @@ _Net Pay Qty Base Act =
     VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
+    // ── 行维度 Tier 作用域（2026-11-12 新增汇总行；同日 15:40 二次修订，不再构造表变量）──
+    // 明细行 = 当前 Tier；VIC (T1-T3) = T1+T2+T3；Total = T1-T5；无 Tier 上下文 = 不施加 Tier 筛选
+    // 子 Tier 范围由下方 REMOVEFILTERS('DIM_Row_VIC_Tier') + KEEPFILTERS(SWITCH(...)) 以布尔表达式
+    // 直接施加于事实表 customer_tier（SWITCH 仅返回布尔、IN 列表均为常量，规避表类型变量的兼容性问题）
+    VAR __TierID = SELECTEDVALUE('DIM_Row_VIC_Tier'[Tier ID])
 
-    // ── Step 1: end period 当月，按当前行 customer_tier 框定 user_id 集合 ──
+    // ── Step 1: end period 当月，按 Tier 作用域框定 user_id 集合 ──
     VAR __TierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
@@ -758,7 +844,19 @@ _Net Pay Qty Base Act =
             ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin,
-            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax
+            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax,
+            // 行维度 Tier 作用域：REMOVEFILTERS 解除 Row Label 行筛选；KEEPFILTERS 将子 Tier 范围
+            // 直接施加于事实表 customer_tier 并与外部切片器取交集；SWITCH 仅返回布尔、IN 列表均为常量
+            REMOVEFILTERS('DIM_Row_VIC_Tier'),
+            KEEPFILTERS(
+                SWITCH(
+                    TRUE(),
+                    __TierID = "VIC (T1-T3)", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3" },
+                    __TierID = "Total", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3", "T4", "T5" },
+                    ISBLANK(__TierID), TRUE(),
+                    'a03_e2e_customer_data_m'[customer_tier] = __TierID
+                )
+            )
         )
 
     // ── Step 2: 该 user_id 集合在所选时间范围的 sum(net_pay_qty) ──
@@ -817,8 +915,13 @@ _Net Pay Qty Base LY =
     VAR __EndPeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
+    // ── 行维度 Tier 作用域（2026-11-12 新增汇总行；同日 15:40 二次修订，不再构造表变量）──
+    // 明细行 = 当前 Tier；VIC (T1-T3) = T1+T2+T3；Total = T1-T5；无 Tier 上下文 = 不施加 Tier 筛选
+    // 子 Tier 范围由下方 REMOVEFILTERS('DIM_Row_VIC_Tier') + KEEPFILTERS(SWITCH(...)) 以布尔表达式
+    // 直接施加于事实表 customer_tier（SWITCH 仅返回布尔、IN 列表均为常量，规避表类型变量的兼容性问题）
+    VAR __TierID = SELECTEDVALUE('DIM_Row_VIC_Tier'[Tier ID])
 
-    // ── Step 1: LY end period 当月，按当前行 customer_tier 框定 user_id 集合 ──
+    // ── Step 1: LY end period 当月，按 Tier 作用域框定 user_id 集合 ──
     VAR __TierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
@@ -832,7 +935,19 @@ _Net Pay Qty Base LY =
             ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin_LY,
-            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax_LY
+            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax_LY,
+            // 行维度 Tier 作用域：REMOVEFILTERS 解除 Row Label 行筛选；KEEPFILTERS 将子 Tier 范围
+            // 直接施加于事实表 customer_tier 并与外部切片器取交集；SWITCH 仅返回布尔、IN 列表均为常量
+            REMOVEFILTERS('DIM_Row_VIC_Tier'),
+            KEEPFILTERS(
+                SWITCH(
+                    TRUE(),
+                    __TierID = "VIC (T1-T3)", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3" },
+                    __TierID = "Total", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3", "T4", "T5" },
+                    ISBLANK(__TierID), TRUE(),
+                    'a03_e2e_customer_data_m'[customer_tier] = __TierID
+                )
+            )
         )
 
     // ── Step 2: 该 user_id 集合在 LY 所选时间范围的 sum(net_pay_qty) ──
@@ -893,8 +1008,13 @@ _Net Pay Order Cnt Base Act =
     VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
+    // ── 行维度 Tier 作用域（2026-11-12 新增汇总行；同日 15:40 二次修订，不再构造表变量）──
+    // 明细行 = 当前 Tier；VIC (T1-T3) = T1+T2+T3；Total = T1-T5；无 Tier 上下文 = 不施加 Tier 筛选
+    // 子 Tier 范围由下方 REMOVEFILTERS('DIM_Row_VIC_Tier') + KEEPFILTERS(SWITCH(...)) 以布尔表达式
+    // 直接施加于事实表 customer_tier（SWITCH 仅返回布尔、IN 列表均为常量，规避表类型变量的兼容性问题）
+    VAR __TierID = SELECTEDVALUE('DIM_Row_VIC_Tier'[Tier ID])
 
-    // ── Step 1: end period 当月，按当前行 customer_tier 框定 user_id 集合 ──
+    // ── Step 1: end period 当月，按 Tier 作用域框定 user_id 集合 ──
     VAR __TierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
@@ -908,7 +1028,19 @@ _Net Pay Order Cnt Base Act =
             ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin,
-            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax
+            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax,
+            // 行维度 Tier 作用域：REMOVEFILTERS 解除 Row Label 行筛选；KEEPFILTERS 将子 Tier 范围
+            // 直接施加于事实表 customer_tier 并与外部切片器取交集；SWITCH 仅返回布尔、IN 列表均为常量
+            REMOVEFILTERS('DIM_Row_VIC_Tier'),
+            KEEPFILTERS(
+                SWITCH(
+                    TRUE(),
+                    __TierID = "VIC (T1-T3)", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3" },
+                    __TierID = "Total", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3", "T4", "T5" },
+                    ISBLANK(__TierID), TRUE(),
+                    'a03_e2e_customer_data_m'[customer_tier] = __TierID
+                )
+            )
         )
 
     // ── Step 2: 该 user_id 集合在所选时间范围的 sum(net_pay_order_cnt) ──
@@ -968,8 +1100,13 @@ _Net Pay Order Cnt Base LY =
     VAR __EndPeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max[Last_Fiscal_Month_Max_LY])
     VAR __IsMemberFilter = SELECTEDVALUE(IsMemberFilter[IsMember], 0)
     VAR __IsEmployeeFilter = VALUES(Slicer_Is_Employee_Selection[IsEmployee_Code])
+    // ── 行维度 Tier 作用域（2026-11-12 新增汇总行；同日 15:40 二次修订，不再构造表变量）──
+    // 明细行 = 当前 Tier；VIC (T1-T3) = T1+T2+T3；Total = T1-T5；无 Tier 上下文 = 不施加 Tier 筛选
+    // 子 Tier 范围由下方 REMOVEFILTERS('DIM_Row_VIC_Tier') + KEEPFILTERS(SWITCH(...)) 以布尔表达式
+    // 直接施加于事实表 customer_tier（SWITCH 仅返回布尔、IN 列表均为常量，规避表类型变量的兼容性问题）
+    VAR __TierID = SELECTEDVALUE('DIM_Row_VIC_Tier'[Tier ID])
 
-    // ── Step 1: LY end period 当月，按当前行 customer_tier 框定 user_id 集合 ──
+    // ── Step 1: LY end period 当月，按 Tier 作用域框定 user_id 集合 ──
     VAR __TierUsers =
         CALCULATETABLE(
             VALUES('a03_e2e_customer_data_m'[user_id]),
@@ -983,7 +1120,19 @@ _Net Pay Order Cnt Base LY =
             ),
             'a03_e2e_customer_data_m'[is_employee] in __IsEmployeeFilter,
             'a03_e2e_customer_data_m'[data_date] >= __EndPeriodMin_LY,
-            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax_LY
+            'a03_e2e_customer_data_m'[data_date] <= __EndPeriodMax_LY,
+            // 行维度 Tier 作用域：REMOVEFILTERS 解除 Row Label 行筛选；KEEPFILTERS 将子 Tier 范围
+            // 直接施加于事实表 customer_tier 并与外部切片器取交集；SWITCH 仅返回布尔、IN 列表均为常量
+            REMOVEFILTERS('DIM_Row_VIC_Tier'),
+            KEEPFILTERS(
+                SWITCH(
+                    TRUE(),
+                    __TierID = "VIC (T1-T3)", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3" },
+                    __TierID = "Total", 'a03_e2e_customer_data_m'[customer_tier] IN { "T1", "T2", "T3", "T4", "T5" },
+                    ISBLANK(__TierID), TRUE(),
+                    'a03_e2e_customer_data_m'[customer_tier] = __TierID
+                )
+            )
         )
 
     // ── Step 2: 该 user_id 集合在 LY 所选时间范围的 sum(net_pay_order_cnt) ──
@@ -1565,7 +1714,7 @@ Freq. Display =
 #### 4.4.1 Customer% vs LY Value Cell SVG Icon
 
 ```dax
-Customer% vs LY Value Cell SVG Icon =
+Customer% vs LY Value Cell SVG Icon = 
 // ========================================
 // 度量值: Customer% vs LY Value Cell SVG Icon
 // Display Folder: Formatting
@@ -1580,6 +1729,8 @@ Customer% vs LY Value Cell SVG Icon =
 // ========================================
 
     VAR __Value  = [Customer% vs LY Value]
+    -- 设一个可接受的最小误差范围（Epsilon），在此范围内视为 0
+    VAR __Tolerance = 0.00000001
 
     // ── SVG 图标定义 ──
     VAR __GreenSVG =
@@ -1588,6 +1739,7 @@ Customer% vs LY Value Cell SVG Icon =
         "<circle cx='8' cy='8' r='7' fill='%234CAF50'/>" &
         "<path d='M8 12 L8 5 M5 7 L8 4 L11 7' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' fill='none'/>" &
         "</svg>"
+
     VAR __RedSVG =
         "data:image/svg+xml;utf8," &
         "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>" &
@@ -1605,9 +1757,9 @@ Customer% vs LY Value Cell SVG Icon =
         SWITCH(
             TRUE(),
             ISBLANK(__Value),    BLANK(),
+            ABS ( __Value ) < __Tolerance , __YellowSVG ,     -- 容差内 = 0
             __Value > 0,         __GreenSVG,
             __Value < 0,         __RedSVG,
-            __Value = 0,         __YellowSVG,
             BLANK()
         )
 ```
@@ -1615,7 +1767,7 @@ Customer% vs LY Value Cell SVG Icon =
 #### 4.4.2 SLS% vs LY Value Cell SVG Icon
 
 ```dax
-SLS% vs LY Value Cell SVG Icon =
+SLS% vs LY Value Cell SVG Icon = 
 // ========================================
 // 度量值: SLS% vs LY Value Cell SVG Icon
 // Display Folder: Formatting
@@ -1630,7 +1782,8 @@ SLS% vs LY Value Cell SVG Icon =
 // ========================================
 
     VAR __Value  = [SLS% vs LY Value]
-
+    -- 设一个可接受的最小误差范围（Epsilon），在此范围内视为 0
+    VAR __Tolerance = 0.00000001
     // ── SVG 图标定义 ──
     VAR __GreenSVG =
         "data:image/svg+xml;utf8," &
@@ -1655,9 +1808,9 @@ SLS% vs LY Value Cell SVG Icon =
         SWITCH(
             TRUE(),
             ISBLANK(__Value),    BLANK(),
+            ABS ( __Value ) < __Tolerance , __YellowSVG ,     -- 容差内 = 0
             __Value > 0,         __GreenSVG,
             __Value < 0,         __RedSVG,
-            __Value = 0,         __YellowSVG,
             BLANK()
         )
 ```
@@ -1860,6 +2013,15 @@ SLS% vs LY Value Cell SVG Icon =
     - 派生指标类型由 VIC Repurchase% / VIC Retention% 简化为 Customer No. vs LY / Customer% vs LY / SLS vs LY / SLS% vs LY
     - 字段筛选由 is_fy_vic / is_fy_retention_vic / last_12m_net_pay_amt 改为无 VIC 标识字段筛选（直接按 customer_tier 分组）
 19. **注册日期类型与空值**：`register_date` 和财月末字段应为 Date，日期切片器需提供有效单值。仓库事实查询包含将 `register_date` 转为 Date 的版本，实际模型仍需核验；仅使用 `<=` 可能放行 BLANK 日期，现按业务要求在 Member VIC 日期分支增加 `NOT ISBLANK`，同时保留原 `<=` 截止判断。TTL VIC 原 OR 放行分支不变，不因本次修改排除空日期；`KEEPFILTERS` 继续取交集，不恢复外部筛选已排除的日期。
+20. **汇总行 VIC (T1-T3) / Total 的 Tier 作用域（2026-11-12，关键逻辑；同日 15:40 二次修订）**：两行的 Tier ID 在事实表 customer_tier 无对应值，1:N 关系不产生事实筛选，全部指标由 Base 度量值的 `REMOVEFILTERS('DIM_Row_VIC_Tier')` + `KEEPFILTERS(SWITCH(TRUE(), ...))` Tier 作用域显式计算（布尔筛选直接作用于事实表 customer_tier，SWITCH 仅返回布尔、IN 列表均为常量，不构造表变量）；明细行限定 `customer_tier = 当前 Tier`，语义与原 1:N 关系行筛选等价。约束与边界：
+
+    - (a) Tier 切片器必须保持在事实表 customer_tier 字段上（当前即如此，切片器含"(空白)"项）；若改挂 DIM_Row_VIC_Tier 字段，汇总行会进入切片器选项，且选中部分明细 Tier 时汇总行会被过滤隐藏
+    - (b) `REMOVEFILTERS('DIM_Row_VIC_Tier')` 解除整表筛选，作用于 DIM_Row_VIC_Tier 任意列的行级视觉筛选在度量值计算中都会被绕过；行级 Tier 排除应使用事实表 customer_tier 筛选实现（"Row Label 不为空"这类筛选本身为无效筛选，不受影响）
+    - (c) 表格视觉对象需关闭内置"总计"行（Total 汇总行已自带，且内置总计行无 Tier 上下文）
+    - (d) 无 Tier 行上下文的调用（如卡片图直接引用 Value 度量值）：SWITCH 命中 TRUE() 分支、不施加 Tier 筛选，口径与旧行为完全一致（全 customer_tier 含空 Tier，仅受外部切片器约束）
+    - (e) Row Label 排序仍按 Indicator Order（VIC (T1-T3)=5、T1-T5=10-50、Total=60），需确认 Row Label 的"按列排序"仍指向 Indicator Order；如需汇总行加粗，可通过条件格式（背景色/字体）按 `Row Type <> "Detail"` 设置
+    - (f) 假定单一用户在同一 end period 仅归属一个 Tier（月度聚合表口径）；若出现跨 Tier 用户，Customer 类汇总行为去重口径（≤各行之和），SLS/Qty/OrderCnt 类 Step1 取用户集合并集后聚合
+    - (g) 4.1.7/4.1.8 SLS Total 分母迭代改为 `Row Type = "Detail"`：若不排除汇总行，SUMX 会在明细行之和之外再叠加 VIC (T1-T3) 与 Total 两行的值，导致占比分母翻倍（SLS% 恒偏小）；4.1.3/4.1.4 Customer Total 的 ALLSELECTED 无需排除汇总行（其 Tier ID 经 1:N 关系不映射任何事实行，分母天然只含 T1-T5）
 
 ---
 
@@ -1885,3 +2047,6 @@ SLS% vs LY Value Cell SVG Icon =
 - TTL VIC 下对齐日期、员工、平台、门店等筛选，用 `_SLS Base Act` 原值对照 SQL，避免千元缩放或汇率干扰。
 - 抽查一个跨月换 Tier 的用户：历史其他 Tier/空 Tier 记录应归入 end period Tier；Customer 人数仍只看期末，保持不变。
 - SLS Total 应等于外部选中 Tier 行金额之和；LY 使用自身期末圈人，ACV/AUR/UPT/Freq. 自动继承新基础值。
+- 2026-11-12 汇总行核对：VIC (T1-T3) 行应等于 T1~T3 三行之和（Customer No. 为用户去重口径，应 ≤ 三行之和；SLS/Qty/OrderCnt 为子 Tier 用户并集聚合，单用户单期末 Tier 前提下等于三行之和）；Total 行应等于 T1~T5 五行之和。
+- Total 行 Customer% / SLS% 应为 100.0%，Customer% vs LY / SLS% vs LY 应为 0bp（分子分母同口径相减）；VIC (T1-T3) 行占比 = T1-T3 合计 / T1-T5 合计。
+- 事实表 customer_tier 切片器仅勾选 T1/T2 时：VIC (T1-T3) 与 Total 行应等于 T1+T2 两行之和（子 Tier 集合与切片器取交集），T3-T5 明细行显示 "-"。
