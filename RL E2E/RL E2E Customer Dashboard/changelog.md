@@ -565,3 +565,20 @@
   - 建议先单独粘贴 `_Customer No. Base Act` 验证编译通过，编译通过后再批量替换其余 7 个度量值（Step1 结构与 4.1.1 的 CALCULATE 结构同构）
   - 未在 Power BI 模型中实测
 
+
+## [2026-11-12 16:20] DAX 新建 — Class x Label Drilldown category 维度方案（派生自 category_summary 方案）
+
+- **模块**: VIC（6 Class x Label Drilldown）
+- **任务**: 条形图/表格分组维度由 category_summary 改为 category，输出仅含度量实现部分的变体方案文件
+- **操作**: 新建
+- **变更内容**:
+  - 新建 `VIC/6 Class x Label Drilldown/Class_x_Label_Drilldown_category.md`（仅 §4 度量值实现；头部、4.1/4.2 复用说明、4.3 新建 MAXX、4.4 清单、4.5 差异对照）
+  - 4 个 Value + 4 个 Display 度量值（VIC No. (Net_Retention/T4-5 Upgrade/Direct/New VIC) Value/Display）：DAX 内无 category_summary 引用（分组由视觉轴字段自动传递），完全复用原方案度量，不新建、不改名
+  - 新建 3 个辅助度量值：`MAXX Retention VIC (Category)`、`MAXX T4-5 Upgrade VIC (Category)`、`MAXX Direct VIC (Category)`，迭代列由 `ALL(t05_customer_order_data_d[category_summary])` 改为 `ALL(t05_customer_order_data_d[category])`；原 3 个 MAXX 度量（category_summary 版）保持不变
+- **关联文件**:
+  - `VIC/6 Class x Label Drilldown/Class_x_Label_Drilldown_category.md`（新建）
+  - `VIC/6 Class x Label Drilldown/Class_x_Label_Drilldown_list.md`（派生来源，未改动）
+  - 字段出处: `参考文件/t05_customer_order_data_d_数据字典.md`（category String / category_summary 品类归纳）
+- **备注**:
+  - 视觉对象配置（条形图轴 / 表格行）从 t05[category_summary] 换为 t05[category]，属视觉配置变更非度量 DAX
+  - 未在 Power BI 模型中实测；category 与 category_summary 为同表不同粒度字段（品类细分 vs 品类归纳），同一 user_id 可跨多个 category 值，Step2 DISTINCTCOUNT 口径不变
