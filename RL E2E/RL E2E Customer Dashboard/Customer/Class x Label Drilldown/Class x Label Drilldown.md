@@ -7,6 +7,7 @@
 > **关联维度**: `Slicer_Time_Frame`、`Slicer_Time_Frame_Min`、`Slicer_Time_Frame_Max`、`Slicer_Currency_Selection`
 > **用途**: 用于条形图和表格（非矩阵），每个指标独立拉取，无 x 轴，无需处理 x 轴当前时间
 > **行维度**: `category_summary` / `product_id` 直接拉取 `t05_customer_order_data_d` 字段，表关系自动传递，DAX 无需显式处理分组
+> **revised**: 2026-11-13 — Class x Label 子模块（指标 1-8）行维度改为 `Slicer_Dim_Category` 字段参数切换（category_summary / category 两档）；4 个百分比 Value 度量分母 `ALLSELECTED` 扩展为双列；Product 子模块（product_id）不变；详见 §7
 
 ---
 
@@ -16,7 +17,7 @@
 
 Class x Label Drilldown 是 Customer Tab 的品类下钻模块，共 **14 个指标**，每个指标独立输出 **Value 度量 + Display 度量**，共 28 个度量值。分为两个子模块：
 
-- **子模块八：Class x Label**（按 `category_summary` 分组，8 个指标）
+- **子模块八：Class x Label**（按 `category_summary` / `category` 字段参数切换分组，8 个指标）
 - **子模块九：Product**（按 `product_id` 分组，6 个指标）
 
 ### 1.2 全局规则
@@ -28,7 +29,7 @@ Class x Label Drilldown 是 Customer Tab 的品类下钻模块，共 **14 个指
 | **行维度直接拉事实表字段** | `category_summary` / `product_id` 从 `t05_customer_order_data_d` 直接拉取，表关系自动传递 |
 | **时间口径** | `t05` 用 `dt ∈ [TimeFrame_Min, TimeFrame_Max]`；`a03` Step1 用 `data_date ∈ [TimeFrame_Min, TimeFrame_Max]`（slicer 区间），Step2 用 `data_date ∈ [First_Fiscal_Month_Min, First_Fiscal_Month_Max]`（start_period） |
 | **New/Existing 判定** | Step1：`a03` 在 slicer 区间内 `SUM(net_pay_amt) > 0 AND is_member = 0` 的本期消费 user_id 集；Step2：`a03` 在 start_period 内 `SUM(lp_12m_net_pay_amt) > 0 AND is_member = 0` 的老客识别集；New = `EXCEPT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id]))`；Existing = `INTERSECT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id]))`；再在 `t05` 的 slicer 区间内对该集合 `TREATAS` 后聚合 |
-| **分母不受产品筛选器影响** | 百分比指标的分母用 `ALLSELECTED('t05_customer_order_data_d'[category_summary])` 移除图表维度影响，保留外部切片器筛选 |
+| **分母不受图表维度影响** | 百分比指标的分母用 `ALLSELECTED('t05_customer_order_data_d'[category_summary], 't05_customer_order_data_d'[category])` 移除图表维度影响（双列，字段参数切换适配），保留外部切片器筛选 |
 | **货币转换** | 金额类 Value 度量保留 RMB 原值，Display 层按 `Currency_ExchangeRate` 换算（RMB÷汇率） |
 | **is_member 筛选** | 仅 `a03`（New/Existing 判定）使用 `is_member = 0`；`t05` 聚合不筛选 `is_member` |
 
@@ -56,7 +57,7 @@ Class x Label Drilldown 是 Customer Tab 的品类下钻模块，共 **14 个指
 - **All（TTL）**：`t05` 在 `dt ∈ [TimeFrame_Min, TimeFrame_Max]` 内直接聚合，不限定 user_id 集合
 - **New**：Step1（本期有消费的新客候选）：`a03` `data_date ∈ slicer 区间 AND is_member = 0 AND SUM(net_pay_amt) > 0`；Step2（第一财月的老客排除集）：`a03` `data_date ∈ start_period AND is_member = 0 AND SUM(lp_12m_net_pay_amt) > 0`；New user_id 集 = `EXCEPT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id]))`；再在 `t05` slicer 区间内对该集合 `TREATAS` 后聚合
 - **Existing**：Step1 同 New，但与 Step2 取 `INTERSECT`（本期消费者中第一财月已识别的老客，`lp_12m_net_pay_amt > 0`）；再在 `t05` slicer 区间内对该集合 `TREATAS` 后聚合
-- **百分比分母**：`t05` slicer 区间聚合，`ALLSELECTED(category_summary)` 移除图表维度，保留外部筛选
+- **百分比分母**：`t05` slicer 区间聚合，`ALLSELECTED(category_summary/category 双列)` 移除图表维度，保留外部筛选
 - **Delta**：New Customer% - TTL Customer%，值 × 10000 转 bp
 
 > 注：Step1/Step2 内部按 `user_id + shop_info_id` 聚合做 SUM 判定，最终各自 `SUMMARIZE(..., [user_id])` 去重到 user_id 级再 EXCEPT/INTERSECT；两步区间不同、不可合并（参考：维度复用/新客 No. 模板详解.md）。New + Existing = Step1（本期消费者总数），两者互补。
@@ -227,7 +228,7 @@ New Customer% by No. Value =
 //       New = EXCEPT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id]))
 //       t05 dt ∈ slicer 区间内对该集合 count(distinct user_id), by category_summary
 // 分母: t05 dt ∈ slicer 区间 count(distinct user_id) where net_pay_amt > 0
-//       ALLSELECTED(category_summary) 移除图表维度，保留外部筛选
+//       ALLSELECTED(category_summary/category 双列) 移除图表维度，保留外部筛选
 // 数据格式: percent_0dp（Display 层处理）
 // 口径（与新客数最新 EXCEPT 逻辑一致，两步区间不可合并）
 // ========================================
@@ -287,11 +288,11 @@ VAR __Numerator =
         't05_customer_order_data_d'[dt] <= __PeriodMax
     )
 
-// ── 分母: 全客买家人数（[Net_Customer No. Value] 已自带 net_pay_amt > 0），ALLSELECTED 移除图表 category_summary 维度 ──
+// ── 分母: 全客买家人数（[Net_Customer No. Value] 已自带 net_pay_amt > 0），ALLSELECTED 移除图表维度（category_summary/category 双列，字段参数切换适配）──
 VAR __Denominator =
     CALCULATE(
         [Net_Customer No. Value],
-        ALLSELECTED('t05_customer_order_data_d'[category_summary])
+        ALLSELECTED('t05_customer_order_data_d'[category_summary], 't05_customer_order_data_d'[category])
     )
 
 RETURN
@@ -325,14 +326,14 @@ TTL Customer% by No. Value =
 // 度量值: TTL Customer% by No. Value
 // 用途: 各筛选条件下全客买家人数占无产品筛选全客的比例
 // 分子: [Net_Customer No. Value]（by category_summary，受图表维度影响）
-// 分母: [Net_Customer No. Value] ALLSELECTED(category_summary)（移除图表维度，保留外部筛选）
+// 分母: [Net_Customer No. Value] ALLSELECTED(category_summary/category 双列)（移除图表维度，保留外部筛选）
 // 数据格式: percent_0dp（Display 层处理）
 // ========================================
 VAR __Numerator = [Net_Customer No. Value]
 VAR __Denominator =
     CALCULATE(
         [Net_Customer No. Value],
-        ALLSELECTED('t05_customer_order_data_d'[category_summary])
+        ALLSELECTED('t05_customer_order_data_d'[category_summary], 't05_customer_order_data_d'[category])
     )
 
 RETURN
@@ -407,7 +408,7 @@ New Customer% by Amt Value =
 //       New = EXCEPT(SUMMARIZE(Step1,[user_id]), SUMMARIZE(Step2,[user_id]))
 //       t05 dt ∈ slicer 区间内对该集合 sum(net_pay_amt), by category_summary
 // 分母: t05 dt ∈ slicer 区间 sum(net_pay_amt)
-//       ALLSELECTED(category_summary) 移除图表维度，保留外部筛选
+//       ALLSELECTED(category_summary/category 双列) 移除图表维度，保留外部筛选
 // 数据格式: percent_0dp（Display 层处理）
 // 汇率换算: 不涉及（比率为无量纲，RMB/USD 同值）
 // 口径（与新客数最新 EXCEPT 逻辑一致，两步区间不可合并）
@@ -468,12 +469,12 @@ VAR __Numerator =
         't05_customer_order_data_d'[dt] <= __PeriodMax
     )
 
-// ── 分母: 全客净销售额（加 net_pay_amt > 0 筛选），ALLSELECTED 移除图表 category_summary 维度 ──
+// ── 分母: 全客净销售额（加 net_pay_amt > 0 筛选），ALLSELECTED 移除图表维度（category_summary/category 双列，字段参数切换适配）──
 VAR __Denominator =
     CALCULATE(
         [Net_SLS Value],
         't05_customer_order_data_d'[net_pay_amt] > 0,
-        ALLSELECTED('t05_customer_order_data_d'[category_summary])
+        ALLSELECTED('t05_customer_order_data_d'[category_summary], 't05_customer_order_data_d'[category])
     )
 
 RETURN
@@ -503,14 +504,14 @@ TTL Customer% by Amt Value =
 // 度量值: TTL Customer% by Amt Value
 // 用途: 各筛选条件下全客净销售额占无产品筛选全客的比例
 // 分子: [Net_SLS Value]（by category_summary，受图表维度影响）
-// 分母: [Net_SLS Value] ALLSELECTED(category_summary)（移除图表维度，保留外部筛选）
+// 分母: [Net_SLS Value] ALLSELECTED(category_summary/category 双列)（移除图表维度，保留外部筛选）
 // 数据格式: percent_0dp（Display 层处理）
 // ========================================
 VAR __Numerator = [Net_SLS Value]
 VAR __Denominator =
     CALCULATE(
         [Net_SLS Value],
-        ALLSELECTED('t05_customer_order_data_d'[category_summary])
+        ALLSELECTED('t05_customer_order_data_d'[category_summary], 't05_customer_order_data_d'[category])
     )
 
 RETURN
@@ -1126,6 +1127,36 @@ RANKX(
 ```dax
 ToolTips 01 = "New Customer% - TTL Customer%"
 ```
+### 4.17 字段参数
+```dax
+Slicer_Dim_Category = {
+    ("Category", NAMEOF('t05_customer_order_data_d'[category]), 0, "Category"),
+    ("AX Class", NAMEOF('t05_customer_order_data_d'[category_summary]), 1, "AX Class")
+}
+```
+### 4.18 辅助指标MAXX(控制条形最大高度)
+```dax
+MAXX Net_Customer No. Value = 
+VAR Class = SELECTEDVALUE('Slicer_Dim_Category'[Label],"Category")
+VAR MaxNetCustomerNoValueByCategory = MAXX(ALL(t05_customer_order_data_d[category]),[Net_Customer No. Value])
+VAR MaxNetCustomerNoValueByAXClass = MAXX(ALL(t05_customer_order_data_d[category_summary]),[Net_Customer No. Value])
+RETURN IF(Class = "AX Class", MaxNetCustomerNoValueByAXClass, MaxNetCustomerNoValueByCategory)
+```
+```dax
+MAXX Net_SLS Value = 
+VAR Class = SELECTEDVALUE('Slicer_Dim_Category'[Label],"Category")
+VAR MaxNetSLSValueByCategory = MAXX(ALL(t05_customer_order_data_d[category]),[Net_SLS Value])
+VAR MaxNetSLSValueByAXClass = MAXX(ALL(t05_customer_order_data_d[category_summary]),[Net_SLS Value])
+RETURN IF(Class = "AX Class", MaxNetSLSValueByAXClass, MaxNetSLSValueByCategory)
+```
+
+### 4.19 动态文本
+```dax
+Dynamic Text 01 = 
+VAR Class = SELECTEDVALUE('Slicer_Dim_Category'[Label],"Category")
+RETURN IF(Class = "AX Class", "Top AX Class", "Top Category")
+```
+
 ---
 
 ## 5. 度量值清单
@@ -1192,10 +1223,10 @@ ToolTips 01 = "New Customer% - TTL Customer%"
    - `is_member = 0` 仅在 `a03` Step1/Step2 中使用；`t05` 聚合不筛选 `is_member`（`t05` 无此字段）
    - New + Existing = Step1（本期消费者总数），两者互补
 
-6. **百分比分母不受产品筛选器影响**：
-   - 指标 3/4/6/7 的分母用 `ALLSELECTED('t05_customer_order_data_d'[category_summary])` 移除图表维度影响
-   - `ALLSELECTED` 保留外部切片器对 `category_summary` 的筛选，仅移除图表行维度的筛选
-   - 聚合粒度分母为 `platform, shop_info_id, brand, framework`（不含 `category_summary`）
+6. **百分比分母不受图表维度影响（2026-11-13 扩展为双列）**：
+   - 指标 3/4/6/7 的分母用 `ALLSELECTED('t05_customer_order_data_d'[category_summary], 't05_customer_order_data_d'[category])` 移除图表维度影响
+   - `ALLSELECTED` 保留外部切片器对两列的筛选，仅移除图表行维度的筛选；轴为 category_summary 时移除 category 筛选为空操作（无该筛选），结果与改造前完全一致
+   - 聚合粒度分母为 `platform, shop_info_id, brand, framework`（不含 `category_summary` / `category`）
 
 7. **汇率换算分层处理**：
    - Value 度量始终保留 RMB 原始值
@@ -1207,3 +1238,69 @@ ToolTips 01 = "New Customer% - TTL Customer%"
 9. **BLANK 处理**：所有 Display 度量在 Value 为 BLANK 时显示 `"-"`，避免空白单元格影响可读性。
 
 10. **Top 20 排序（指标 9-14）**：为 Product 子模块的 6 个指标各新增一个 Rank 度量（共 6 个），按对应 Value 降序排名（值最大 = Rank 1，DENSE 模式无间隔）。在条形图/表格的「此页上的筛选器」中添加对应 Rank 度量，设置筛选条件为「小于或等于 20」即可仅显示 Top 20。`ALLSELECTED('t05_customer_order_data_d'[product_id])` 保留外部切片器筛选，仅移除图表行维度筛选，确保排名在当前筛选上下文内计算。
+
+---
+
+## 7. category 维度字段参数切换（2026-11-13 新增）
+
+> 目标：Class x Label 子模块（指标 1-8）行维度在 `category_summary`（品类归纳）与 `category`（品类，品类细分粒度）之间切换。**不另建一套 category 度量值、不改任何度量值名称**，仅 4 个百分比 Value 度量的分母 `ALLSELECTED` 扩展为双列（见 7.4）。Product 子模块（product_id，指标 9-14 及 6 个 Rank）零改动。
+
+### 7.1 字段参数表 Slicer_Dim_Category
+
+新建字段参数（建模 → 新建参数 → 字段，或直接粘贴以下 DAX）：
+
+```dax
+Slicer_Dim_Category = {
+    ("Category", NAMEOF('t05_customer_order_data_d'[category]), 0, "Category"),
+    ("AX Class", NAMEOF('t05_customer_order_data_d'[category_summary]), 1, "AX Class")
+}
+```
+
+- 列结构：`Slicer_Dim_Category`（显示名）、`Slicer_Dim_Category Order`（排序）、隐藏的参数列（字段引用）
+- Order 0（Category）在前 = 默认选中，与改造前行为一致
+- 参数表为断开维度，不与任何表建关系
+- 字段出处：`t05_customer_order_data_d` 同时含 `category`（String）与 `category_summary`（品类归纳）字段（参考文件/t05_customer_order_data_d_数据字典.md）
+
+### 7.2 视觉对象改绑（仅 Class x Label 子模块）
+
+| 视觉对象 | 原配置 | 新配置 |
+| --- | --- | --- |
+| 条形图轴 / 表格列（指标 1-8 所在视觉对象） | `t05_customer_order_data_d[category_summary]` | 拖入 `Slicer_Dim_Category[Slicer_Dim_Category]`（参数字段） |
+| Product 子模块视觉对象（product_id） | `t05_customer_order_data_d[product_id]` | **不动** |
+
+- 改绑后视觉按参数当前选中的字段分组；行上下文筛选用到哪个字段就过滤哪个字段，值度量自动按新维度分组
+- 值区域继续拉取既有 Value/Display 度量值，不新建、不改名
+
+### 7.3 切换交互（书签 + 按钮，二选一）
+
+**方式 A（推荐，零书签）**：把 `Slicer_Dim_Category[Slicer_Dim_Category]` 拉成切片器，样式选"平铺/Tile"，单选必选；点击选项即切换页面所有绑定了该参数的视觉对象。
+
+**方式 B（书签 + 按钮）**：
+1. 页面放置参数切片器（可见，或缩小置于角落）
+2. 选中参数切片器这一个视觉对象，分别在其选中 Category Summary / Category 的两个状态下「添加书签」（"所选视觉对象"模式，Data 勾选）——只捕获参数切片器的状态，避免书签连带恢复其它切片器当时的选择
+3. 新建两个按钮（文字 Category Summary / Category），格式 → 操作 → 书签，分别绑定两个书签
+
+### 7.4 度量值修改（仅 4 处分母，名称不变）
+
+指标 3/4/6/7 的 Value 度量分母：
+
+```dax
+// 修改前
+ALLSELECTED('t05_customer_order_data_d'[category_summary])
+// 修改后
+ALLSELECTED('t05_customer_order_data_d'[category_summary], 't05_customer_order_data_d'[category])
+```
+
+- 轴 = category_summary 时：行筛选在 category_summary 上被移除；category 无筛选，移除为空操作 → 结果与改造前**完全一致**
+- 轴 = category 时：行筛选在 category 上被移除 → 分母 = 当前外部筛选下全量口径，各行百分比之和 = 100%
+- 分子与其余 24 个度量（Value/Display/Rank）零改动；±%（指标 5/8）为 % 度量之差，自动继承
+
+### 7.5 注意事项与边界
+
+1. 字段参数要求 Power BI Desktop 2022 年 11 月及以后版本
+2. 字段参数切片器**只影响绑定了该参数的视觉对象**，不作为筛选器过滤其它视觉（Product 子模块不受影响，符合"product_id 不动"要求）
+3. 交叉筛选：点击 category 条形柱子会按 `t05[category]` 值交叉筛选同页其它视觉（与原 category_summary 行为一致）
+4. 条形图排序仍按值度量排序，参数切换不影响排序定义
+5. category 为品类细分粒度（较 category_summary 更细），切换后行数变多；同一 user_id 可跨多个 category 值，各行 Customer No. 之和可能大于全量去重人数（DISTINCTCOUNT 口径不变）
+6. 后续新增 Class x Label 视觉对象需同样改绑参数字段，才会纳入切换范围
+7. 未在 Power BI 模型中实测；验收要点：切换前后 Category Summary 视图的数值与改造前一致（分母双列空操作验证），Category 视图各行百分比之和 = 100%

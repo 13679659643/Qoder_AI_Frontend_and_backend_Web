@@ -582,3 +582,21 @@
 - **备注**:
   - 视觉对象配置（条形图轴 / 表格行）从 t05[category_summary] 换为 t05[category]，属视觉配置变更非度量 DAX
   - 未在 Power BI 模型中实测；category 与 category_summary 为同表不同粒度字段（品类细分 vs 品类归纳），同一 user_id 可跨多个 category 值，Step2 DISTINCTCOUNT 口径不变
+
+## [2026-11-13 10:30] 数据模型/DAX 修改 — Class x Label Drilldown 新增 category 维度字段参数切换（不另建度量值）
+
+- **模块**: Customer（Class x Label Drilldown）
+- **任务**: 行维度在 category_summary / category 间切换（书签+按钮），用户明确不另写一套 category 度量、不改度量值名称，product_id 子模块不动
+- **操作**: 修改
+- **变更内容**:
+  - 新增字段参数表 `Slicer_Dim_Category`（DAX: {("Category Summary", NAMEOF('t05_customer_order_data_d'[category_summary]), 0), ("Category", NAMEOF('t05_customer_order_data_d'[category]), 1)}；断开维度，Order 0 默认选中与改造前一致）
+  - 4 个百分比 Value 度量分母 `ALLSELECTED` 单列扩展为双列（度量名称不变）：`New Customer% by No. Value`（4.3.1）、`TTL Customer% by No. Value`（4.4.1）、`New Customer% by Amt Value`（4.6.1）、`TTL Customer% by Amt Value`（4.7.1），由 `ALLSELECTED('t05'[category_summary])` 改为 `ALLSELECTED('t05'[category_summary], 't05'[category])`
+  - 视觉对象改绑：指标 1-8 的条形图轴/表格列由 `t05[category_summary]` 改拉参数字段 `Slicer_Dim_Category[Slicer_Dim_Category]`；Product 子模块（product_id + 6 个 Rank 度量）不变
+  - 切换交互：参数切片器（平铺样式，方式 A）或书签+按钮（方式 B，"所选视觉对象"模式仅捕获参数切片器状态）
+  - 其余 24 个度量（Value/Display/Rank）及 ±%（5/8，自动继承）零改动
+  - 文档同步：头部 revised 行、§1.1/§1.2/§1.4 分母双列表述、§4.3.1/4.4.1/4.6.1/4.7.1 分母 DAX 与注释、§6 注意事项 item 6、新增 §7 字段参数切换设计（7.1-7.5）
+- **关联文件**:
+  - `Customer/Class x Label Drilldown/Class x Label Drilldown.md`
+- **备注**:
+  - 核心机制：字段参数只改变视觉对象轴/列的字段绑定，行上下文筛选用哪个字段由参数决定，既有度量自动按新维度分组；仅 4 个分母度量显式引用了 category_summary 需要双列适配（轴为 category_summary 时移除 category 筛选为空操作，结果与改造前完全一致）
+  - 未在 Power BI 模型中实测；验收：Category Summary 视图数值与改造前一致、Category 视图各行百分比之和 = 100%

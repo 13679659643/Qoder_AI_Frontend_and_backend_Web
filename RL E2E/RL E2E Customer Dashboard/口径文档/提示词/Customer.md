@@ -346,4 +346,11 @@ Slicer_Platform_Selection[Platform_ID]：a03_e2e_customer_order_correlation_data
 Slicer_Customer_Type_Selection[Customer_Type_Code]：a03_e2e_customer_order_correlation_data_m[customer_type]-->1:N
 
 
+# RL E2E Customer UAT(用户验收) 第十三轮提示词：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Customer Dashboard\Customer\Class x Label Drilldown\Class x Label Drilldown.md
+之前的维度是category_summary，是 `t05_customer_order_data_d` 的字段，直接拉取实现自动分组与筛选，现在新需求需要新增category维度，我不想再另外写一套category的逻辑，通过书签+按钮的方式去切换。
+可不可以通过字段参数实现，两个维度，这样不用修改度量名称，直接修改度量逻辑，使用按钮切片器切换不同维度。
+注意：
+1、能实现再做，不能就再讨论一下。
+2、只修改之前的category_summary部分，product_id部分不需要有额外的修改。
 
