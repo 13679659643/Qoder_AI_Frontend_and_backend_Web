@@ -600,3 +600,26 @@
 - **备注**:
   - 核心机制：字段参数只改变视觉对象轴/列的字段绑定，行上下文筛选用哪个字段由参数决定，既有度量自动按新维度分组；仅 4 个分母度量显式引用了 category_summary 需要双列适配（轴为 category_summary 时移除 category 筛选为空操作，结果与改造前完全一致）
   - 未在 Power BI 模型中实测；验收：Category Summary 视图数值与改造前一致、Category 视图各行百分比之和 = 100%
+
+## [2026-11-13 11:30] DAX 新增 — Co-Purchase 新增 Cross-Sell-Category（品类细分粒度热力矩阵，书签+按钮切换）
+
+- **模块**: Customer（Co-Purchase）
+- **任务**: 用户新增维度表 Dim_Category / Dim_Co_Category 后，新增 Category 图表（品类细分粒度）整套度量；明确不用字段参数，页面用书签+按钮在 Class / Category 图表间切换；Class/Label 既有度量与维度表不动
+- **操作**: 新增（文档修改）
+- **变更内容**:
+  - `Co-Purchase Trend.md` 新增 §4.6（5 个新度量）：
+    - `Co-Purchase Cross-Sell-Category Value`（行 `Dim_Category[category]` × 列 `Dim_Co_Category[co_category]`，sum(co_net_pay_order_cnt)/sum(net_pay_order_cnt)，与指标 1 同构，事实表显式筛选 category/co_category）
+    - `Co-Purchase Cross-Sell-Category Display`（percent_0dp）
+    - `Is_Matrix_Row_Visible_Category_Detail` / `Is_Matrix_Col_Visible_CoCategory_Detail`（行列可见性；既有 Is_Matrix_Row_Visible_Category / Is_Matrix_Col_Visible_CoCategory 为 category_summary 粒度且被页面绑定不可改名，故追加 _Detail 后缀）
+    - `Co-Purchase Cross-Sell-Category SVG`（完整版：四点三段插值 + ISINSCOPE(Dim_Category[category]) && ISINSCOPE(Dim_Co_Category[co_category]) + _Detail 可见性判断）
+  - `Co-Purchase svg.md` 新增 §2.3 简版 SVG（同名称同口径，颜色逻辑规格版）+ 清单/注意事项同步
+  - Trend 文档头部 revised 行、§1.1（6 指标 12 对 Value/Display）、§1.2 全局规则（三图表/行维度补 category、co_category）、§1.3 指标清单行 6、§2.1 关键字段、§2.3 新维度表说明、§5 度量值清单、§6 注意事项 item 2/9/10 同步
+- **关联文件**:
+  - `Customer/Co-Purchase/Co-Purchase Trend.md`
+  - `Customer/Co-Purchase/Co-Purchase svg.md`
+  - 字段出处: `参考文件/a03_e2e_customer_order_correlation_data_m_数据字典.md`（category / co_category 字段已存在）
+  - 维度表参照: `维度复用/Co-Purchase Matrix/Dim_Category_Summary.sql`（Dim_Category / Dim_Co_Category 为用户新建，同模式）
+- **备注**:
+  - 页面配置：Category 图表行拉 Dim_Category[category]、列拉 Dim_Co_Category[co_category]，值拉 Value/Display/SVG；书签只控制视觉对象可见性（无需 Data 捕获度量状态），两个按钮分别绑定显示 Class / Category 图表的书签
+  - 品类细分粒度矩阵大于品类归纳，全空行/列由 _Detail 可见性 + 矩阵空值抑制隐藏
+  - 未在 Power BI 模型中实测

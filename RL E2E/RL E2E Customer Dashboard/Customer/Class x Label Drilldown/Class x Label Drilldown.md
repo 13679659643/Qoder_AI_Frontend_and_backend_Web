@@ -1156,7 +1156,11 @@ Dynamic Text 01 =
 VAR Class = SELECTEDVALUE('Slicer_Dim_Category'[Label],"Category")
 RETURN IF(Class = "AX Class", "Top AX Class", "Top Category")
 ```
-
+```dax
+Dynamic Text 02 = 
+VAR Class = SELECTEDVALUE('Slicer_Dim_Category'[Label],"Category")
+RETURN IF(Class = "AX Class", "AX Class", "Category")
+```
 ---
 
 ## 5. 度量值清单

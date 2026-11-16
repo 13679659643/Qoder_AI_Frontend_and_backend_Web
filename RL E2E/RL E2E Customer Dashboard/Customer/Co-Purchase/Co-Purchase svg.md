@@ -2,9 +2,10 @@
 
 > **版本**: v1.1
 > **模块**: Customer Dashboard - Customer Tab - Co-Purchase
-> **关联度量**: `[Co-Purchase Cross-Sell-Class Value]`、`[Co-Purchase Cross-Sell-Label Value]`
+> **关联度量**: `[Co-Purchase Cross-Sell-Class Value]`、`[Co-Purchase Cross-Sell-Label Value]`、`[Co-Purchase Cross-Sell-Category Value]`
 > **参考文件**: 参考文件/SVG 热力矩阵图 颜色自适应 圆角.md
 > **用途**: 热力矩阵图单元格，背景/字体颜色按值四点三段插值自适应，圆角 4px
+> **revised**: 2026-11-13 — 新增 §2.3 Co-Purchase Cross-Sell-Category SVG（Category 图表，品类细分粒度）
 
 ---
 
@@ -203,7 +204,7 @@ VAR _FinalText = IF(_IsBlank, "-", _Pct)
 VAR _URL =
 "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='88' height='33' viewBox='0 0 88 33' preserveAspectRatio='none'>
 <rect rx='4' ry='4' x='0' y='0' width='88' height='33' fill='" & _FinalBg & "' stroke='none'/>
-<text x='44' y='16.5' text-anchor='middle' dominant-baseline='central' font-size='12' font-family='Segoe UI' font-weight='normal' font-style='normal' fill='" & _FinalFont & "'>" & _FinalText & "</text>
+<text x='44' y='16.5' text-anchor='middle' dominant-baseline='central' font-size='16' font-family='Segoe UI' font-weight='normal' font-style='normal' fill='" & _FinalFont & "'>" & _FinalText & "</text>
 </svg>"
 
 RETURN _URL
@@ -337,7 +338,143 @@ VAR _FinalText = IF(_IsBlank, "-", _Pct)
 VAR _URL =
 "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='88' height='33' viewBox='0 0 88 33' preserveAspectRatio='none'>
 <rect rx='4' ry='4' x='0' y='0' width='88' height='33' fill='" & _FinalBg & "' stroke='none'/>
-<text x='44' y='16.5' text-anchor='middle' dominant-baseline='central' font-size='12' font-family='Segoe UI' font-weight='normal' font-style='normal' fill='" & _FinalFont & "'>" & _FinalText & "</text>
+<text x='44' y='16.5' text-anchor='middle' dominant-baseline='central' font-size='16' font-family='Segoe UI' font-weight='normal' font-style='normal' fill='" & _FinalFont & "'>" & _FinalText & "</text>
+</svg>"
+
+RETURN _URL
+```
+
+### 2.3 Co-Purchase Cross-Sell-Category SVG（2026-11-13 新增）
+
+> Category 图表热力矩阵单元格（品类细分粒度，行 `Dim_Category[category]` × 列 `Dim_Co_Category[co_category]`），颜色插值与 Class/Label 完全相同，仅基础度量不同。页面通过书签+按钮在 Class / Category 图表间切换显示。行列可见性 + 空值抑制完整版见 Co-Purchase Trend.md §4.6.5（`Is_Matrix_Row_Visible_Category_Detail` / `Is_Matrix_Col_Visible_CoCategory_Detail`）。
+
+```dax
+Co-Purchase Cross-Sell-Category SVG =
+// ========================================
+// 度量值: Co-Purchase Cross-Sell-Category SVG
+// 用途: 热力矩阵图单元格，背景/字体颜色按值四点三段插值自适应
+// 背景插值: 0%→#d8dee5, 30%→#95afcf, 50%→#0c2340, 100%→#000000
+// 字体插值: 0%→#737373, 30%→#333333, 35%→#ffffff, 100%→#ffffff（白色提前到35%）
+// 无百分比切片器，全部视为范围内
+// 基础度量: [Co-Purchase Cross-Sell-Category Value]
+// ========================================
+
+// ── 1. 读取基础值 ──
+VAR _RawValue = [Co-Purchase Cross-Sell-Category Value]
+VAR _IsBlank = ISBLANK(_RawValue)
+VAR _Value = MIN(MAX(_RawValue, 0), 1)
+VAR _Pct = FORMAT(_Value, "#,##0%;#,##0%;0%")
+
+// ── 2. 背景颜色三段插值（0%→30%→50%→100%）──
+// 0%: #d8dee5 = rgb(216,222,229)
+// 30%: #95afcf = rgb(149,175,207)
+// 50%: #0c2340 = rgb(12,35,64)
+// 100%: #000000 = rgb(0,0,0)
+VAR _BR0 = 216
+VAR _BG0 = 222
+VAR _BB0 = 229
+
+VAR _BR30 = 149
+VAR _BG30 = 175
+VAR _BB30 = 207
+
+VAR _BR50 = 12
+VAR _BG50 = 35
+VAR _BB50 = 64
+
+VAR _BR100 = 0
+VAR _BG100 = 0
+VAR _BB100 = 0
+
+VAR _BR = IF(
+    _Value <= 0.3,
+    _BR0 + (_BR30 - _BR0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.5,
+        _BR30 + (_BR50 - _BR30) * ((_Value - 0.3) / 0.2),
+        _BR50 + (_BR100 - _BR50) * ((_Value - 0.5) / 0.5)
+    )
+)
+VAR _BG = IF(
+    _Value <= 0.3,
+    _BG0 + (_BG30 - _BG0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.5,
+        _BG30 + (_BG50 - _BG30) * ((_Value - 0.3) / 0.2),
+        _BG50 + (_BG100 - _BG50) * ((_Value - 0.5) / 0.5)
+    )
+)
+VAR _BB = IF(
+    _Value <= 0.3,
+    _BB0 + (_BB30 - _BB0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.5,
+        _BB30 + (_BB50 - _BB30) * ((_Value - 0.3) / 0.2),
+        _BB50 + (_BB100 - _BB50) * ((_Value - 0.5) / 0.5)
+    )
+)
+VAR _BgColor = "rgb(" & INT(_BR) & "," & INT(_BG) & "," & INT(_BB) & ")"
+
+// ── 3. 字体颜色三段插值（0%→30%→35%→100%，白色提前到35%）──
+// 0%: #737373 = rgb(115,115,115)
+// 30%: #333333 = rgb(51,51,51)
+// 35%: #ffffff = rgb(255,255,255)  ← 白色节点从50%提前到35%
+// 100%: #ffffff = rgb(255,255,255)
+VAR _FR0 = 115
+VAR _FG0 = 115
+VAR _FB0 = 115
+
+VAR _FR30 = 51
+VAR _FG30 = 51
+VAR _FB30 = 51
+
+VAR _FR35 = 255
+VAR _FG35 = 255
+VAR _FB35 = 255
+
+VAR _FR100 = 255
+VAR _FG100 = 255
+VAR _FB100 = 255
+
+VAR _FR = IF(
+    _Value <= 0.3,
+    _FR0 + (_FR30 - _FR0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.35,
+        _FR30 + (_FR35 - _FR30) * ((_Value - 0.3) / 0.05),
+        _FR35 + (_FR100 - _FR35) * ((_Value - 0.35) / 0.65)
+    )
+)
+VAR _FG = IF(
+    _Value <= 0.3,
+    _FG0 + (_FG30 - _FG0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.35,
+        _FG30 + (_FG35 - _FG30) * ((_Value - 0.3) / 0.05),
+        _FG35 + (_FG100 - _FG35) * ((_Value - 0.35) / 0.65)
+    )
+)
+VAR _FB = IF(
+    _Value <= 0.3,
+    _FB0 + (_FB30 - _FB0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.35,
+        _FB30 + (_FB35 - _FB30) * ((_Value - 0.3) / 0.05),
+        _FB35 + (_FB100 - _FB35) * ((_Value - 0.35) / 0.65)
+    )
+)
+VAR _FontColor = "rgb(" & INT(_FR) & "," & INT(_FG) & "," & INT(_FB) & ")"
+
+// ── 4. BLANK 处理：置灰显示 "-" ──
+VAR _FinalBg = IF(_IsBlank, "rgb(215,222,228)", _BgColor)
+VAR _FinalFont = IF(_IsBlank, "rgb(179,179,179)", _FontColor)
+VAR _FinalText = IF(_IsBlank, "-", _Pct)
+
+// ── 5. SVG 输出（圆角 4px，88x33 单元格）──
+VAR _URL =
+"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='88' height='33' viewBox='0 0 88 33' preserveAspectRatio='none'>
+<rect rx='4' ry='4' x='0' y='0' width='88' height='33' fill='" & _FinalBg & "' stroke='none'/>
+<text x='44' y='16.5' text-anchor='middle' dominant-baseline='central' font-size='16' font-family='Segoe UI' font-weight='normal' font-style='normal' fill='" & _FinalFont & "'>" & _FinalText & "</text>
 </svg>"
 
 RETURN _URL
@@ -351,6 +488,7 @@ RETURN _URL
 | --- | --- | --- | --- |
 | 1 | Co-Purchase Cross-Sell-Class SVG | [Co-Purchase Cross-Sell-Class Value] | Class 图表热力矩阵单元格 |
 | 2 | Co-Purchase Cross-Sell-Label SVG | [Co-Purchase Cross-Sell-Label Value] | Label 图表热力矩阵单元格 |
+| 3 | Co-Purchase Cross-Sell-Category SVG | [Co-Purchase Cross-Sell-Category Value] | Category 图表热力矩阵单元格 |
 
 ---
 
@@ -373,4 +511,4 @@ RETURN _URL
 
 7. **SVG 格式**：`width='88' height='33'`，`preserveAspectRatio='none'` 强制拉伸填满单元格；`rx='4' ry='4'` 圆角 4px；文本居中 `text-anchor='middle' dominant-baseline='central'`。
 
-8. **两个度量差异**：仅基础度量不同（Class 用 `[Co-Purchase Cross-Sell-Class Value]`，Label 用 `[Co-Purchase Cross-Sell-Label Value]`），颜色插值逻辑完全相同。
+8. **三个度量差异**：仅基础度量不同（Class / Label / Category 分别用各自的 Cross-Sell Value），颜色插值逻辑完全相同。Category 图表（2026-11-13 新增）为品类细分粒度（`Dim_Category[category]` × `Dim_Co_Category[co_category]`），页面由书签+按钮与 Class 图表切换显示；本文件为颜色逻辑规格版，含行列可见性与空值抑制的完整 SVG 见 Co-Purchase Trend.md §4.6.5。

@@ -7,6 +7,7 @@
 > **关联维度**: Slicer_Time_Frame、`Slicer_Co_Purchase_Type_Selection`（时间/周期/类型由模型关系自动传递，DAX 无需显式处理）
 > **用途**: 用于条形图和表格，每个指标独立拉取，无 x 轴
 > **行维度**: `co_brand` / `co_category_summary` / `brand` / `category_summary` 直接拉取事实表字段，表关系自动传递
+> **revised**: 2026-11-13 — 新增指标 6 Co-Purchase Cross-Sell-Category（Category 图表，行/列维度 `Dim_Category[category]` × `Dim_Co_Category[co_category]`，品类细分粒度）；页面通过书签+按钮在 Class 图表 / Category 图表间切换显示，不使用字段参数；Class/Label 既有度量不变
 
 ---
 
@@ -14,9 +15,9 @@
 
 ### 1.1 模块定位
 
-Co-Purchase Trend 是 Customer Tab 的连带购买与商品路径模块，共 **5 个指标**，每个指标独立输出 **Value 度量 + Display 度量**，共 10 个度量值。分为两个子模块：
+Co-Purchase Trend 是 Customer Tab 的连带购买与商品路径模块，共 **6 个指标**，每个指标独立输出 **Value 度量 + Display 度量**，共 12 个度量值（另有行列可见性 / SVG 辅助度量）。分为两个子模块：
 
-- **子模块十：Co-Purchase Matrix**（连带率，2 个指标，对应 Class / Label 两张图表）
+- **子模块十：Co-Purchase Matrix**（连带率，3 个指标，对应 Class / Label / Category 三张图表；Class 与 Category 由书签+按钮切换显示）
 - **子模块十一：Product Path**（商品购买路径，3 个指标）
 
 ### 1.2 全局规则
@@ -24,8 +25,8 @@ Co-Purchase Trend 是 Customer Tab 的连带购买与商品路径模块，共 **
 | 项目                                          | 说明                                                                                                                                 |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | **无需 DAX 显式处理时间/周期/类型筛选** | `data_month`、`correlation_period`、`correlation_type`、`dt`、`period` 由模型关系或表字段自动传递，DAX 不显式处理          |
-| **Class/Label 按钮决定图表**            | 指标 1 用于 Class 图表，指标 2 用于 Label 图表；度量内部通过`Slicer_Co_Purchase_Type_Selection` 切换 Same-Order / Cross-Order 公式 |
-| **行维度直接拉取事实表字段**            | `co_brand` / `co_category_summary` / `brand` / `category_summary` 从事实表直接拉取，自动分组与筛选                           |
+| **Class/Label/Category 按钮决定图表**   | 指标 1 用于 Class 图表，指标 2 用于 Label 图表，指标 6 用于 Category 图表（书签+按钮切换显示，不用字段参数）；度量内部通过`Slicer_Co_Purchase_Type_Selection` 切换 Same-Order / Cross-Order 公式 |
+| **行维度直接拉取事实表字段**            | `co_brand` / `co_category_summary` / `brand` / `category_summary` / `category` / `co_category` 从事实表直接拉取，自动分组与筛选                           |
 | **Cross-Order 分母移除图表维度**        | Class 图表分母用`ALLSELECTED(co_category_summary)`，Label 图表分母用 `ALLSELECTED(co_brand)`，保留外部切片器筛选                 |
 | **货币转换**                            | 本模块均为百分比/整数指标，不涉及汇率换算                                                                                            |
 
@@ -38,6 +39,7 @@ Co-Purchase Trend 是 Customer Tab 的连带购买与商品路径模块，共 **
 | 3 | Product Path 1st Class       | Product Path       | 通用       | brand, category_summary | integer     | #,##0    |
 | 4 | Product Path 2st Class       | Product Path       | 通用       | brand, category_summary | integer     | #,##0    |
 | 5 | Product Path 3st Class       | Product Path       | 通用       | brand, category_summary | integer     | #,##0    |
+| 6 | Co-Purchase Cross-Sell-Category | Co-Purchase Matrix | Category 图表 | category, co_category | percent_0dp | #,##0%   |
 
 ### 1.4 指标 1/2 分支口径（按 Slicer_Co_Purchase_Type_Selection 切换）
 
@@ -64,7 +66,7 @@ Co-Purchase Trend 是 Customer Tab 的连带购买与商品路径模块，共 **
 
 | 表名                                          | 日期字段       | 用途         | 关键字段                                                                                                                             |
 | --------------------------------------------- | -------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `a03_e2e_customer_order_correlation_data_m` | `data_month` | 连带率聚合   | `co_net_pay_order_cnt`, `net_pay_order_cnt`, `user_id`, `co_brand`, `co_category_summary`, `brand`, `category_summary` |
+| `a03_e2e_customer_order_correlation_data_m` | `data_month` | 连带率聚合   | `co_net_pay_order_cnt`, `net_pay_order_cnt`, `user_id`, `co_brand`, `co_category_summary`, `brand`, `category_summary`, `category`, `co_category` |
 | `a03_e2e_customer_time_ordered_data_m`      | `dt`         | 商品路径聚合 | `user_id`, `payment_time_seq`, `brand`, `category_summary`                                                                   |
 
 ### 2.2 切片器表
@@ -79,6 +81,7 @@ Co-Purchase Trend 是 Customer Tab 的连带购买与商品路径模块，共 **
 - 指标 1/2 通过 `SELECTEDVALUE(Slicer_Co_Purchase_Type_Selection[CoPurchase_Type_Label])` 切换 Same-Order / Cross-Order 公式
 - `payment_time_seq` 是指标 3/4/5 的核心业务定义（区分第 1/2/3 次购买），需在 DAX 中显式筛选
 - Cross-Order 分母用 `ALLSELECTED` 移除图表维度，保留外部切片器筛选
+- 指标 6（Category 图表）使用新建维度表 `Dim_Category[category]` / `Dim_Co_Category[co_category]`（品类细分粒度，1:N 关联事实表 `a03_e2e_customer_order_correlation_data_m[category]` / `[co_category]`），与 Class 图表的 `Dim_Category_Summary` / `Dim_Co_Category_Summary`（品类归纳粒度）并存；字段出处：a03_e2e_customer_order_correlation_data_m_数据字典.md（category / co_category 字段均已存在）
 
 ---
 
@@ -370,7 +373,7 @@ VAR _FinalText = IF(_IsBlank, "-", _Pct)
 VAR _URL =
 "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='88' height='33' viewBox='0 0 88 33' preserveAspectRatio='none'>
 <rect rx='4' ry='4' x='0' y='0' width='88' height='33' fill='" & _FinalBg & "' stroke='none'/>
-<text x='44' y='16.5' text-anchor='middle' dominant-baseline='central' font-size='12' font-family='Segoe UI' font-weight='normal' font-style='normal' fill='" & _FinalFont & "'>" & _FinalText & "</text>
+<text x='44' y='16.5' text-anchor='middle' dominant-baseline='central' font-size='16' font-family='Segoe UI' font-weight='normal' font-style='normal' fill='" & _FinalFont & "'>" & _FinalText & "</text>
 </svg>"
 
 // ── 6. 行列可见性：隐藏全空行列，保留内部空白占位 ──
@@ -653,7 +656,7 @@ VAR _FinalText = IF(_IsBlank, "-", _Pct)
 VAR _URL =
 "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='88' height='33' viewBox='0 0 88 33' preserveAspectRatio='none'>
 <rect rx='4' ry='4' x='0' y='0' width='88' height='33' fill='" & _FinalBg & "' stroke='none'/>
-<text x='44' y='16.5' text-anchor='middle' dominant-baseline='central' font-size='12' font-family='Segoe UI' font-weight='normal' font-style='normal' fill='" & _FinalFont & "'>" & _FinalText & "</text>
+<text x='44' y='16.5' text-anchor='middle' dominant-baseline='central' font-size='16' font-family='Segoe UI' font-weight='normal' font-style='normal' fill='" & _FinalFont & "'>" & _FinalText & "</text>
 </svg>"
 
 // ── 6. 判断当前计算位置 ──
@@ -820,6 +823,294 @@ RETURN
     )
 ```
 
+### 4.6 Co-Purchase Cross-Sell-Category（指标 6 — Category 图表，2026-11-13 新增）
+
+> 与指标 1（Class 图表）完全同构，仅行/列维度粒度不同：Class 用 `Dim_Category_Summary[category_summary] × Dim_Co_Category_Summary[co_category_summary]`（品类归纳），Category 用新建维度表 `Dim_Category[category] × Dim_Co_Category[co_category]`（品类细分）。页面通过书签+按钮切换 Class 图表 / Category 图表的显示，两套度量并存、互不影响，不使用字段参数。
+
+#### 4.6.1 Co-Purchase Cross-Sell-Category Value
+
+```dax
+Co-Purchase Cross-Sell-Category Value = 
+// ========================================
+// 度量值: Co-Purchase Cross-Sell-Category Value
+// 用途: Category 图表的连带率（品类细分粒度），结构与指标 1 完全同构
+// 计算: sum(co_net_pay_order_cnt) / sum(net_pay_order_cnt)（行×列单元格直接聚合）
+// 数据底表: a03_e2e_customer_order_correlation_data_m
+// 筛选处理: 时间/周期/类型由模型关系自动传递；
+// 行维度: Dim_Category[category]（行）× Dim_Co_Category[co_category]（列），新建维度表 1:N 关联事实表
+// 数据格式: percent_0dp（Display 层处理）
+// ========================================
+VAR __CurrentCategory = SELECTEDVALUE(Dim_Category[category])
+VAR __CurrentCoCategory = SELECTEDVALUE(Dim_Co_Category[co_category])
+VAR __co_net_pay_order_cnt = 
+    CALCULATE(
+        SUM('a03_e2e_customer_order_correlation_data_m'[co_net_pay_order_cnt]),
+        a03_e2e_customer_order_correlation_data_m[category] = __CurrentCategory,
+        a03_e2e_customer_order_correlation_data_m[co_category] = __CurrentCoCategory
+    )
+VAR __net_pay_order_cnt = 
+    CALCULATE(
+        SUM('a03_e2e_customer_order_correlation_data_m'[net_pay_order_cnt]),
+        a03_e2e_customer_order_correlation_data_m[category] = __CurrentCategory,
+        a03_e2e_customer_order_correlation_data_m[co_category] = __CurrentCoCategory
+    )
+
+RETURN
+    DIVIDE(
+        __co_net_pay_order_cnt,
+        __net_pay_order_cnt
+    )
+```
+
+#### 4.6.2 Co-Purchase Cross-Sell-Category Display
+
+```dax
+Co-Purchase Cross-Sell-Category Display =
+// ========================================
+// 度量值: Co-Purchase Cross-Sell-Category Display
+// 用途: 按 percent_0dp 格式化（百分比整数，不含正号）
+// ========================================
+VAR __Value = [Co-Purchase Cross-Sell-Category Value]
+RETURN
+    IF(
+        ISBLANK(__Value),
+        "-",
+        FORMAT(__Value, "#,##0%")
+    )
+```
+
+#### 4.6.3 Is_Matrix_Row_Visible_Category_Detail
+
+```dax
+Is_Matrix_Row_Visible_Category_Detail = 
+// ========================================
+// 用途：严格按度量值结果判断，当前 Category (行) 是否至少有一个 Co_Category (列) 有真实数据
+// 返回值：1 (显示该行), 0 (隐藏该行)
+// 命名：既有 Is_Matrix_Row_Visible_Category 为 category_summary 粒度（页面配置绑定，不可改名），
+//       本度为 category 粒度版本，追加 _Detail 后缀
+// ========================================
+
+VAR __CurrentCategory = SELECTEDVALUE(Dim_Category[category])
+
+// 获取当前筛选上下文下，所有可见的 Co_Category 列表
+VAR __AllVisibleCoCategories = ALLSELECTED(Dim_Co_Category[co_category])
+
+// 迭代检查：遍历这一行所有的 Co_Category
+VAR __HasValidDataInRow = 
+    MAXX(
+        __AllVisibleCoCategories,
+        VAR __CurrentCoCategory = Dim_Co_Category[co_category]
+  
+        // 严格复刻单元格计算逻辑
+        VAR __CellResult = 
+            CALCULATE(
+                [Co-Purchase Cross-Sell-Category Value], 
+                'a03_e2e_customer_order_correlation_data_m'[category] = __CurrentCategory,
+                'a03_e2e_customer_order_correlation_data_m'[co_category] = __CurrentCoCategory
+            )
+    
+        RETURN
+            IF(NOT ISBLANK(__CellResult), 1, 0)
+    )
+
+RETURN
+    IF(__HasValidDataInRow = 1, 1, 0)
+```
+
+#### 4.6.4 Is_Matrix_Col_Visible_CoCategory_Detail
+
+```dax
+Is_Matrix_Col_Visible_CoCategory_Detail = 
+// ========================================
+// 用途：严格按度量值结果判断，当前 Co_Category (列) 是否至少有一个 Category (行) 有真实数据
+// 返回值：1 (显示该列), 0 (隐藏该列)
+// 命名：既有 Is_Matrix_Col_Visible_CoCategory 为 co_category_summary 粒度（页面配置绑定，不可改名），
+//       本度为 co_category 粒度版本，追加 _Detail 后缀
+// ========================================
+
+VAR __CurrentCoCategory = SELECTEDVALUE(Dim_Co_Category[co_category])
+
+// 获取当前筛选上下文下，所有可见的 Category 列表
+VAR __AllVisibleCategories = ALLSELECTED(Dim_Category[category])
+
+// 迭代检查：遍历这一列所有的 Category
+VAR __HasValidDataInCol = 
+    MAXX(
+        __AllVisibleCategories,
+        VAR __CurrentCategory = Dim_Category[category]
+  
+        VAR __CellResult = 
+            CALCULATE(
+                [Co-Purchase Cross-Sell-Category Value], 
+                'a03_e2e_customer_order_correlation_data_m'[category] = __CurrentCategory,
+                'a03_e2e_customer_order_correlation_data_m'[co_category] = __CurrentCoCategory
+            )
+    
+        RETURN
+            IF(NOT ISBLANK(__CellResult), 1, 0)
+    )
+
+RETURN
+    IF(__HasValidDataInCol = 1, 1, 0)
+```
+
+#### 4.6.5 Co-Purchase Cross-Sell-Category SVG
+
+```dax
+Co-Purchase Cross-Sell-Category SVG = 
+// ========================================
+// 度量值: Co-Purchase Cross-Sell-Category SVG
+// 用途: 热力矩阵图单元格（Category 图表，品类细分粒度），背景/字体颜色按值四点三段插值自适应
+// 背景插值: 0%→#d8dee5, 30%→#95afcf, 50%→#0c2340, 100%→#000000
+// 字体插值: 0%→#737373, 30%→#333333, 35%→#ffffff, 100%→#ffffff（白色提前到35%）
+// 无百分比切片器，全部视为范围内
+// 基础度量: [Co-Purchase Cross-Sell-Category Value]
+// ========================================
+
+// ── 1. 读取基础值 ──
+VAR _RawValue = [Co-Purchase Cross-Sell-Category Value]
+VAR _IsBlank = ISBLANK(_RawValue)
+VAR _Value = MIN(MAX(_RawValue, 0), 1)
+VAR _Pct = FORMAT(_Value, "#,##0%;#,##0%;0%")
+
+// ── 2. 背景颜色三段插值（0%→30%→50%→100%）──
+// 0%: #d8dee5 = rgb(216,222,229)
+// 30%: #95afcf = rgb(149,175,207)
+// 50%: #0c2340 = rgb(12,35,64)
+// 100%: #000000 = rgb(0,0,0)
+VAR _BR0 = 216
+VAR _BG0 = 222
+VAR _BB0 = 229
+
+VAR _BR30 = 149
+VAR _BG30 = 175
+VAR _BB30 = 207
+
+VAR _BR50 = 12
+VAR _BG50 = 35
+VAR _BB50 = 64
+
+VAR _BR100 = 0
+VAR _BG100 = 0
+VAR _BB100 = 0
+
+VAR _BR = IF(
+    _Value <= 0.3,
+    _BR0 + (_BR30 - _BR0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.5,
+        _BR30 + (_BR50 - _BR30) * ((_Value - 0.3) / 0.2),
+        _BR50 + (_BR100 - _BR50) * ((_Value - 0.5) / 0.5)
+    )
+)
+VAR _BG = IF(
+    _Value <= 0.3,
+    _BG0 + (_BG30 - _BG0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.5,
+        _BG30 + (_BG50 - _BG30) * ((_Value - 0.3) / 0.2),
+        _BG50 + (_BG100 - _BG50) * ((_Value - 0.5) / 0.5)
+    )
+)
+VAR _BB = IF(
+    _Value <= 0.3,
+    _BB0 + (_BB30 - _BB0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.5,
+        _BB30 + (_BB50 - _BB30) * ((_Value - 0.3) / 0.2),
+        _BB50 + (_BB100 - _BB50) * ((_Value - 0.5) / 0.5)
+    )
+)
+VAR _BgColor = "rgb(" & INT(_BR) & "," & INT(_BG) & "," & INT(_BB) & ")"
+
+// ── 3. 字体颜色三段插值（0%→30%→35%→100%，白色提前到35%）──
+// 0%: #737373 = rgb(115,115,115)
+// 30%: #333333 = rgb(51,51,51)
+// 35%: #ffffff = rgb(255,255,255)  ← 白色节点从50%提前到35%
+// 100%: #ffffff = rgb(255,255,255)
+VAR _FR0 = 115
+VAR _FG0 = 115
+VAR _FB0 = 115
+
+VAR _FR30 = 51
+VAR _FG30 = 51
+VAR _FB30 = 51
+
+VAR _FR35 = 255
+VAR _FG35 = 255
+VAR _FB35 = 255
+
+VAR _FR100 = 255
+VAR _FG100 = 255
+VAR _FB100 = 255
+
+VAR _FR = IF(
+    _Value <= 0.3,
+    _FR0 + (_FR30 - _FR0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.35,
+        _FR30 + (_FR35 - _FR30) * ((_Value - 0.3) / 0.05),
+        _FR35 + (_FR100 - _FR35) * ((_Value - 0.35) / 0.65)
+    )
+)
+VAR _FG = IF(
+    _Value <= 0.3,
+    _FG0 + (_FG30 - _FG0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.35,
+        _FG30 + (_FG35 - _FG30) * ((_Value - 0.3) / 0.05),
+        _FG35 + (_FG100 - _FG35) * ((_Value - 0.35) / 0.65)
+    )
+)
+VAR _FB = IF(
+    _Value <= 0.3,
+    _FB0 + (_FB30 - _FB0) * (_Value / 0.3),
+    IF(
+        _Value <= 0.35,
+        _FB30 + (_FB35 - _FB30) * ((_Value - 0.3) / 0.05),
+        _FB35 + (_FB100 - _FB35) * ((_Value - 0.35) / 0.65)
+    )
+)
+VAR _FontColor = "rgb(" & INT(_FR) & "," & INT(_FG) & "," & INT(_FB) & ")"
+
+// ── 4. BLANK 处理：置灰显示 "-" ──
+VAR _FinalBg = IF(_IsBlank, "rgb(215,222,228)", _BgColor)
+VAR _FinalFont = IF(_IsBlank, "rgb(179,179,179)", _FontColor)
+VAR _FinalText = IF(_IsBlank, "-", _Pct)
+
+// ── 5. SVG 输出（圆角 4px，88x33 单元格）──
+VAR _URL =
+"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='88' height='33' viewBox='0 0 88 33' preserveAspectRatio='none'>
+<rect rx='4' ry='4' x='0' y='0' width='88' height='33' fill='" & _FinalBg & "' stroke='none'/>
+<text x='44' y='16.5' text-anchor='middle' dominant-baseline='central' font-size='16' font-family='Segoe UI' font-weight='normal' font-style='normal' fill='" & _FinalFont & "'>" & _FinalText & "</text>
+</svg>"
+
+// ── 6. 行列可见性：隐藏全空行列，保留内部空白占位 ──
+VAR __IsDetailCell =
+    ISINSCOPE(Dim_Category[category])
+        && ISINSCOPE(Dim_Co_Category[co_category])
+
+RETURN
+    IF(
+        NOT __IsDetailCell,
+        // 总计位置不绘制 SVG
+        BLANK(),
+        IF(
+            _IsBlank,
+            // 当前单元格为空时，检查所在行、列是否分别存在有效值
+            IF(
+                [Is_Matrix_Row_Visible_Category_Detail] = 1
+                    && [Is_Matrix_Col_Visible_CoCategory_Detail] = 1,
+                _URL,
+                BLANK()
+            ),
+            // 当前单元格有值，所在行、列必然有效
+            _URL
+        )
+    )
+
+```
+
 ---
 
 ## 5. 度量值清单
@@ -836,13 +1127,15 @@ RETURN
 | 8  | Product Path 2st Class Display       | Display | #,##0       | 整数千分位                                       |
 | 9  | Product Path 3st Class Value         | Value   | integer     | 第 3 次购买买家人数                              |
 | 10 | Product Path 3st Class Display       | Display | #,##0       | 整数千分位                                       |
+| 11 | Co-Purchase Cross-Sell-Category Value   | Value   | percent_0dp | Category 图表连带率（品类细分粒度，同构指标 1）  |
+| 12 | Co-Purchase Cross-Sell-Category Display | Display | #,##0%      | 百分比整数不含正号                               |
 
 ---
 
 ## 6. 注意事项
 
 1. **指标 1/2 合并逻辑**：原 3 个指标（Same-Order / Cross-Order-Class / Cross-Order-Label）合并为 2 个，分别对应 Class 图表和 Label 图表。度量内部通过 `SELECTEDVALUE(Slicer_Co_Purchase_Type_Selection[CoPurchase_Type_Label])` 切换 Same-Order（直接聚合）与 Cross-Order（分母 ALLSELECTED 移除图表维度）公式。
-2. **Class/Label 按钮决定图表**：指标 1 放在 Class 图表（行维度 `co_category_summary`），指标 2 放在 Label 图表（行维度 `co_brand`）。按钮切换显示对应图表，度量内部不需要判断 Class/Label，只需判断 `Slicer_Co_Purchase_Type_Selection`。
+2. **Class/Label/Category 按钮决定图表**：指标 1 放在 Class 图表，指标 2 放在 Label 图表（行维度 `co_brand`），指标 6 放在 Category 图表（行 `Dim_Category[category]` × 列 `Dim_Co_Category[co_category]`）。按钮/书签切换显示对应图表，度量内部不需要判断图表，只需判断 `Slicer_Co_Purchase_Type_Selection`。
 3. **无需 DAX 显式处理时间/周期/类型筛选**：`data_month`、`correlation_period`、`correlation_type`、`dt`、`period` 由模型关系或表字段自动传递，DAX 不显式处理。此为 Co-Purchase 模块与其他模块（如 Class x Label Drilldown 显式处理 `dt` 区间）的关键差异。
 4. **行维度直接拉取事实表字段**：`co_brand` / `co_category_summary` / `brand` / `category_summary` 从事实表直接拉取，表关系自动传递分组与筛选，DAX 无需显式处理。
 5. **Cross-Order 分母移除图表维度（指标 1/2 的 Cross-Order 分支）**：
@@ -853,4 +1146,10 @@ RETURN
 6. **payment_time_seq 为核心业务定义（指标 3/4/5）**：`payment_time_seq = 1/2/3` 是区分第 1/2/3 次购买的核心业务定义，需在 DAX 中显式筛选；`dt`/`period` 时间筛选由模型关系自动传递。
 7. **SWITCH 短路求值**：指标 1/2 使用 `SWITCH` 内联表达式，DAX 仅计算匹配分支的公式，非匹配分支不求值，避免 Same-Order 与 Cross-Order 公式互相干扰。
 8. **BLANK 处理**：所有 Display 度量在 Value 为 BLANK 时显示 `"-"`，避免空白单元格影响可读性。
-9. **本模块不涉及汇率换算**：5 个指标均为百分比或整数类型，无量纲金额，无需 `Currency_ExchangeRate` 换算。
+9. **本模块不涉及汇率换算**：6 个指标均为百分比或整数类型，无量纲金额，无需 `Currency_ExchangeRate` 换算。
+10. **Category 图表（指标 6，2026-11-13 新增）**：
+    - 行/列维度使用新建维度表 `Dim_Category[category]` × `Dim_Co_Category[co_category]`（品类细分粒度，1:N 关联事实表 `a03_e2e_customer_order_correlation_data_m[category]` / `[co_category]`）；与 Class 图表的 `Dim_Category_Summary` / `Dim_Co_Category_Summary`（品类归纳粒度）并存，字段出处：a03_e2e_customer_order_correlation_data_m_数据字典.md
+    - 页面通过书签+按钮在 Class 图表 / Category 图表间切换显示（书签只控制视觉对象可见性，无需字段参数）；两套度量各自独立、互不影响，Class/Label 既有度量与维度表一律不改名不动
+    - 度量命名：`Co-Purchase Cross-Sell-Category Value / Display / SVG`；行列可见性度量因既有 `Is_Matrix_Row_Visible_Category` / `Is_Matrix_Col_Visible_CoCategory`（category_summary 粒度）已被页面配置绑定不可改名，Category 粒度版本追加 `_Detail` 后缀：`Is_Matrix_Row_Visible_Category_Detail` / `Is_Matrix_Col_Visible_CoCategory_Detail`
+    - 品类细分粒度的行/列数多于品类归纳，矩阵更大；全空行/列由可见性度量 + 矩阵空值抑制隐藏
+    - 未在 Power BI 模型中实测；验收要点：同一筛选下 Category 图表与 Class 图表互切显示正常，单元格数值可按 SQL（按 category × co_category 分组）对照验证
