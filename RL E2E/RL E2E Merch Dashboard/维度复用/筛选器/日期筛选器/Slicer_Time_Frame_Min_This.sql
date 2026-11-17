@@ -117,10 +117,10 @@ LEFT JOIN dim_t00_bi_fiscal_calendar fm_min
 LEFT JOIN fiscal_year fy_min
     ON t1.`TimeFrame_Min` BETWEEN fy_min.`fiscal_year_first_day` AND fy_min.`fiscal_year_last_day`
 
-WHERE (t1.`TimeFrame_ID` = 'Day' AND t1.`timeframe_value` >='2025-01-01' AND t1.`timeframe_value` < CURDATE())
-   OR (t1.`TimeFrame_ID` = 'Week' AND t1.`TimeFrame_Key` >=202540)
-   OR (t1.`TimeFrame_ID` = 'Month' AND t1.`TimeFrame_Key` >=202510)
-   OR (t1.`TimeFrame_ID` = 'Quarter' AND t1.`TimeFrame_Key` >=202504)
+WHERE (t1.`TimeFrame_ID` = 'Day' AND t1.`timeframe_value` >='2024-03-31' AND t1.`timeframe_value` < CURDATE())
+   OR (t1.`TimeFrame_ID` = 'Week' AND t1.`TimeFrame_Key` >=202501)
+   OR (t1.`TimeFrame_ID` = 'Month' AND t1.`TimeFrame_Key` >=202501)
+   OR (t1.`TimeFrame_ID` = 'Quarter' AND t1.`TimeFrame_Key` >=202501)
    OR (t1.`TimeFrame_ID` = 'Year' AND t1.`TimeFrame_Key` >=2025)
 ORDER BY t1.`ID_Sort` DESC;
     ")
