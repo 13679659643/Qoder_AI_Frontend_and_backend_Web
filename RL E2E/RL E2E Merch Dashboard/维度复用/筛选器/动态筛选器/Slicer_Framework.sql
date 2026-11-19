@@ -7,6 +7,7 @@ SELECT DISTINCT
          WHEN framework = 'Foundation' THEN 1
          WHEN framework = 'Acceleration' THEN 2
          WHEN framework = 'Complementary' THEN 3
+         WHEN framework = 'Pending' THEN 4
          ELSE 99
        END AS sort_order
 FROM " & ADS & ".a02_e2e_product_performance_sales_summary_d

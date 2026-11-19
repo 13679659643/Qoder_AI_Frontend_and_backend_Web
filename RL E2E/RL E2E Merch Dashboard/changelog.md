@@ -654,3 +654,66 @@
 
 
 
+
+## [2026-11-19 16:55] DAX 修改 — Item Stockout_Table 两项口径调整（v2.6：Product Type 区间去重拼接 / Weeks Cover 字段直读）
+
+- **模块**: Dimension Cross Analysis - Item Stockout & Slow Mover Alert
+- **任务**: 业务确认口径调整——① Item Stockout Product Type（属性列）取值规则改为 This Period 区间内全部值去重顿号拼接（不再限定最大 dt 当天）；② Item Stockout Weeks Cover Value 改为数仓预计算 weeks_cover 字段直读（取 end period 最后一天快照日值，防御性 MAX——SPU/SKU + day 不保证唯一行），v2.5 近四周日均分母计算废止；度量名称均不变
+- **操作**: 修改
+- **变更内容**:
+  - Item Stockout Product Type：删除 __MaxDt 最新日期判定，CONCATENATEX 值域改为 dt ∈ [TimeFrame_Min, TimeFrame_Max] 区间全部 distinct 值（空白排除，字母序顿号拼接）
+  - Item Stockout Weeks Cover Value：删除 __InvUnits / __FourWeekStart / __DailyAvgSlsUnits 计算链，改 IF 标量双分支 + TREATAS 主键单列 + MAX(weeks_cover)（SPU 分支取 s02_inventory_stock_sales_detail_d_spu，SKU 分支取 s02_inventory_stock_sales_detail_d，快照日 = TimeFrame_Max 单日过滤）；Display 层不动（仅依赖 Value）
+  - 方案文档 Item_Stockout_Table.md 升版 v2.5 → v2.6：版本记录新增、§1.2 指标表 / 属性表、§1.3 Product Type 独立规则、§1.4 时间口径（近四周行废止标注）、§1.7 双维度机制（Weeks Cover 由 trade 侧移入 inv 侧）、§3.1 分层、§4.11 / §4.31 度量重写、§5 清单、§7 验证方法、§8 注意事项 3 / 13 同步
+  - test_Item_Stockout_Table.sql 两段同步：trade_attr 移除 product_type、新增 trade_product_type CTE（区间全值 GROUP_CONCAT DISTINCT 拼接）；trade_agg 删除 sls_unit_4w 近四周条件聚合；inv_agg 两段新增 MAX(weeks_cover)（SPU 段整体由直取改为 GROUP BY spu_id + MAX，对齐 DAX 标量聚合语义）；输出列 Weeks_Cover 改 i.weeks_cover 直读、Product_Type 改 pt.product_type
+- **关联文件**: Dimension Cross Analysis/4 Item Stockout & Slow Mover Alert/Item_Stockout_Table.md；test_Item_Stockout_Table.sql
+- **备注**: 两张 inv 类表（s02_inventory_stock_sales_detail_d / _dpu 同源表 s02_inventory_stock_sales_detail_result_d）均含 weeks_cover 字段；快照日无对应表行 / 字段 NULL → BLANK（显示 "-"）；ST% / 其他指标不受本次调整影响
+
+## [2026-11-19 17:20] DAX 修改 — Top_SKUs_Analysis_Table 两项口径调整（v2.2：排名/排序基准改 SLS Units + Weeks Cover 字段直读）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（Top 部分）
+- **任务**: 业务确认口径调整——① Top3 排名（Top SKUs SKU Rank）与行排序（Top SKUs Sort Key）依据由 SLS Amt 改为 SLS Units（This Period sum(product_qty)，数量口径不涉及币种）；排序结构不变（category 权重大块靠前，块内 Top3 跟随）② Top SKUs Weeks Cover Value 改数仓预计算 weeks_cover 字段直读（取 end period 最后一天快照日值，防御性 MAX——sku + day 不保证唯一行），原"(库存+在途)/This Period 销售数量"计算废止；度量名称均不变
+- **操作**: 修改
+- **变更内容**:
+  - Top SKUs SKU Rank：RANKX 排名表达式与当前行值由 SUM(net_sales_amt) 改 SUM(product_qty)，变量 __CurrentAmt 更名 __CurrentUnits；DENSE 并列语义保持（数量为整数聚合，并列概率高于金额口径，放行含并列）
+  - Top SKUs Sort Key：编码改 -(category SLS Units × 1,000,000 + sku SLS Units)，变量 __SkuAmt / __CatAmt 更名 __SkuUnits / __CatUnits，聚合全部换 product_qty；新增知悉项：同 category 内两 sku 数量完全相等时排序键相同、行序不定（金额口径下概率极低，数量口径下常见，块归属与块序不受影响）
+  - Top SKUs Weeks Cover Value：删除 __InvUnits / __SlsUnits 计算链，改 TREATAS(trade[sku_id] → inv[sku_id]) 单列桥接 + MAX(inv[weeks_cover])（快照日 = TimeFrame_Max 单日过滤）；Display 层不动
+  - Top SKUs SLS Amt Value：角色调整——v2.2 起不再参与排名 / 排序，保留对数辅助（默认隐藏）；Top SKUs SLS Units Value 标注为排名 / 排序依据指标
+  - 方案文档 Top_SKUs_Analysis_Table.md 升版 v2.0 → v2.2：版本记录新增、§1.1~§1.7（指标清单 / 时间口径 / 币种 / Top3 机制 / 渠道）、§2 现状（inv 表补 weeks_cover 字段）、§3.1~§3.3（分层 / 筛选 / Sort Key 编码与示例表）、§4.1 / §4.3 / §4.4 / §4.9 / §4.13 度量重写、§5 清单、§6.1 配置、§7 验证方法、§8 注意事项 3 / 7 / 11 / 12 / 14 同步
+- **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/Top_SKUs_Analysis_Table.md
+- **备注**: Weeks Cover 与 Item Stockout 模块 v2.6 同款调整（本模块仅 sku 单分支无 IF，行粒度 category + sku_id 桥接仍 sku_id 单列）；本模块测试 SQL 未输出（§7 为还原要点，已同步更新）；数量并列行序不定项已标注，如业务要求并列行序确定需确认次级决胜键
+
+## [2026-11-19 18:05] DAX 修改 — Top SKUs Sort Key 分组表头排序缺陷修复（v2.3）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（Top 部分）
+- **任务**: 用户实测反馈——块内排序正确但 category 块序未按数量降序（Dresses CatUnits=2585 排在 Outerwear=2774 前）；根因定位 + 修复
+- **操作**: 修改
+- **变更内容**:
+  - 根因（非负号）：分组表格视觉对象对 category 块的排序 = Sort Key 在「仅 category 层级」上下文求值，该上下文 SELECTEDVALUE(sku_id) 为 BLANK，原度量空白拦截返回 BLANK → 全部块头排序键并列 → 块序回退 category 字母序（Dresses < Outerwear）；负号翻转本身已验证生效（块内 -2585000089 → -44 → -39 升序 = 数量 89/44/39 降序）
+  - Top SKUs Sort Key 修复：外层拦截仅保留 category 空白条件（总计行 / 空白组）；sku_id 不在作用域（分组头）时 __SkuUnits 记 0，返回类别块键 -(CatUnits × 1,000,000)——块头升序 = 类别数量降序；sku 行仍返回完整键 -(CatUnits × 1e6 + SkuUnits)，块内排序不变；当期无数量 sku 行算术按 0 记（该类行已被 Rank 区间筛选排除，不展示）
+  - 方案文档 Top_SKUs_Analysis_Table.md 升版 v2.2 → v2.3：版本记录、§3.3 新增分组表头排序条目（禁止恢复 sku 空白即 BLANK 的拦截写法）、§4.4 度量重写 + 头注释、§8 新增注意事项 20
+- **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/Top_SKUs_Analysis_Table.md
+- **备注**: 修复后预期：Outerwear(-2774000085) 块排在 Dresses(-2585000089) 块前；分组头自身求值 = -(2774000000) / -(2585000000) 升序正确；若块序仍异常，检查表格是否实际按 Sort Key 列排序（列标题三角图标）及 sku_id 是否使用 SELECTEDVALUE 兼容的分组合并显示
+
+## [2026-11-19 18:40] DAX 修改 — Top SKUs Sort Key v2.3 空行副作用修复（v2.4）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（Top 部分）
+- **任务**: 用户实测反馈——v2.3 修复块序后产生大量空行（无 Rank / 无图片 / 无属性的行，Sort Key 形如 -38706000000 = CatUnits×1e6+0）；视觉对象筛选条件不变
+- **操作**: 修改
+- **变更内容**:
+  - 根因：v2.3 重写 Sort Key 时误删"sku 行当期无销售数量 → BLANK"内层拦截——无数量行 SUM 为 BLANK 算术按 0 记，得块键 -(CatUnits×1e6+0) 通过「Sort Key 不为空」；其 Top Rank 为 BLANK，在视觉实际配置「Top Rank 小于或等于 3」中 BLANK 视为 0 亦放行（§3.2 设计推荐「介于 1 与 3」，视觉实际为 ≤3）——此前该拦截 + Sort Key 不为空为空行双防线，一直生效
+  - Top SKUs Sort Key 修复（三类上下文分别处理）：① category 空白（总计行 / 空白组）→ BLANK；② 分组表头（sku_id 不在作用域，__IsSkuRow = FALSE）→ SkuUnits 记 0，返回类别块键 -(CatUnits × 1e6)（v2.3 块序修复保持）；③ sku 行且 SkuUnits BLANK（当期无销售数量）→ BLANK（恢复空行防线，禁止删除）
+  - 方案文档 Top_SKUs_Analysis_Table.md 升版 v2.3 → v2.4：版本记录、§4.4 度量重写（__IsSkuRow 变量 + 三类拦截注释）、§8 注意事项 20 补充空行防线条款
+- **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/Top_SKUs_Analysis_Table.md
+- **备注**: 视觉对象筛选条件不变（用户确认）；验证：无数量行不再出现（Sort Key BLANK 被「不为空」排除），块序仍按类别数量降序，块内 Top3 顺序不变
+
+## [2026-11-19 19:10] DAX 修改 — Top SKUs Sort Key v2.4 语法修正（v2.5）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（Top 部分）
+- **任务**: 用户反馈 v2.4 度量粘贴进 PBI 报"找不到名称 '_SkuUnits'"（IDE 红色波浪线在 IsSkuRow / ISBLANK / SkuUnits / BLANK）——本人代码缺陷，向用户致歉
+- **操作**: 修改
+- **变更内容**:
+  - 根因：v2.4 重写时内层 VAR 块漏写 RETURN 关键字——DAX 规则：表达式内声明 VAR 后必须紧跟 RETURN 才能接表达式，VAR 后直接接 IF( 解析失败才报"找不到名称 __SkuUnits"
+  - Top SKUs Sort Key 修正（v2.5 拍平结构，逻辑零变更）：外层 IF 拦 category 空白后，else 分支内 __PeriodMin / __PeriodMax / __IsSkuRow / __SkuUnits / __CatUnits 全部连续声明，然后统一一个 RETURN + 嵌套 IF 链（空行防线 → 类别块键输出）；v2.3 块序修复 + v2.4 空行防线两类拦截语义全部保持；__CatUnits 为 VAR 惰性求值，被短路路径不计算、无性能副作用
+  - 方案文档 Top_SKUs_Analysis_Table.md 升版 v2.4 → v2.5：版本记录、§4.4 度量重写（头注释标注禁止 VAR 后直接接 IF）、§3.3 保持
+- **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/Top_SKUs_Analysis_Table.md
+- **备注**: 验证方式不变：块序按类别 SLS Units 降序、块内 Top3 降序、无空行；若 IDE 仍报错，确认整段粘贴未截断（SELECTEDVALUE / RETURN 大小写不敏感）

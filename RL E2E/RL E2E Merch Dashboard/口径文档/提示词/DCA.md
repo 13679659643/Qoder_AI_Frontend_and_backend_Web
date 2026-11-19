@@ -248,3 +248,22 @@ VAR __EndPeriodDate_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_
 VAR __EndPeriodDate_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
 不懂就问，其他没提到的修改需要不要修改。记得写入变更日志，D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\changelog.md
+
+
+# DCA UAT  第一轮提示词:
+Item Stockout Product Type（产品类型，属性列）逻辑调整：取选择日期段中的所有值，去重后拼接在一起
+Item Stockout Weeks Cover Value（库存周转周数）：s02_inventory_stock_sales_detail_d_spu和s02_inventory_stock_sales_detail_d已经有weeks_cover字段，直接取即可，逻辑为取所选时间范围end period最后一天的weeks_cover值，防御性写法，我觉得可以取MAX(weeks_cover)，SPU/SKU+day不一定只存在一行。
+调整文件：
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\4 Item Stockout & Slow Mover Alert\Item_Stockout_Table.md
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\4 Item Stockout & Slow Mover Alert\test_Item_Stockout_Table.sql
+
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\6 Top & OPP SKUs Analysis\Top_SKUs_Analysis_Table.md
+这个文件看一下，排名，是否categorySLS Amt降序排序权重较大靠前，然后再是其下分组的Top3，这个应该和排序键有关。
+然后之前是按金额降序，现在改为按SLS Units降序，表格中也用到了这个指标。
+weeks_cover 字段直读，表中是有s02_trade_sku_data_d[category]+s02_trade_sku_data_d[sku_id],逻辑为取所选时间范围end period最后一天的weeks_cover值，防御性写法，我觉得可以取MAX(weeks_cover)，
+
+
+D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\Dimension Cross Analysis\6 Top & OPP SKUs Analysis\OPP_SKUs_Analysis_Table.md
+由于weeks_cover逻辑调整为字段直读，所以资格判定、排名、排序键需要调整。
+Weeks Cover > 均值，单个sku的weeks_cover值和上述逻辑一致，主要是均值，安装上述逻辑计算出所有SKU的weeks_cover值，再聚合除以参与计算的SKU数量，就是均值。
+按照库存降序排序不变，就是EOH，但是需要新增一条逻辑就是OPP sku中不能存在top sku中的sku值，即Top中的所有category分组下的TOP3 sku，不能在OPP中出现，注意是category分组下的TOP3 sku，不是对应的category。
