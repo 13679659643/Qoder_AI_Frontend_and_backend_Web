@@ -1,12 +1,15 @@
 # Platform Merchandising Performance 矩阵解决方案
 
-> **版本**: v1.0
+> **版本**: v1.1
 > **模块**: RL E2E Merch Dashboard - Dimension Cross Analysis Tab - Platform Merchandising Performance（子模块八）
 > **关联口径**: 口径文档/口径Markdown格式/Dimension Cross Analysis.md - 子模块八：Platform Merchandising Performance（§34-§39）+ 口径文档/口径Markdown格式/actual除target逻辑详情.md（TAR 类指标五粒度规则）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
 > **数据底表（库存类）**: a02_e2e_product_performance_inv_summary_d
 > **数据底表（目标类）**: a05_e2e_product_fcst_data_d
-> **关联维度**: Dim_ColMetric_Platform_Merchandising_Performance（列，三层 ChannelGroup > Label > ColName，64 列）、Slicer_Time_Frame（时间粒度）、Slicer_Time_Frame_Min_This / Max_This / Min_Last / Max_Last（日期，断开维度）、Slicer_Framework / Slicer_Category（行维度）、Slicer_Platform_Selection / Slicer_Store_Name / Slicer_Label（渠道 / 品牌外部切片器）、Slicer_Currency_Selection（币种）
+> **关联维度**: Dim_ColMetric_Platform_Merchandising_Performance（列，三层 ChannelGroup > Label > ColName，68 列）、Slicer_Time_Frame（时间粒度）、Slicer_Time_Frame_Min_This / Max_This / Min_Last / Max_Last（日期，断开维度）、Slicer_Framework / Slicer_Category（行维度）、Slicer_Platform_Selection / Slicer_Store_Name / Slicer_Label（渠道 / 品牌外部切片器）、Slicer_Currency_Selection（币种）
+>
+> **版本记录**:
+> v1.1（2026-11-20）——TTL 组 EOH 拆分（业务口径新增）：原 EOH（期末库存金额）单列拆为 EOH Units（期末库存数量 = end period 最后一天 sum(inv_qty)）/ EOH Amt（期末库存金额 = end period 最后一天 sum(msrp_inv_amt)，业务定义 EOH Units × msrp，与原 EOH 口径相同，ST% 分母不变）/ EOH Amt%（期末库存金额占比，计算同 SLS Amt% 模式：分子 = 当前行 framework / category 库存金额，分母 = ALLSELECTED 行维度下全部行合计）三列，均仅 TTL 组展示（inv 无渠道字段，全渠道口径）；列指标表 64 → 68 行（存量 Metric_ID 不变，新增 65-68；TTL 组 7 → 9 列，TTL 行 ColName_Sort 顺延 600-900）；Act Base Value 新增 __EOHUnits / __EOHAmt_Total / __EOHAmtPct 三 VAR + SWITCH 三路由（"EOH" 路由键废止），EOH Amt% 分母 **ALLSELECTED 整表**（Slicer_Framework / Slicer_Category——整表移除含 sort_order 排序列的隐藏筛选传递，列级写法有占比恒 100% 风险）；Cell Value / Cell Display / 颜色层零改动（格式经 Metric_Format integer / currency / percent_0dp 既有分支自动覆盖）；其余指标逻辑零变更
 
 ---
 
@@ -16,12 +19,12 @@
 
 Platform Merchandising Performance 是按 Framework + Category 展开的渠道 × 指标销售明细矩阵：
 
-- **列**：三层结构 ChannelGroup（Platform / Store）> Label（页面显示标签）> ColName（指标列），共 64 列
-  - Platform 组 27 列：TTL（7 列）+ Tmall / JD / RLE / DY（各 5 列）
-  - Store 组 37 列：TTL（7 列）+ Tmall / JD / RLE / DY_Family / DY_W / DY_MN（各 5 列）
-  - TTL 列组合（7 列）: SLS Amt% / vs LP / EOH / ST% / TAR ACH% / MTD TAR Progress / YTD TAR Progress
+- **列**：三层结构 ChannelGroup（Platform / Store）> Label（页面显示标签）> ColName（指标列），共 68 列
+  - Platform 组 29 列：TTL（9 列）+ Tmall / JD / RLE / DY（各 5 列）
+  - Store 组 39 列：TTL（9 列）+ Tmall / JD / RLE / DY_Family / DY_W / DY_MN（各 5 列）
+  - TTL 列组合（9 列）: SLS Amt% / vs LP / EOH Units / EOH Amt / EOH Amt% / ST% / TAR ACH% / MTD TAR Progress / YTD TAR Progress
   - 非 TTL 列组合（5 列）: SLS Amt% / vs LP / TAR ACH% / MTD TAR Progress / YTD TAR Progress
-  - EOH / ST% 仅 TTL 列展示——库存类指标按全渠道口径（inv 表无渠道字段）；
+  - EOH Units / EOH Amt / EOH Amt% / ST% 仅 TTL 列展示——库存类指标按全渠道口径（inv 表无渠道字段）；
     TAR 三指标（TAR ACH% / MTD TAR Progress / YTD TAR Progress）按渠道口径在全部 Label 列展示
 - **行**：层级结构 `Slicer_Framework[framework]`（父层）> `Slicer_Category[category]`（子层），均取自 Slicer_ 维度表，与三张事实表一对多关联，行筛选经模型关系自动传导
 - **行自动隐藏**：矩阵在检测到该行所有度量值均为 BLANK() 时自动隐藏该行（包括层级行）；Display 度量值空值一律返回 BLANK()（非 "-""），由矩阵自动隐藏机制消化
@@ -31,7 +34,7 @@ Platform Merchandising Performance 是按 Framework + Category 展开的渠道 �
 | 路由维度 | 来源                                                                           | 类型       | 说明                                                                                                        |
 | -------- | ------------------------------------------------------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------- |
 | 渠道     | Dim_ColMetric_Platform_Merchandising_Performance 的 ChannelGroup + Label_Value | 断开列维度 | Platform 组过滤事实表 [platform]，Store 组过滤 [shop_name]；Label_Value = "TTL" 时走 ALLSELECTED 全渠道合计 |
-| 指标     | Dim_ColMetric_Platform_Merchandising_Performance 的 ColType                    | 断开列维度 | 7 种：SLS Amt% / vs LP / EOH / ST% / TAR ACH% / MTD TAR Progress / YTD TAR Progress                         |
+| 指标     | Dim_ColMetric_Platform_Merchandising_Performance 的 ColType                    | 断开列维度 | 9 种：SLS Amt% / vs LP / EOH Units / EOH Amt / EOH Amt% / ST% / TAR ACH% / MTD TAR Progress / YTD TAR Progress                         |
 | 行维度   | Slicer_Framework[framework] + Slicer_Category[category]                        | 维度表字段 | 层级行维度（framework 父层 + category 子层）；与三张事实表一对多关联，筛选自动传导，DAX 无需显式处理        |
 
 **Label → 事实表实际值映射**（已核对 Slicer_Platform_Selection / Slicer_Store_Name）：
@@ -53,7 +56,7 @@ Platform Merchandising Performance 是按 Framework + Category 展开的渠道 �
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | This Period（区间类）     | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                               | SLS Amt% 分子分母、TAR 三指标 actual、TAR ACH% 分母          |
 | Last Period（vs LP 基线） | data_date ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]]                               | vs LP 分子分母（占比差值双期）                               |
-| End Period（期末时点类）  | end period 最后一天 = Slicer_Time_Frame_Max_This[TimeFrame_Max]（直接单日过滤） | EOH、ST% 分母库存                                            |
+| End Period（期末时点类）  | end period 最后一天 = Slicer_Time_Frame_Max_This[TimeFrame_Max]（直接单日过滤） | EOH Units / EOH Amt / EOH Amt% / ST% 分母库存                    |
 | target MTD 区间           | [Slicer_Time_Frame_Max_This[Fiscal_Month_First_Day], Slicer_Time_Frame_Max_This[Fiscal_Month_Last_Day]]（TimeFrame_Max 所在财月） | MTD TAR Progress 分母（Day / Week 不跨月）                   |
 | target YTD 区间           | [Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day], Slicer_Time_Frame_Max_This[Fiscal_Year_Last_Day]]（TimeFrame_Max 所在财年）   | YTD TAR Progress 分母（Day / Week / Month / Quarter 不跨年） |
 
@@ -94,13 +97,15 @@ Platform Merchandising Performance 是按 Framework + Category 展开的渠道 �
 | 2026-03-29 ~ 2026-05-03（跨月不跨年）   | actual[03-29~05-03] / target[03-29~05-03] | 不计算（BLANK）                                                    | actual[03-29~05-03] / target[FY27 财年]                          |
 | 跨财年区间                              | actual / target 同区间                    | 视是否跨财月                                                       | 不计算（BLANK）                                                  |
 
-### 1.5 指标口径（§34-§39 → 7 种 ColType）
+### 1.5 指标口径（§34-§39 → 9 种 ColType）
 
 | ColType          | 口径出处        | 计算逻辑                                                                                | 格式        |
 | ---------------- | --------------- | --------------------------------------------------------------------------------------- | ----------- |
 | SLS Amt%         | §34-§37       | 单元格 SLS Amt / 该列渠道全部行合计（占比；随行维度切换承载 framework / category 占比） | percent_0dp |
 | vs LP            | §34-§37 附属  | SLS Amt% This - SLS Amt% Last（占比差值，原始小数，×10000 转 bp 在 Display 层）        | integer_bp  |
-| EOH              | §38            | 期末库存金额 = end period 最后一天（TimeFrame_Max 单日过滤）`sum(msrp_inv_amt)`，仅 TTL 列 | currency    |
+| EOH Units        | §38 拆分       | 期末库存数量 = end period 最后一天（TimeFrame_Max 单日过滤）`sum(inv_qty)`，仅 TTL 列   | integer     |
+| EOH Amt          | §38 拆分       | 期末库存金额 = end period 最后一天（TimeFrame_Max 单日过滤）`sum(msrp_inv_amt)`（业务定义 EOH Units × msrp，与原 EOH 口径相同；ST% 分母沿用此值），仅 TTL 列 | currency    |
+| EOH Amt%         | §38 拆分       | 期末库存金额占比 = 当前行 framework / category EOH Amt ÷ 全部行合计（计算同 SLS Amt% 模式），仅 TTL 列 | percent_0dp |
 | ST%              | §39            | This Period 销售金额 /（This Period 销售金额 + 期末库存金额），仅 TTL 列                | percent_0dp |
 | TAR ACH%         | 子模块八 TAR 类 | 见 §1.4 粒度矩阵                                                                       | percent_0dp |
 | MTD TAR Progress | 子模块八 TAR 类 | 见 §1.4 粒度矩阵                                                                       | percent_0dp |
@@ -113,11 +118,11 @@ Platform Merchandising Performance 是按 Framework + Category 展开的渠道 �
 ## 2. 现状分析
 
 - 数据底表 `a02_e2e_product_performance_sales_summary_d`（日粒度）：net_sales_amt 及商品维度字段（brand、super_season、product_type、category、md_type、division、framework、ax_class 等）+ platform / shop_name 渠道字段；platform 已在数据源层过滤 IN ('JD','TM','RLE','DY')，无 TTL 值
-- 数据底表 `a02_e2e_product_performance_inv_summary_d`（日快照）：msrp_inv_amt，商品维度字段与 sales 表同名同构；**无 platform / shop_name 字段**，渠道筛选不影响库存侧
+- 数据底表 `a02_e2e_product_performance_inv_summary_d`（日快照）：msrp_inv_amt（期末库存金额）、inv_qty（期末库存数量），商品维度字段与 sales 表同名同构；**无 platform / shop_name 字段**，渠道筛选不影响库存侧
 - 数据底表 `a05_e2e_product_fcst_data_d`（目标类）：data_date（date 类型）、platform、shop_name、brand、framework、category、fcst_sales_amt；**无 TTL 预聚合值**（TTL 列 target 由 ALLSELECTED 汇总实现）
 - **模型关系**：Slicer_Platform_Selection、Slicer_Store_Name、Slicer_Label、Slicer_Framework、Slicer_Category 五个维度表与三张事实表均为一对多关联，切片器与行维度筛选自动传导；**日期筛选器（Slicer_Time_Frame 系列）与三张事实表断开维度**，全部时间区间在度量值内以 data_date 比较显式过滤
 - 矩阵行取自 Slicer_ 维度表字段（framework / category），sales / inv / a05 三侧行筛选均经关系自动传导，**无需 TREATAS 桥接**
-- 列维度表 `Dim_ColMetric_Platform_Merchandising_Performance` 已存在（本目录，64 行），含 ChannelGroup / Label / Label_Value / ColName / ColType / Metric_Format / Metric_IsCurrencyAmount / 颜色字段
+- 列维度表 `Dim_ColMetric_Platform_Merchandising_Performance` 已存在（本目录，68 行），含 ChannelGroup / Label / Label_Value / ColName / ColType / Metric_Format / Metric_IsCurrencyAmount / 颜色字段
 - Slicer_Time_Frame_Max_This 含 Fiscal_Month_First_Day / Fiscal_Month_Last_Day / Fiscal_Year_First_Day / Fiscal_Year_Last_Day（按 TimeFrame_Max 落入的财月 / 财年自关联财年日历生成）及 TimeFrame_Max_Month_Value / TimeFrame_Max_Year_Value；Slicer_Time_Frame_Min_This 含 TimeFrame_Min_Month_Value / TimeFrame_Min_Year_Value——TAR 分母区间起点与跨期判定字段直接读取
 - 字段名已逐一核对数据字典与维度复用 SQL
 
@@ -134,10 +139,10 @@ Act Base Value / LY Base Value
     ↓
 Base Value（总路由）
     ←  vs LP = SLS Amt% This - SLS Amt% Last（整表 REMOVEFILTERS + 渠道三条件重路由取分子）
-       其余 6 种 ColType 直接取 Act Base Value
+       其余 8 种 ColType 直接取 Act Base Value
     ↓
 Cell Value
-    ←  金额类（Metric_IsCurrencyAmount = TRUE，仅 EOH）汇率换算（÷ Currency_ExchangeRate）
+    ←  金额类（Metric_IsCurrencyAmount = TRUE，仅 EOH Amt）汇率换算（÷ Currency_ExchangeRate）
     ↓
 Cell Display
     ←  按 Metric_Format 格式化（percent_0dp / currency / integer_bp + 扩展格式）；空值返回 BLANK()
@@ -162,7 +167,9 @@ Cell Font Color / Cell Background Color
 | ---------------- | ----------- | -------------------- | ------------------------------------------------------------------------------------- | ----------- |
 | SLS Amt%         | sales       | This Period 区间     | 单元格 SLS Amt / 该列渠道全部行合计（分母 ALLSELECTED framework + category 两行维度） | percent_0dp |
 | vs LP            | sales       | This / Last 区间     | SLS Amt% This - SLS Amt% Last（差值原始小数）                                         | integer_bp  |
-| EOH              | inv         | 期末快照单日         | sum(msrp_inv_amt)                                                                     | currency    |
+| EOH Units        | inv         | 期末快照单日         | sum(inv_qty)                                                                          | integer     |
+| EOH Amt          | inv         | 期末快照单日         | sum(msrp_inv_amt)（业务定义 EOH Units × msrp）                                        | currency    |
+| EOH Amt%         | inv         | 期末快照单日         | 当前行 EOH Amt ÷ ALLSELECTED 行维度下全部行合计（分母 ALLSELECTED 整表，计算同 SLS Amt% 模式） | percent_0dp |
 | ST%              | sales + inv | This 区间 / 期末快照 | This SLS Amt /（This SLS Amt + 期末库存金额）                                         | percent_0dp |
 | TAR ACH%         | sales + a05 | This / This 区间     | This actual / This target                                                             | percent_0dp |
 | MTD TAR Progress | sales + a05 | 见 §1.4 粒度矩阵    | This actual / 分母区间 target（随粒度分支）                                           | percent_0dp |
@@ -176,6 +183,7 @@ Cell Font Color / Cell Background Color
 | vs LP（bp 差值） | SLS Amt% This（同渠道上下文，This Period 区间）                  | SLS Amt% Last（同渠道上下文，Last Period 区间，分母 ALLSELECTED 同构）                                                                              |
 
 - ALLSELECTED 两个行维度字段：移除视觉对象内部的行维度筛选、保留外部切片器；framework 上行时 category 无内部筛选（ALLSELECTED 为无操作），展开到 category 时同理——一套分母逻辑同时覆盖 §34-§36（framework 行）与 §37（category 行）
+- **EOH Amt% 分母与 SLS Amt% 分母的 ALLSELECTED 写法差异**：EOH Amt%（v1.1 新增）分母按整表 `ALLSELECTED(Slicer_Framework)` / `ALLSELECTED(Slicer_Category)` 移除——整表移除一并清除 sort_order 排序列经按列排序传递的隐藏筛选（列级写法在排序列 1:1 反推下分母退化为当前行、占比恒 100%）；SLS Amt% 分母沿用列级 + 显式排序列组合写法（v1.0 既有口径，按「不改变其余指标逻辑」保持不动）
 - vs LP 值层为占比差值原始小数（如 -0.0152），×10000 转 bp 在 Cell Display 层完成（本模块为矩阵纯展示场景，无 Y 轴绑定）；落地格式不含正号（-152bp / 0bp）
 
 ---
@@ -190,8 +198,8 @@ Platform Merchandising Act Base Value =
 // 度量值: Platform Merchandising Act Base Value
 // Display Folder: Platform Merchandising Performance\Base Metrics
 // 用途: This Period 基础值，按渠道上下文（ChannelGroup + Label_Value）+ ColType 路由，
-//       覆盖 6 种基础指标列（SLS Amt% / EOH / ST% / TAR ACH% / MTD TAR Progress /
-//       YTD TAR Progress），保留 RMB 原始值（比率类为原始小数）
+//       覆盖 8 种基础指标列（SLS Amt% / EOH Units / EOH Amt / EOH Amt% / ST% /
+//       TAR ACH% / MTD TAR Progress / YTD TAR Progress），保留 RMB 原始值（比率类为原始小数）
 //       vs LP 为跨期派生指标，在 Base Value 总路由中处理，本度量值不涉及
 // 依赖: 'Dim_ColMetric_Platform_Merchandising_Performance'[ChannelGroup, Label_Value, ColType]
 //       Slicer_Time_Frame[TimeFrame_ID]（时间粒度，TAR 分母区间分支）
@@ -202,9 +210,9 @@ Platform Merchandising Act Base Value =
 //       Slicer_Time_Frame_Max_This[TimeFrame_Max_Month_Value / TimeFrame_Max_Year_Value]
 //         （跨财月 / 跨财年判定，文本比较）
 // 数据底表: a02_e2e_product_performance_sales_summary_d（actual）
-//           a02_e2e_product_performance_inv_summary_d（EOH / ST% 分母库存）
+//           a02_e2e_product_performance_inv_summary_d（EOH Units / EOH Amt / EOH Amt% / ST% 分母库存）
 //           a05_e2e_product_fcst_data_d（target；无 TTL 预聚合值，TTL 由 ALLSELECTED 汇总）
-// 汇率换算: 不在此度量值处理，EOH 保持原始 RMB，由 Cell Value 层统一换算；
+// 汇率换算: 不在此度量值处理，EOH Amt 保持原始 RMB，由 Cell Value 层统一换算；
 //           TAR 类比率为 actual / target 同币种相除，不受币种选择影响
 // ========================================
 
@@ -344,14 +352,32 @@ VAR __SLSAmt_Total_Channel =
     )
 VAR __SLSAmtPct = DIVIDE(__SLSAmt_This, __SLSAmt_Total_Channel)
 
-// ═══ EOH（期末库存金额，仅 TTL 列；inv 表期末快照日单日时点，§38）═══
+// ═══ EOH Units / EOH Amt（期末库存数量 / 金额，仅 TTL 列；inv 表期末快照日单日时点，§38 拆分）═══
 // 行维度经 Slicer_Framework / Slicer_Category 与 inv 一对多关系自动传导；
 // inv 无渠道字段，渠道上下文不作用于库存侧
+VAR __EOHUnits =
+    CALCULATE(
+        SUM('a02_e2e_product_performance_inv_summary_d'[inv_qty]),
+        'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate_This
+    )
 VAR __EOHAmt =
     CALCULATE(
         SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
         'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate_This
     )
+
+// ═══ EOH Amt%（期末库存金额占比，仅 TTL 列；计算同 SLS Amt% 模式，§38 拆分）═══
+// 分母 ALLSELECTED **整表**（Slicer_Framework / Slicer_Category）——整表移除一并清除
+// sort_order 排序列经按列排序传递的隐藏筛选；列级写法在排序列 1:1 反推（auto-existence）
+// 下分母会退化为当前行，占比恒 100%
+VAR __EOHAmt_Total =
+    CALCULATE(
+        SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
+        ALLSELECTED(Slicer_Framework),
+        ALLSELECTED(Slicer_Category),
+        'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate_This
+    )
+VAR __EOHAmtPct = DIVIDE(__EOHAmt, __EOHAmt_Total)
 
 // ═══ ST%（售罄率%金额，仅 TTL 列，§39）═══
 // 分子: This Period SLS Amt（TTL 渠道上下文 + 行维度关系传导）
@@ -421,7 +447,9 @@ RETURN
     SWITCH(
         __ColType,
         "SLS Amt%",         __SLSAmtPct,      // SLS Amt% Act（§34-§37，随行维度切换承载占比）
-        "EOH",              __EOHAmt,         // EOH Act（仅 TTL 列）
+        "EOH Units",        __EOHUnits,       // EOH Units Act（仅 TTL 列，sum(inv_qty)）
+        "EOH Amt",          __EOHAmt,        // EOH Amt Act（仅 TTL 列，sum(msrp_inv_amt)）
+        "EOH Amt%",         __EOHAmtPct,     // EOH Amt% Act（仅 TTL 列，占比分母 ALLSELECTED 整表）
         "ST%",              __STPct,          // ST% Act（仅 TTL 列）
         "TAR ACH%",         IF(ISBLANK(__TARAchPct)&& NOT ISBLANK(__SLSAmtPct),"-",__TARAchPct),      // TAR ACH% Act（全部 Label 列，渠道上下文随列位置）
         "MTD TAR Progress", IF(ISBLANK(__MTDProgress)&& NOT ISBLANK(__SLSAmtPct),"-",__MTDProgress),    // MTD TAR Progress Act
@@ -539,7 +567,7 @@ Platform Merchandising Base Value =
 // Display Folder: Platform Merchandising Performance\Base Metrics
 // 用途: 总路由，按 ColType 分发
 //       - vs LP → SLS Amt% This - SLS Amt% Last（占比差值原始小数，×10000 转 bp 在 Display 层）
-//       - 其余 6 种 ColType → 直接取 Act Base Value
+//       - 其余 8 种 ColType → 直接取 Act Base Value
 //
 // vs LP 分子重路由机制（整表 REMOVEFILTERS + 三条件重建）:
 //   矩阵列头三层（ChannelGroup > Label > ColName）在视觉对象查询（SUMMARIZECOLUMNS）中
@@ -593,7 +621,7 @@ Platform Merchandising Base Value =
         IF(
             __IsVsLP,
             IF(ISBLANK(__vsLPResult)&& NOT ISBLANK(__SLSAmtPct_This),"-",__vsLPResult),                                // vs LP（12 列，每组各 Label 下 1 列）
-            [Platform Merchandising Act Base Value]      // 其余 6 种 ColType 直接取 Act
+            [Platform Merchandising Act Base Value]      // 其余 8 种 ColType 直接取 Act
         )
 ```
 
@@ -605,7 +633,7 @@ Platform Merchandising Cell Value =
 // 度量值: Platform Merchandising Cell Value
 // Display Folder: Platform Merchandising Performance\Cell Values
 // 用途: 对外暴露的单元格值
-//       - 金额类（Metric_IsCurrencyAmount = TRUE：EOH）→ 按汇率换算
+//       - 金额类（Metric_IsCurrencyAmount = TRUE：EOH Amt）→ 按汇率换算
 //       - 其余（比率类 / bp 差值类）→ 直接返回 Base Value，不换算
 // 依赖: [Platform Merchandising Base Value],
 //       'Dim_ColMetric_Platform_Merchandising_Performance'[Metric_IsCurrencyAmount],
@@ -615,7 +643,7 @@ Platform Merchandising Cell Value =
 //   - 数据底表存储 RMB 原始值，USD 时通过 ÷ Currency_ExchangeRate 换算
 //   - RMB 时 Currency_ExchangeRate = 1，换算前后值相同
 //   - Base Value 层始终保留 RMB 原始值，确保派生计算口径一致；换算集中在展示层
-//   - TAR 类比率为 actual / target 同币种相除，SLS Amt% / ST% / vs LP 为比率或差值，
+//   - TAR 类比率为 actual / target 同币种相除，SLS Amt% / EOH Amt% / ST% / vs LP 为比率或差值，
 //     均不受币种选择影响（Metric_IsCurrencyAmount = FALSE 不换算）
 // ========================================
     VAR __BaseValue = [Platform Merchandising Base Value]
@@ -648,8 +676,9 @@ Platform Merchandising Cell Display =
 //
 // 格式类型（口径文档子模块八 §34-§39 数据类型 + 附属指标类型）:
 //   percent_0dp → FORMAT(__Value, "#,##0%") 百分比整数，不含正号
-//                 （SLS Amt% / ST% / TAR ACH% / MTD TAR Progress / YTD TAR Progress）
-//   currency    → __CurrencySymbol & FORMAT(__Value, "#,##0")（EOH，符号由币种切片器决定，§38）
+//                 （SLS Amt% / EOH Amt% / ST% / TAR ACH% / MTD TAR Progress / YTD TAR Progress）
+//   currency    → __CurrencySymbol & FORMAT(__Value, "#,##0")（EOH Amt，符号由币种切片器决定，§38）
+//   integer     → FORMAT(__Value, "#,##0")（EOH Units，期末库存数量，§38）
 //   integer_bp  → FORMAT(__Value * 10000, "#,##0") & "bp"（vs LP 占比差值 ×10000 转 bp；
 //                 负数自带负号、零值 0bp、不含正号；本模块为矩阵纯展示场景，
 //                 ×10000 转换在 Display 层完成，Value 层保持原始差值小数）
@@ -727,8 +756,8 @@ Platform Merchandising Cell Font Color =
 //        Metric_ColorPositive/Negative/Zero/Default]
 //
 // 颜色规则:
-//   1. 全部基础指标列（SLS Amt% / EOH / ST% / TAR ACH% / MTD TAR Progress /
-//      YTD TAR Progress）固定 #252423 → "fixed_black"
+//   1. 全部基础指标列（SLS Amt% / EOH Units / EOH Amt / EOH Amt% / ST% / TAR ACH% /
+//      MTD TAR Progress / YTD TAR Progress）固定 #252423 → "fixed_black"
 //   2. vs LP（差值为正 / 负 / 零三色）→ "pos_neg_zero"
 // ========================================
     VAR __Value = [Platform Merchandising Cell Value]
@@ -781,10 +810,10 @@ Platform Merchandising Cell Background Color =
 
 | 序号 | 度量值名称                                   | Display Folder | 用途                                                                                       |
 | ---- | -------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------ |
-| 1    | Platform Merchandising Act Base Value        | Base Metrics   | This Period 基础值（6 种基础 ColType）；渠道上下文 + ColType 路由 + TAR 粒度分支；RMB 原值 |
+| 1    | Platform Merchandising Act Base Value        | Base Metrics   | This Period 基础值（8 种基础 ColType）；渠道上下文 + ColType 路由 + TAR 粒度分支；RMB 原值 |
 | 2    | Platform Merchandising LY Base Value         | Base Metrics   | Last Period SLS Amt% 基线（vs LP 分母，占比差值双期口径）                                  |
-| 3    | Platform Merchandising Base Value            | Base Metrics   | 总路由（vs LP 派生 + 整表 REMOVEFILTERS + 渠道三条件重路由；其余直接取 Act）；64 列全覆盖  |
-| 4    | Platform Merchandising Cell Value            | Cell Values    | 对外值：金额类（EOH）汇率换算（÷ Currency_ExchangeRate）                                  |
+| 3    | Platform Merchandising Base Value            | Base Metrics   | 总路由（vs LP 派生 + 整表 REMOVEFILTERS + 渠道三条件重路由；其余直接取 Act）；68 列全覆盖  |
+| 4    | Platform Merchandising Cell Value            | Cell Values    | 对外值：金额类（EOH Amt）汇率换算（÷ Currency_ExchangeRate）                              |
 | 5    | Platform Merchandising Cell Display          | Formatting     | 格式化显示文本（percent_0dp / currency / integer_bp + 扩展格式）；空值返回 BLANK()         |
 | 6    | Platform Merchandising Cell Font Color       | Formatting     | 字体颜色（基础指标 = fixed_black；vs LP = pos_neg_zero 三色）                              |
 | 7    | Platform Merchandising Cell Background Color | Formatting     | 背景色（ColName 层 #FFFFFF vs 上层 #E6D9C7）                                               |
@@ -801,7 +830,7 @@ Platform Merchandising Cell Background Color =
 │        brand, ..., net_sales_amt                                    │
 │  a02_e2e_product_performance_inv_summary_d（库存类，日快照）        │
 │  字段: data_date + 商品维度（与 sales 同名同构，无渠道字段）,        │
-│        msrp_inv_amt                                                 │
+│        inv_qty, msrp_inv_amt                                       │
 │  a05_e2e_product_fcst_data_d（目标类）                              │
 │  字段: data_date, platform, shop_name, brand, framework,            │
 │        category, fcst_sales_amt（无 TTL 预聚合值）                  │
@@ -832,12 +861,12 @@ Platform Merchandising Cell Background Color =
 │  │ Platform Merchandising Base Value                    │           │
 │  │ (总路由: vs LP = SLS Amt% This - Last，整表           │           │
 │  │  REMOVEFILTERS + 渠道三条件重路由取分子；             │           │
-│  │  其余 6 种直接取 Act)                                │           │
+│  │  其余 8 种直接取 Act)                                │           │
 │  └───────────────────────┬──────────────────────────────┘           │
 │                          ▼                                          │
 │  ┌──────────────────────────────────────────────────────┐           │
 │  │ Platform Merchandising Cell Value                    │           │
-│  │ (金额类 EOH 汇率换算 ÷ Currency_ExchangeRate)        │           │
+│  │ (金额类 EOH Amt 汇率换算 ÷ Currency_ExchangeRate)   │           │
 │  │          ▲ Slicer_Currency_Selection                 │           │
 │  └───────────────────────┬──────────────────────────────┘           │
 │                          ▼                                          │
@@ -879,9 +908,10 @@ Platform Merchandising Cell Background Color =
 7. **vs LP 为占比差值 bp 口径**：SLS Amt% This - SLS Amt% Last（差值原始小数），×10000 转 bp 在 Display 层完成（本模块为矩阵纯展示场景，无 Y 轴 / 数值排序绑定）；落地格式不含正号（-152bp / 0bp）。若后续 vs LP 需绑定图表 Y 轴或数值排序，×10000 需移至 Value 层并同步调整 Display。
 8. **TTL 的 ALLSELECTED 语义**：TTL 列对 [platform] / [shop_name] 应用 ALLSELECTED——移除视觉对象内部的渠道筛选，保留外部切片器，即外部筛选上下文下的全渠道合计；不选或多选 Label 时 SELECTEDVALUE 默认 "TTL"。
 9. **非 TTL 列与外部渠道切片器的交集关系**：Platform / Store 列的渠道过滤基于 ALLSELECTED 集与 Label_Value 取交集。如外部 platform 切片器仅选 TM，则 JD 列返回空（外部切片器限定数据范围）。
-10. **inv 表无渠道字段**：a02_e2e_product_performance_inv_summary_d 无 platform / shop_name，渠道上下文不作用于库存侧；EOH / ST% 仅 TTL 列展示，其值实际为全渠道口径。
-11. **期末时点机制**：期末日期 = end period 最后一天，直接读 `SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])` 单日过滤（`__EndPeriodDate_This`；Max_This 表为断开维度，读值不随行维度 / 商品切片器漂移）；快照表按日存储只取单日，整段区间求和会重复计数库存；该日快照缺数时指标为空，不回退取范围内最近一天（与口径「end period 最后一天」一致）。
-12. **汇率换算分层**：Base Value 层始终保留 RMB 原始值；换算集中在 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1，仅 EOH 金额类）；Cell Display 只拼接 Currency_Symbol。金额类判定用 Metric_IsCurrencyAmount；TAR / SLS Amt% / ST% / vs LP 为比率或差值，不受币种影响。
+10. **inv 表无渠道字段**：a02_e2e_product_performance_inv_summary_d 无 platform / shop_name，渠道上下文不作用于库存侧；EOH Units / EOH Amt / EOH Amt% / ST% 仅 TTL 列展示，其值实际为全渠道口径。EOH Amt 与 EOH Units 业务上为「数量 × msrp」关系（同一快照日、同一行维度筛选下分别对 msrp_inv_amt / inv_qty 求和），二者口径独立、不互相推导。
+11. **期末时点机制**：期末日期 = end period 最后一天，直接读 `SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])` 单日过滤（`__EndPeriodDate_This`；Max_This 表为断开维度，读值不随行维度 / 商品切片器漂移）；快照表按日存储只取单日，整段区间求和会重复计数库存；该日快照缺数时指标为空，不回退取范围内最近一天（与口径「end period 最后一天」一致）。EOH Units / EOH Amt / EOH Amt%（分子分母）/ ST% 分母库存共用此机制。
+12. **汇率换算分层**：Base Value 层始终保留 RMB 原始值；换算集中在 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1，仅 EOH Amt 金额类）；Cell Display 只拼接 Currency_Symbol。金额类判定用 Metric_IsCurrencyAmount；TAR / SLS Amt% / EOH Amt% / ST% / vs LP 为比率或差值，不受币种影响。
 13. **Display 空值返回 BLANK()**：区别于文本 "-" 占位，空值一律返回 BLANK()，使矩阵在整行所有度量值均为 BLANK 时自动隐藏该行（包括 framework / category 层级行），无需额外 IsEmpty 视觉级筛选器。
-14. **字段名已核对数据字典**：net_sales_amt / platform / shop_name / framework / category（sales 表）；msrp_inv_amt（inv 表）；fcst_sales_amt / data_date / platform / shop_name / brand / framework / category（a05 表）；日期字段统一为 data_date（date 类型）。
+14. **字段名已核对数据字典**：net_sales_amt / platform / shop_name / framework / category（sales 表）；inv_qty / msrp_inv_amt（inv 表）；fcst_sales_amt / data_date / platform / shop_name / brand / framework / category（a05 表）；日期字段统一为 data_date（date 类型）。
 15. **DAX 语法规范**：文本常量使用双引号，单引号仅用于表名，列名使用方括号；渠道上下文过滤器用 UNION + FILTER 构造（IF 分支返回表会被降级为标量）；与口径文档存在争议时一切以口径文档为准。
+16. **EOH Amt% 分母必须整表 ALLSELECTED**：`ALLSELECTED(Slicer_Framework)` / `ALLSELECTED(Slicer_Category)` 整表移除——Slicer_ 维度表含 sort_order 排序列（framework 按 sort_order 按列排序），列级 ALLSELECTED 写法下排序列筛选经按列排序 1:1 反推（auto-existence）残留，分母退化为当前行 → 占比恒 100%；整表移除一并清除排序列隐藏筛选，分母 = 该列渠道上下文下全部行合计。SLS Amt% 分母（v1.0 既有口径）采用列级 + 显式排序列组合写法，按「不改变其余指标逻辑」保持不动；若后续 SLS Amt% 也出现占比恒 100% 现象，可参照本条整体迁移至整表写法。

@@ -8,14 +8,14 @@ Dim_ColMetric_Platform_Merchandising_Performance =
 // 范围: 口径文档/口径Markdown格式/Merchandise Performance Overview.md
 //       - 子模块八：Platform Merchandising Performance（§34-§39 + TAR 类口径）+ 页面设计截图
 // 数据底表（销售类）: a02_e2e_product_performance_sales_summary_d（SLS Amt% 分子/分母 / ST% 销售金额 / TAR actual）
-// 数据底表（库存类）: a02_e2e_product_performance_inv_summary_d（EOH = sum(msrp_inv_amt) / ST% 期末库存金额）
+// 数据底表（库存类）: a02_e2e_product_performance_inv_summary_d（EOH Units = sum(inv_qty) / EOH Amt = sum(msrp_inv_amt) / EOH Amt% 占比 / ST% 期末库存金额）
 // 数据底表（目标类）: a05_e2e_product_fcst_data_d（TAR ACH% / MTD TAR Progress / YTD TAR Progress 的 target）
-// 规模: 64 行 = Platform 组 27 行（TTL 7 列 + 4 渠道 × 5 列）
-//              + Store 组 37 行（TTL 7 列 + 6 店铺 × 5 列）
+// 规模: 68 行 = Platform 组 29 行（TTL 9 列 + 4 渠道 × 5 列）
+//              + Store 组 39 行（TTL 9 列 + 6 店铺 × 5 列）
 // 列结构（与页面截图一致）:
-//   TTL 组 7 列: SLS Amt% / vs LP / EOH / ST% / TAR ACH% / MTD TAR Progress / YTD TAR Progress
+//   TTL 组 9 列: SLS Amt% / vs LP / EOH Units / EOH Amt / EOH Amt% / ST% / TAR ACH% / MTD TAR Progress / YTD TAR Progress
 //   渠道组 5 列: SLS Amt% / vs LP / TAR ACH% / MTD TAR Progress / YTD TAR Progress
-//   （EOH / ST% 仅 TTL 组展示——库存售罄类指标按全渠道口径（inv 表无渠道字段）；
+//   （EOH Units / EOH Amt / EOH Amt% / ST% 仅 TTL 组展示——库存售罄类指标按全渠道口径（inv 表无渠道字段）；
 //     TAR 三指标（TAR ACH% / MTD / YTD TAR Progress）按渠道口径在全部 Label 组展示）
 // §34-§36 占比（Foundation / Acceleration / Complementary 销售金额占比）说明:
 //   三者为「framework 维度切换」下的 SLS Amt% 取值，非独立列——矩阵行维度切到 framework 时，
@@ -45,19 +45,22 @@ Dim_ColMetric_Platform_Merchandising_Performance =
 //      integer_bp    → vs LP: this period - last period 差值，bp 指标，展示时 ×10000 转 bp
 //                      （§34-§37 附属指标类型 vs LP:integer_bp；Foundation/Acceleration/
 //                       Complementary/SLS Amt% 四个占比共用此附属指标）
-//      currency      → EOH: 期末库存金额 = EOH Units × msrp，看所选时间范围 end period 最后一天；
-//                      `#,##0` + 币种符号（DAX 中 __CurrencySymbol & FORMAT(__Value,"#,##0") 拼接，§38）
+//      integer       → EOH Units: 期末库存数量 = end period 最后一天 sum(inv_qty)（数量口径，
+//                       不换币不带符号）；`#,##0`
+//      currency      → EOH Amt: 期末库存金额 = end period 最后一天 sum(msrp_inv_amt)
+//                      （业务定义 EOH Units × msrp，字段即库存金额）；`#,##0` + 币种符号
+//                      （DAX 中 __CurrencySymbol & FORMAT(__Value,"#,##0") 拼接，§38）
 //      percent_0dp   → 其余: `#,##0%` 百分比整数，不含正号
-//                      （SLS Amt% §34-§37 / ST% §39 / TAR ACH% / MTD TAR Progress / YTD TAR Progress）
+//                      （SLS Amt% §34-§37 / EOH Amt% / ST% §39 / TAR ACH% / MTD TAR Progress / YTD TAR Progress）
 //   3. Metric_IsCurrencyAmount（BOOLEAN）:
-//      TRUE  → EOH（金额类，涉及汇率换算与币种符号拼接）
-//      FALSE → 其余（SLS Amt% / ST% / TAR 类为比率类；vs LP 为 bp 差值类）
+//      TRUE  → EOH Amt（金额类，涉及汇率换算与币种符号拼接）
+//      FALSE → 其余（EOH Units 为数量类；SLS Amt% / EOH Amt% / ST% / TAR 类为比率类；vs LP 为 bp 差值类）
 //   4. 颜色规则通过 Metric_ColorRule 字段标识，由 Cell Font Color 度量值统一调度:
-//      fixed_black  → 全部基础指标列（SLS Amt% / EOH / ST% / TAR ACH% / MTD TAR Progress / YTD TAR Progress）
+//      fixed_black  → 全部基础指标列（SLS Amt% / EOH Units / EOH Amt / EOH Amt% / ST% / TAR ACH% / MTD TAR Progress / YTD TAR Progress）
 //      pos_neg_zero → vs LP（按值正/负/零三色）
 //
 // 字段说明:
-//   Metric_ID             主键（全局唯一 1-64）
+//   Metric_ID             主键（全局唯一 1-68；新增行续用 65-68，存量行 ID 保持不变以减少视觉对象列绑定重建）
 //   ChannelGroup          Level 1: 渠道分组（Platform / Store）
 //   Label                 Level 2: 页面显示标签（TTL / Tmall / JD / RLE / DY / DY_Family / DY_W / DY_MN）
 //   Label_Value           Level 2 对应事实表实际值（Platform 组映射 platform 字段；Store 组映射
@@ -67,8 +70,9 @@ Dim_ColMetric_Platform_Merchandising_Performance =
 //   ChannelGroup_Sort     Level 1 排序（Platform=10, Store=20）
 //   Label_Sort            Level 2 排序（TTL=10 首列；Tmall=20, JD=30, RLE=40, DY=50；
 //                         Store 组 DY_Family=50, DY_W=60, DY_MN=70）
-//   ColName_Sort          Level 3 排序（SLS Amt%=100, vs LP=200, EOH=300（仅 TTL）, ST%=400（仅 TTL）,
-//                         TAR ACH%=500, MTD TAR Progress=600, YTD TAR Progress=700）
+//   ColName_Sort          Level 3 排序（SLS Amt%=100, vs LP=200, EOH Units=300 / EOH Amt=400 /
+//                         EOH Amt%=500（三者仅 TTL）, ST%=600（仅 TTL）, TAR ACH%=700,
+//                         MTD TAR Progress=800, YTD TAR Progress=900）
 //   ColType               列类型标识（即指标路由键，详见上方 ColType 口径）
 //   Metric_Format         单一格式字段（integer_bp / currency / percent_0dp）
 //   Metric_IsCurrencyAmount 是否金额类（TRUE 才涉及汇率换算与币种符号拼接）
@@ -110,16 +114,18 @@ DATATABLE(
     {
         // ════════════════════════════════════════════════════════════════
         // Level 1 = Platform（ChannelGroup_Sort=10，过滤事实表 [platform] 字段）
-        // TTL（Label_Sort=10，特殊标记：ALLSELECTED 全渠道合计，7 列）
+        // TTL（Label_Sort=10，特殊标记：ALLSELECTED 全渠道合计，9 列）
         // 颜色规则: 基础指标=固定黑；vs LP=正负零三色
         // ════════════════════════════════════════════════════════════════
         { 1,  "Platform", "TTL", "TTL", "1-SLS Amt%",         10, 10, 100, "SLS Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 2,  "Platform", "TTL", "TTL", "2-vs LP",            10, 10, 200, "vs LP",            "integer_bp",  FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 3,  "Platform", "TTL", "TTL", "3-EOH",              10, 10, 300, "EOH",              "currency",    TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 4,  "Platform", "TTL", "TTL", "4-ST%",              10, 10, 400, "ST%",              "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 5,  "Platform", "TTL", "TTL", "5-TAR ACH%",         10, 10, 500, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 6,  "Platform", "TTL", "TTL", "6-MTD TAR Progress", 10, 10, 600, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 7,  "Platform", "TTL", "TTL", "7-YTD TAR Progress", 10, 10, 700, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 3,  "Platform", "TTL", "TTL", "3-EOH Units",        10, 10, 300, "EOH Units",        "integer",     FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 65, "Platform", "TTL", "TTL", "65-EOH Amt",         10, 10, 400, "EOH Amt",          "currency",    TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 66, "Platform", "TTL", "TTL", "66-EOH Amt%",        10, 10, 500, "EOH Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 4,  "Platform", "TTL", "TTL", "4-ST%",              10, 10, 600, "ST%",              "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 5,  "Platform", "TTL", "TTL", "5-TAR ACH%",         10, 10, 700, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 6,  "Platform", "TTL", "TTL", "6-MTD TAR Progress", 10, 10, 800, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 7,  "Platform", "TTL", "TTL", "7-YTD TAR Progress", 10, 10, 900, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Platform / Tmall（Label_Sort=20，platform = "TM"，5 列）
@@ -159,15 +165,17 @@ DATATABLE(
 
         // ════════════════════════════════════════════════════════════════
         // Level 1 = Store（ChannelGroup_Sort=20，过滤事实表 [shop_name] 字段）
-        // TTL（Label_Sort=10，特殊标记：ALLSELECTED 全店铺合计，7 列）
+        // TTL（Label_Sort=10，特殊标记：ALLSELECTED 全店铺合计，9 列）
         // ════════════════════════════════════════════════════════════════
         { 28, "Store", "TTL", "TTL", "28-SLS Amt%",         20, 10, 100, "SLS Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 29, "Store", "TTL", "TTL", "29-vs LP",            20, 10, 200, "vs LP",            "integer_bp",  FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 30, "Store", "TTL", "TTL", "30-EOH",              20, 10, 300, "EOH",              "currency",    TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 31, "Store", "TTL", "TTL", "31-ST%",              20, 10, 400, "ST%",              "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 32, "Store", "TTL", "TTL", "32-TAR ACH%",         20, 10, 500, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 33, "Store", "TTL", "TTL", "33-MTD TAR Progress", 20, 10, 600, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 34, "Store", "TTL", "TTL", "34-YTD TAR Progress", 20, 10, 700, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 30, "Store", "TTL", "TTL", "30-EOH Units",        20, 10, 300, "EOH Units",        "integer",     FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 67, "Store", "TTL", "TTL", "67-EOH Amt",          20, 10, 400, "EOH Amt",          "currency",    TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 68, "Store", "TTL", "TTL", "68-EOH Amt%",         20, 10, 500, "EOH Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 31, "Store", "TTL", "TTL", "31-ST%",              20, 10, 600, "ST%",              "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 32, "Store", "TTL", "TTL", "32-TAR ACH%",         20, 10, 700, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 33, "Store", "TTL", "TTL", "33-MTD TAR Progress", 20, 10, 800, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 34, "Store", "TTL", "TTL", "34-YTD TAR Progress", 20, 10, 900, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Store / Tmall（Label_Sort=20，shop_name = "TM"，5 列）

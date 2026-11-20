@@ -250,7 +250,7 @@ VAR __EndPeriodDate_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max]
 不懂就问，其他没提到的修改需要不要修改。记得写入变更日志，D:\gutao\辜涛\Project\Qoder_AI_Frontend_and_backend_Web\RL E2E\RL E2E Merch Dashboard\changelog.md
 
 
-# DCA UAT  第一轮提示词:
+# DCA UAT  Top & OPP第一轮提示词:
 Item Stockout Product Type（产品类型，属性列）逻辑调整：取选择日期段中的所有值，去重后拼接在一起
 Item Stockout Weeks Cover Value（库存周转周数）：s02_inventory_stock_sales_detail_d_spu和s02_inventory_stock_sales_detail_d已经有weeks_cover字段，直接取即可，逻辑为取所选时间范围end period最后一天的weeks_cover值，防御性写法，我觉得可以取MAX(weeks_cover)，SPU/SKU+day不一定只存在一行。
 调整文件：
