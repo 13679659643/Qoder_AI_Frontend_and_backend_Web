@@ -882,7 +882,59 @@ Top SKUs Weeks Cover Display =
             FORMAT(__Value, "#,##0.0")
         )
 ```
+### 4.15 Top SKUs SPU ID（SPU ID）
+```dax
+Top SKUs SPU ID =
+// ========================================
+// 度量值: Top SKUs SPU ID
+// 中文名: SPU ID（属性列）
+// Display Folder: Top & OPP SKUs Analysis\Top\Attributes
+// 用途: 根据当前筛选上下文中的 sku_id 反查 spu_id，作为值区域度量展示，
+//       spu_id 不作为行维度
+// 数据底表: s02_trade_sku_data_d
+// 取值规则（§1.3）: 最新日期 distinct 顿号拼接——This Period 区间内该组合的
+//       最大 dt 那天 spu_id distinct 值升序拼接（sku 级属性通常为单值，
+//       拼接自然退化为单值）；区间无记录 / 当天全空白返回 BLANK
+// 行维度传递: 当前行的 category + sku_id 筛选自动限定取值范围；
+//       若行上只有 sku_id，同样可按 sku_id 取值；
+//       framework / 渠道等外部切片器自动传导
+// 说明: 返回结果为文本，不会对 spu_id 进行求和等数值聚合
+// ========================================
 
+// ── This Period 时间区间 ──
+VAR __PeriodMin =
+    SELECTEDVALUE ( Slicer_Time_Frame_Min_This[TimeFrame_Min] )
+VAR __PeriodMax =
+    SELECTEDVALUE ( Slicer_Time_Frame_Max_This[TimeFrame_Max] )
+
+// ── 最新日期：该组合在区间内的最大 dt ──
+VAR __MaxDt =
+    CALCULATE (
+        MAX ( 's02_trade_sku_data_d'[dt] ),
+        's02_trade_sku_data_d'[dt] >= __PeriodMin,
+        's02_trade_sku_data_d'[dt] <= __PeriodMax
+    )
+
+RETURN
+    IF (
+        ISBLANK ( __MaxDt ),
+        BLANK (),
+        CONCATENATEX (
+            FILTER (
+                CALCULATETABLE (
+                    VALUES ( 's02_trade_sku_data_d'[spu_id] ),
+                    's02_trade_sku_data_d'[dt] = __MaxDt
+                ),
+                NOT ISBLANK ( 's02_trade_sku_data_d'[spu_id] )
+                    && LEN ( TRIM ( 's02_trade_sku_data_d'[spu_id] & "" ) ) > 0
+            ),
+            's02_trade_sku_data_d'[spu_id] & "",
+            "、",
+            's02_trade_sku_data_d'[spu_id],
+            ASC
+        )
+    )
+```
 ---
 
 ## 5. 度量值清单

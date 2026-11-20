@@ -717,3 +717,30 @@
   - 方案文档 Top_SKUs_Analysis_Table.md 升版 v2.4 → v2.5：版本记录、§4.4 度量重写（头注释标注禁止 VAR 后直接接 IF）、§3.3 保持
 - **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/Top_SKUs_Analysis_Table.md
 - **备注**: 验证方式不变：块序按类别 SLS Units 降序、块内 Top3 降序、无空行；若 IDE 仍报错，确认整段粘贴未截断（SELECTEDVALUE / RETURN 大小写不敏感）
+
+## [2026-11-19 19:50] DAX 修改 — OPP_SKUs_Analysis_Table 两项口径调整（v2.0：Weeks Cover 直读 + Top Top3 sku 排除）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（OPP 部分）
+- **任务**: 业务确认口径调整——① 条件 3 Weeks Cover 判定切换数仓预计算 weeks_cover 字段直读（判定值 = 快照日 MAX(weeks_cover)，与 Top v2.2 / Item Stockout v2.6 同源同款），均值由比值均值改为 SKU 值算术平均（各 SKU 先按直读逻辑取值再 Σ ÷ 参与计算 SKU 数，BLANK 不参与分子分母），原"(stock+in_trans)/product_qty"计算废止；② 新增资格条件 5——OPP 行排除 Top 表各 category 组内 SLS Units Top3 sku（sku 级排除，非 category 级；Top3 口径跟随 Top 模块 v2.2：SLS Units 降序、DENSE 含并列、≤3、无数量 sku 不入集）；排序维持 EOH 库存量编码降序不变；度量名称均不变
+- **操作**: 修改
+- **变更内容**:
+  - OPP SKUs Qualify：判定值 __WcInv/__Qty 计算链删除，新增 __SkuWc（快照日 MAX(weeks_cover) 直读）；均值 __T_Qty/__T_WcInv 比值均值删除，新增 __AvgWc = CALCULATE(AVERAGEX(VALUES(inv[sku_id]), CALCULATE(MAX(inv[weeks_cover]))), inv[dt] = 快照日)（AVERAGEX 自动跳过 BLANK）；新增 __TopCandSkus/__TopSet（trade 全类目 (category, sku_id, @Units) 一次分组查询 + 组内 RANKX 内存排名 ≤ 3，REMOVEFILTERS 两列防收窄）与 __NotInTop 判定；RETURN 判定由四条件改五条件（__NotInTop && __PassLaunch && __PassSt && __PassWc && __PassEoh）
+  - OPP SKUs SKU Rank：候选判定同步——__InvAgg 的 @WcInv 计算列改 @Wc（MAX(weeks_cover) 直读）；__CandTable 删除 @Qty 桥接列（条件 3 不再需要 trade 侧数量）；__AvgWc 同 Qualify 算术平均；新增 __TopSet 排除集（同构）；__Qualified 过滤改五条件（含 NOT CONTAINSROW(__TopSet, sku)）
+  - OPP SKUs Sort Key：无变更（排序维持 EOH 编码；排除逻辑落位资格 / 排名筛选层，被排除行不进入视觉无排序求值）
+  - 副作用知悉：零销售高库存 sku 不再被条件 3 天然排除（原 product_qty=0 分母短路废止，预计算 weeks_cover 可为高值）；条件 3 判定与均值全量取自 inv 侧，原 WC 渠道口径不对称消失（ST% 保留）
+  - 方案文档 OPP_SKUs_Analysis_Table.md 升版 v1.0 → v2.0：新增版本记录；§1.2 四条件改五条件（条件 3 直读 + 条件 5 排除）、§1.3~§1.5、§2 现状（inv 表补 weeks_cover 字段）、§3.1~§3.3（候选物化表增 __TopSet / @Wc，删 @Qty/@WcInv）、§4.1 / §4.2 度量重写、§4.3 无变更标注、§4.4 复用清单（WC 展示与判定同源直读）、§5 / §6.1 / §7 验证方法（WC 均值 = AVG(weeks_cover)、Top3 排除集还原）、§8 注意事项全面同步（新增 17 排除集口径跟随 / 18 直读防御性 MAX，更新 2/3/4/5/9/10/11/14/15）
+- **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/OPP_SKUs_Analysis_Table.md
+- **备注**: Top3 排除集口径与 Top 模块当前实现强绑定（Top 口径再调整时本模块必须同步）；__TopSet 为每行 / 行组一次全类目分组查询（v2.0 新增性能成本），@Qty 桥接列删除互有抵消，卡顿时可限制 __TopSet 构建到当前 category（sku→category 一一对应时语义等价）或数仓预计算排除标签
+
+## [2026-11-20 09:30] DAX 修改 — OPP SKUs Sort Key 分组表头排序缺陷修复 + 性能优化（v2.1）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（OPP 部分）
+- **任务**: 用户实测反馈——按 Sort Key 升序排序后 category 块序不按 EOH 降序（图一 Belts → Headwear → Pants、图二 Luggage/Bags → Pants 均为字母序）；另反馈度量偏卡需优化
+- **操作**: 修改
+- **变更内容**:
+  - 根因：OPP SKUs Sort Key 沿袭 v1.0 旧写法（sku_id 空白即 BLANK 拦截），分组表头上下文（sku_id 不在作用域）排序键恒 BLANK → 全部块头排序键并列 → 块序回退 category 字母序——Top 模块 v2.3 同源缺陷漏移植（Top 已修，OPP 未同步）
+  - OPP SKUs Sort Key 修复（三上下文，同 Top v2.5）：①category 空白 → BLANK；②分组表头 → SkuEOH 记 0，返回类别块键 -(CatEOH × 1e6)，块头升序 = 类别 EOH 降序；③sku 行快照日无库存 → BLANK（空行防线）；__CatEOH 惰性求值
+  - 性能优化（Qualify / Rank 两处同步）：Top3 排除集 __TopCandSkus/__TopSet 构建由全类目（REMOVEFILTERS 两列 + 全类目 SUMMARIZE + 组内 FILTER 扫描排名，FE O(N²) 全类目）收窄到当前 category（REMOVEFILTERS(sku_id) + category 等值 + 单类目 RANKX，同 __CandSkus 模式）——sku→category 一一对应下语义等价，跨 category sku 数据需回退全类目写法；Rank 候选表 @StAmt 由每候选 TREATAS(ROW) 桥接聚合（N 次单 sku 查询）改为 __TradeAgg 一次分组查询 + MAXX 内存匹配；WC 均值 __AvgWc 由 VALUES 迭代 + 逐行上下文转换 AVERAGEX 改为 __WcBySku 一次分组物化 + AVERAGEX（上下文跨行相同 → SE 缓存共享）
+  - 方案文档 OPP_SKUs_Analysis_Table.md 升版 v2.0 → v2.1：版本记录、§1.1 / §1.3 / §3.1 / §3.3 / §4.1 / §4.2 / §4.3（度量重写三上下文）/ §5 / §7 / §8 注意事项 2 / 8 / 10 / 17 同步
+- **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/OPP_SKUs_Analysis_Table.md
+- **备注**: 验证：块序按 category 快照日 EOH 合计降序（注意是 category 全量 EOH 合计，非当前行 sku 的 EOH）、块内资格 Top3 按组内 EOH 降序、块内名次应随 EOH 递增（若 DENSE 并列除外）；排除集收窄构建假设 sku→category 一一对应，如存在跨 category sku 回退 v2.0 全类目写法
