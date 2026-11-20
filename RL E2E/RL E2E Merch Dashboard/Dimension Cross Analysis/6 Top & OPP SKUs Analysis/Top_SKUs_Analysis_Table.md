@@ -1,6 +1,6 @@
 # Top_SKUs_Analysis_Table 解决方案（Top 部分）
 
-> **版本**: v2.5
+> **版本**: v2.6
 > **模块**: RL E2E Merch Dashboard - Dimension Cross Analysis Tab - Top & OPP SKUs Analysis（Top 部分）
 > **关联口径**: 口径文档/口径Markdown格式/Dimension Cross Analysis.md - 子模块九（§40 Weeks Cover / §41 SLS Units / §42 EOH + 模块说明属性列；§43~§49 为 OPP 部分指标，不在本方案范围，后续另行方案）
 > **数据底表（销售/属性类）**: s02_trade_sku_data_d
@@ -9,6 +9,7 @@
 > **筛选影响范围**: dt（断开维度，DAX 显式筛选）+ framework 前置筛选 + Platform / Store Name（模型关系自动传导）+ 其余与两张事实表已建关系的商品维度切片器
 >
 > **版本记录**:
+> v2.6（2026-11-20）——属性度量零销售行兜底（业务确认）：五个属性度量（Product Photo / Product Type / Price / Predictive Buy / SPU ID）"最新日期"原仅取 This Period 区间内 MAX(dt)，区间无记录即 BLANK——Top 表行必有当期销售不受影响，但 OPP 表 v2.4 候选域修复后本期零销售 sku 可凭 EOH 前三展示（ST% = 0 恒低于均值天然过判定），此类行属性列全空（实测 Product Photo / Product Type / SPU ID 均空）；业务确认全部属性列统一加回退——区间内无记录时回退取该组合全历史 MAX(dt) 当天值（属性为慢变字段，取最近已知值），全历史也无记录 / 当天全空白仍 BLANK；改法 = __MaxDt 包 COALESCE（区间内 MAX(dt) 为空 → 全历史 MAX(dt)），度量名称与 Top 表行为零变化（回退分支对 Top 行永不触发）；五个属性度量同步修改，OPP 表经复用自动生效
 > v2.5（2026-11-19）——v2.4 代码语法修正（用户实测报错"找不到名称 _SkuUnits"）：v2.4 内层 VAR 块（__SkuUnits 之后）漏写 RETURN 关键字直接接 IF——DAX 规则：表达式内 VAR 声明必须以 RETURN 结束才能接表达式，缺 RETURN 解析失败致 IDE 报名称未找到（IsSkuRow / ISBLANK / SkuUnits / BLANK 全线红波浪）；修正为扁平结构——else 分支内 VAR 全部声明（__PeriodMin / __PeriodMax / __IsSkuRow / __SkuUnits / __CatUnits）后统一一个 RETURN 接 IF 链（__CatUnits 惰性求值，短路时不计算）；逻辑零变化（v2.3 块序修复 + v2.4 空行防线语义均保持）
 > v2.4（2026-11-19）——v2.3 空行副作用修复（用户实测反馈：产生大量空行，视觉筛选条件不变）：v2.3 修复块序时误删"sku 行当期无销售数量 → BLANK"内层拦截——无数量行得块键 -CatUnits×1e6+0 通过「Sort Key 不为空」筛选，其 Top Rank BLANK 在实际配置「小于或等于 3」中视为 0 亦放行（视觉实际配置为 ≤3 而非「介于 1 与 3」，该拦截 + Sort Key 不为空为空行双防线，此前一直生效）；修复：三类上下文分别处理——category 空白 → BLANK；分组头（sku 不在作用域）→ 类别块键（v2.3 保持）；sku 行且 SkuUnits BLANK → BLANK（恢复，禁止删除）；视觉对象筛选条件不变
 > v2.3（2026-11-19）——Sort Key 分组表头排序缺陷修复（用户实测反馈：块内排序正确，category 块序未按数量降序——Dresses(2585) 排在 Outerwear(2774) 前）：根因非负号（块内升序 -2585000089 → -44 → -39 证明翻转生效），而是分组表格视觉对象对 category 块的排序取 Sort Key 在「仅 category 层级」的求值——该上下文 SELECTEDVALUE(sku_id) 为 BLANK，原空白拦截返回 BLANK → 全部块头排序键并列 → 块序回退 category 字母序；修复：sku_id 不在作用域（分组头）时返回类别块键 -(CatUnits × 1e6)（SkuUnits 记 0），块头升序 = 类别数量降序；sku 行仍返回完整键，块内排序不变
@@ -61,8 +62,8 @@ Top & OPP SKUs Analysis 板块含 TOP 与 OPP 两部分（口径板块级商品�
 
 - **取值范围** = This Period 时间区间（[TimeFrame_Min, TimeFrame_Max]）+ 当前行 category + sku_id 分组筛选 + 外部切片器（framework / Platform / Store 等，自动传导）下的全部记录
 - **"最新"定义**：范围内该 category + sku_id 组合的最大 dt（`MAX(trade[dt])`）——用户选定时间段内最后一次出现记录的日期
+- **零销售回退（v2.6）**：区间内无记录（最大 dt 为 BLANK）时回退取该组合**全历史 MAX(dt)** 当天值——属性为 sku 级慢变字段，取最近已知值；触发场景为 OPP 表零销售行（Top 表行必有当期销售，回退分支永不触发）；全历史也无记录 / 回退日当天该字段全空白仍返回 BLANK
 - **取值**：最大 dt 那天的该字段 distinct 值，按升序顿号（、）拼接——trade 表为 sku 粒度，同一组合同日多行为常态（不同订单 / 店铺）；product_type / md_price / spu_img_url / predictive_buy 为 sku 级属性，拼接自然退化为单值
-- 区间内无记录（最大 dt 为 BLANK）时返回 BLANK；最新日期当天该字段全为空白时返回 BLANK（空白值不参与拼接）
 - **Price 特殊**：md_price 为 CNY 单价，逐个值 ÷ Currency_ExchangeRate 换算 + 币种符号 + `#,##0` 格式化后拼接（md_price 为 0 的行展示 ¥0，NULL 行排除）
 - **Predictive Buy 特殊**：predictive_buy 为整数类型（Nullable(Int32)，v1.1 实证确认），值包括 1 / 0 / NULL——最新日期当天仅 1 / 0 参与映射（1 → "Y"、0 → "N"），NULL 不参与，全部为空时返回 BLANK
 - 示例：某 category + sku_id 组合在 this period 区间内最后记录日为 2026-07-20，当天该 sku 有 3 行记录，product_type 均为 T-shirt → Product Type 列显示 "T-shirt"
@@ -528,7 +529,7 @@ Top SKUs Product Photo =
 // 数据底表: s02_trade_sku_data_d
 // 取值规则（§1.3）: 最新日期 distinct 顿号拼接——This Period 区间内该组合的
 //       最大 dt 那天 spu_img_url distinct 值升序拼接（sku 级属性以单值为
-//       主，拼接自然退化单值）；区间无记录 / 当天全空白返回 BLANK
+//       主，拼接自然退化单值）；区间无记录回退全历史最新 dt（v2.6 零销售行兜底）；全历史无记录 / 当天全空白返回 BLANK
 // 行维度传递: 行分组（category + sku_id 两列）筛选自动限定取值范围，
 //       framework / 渠道等外部切片器自动传导
 // 配置: 度量工具 → 数据类别 → 图像 URL；值区域列显示商品图片
@@ -539,11 +540,17 @@ VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 最新日期：该组合在区间内的最大 dt ──
+// ── 最新日期：区间内最大 dt；无记录回退全历史最大 dt（v2.6 零销售行兜底）──
+// OPP 表零销售行（本期无 trade 记录但 EOH 进前三）凭回退展示最近已知属性；
+// Top 表行必有当期销售，回退分支永不触发
 VAR __MaxDt =
-    CALCULATE(
-        MAX('s02_trade_sku_data_d'[dt]),
-        's02_trade_sku_data_d'[dt] >= __PeriodMin,
-        's02_trade_sku_data_d'[dt] <= __PeriodMax
+    COALESCE(
+        CALCULATE(
+            MAX('s02_trade_sku_data_d'[dt]),
+            's02_trade_sku_data_d'[dt] >= __PeriodMin,
+            's02_trade_sku_data_d'[dt] <= __PeriodMax
+        ),
+        CALCULATE(MAX('s02_trade_sku_data_d'[dt]))
     )
 
 RETURN
@@ -585,11 +592,17 @@ VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 最新日期 ──
+// ── 最新日期：区间内最大 dt；无记录回退全历史最大 dt（v2.6 零销售行兜底）──
+// OPP 表零销售行（本期无 trade 记录但 EOH 进前三）凭回退展示最近已知属性；
+// Top 表行必有当期销售，回退分支永不触发
 VAR __MaxDt =
-    CALCULATE(
-        MAX('s02_trade_sku_data_d'[dt]),
-        's02_trade_sku_data_d'[dt] >= __PeriodMin,
-        's02_trade_sku_data_d'[dt] <= __PeriodMax
+    COALESCE(
+        CALCULATE(
+            MAX('s02_trade_sku_data_d'[dt]),
+            's02_trade_sku_data_d'[dt] >= __PeriodMin,
+            's02_trade_sku_data_d'[dt] <= __PeriodMax
+        ),
+        CALCULATE(MAX('s02_trade_sku_data_d'[dt]))
     )
 
 RETURN
@@ -628,7 +641,7 @@ Top SKUs Price =
 //       md_price distinct 值逐个换算格式化后顿号拼接（sku 级属性以单值为主）
 // 币种: md_price 为 CNY 单价，逐值 ÷ Currency_ExchangeRate 换算为当前币种
 //       + 币种符号 + #,##0（如 ¥599）；md_price 为 0 的行展示 ¥0，
-//       NULL 行排除；区间无记录 / 当天全空白返回 BLANK
+//       NULL 行排除；区间无记录回退全历史最新 dt（v2.6 零销售行兜底）；全历史无记录 / 当天全空白返回 BLANK
 // ========================================
 
 // ── This Period 时间区间 ──
@@ -640,11 +653,17 @@ VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRa
 VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
 
 // ── 最新日期 ──
+// ── 最新日期：区间内最大 dt；无记录回退全历史最大 dt（v2.6 零销售行兜底）──
+// OPP 表零销售行（本期无 trade 记录但 EOH 进前三）凭回退展示最近已知属性；
+// Top 表行必有当期销售，回退分支永不触发
 VAR __MaxDt =
-    CALCULATE(
-        MAX('s02_trade_sku_data_d'[dt]),
-        's02_trade_sku_data_d'[dt] >= __PeriodMin,
-        's02_trade_sku_data_d'[dt] <= __PeriodMax
+    COALESCE(
+        CALCULATE(
+            MAX('s02_trade_sku_data_d'[dt]),
+            's02_trade_sku_data_d'[dt] >= __PeriodMin,
+            's02_trade_sku_data_d'[dt] <= __PeriodMax
+        ),
+        CALCULATE(MAX('s02_trade_sku_data_d'[dt]))
     )
 
 RETURN
@@ -679,8 +698,8 @@ Top SKUs Predictive Buy =
 // 数据底表: s02_trade_sku_data_d
 // 取值规则（§1.3）: 最新日期（This Period 区间内该组合的 MAX(dt)）当天
 //       predictive_buy distinct 值中仅 1 / 0 参与映射（Y / N 顿号拼接，
-//       sku 级属性以单值为主）；NULL 不参与；区间无记录 / 当天无
-//       有效值返回 BLANK
+//       sku 级属性以单值为主）；NULL 不参与；区间无记录回退全历史
+//       最新 dt（v2.6 零销售行兜底）；全历史无记录 / 当天无有效值返回 BLANK
 // 类型口径（v1.1 实证确认）: predictive_buy 为整数类型（Nullable(Int32)，
 //       值 1 / 0 / NULL）——比较使用整数字面量；禁止 String 比较
 //       （"1" ≠ 1 恒不成立，会输出全空）
@@ -691,11 +710,17 @@ VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
 // ── 最新日期 ──
+// ── 最新日期：区间内最大 dt；无记录回退全历史最大 dt（v2.6 零销售行兜底）──
+// OPP 表零销售行（本期无 trade 记录但 EOH 进前三）凭回退展示最近已知属性；
+// Top 表行必有当期销售，回退分支永不触发
 VAR __MaxDt =
-    CALCULATE(
-        MAX('s02_trade_sku_data_d'[dt]),
-        's02_trade_sku_data_d'[dt] >= __PeriodMin,
-        's02_trade_sku_data_d'[dt] <= __PeriodMax
+    COALESCE(
+        CALCULATE(
+            MAX('s02_trade_sku_data_d'[dt]),
+            's02_trade_sku_data_d'[dt] >= __PeriodMin,
+            's02_trade_sku_data_d'[dt] <= __PeriodMax
+        ),
+        CALCULATE(MAX('s02_trade_sku_data_d'[dt]))
     )
 
 RETURN
@@ -894,7 +919,7 @@ Top SKUs SPU ID =
 // 数据底表: s02_trade_sku_data_d
 // 取值规则（§1.3）: 最新日期 distinct 顿号拼接——This Period 区间内该组合的
 //       最大 dt 那天 spu_id distinct 值升序拼接（sku 级属性通常为单值，
-//       拼接自然退化为单值）；区间无记录 / 当天全空白返回 BLANK
+//       拼接自然退化为单值）；区间无记录回退全历史最新 dt（v2.6 零销售行兜底）；全历史无记录 / 当天全空白返回 BLANK
 // 行维度传递: 当前行的 category + sku_id 筛选自动限定取值范围；
 //       若行上只有 sku_id，同样可按 sku_id 取值；
 //       framework / 渠道等外部切片器自动传导
@@ -907,12 +932,17 @@ VAR __PeriodMin =
 VAR __PeriodMax =
     SELECTEDVALUE ( Slicer_Time_Frame_Max_This[TimeFrame_Max] )
 
-// ── 最新日期：该组合在区间内的最大 dt ──
+// ── 最新日期：区间内最大 dt；无记录回退全历史最大 dt（v2.6 零销售行兜底）──
+// OPP 表零销售行（本期无 trade 记录但 EOH 进前三）凭回退展示最近已知属性；
+// Top 表行必有当期销售，回退分支永不触发
 VAR __MaxDt =
-    CALCULATE (
-        MAX ( 's02_trade_sku_data_d'[dt] ),
-        's02_trade_sku_data_d'[dt] >= __PeriodMin,
-        's02_trade_sku_data_d'[dt] <= __PeriodMax
+    COALESCE (
+        CALCULATE (
+            MAX ( 's02_trade_sku_data_d'[dt] ),
+            's02_trade_sku_data_d'[dt] >= __PeriodMin,
+            's02_trade_sku_data_d'[dt] <= __PeriodMax
+        ),
+        CALCULATE ( MAX ( 's02_trade_sku_data_d'[dt] ) )
     )
 
 RETURN
@@ -1019,7 +1049,7 @@ RETURN
 | EOH                    | inv WHERE dt = 快照日 GROUP BY sku_id（framework 条件视与 inv 的模型关系对齐——有关系附加条件，无关系不附加）                |
 | Weeks Cover            | MAX(weeks_cover)（快照日该 sku 防御性 MAX 直读；无 inv 记录 / 字段 NULL → NULL，v2.2）                                       |
 
-- NULL 语义对齐 DAX：分子 NULL → 比率按 DIVIDE 语义（分子记 0 / 分母拦截整体 NULL）；属性字段区间无记录或当天全空白 → NULL（显示 "-"）
+- NULL 语义对齐 DAX：分子 NULL → 比率按 DIVIDE 语义（分子记 0 / 分母拦截整体 NULL）；属性字段区间无记录回退全历史最新 dt（v2.6——SQL 对应：区间无记录的组合改在全历史 MAX(dt) 取值），全历史无记录或当天全空白 → NULL（显示 "-"）
 - 参数区（对齐同看板惯例）：framework = 'Foundation'、Platform / Store 全选（等价不筛选）、This Period dt ∈ ['2026-03-29', '2026-07-25']、快照日 '2026-07-25'
 - 对数路径：PBI 表格行（category 块按数量降序 × 每块 3 行）vs SQL sku_rank <= 3 结果按 sort_key 升序逐列比对
 

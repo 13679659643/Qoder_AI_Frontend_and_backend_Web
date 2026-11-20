@@ -744,3 +744,55 @@
   - 方案文档 OPP_SKUs_Analysis_Table.md 升版 v2.0 → v2.1：版本记录、§1.1 / §1.3 / §3.1 / §3.3 / §4.1 / §4.2 / §4.3（度量重写三上下文）/ §5 / §7 / §8 注意事项 2 / 8 / 10 / 17 同步
 - **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/OPP_SKUs_Analysis_Table.md
 - **备注**: 验证：块序按 category 快照日 EOH 合计降序（注意是 category 全量 EOH 合计，非当前行 sku 的 EOH）、块内资格 Top3 按组内 EOH 降序、块内名次应随 EOH 递增（若 DENSE 并列除外）；排除集收窄构建假设 sku→category 一一对应，如存在跨 category sku 回退 v2.0 全类目写法
+
+## [2026-11-20 10:40] DAX 修改 — OPP SKUs Rank 单通道重构根治内存不足（v2.2）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（OPP 部分）
+- **任务**: 用户反馈视觉对象加载报"内存不足，无法完成此操作"（OOM），询问换 RANK 窗口函数是否更快；根因定位 + 性能重构
+- **操作**: 修改
+- **变更内容**:
+  - 根因（非 RANKX 慢）：「Qualify = 1」+「Rank 介于 1 与 3」双度量筛选器 = 引擎对全部 (category, sku) 分组跑两遍完整度量求值——Qualify 通道每行约 8 次 SE 查询 + 排除集物化，Rank 通道再物化一遍候选表，全表行组规模下 FE 物化叠加内存耗尽；RANK 窗口函数方案否决（瓶颈非排名计算；无 relation 时 ORDERBY 不接受度量表达式，带 relation 成本同 RANKX）
+  - OPP SKUs SKU Rank 重构（自包含单通道）：不再引用 [OPP SKUs Qualify]，五条件判定内嵌本度量分三层惰性短路——第 0 层每行标量聚合（空白键 / EOH / launch / ST% / WC + 缓存命中全局均值，约 7 次 SE 查询）任一不成立直接 BLANK、候选表零物化；第 1 层条件 4 分组均值（TREATAS(ROW) 4 次聚合）；第 2 层仅资格候选行到达——条件 5 排除集（当前 category）+ 资格集合候选表（__CandSkus / __InvAgg / __TradeAgg / __GrpAvg）+ RANKX；非资格行（绝大多数）成本从重表物化降为标量聚合；候选表求值上下文仅含 category + 外部筛选 → 同 category 跨行 SE 缓存共享
+  - 视觉对象配置变更：**移除视觉级「OPP SKUs Qualify = 1」筛选器**（保留 framework = Foundation / Rank 介于 1 与 3 / category 不为空 / sku_id 不为空）；Qualify 度量保留不删除（名称不变），降级为对数 / 调试辅助（临时拖入核对资格判定），不挂任何视觉
+  - 方案文档 OPP_SKUs_Analysis_Table.md 升版 v2.1 → v2.2：版本记录、§1.1 / §1.3 / §3.1 / §3.2（筛选器表改四条 + 机制说明）、§4.1（降级标注）、§4.2 度量全量重写（分层结构）、§5 / §6.1 / §8 注意事项 10 同步
+- **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/OPP_SKUs_Analysis_Table.md
+- **备注**: 必须同步操作：① PBI 内整段替换 OPP SKUs SKU Rank 度量 ② 删除该表格视觉对象上的「OPP SKUs Qualify = 1」筛选器（不删会退回双通道，OOM 复现）；验证：表能正常加载、结果行集与之前一致（无 Top Top3 sku、每 category ≤3 行资格 EOH 降序）；若仍 OOM → 终极方案为数仓预计算资格 / 排除标签（判定全部下沉源侧）
+
+## [2026-11-20 11:30] DAX 修改 — OPP SKUs SKU Rank 全 1 缺陷修复（v2.3）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（OPP 部分）
+- **任务**: 用户实测反馈——Skirt 组 EOH 13/11/10/10 四行 OPP SKUs SKU Rank 全为 1（EOH 不同名次应递增）；根因定位 + 修复
+- **操作**: 修改
+- **变更内容**:
+  - 根因（全 1 = 空候选表签名）：RANKX 的排名候选表 __Qualified 为空时无值可比较，对所有行返回 1——不是 EOH 基准错，是「和谁比」不存在；每行第 0~2 层标量判定通过（行能显示），但候选表内的同判定副本全军覆没 → 候选物化链路断裂
+  - 缺陷 ①（__TradeAgg 筛选泄漏）：__TradeAgg 分组物化缺 REMOVEFILTERS(sku_id)——视觉行组当前 sku 筛选泄漏进 CALCULATETABLE，__TradeAgg 仅含当前 sku、其余候选 @StAmt 全 BLANK（候选 ST% 判定退化为 0 < 均值恒真，高售罄候选被误放行）；补 REMOVEFILTERS('s02_trade_sku_data_d'[sku_id]) 修复
+  - 缺陷 ②（SUMMARIZE 传统扩展列脆弱）：全部候选物化表（__WcBySku / __TopCandSkus / __InvAgg / __TradeAgg / __GrpAvg）由 SUMMARIZE 分组列 + 扩展列混写改为「SUMMARIZE 仅分组列 + CALCULATETABLE(ADDCOLUMNS(..., CALCULATE(...)), 筛选参数)」分组/扩展分离——传统 SUMMARIZE 扩展列在 CALCULATETABLE + TREATAS 组合下求值上下文脆弱，扩展列值一旦成 BLANK，资格 FILTER 筛光全部候选 → 空表 → 全 1；Qualify（__WcBySku / __TopCandSkus）与 Rank 两处同步
+  - 遗留边界（需业务确认）：category 本期无任何 trade 记录时 __CandSkus 为空——视觉行组不受 dt 筛选照常显示、候选集受 dt 筛选为空，组内全部资格 sku 均 Rank 1 全展示（Top3 截断失效）
+- **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/OPP_SKUs_Analysis_Table.md
+- **备注**: 必须同步操作：PBI 内整段替换 OPP SKUs Qualify 与 OPP SKUs SKU Rank 两个度量（视觉级筛选器配置不变：framework = Foundation / Rank 介于 1 与 3 / category 不为空 / sku_id 不为空）；验证：Skirt 组 Rank 应为 1/2/3/3（EOH 13/11/10/10，10 为 DENSE 并列）；若仍全 1，按 §8 注意事项 19 调试三步定位（COUNTROWS(__Qualified) → COUNTROWS(__CandSkus) → 核对 SLS Units 列）
+
+## [2026-11-20 14:20] DAX 修改 — OPP SKUs SKU Rank 全 1 真根因修复：候选域与行域对齐（v2.4）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（OPP 部分）
+- **任务**: 用户实测反馈——v2.3 修复后仍全 1（Skirt 组 EOH 13/11/10/10 四行 Rank 均 1），并提供关键线索：WMLRSKTS6H202994106 不属于本期财年（202701~202704，dt ∈ 2026-03-29 ~ 2026-07-25）；询问与本期间无 trade 记录是否相关
+- **操作**: 修改
+- **变更内容**:
+  - 根因确认（候选域与行域错位）：时间切片器为断开维度、仅 DAX 显式筛选 → 视觉行组 (category, sku) 不受 dt 筛选、全历史 sku 照常显示；而 Rank 候选集 __CandSkus 沿习 Top v2.1 写法带本期 dt 区间筛选 → 本期无 trade 记录的 sku 全部缺席候选表——本期零销售 category（OPP 典型场景：旧季滞销库存）候选表为空 → __Qualified 空表 → RANKX 空表对所有行返回 1、Top3 截断失效全组放行；用户线索直接命中根因
+  - 修复：__CandSkus 去掉 dt 区间筛选——候选域 = 当前 category 全部 sku（REMOVEFILTERS(sku_id) + category 等值，framework 等外部筛选经关系保留），对齐视觉行域；排名基准为快照日 EOH（时点值）本就不依赖本期销售；dt 仅保留约束 __TradeAgg（@StAmt 当期口径，无本期记录候选 @StAmt BLANK → ST% = 0 < 均值，与行级第 0 层判定一致）与 __TopCandSkus（Top3 排除集当期 SLS Units 口径，不动）
+  - Top 模块不受影响：其排名基准即当期 SLS Units，候选域滤 dt 与基准同源，非同款缺陷
+  - 副作用知悉：候选表规模由「本期活跃 sku」扩大为「category 全历史 sku」（快照日 inv 侧分组查询行数增加）；本期零销售 sku 正常参与排名（其 ST% = 0 恒低于均值，资格本就可能通过——v2.0 注意事项 5 已知悉，口径不变）
+- **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/OPP_SKUs_Analysis_Table.md
+- **备注**: 必须同步操作：PBI 内仅改 OPP SKUs SKU Rank 一个度量（Qualify 无 __CandSkus 不涉及，但若 v2.3 未替换需两个一并整段替换）；验证：Skirt 组 Rank 应为 1/2/3/3（EOH 13/11/10/10，10 为 DENSE 并列），且行集可能变化——此前全组放行的组修复后恢复 Top3 截断（≤3 名次含并列）；若仍全 1 按 §8 注意事项 19 调试三步定位
+
+## [2026-11-20 16:10] DAX 修改 — 属性度量零销售行兜底：区间无记录回退全历史最新 dt（Top v2.6 / OPP v2.5）
+
+- **模块**: Dimension Cross Analysis - Top & OPP SKUs Analysis（属性度量，Top / OPP 两表共用）
+- **任务**: 用户发现 OPP 表本期零销售但 EOH 进前三的行（v2.4 修复后可展示）属性列为空，询问 Top SKUs SPU ID 是否需要修改；业务确认全部属性列统一加回退
+- **操作**: 修改
+- **变更内容**:
+  - 根因：五个属性度量（Top SKUs Product Photo / Product Type / Price / Predictive Buy / SPU ID）"最新日期"原仅取 This Period 区间内 MAX(dt)，区间无记录直接 BLANK——Top 表行必有当期销售不受影响；OPP 表 v2.4 候选域修复后零销售 sku 可展示，此类行属性列全空
+  - 修复：__MaxDt 包 COALESCE——区间内 MAX(dt) 为空时回退取该组合全历史 MAX(dt) 当天值（属性为 sku 级慢变字段，取最近已知值；framework / 渠道等外部筛选经关系保留）；全历史无记录 / 回退日当天该字段全空白仍 BLANK；五个属性度量同步修改（Top_SKUs_Analysis_Table.md §4.5 / §4.6 / §4.7 / §4.8 / §4.15）
+  - Top 表行为零变化（行必有当期销售，回退分支永不触发）；OPP 表经复用自动生效
+  - Top_SKUs_Analysis_Table.md 升版 v2.5 → v2.6（版本记录、§1.3 属性规则补零销售回退条目、五度量代码与头注释、§7 NULL 语义）；OPP_SKUs_Analysis_Table.md 升版 v2.4 → v2.5（版本记录、§4.4 复用说明补兜底条目，度量代码不另建）
+- **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/Top_SKUs_Analysis_Table.md；Dimension Cross Analysis/6 Top & OPP SKUs Analysis/OPP_SKUs_Analysis_Table.md
+- **备注**: 必须同步操作：PBI 内整段替换五个属性度量（Top SKUs Product Photo / Product Type / Price / Predictive Buy / SPU ID），度量名称不变；验证：OPP 表零销售行（SLS Units 列为空 / "-"）的 Photo / Type / SPU ID / Price / Predictive Buy 应展示最近已知值，Top 表展示结果与改前完全一致
