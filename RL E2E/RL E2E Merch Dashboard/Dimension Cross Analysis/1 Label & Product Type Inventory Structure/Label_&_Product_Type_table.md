@@ -1,6 +1,6 @@
 # Label & Product Type Inventory Structure 表格解决方案
 
-> **版本**: v1.1（商品维度 category → ax_class 字段替换（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §4.1 / §3.2）
+> **版本**: v1.2（MD 口径变更（业务确认）：MD 分子由 md_net_sales_amt 改为 net_sales_amt，MD = 1 − sum(net_sales_amt) / sum(msrp_net_sales_amt)，时间范围仍为 This Period，详见 §4.17 / 指标清单 #8）。v1.1（商品维度 category → ax_class 字段替换（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §4.1 / §3.2）
 > **模块**: RL E2E Merch Dashboard - Dimension Cross Analysis Tab - Label & Product Type Inventory Structure
 > **关联口径**: 口径文档/口径Markdown格式/Dimension Cross Analysis.md - 子模块一~子模块四（§1~§16）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
@@ -48,7 +48,7 @@
 | 5    | SLS Unit       | §3 / §11      | This Period（区间）           | 行维度下 sum(net_sales_qty)                                                                        | integer → `#,##0`      |
 | 6    | EOH Unit       | §4 / §12      | End Period（期末时点）        | 行维度下 sum(inv_qty)                                                                              | integer → `#,##0`      |
 | 7    | YTD ST%        | §5 / §13      | YTD 区间 + 期末时点（跨双表） | sales.net_sales_qty / (sales.net_sales_qty + inv.inv_qty)，sales 侧为 YTD 区间，inv 侧为快照日单日 | percent_0dp → `#,##0%` |
-| 8    | MD             | §6 / §14      | This Period（区间）           | 1 − sum(md_net_sales_amt) / sum(msrp_net_sales_amt)                                               | percent_0dp → `#,##0%` |
+| 8    | MD             | §6 / §14      | This Period（区间）           | 1 − sum(net_sales_amt) / sum(msrp_net_sales_amt)                                               | percent_0dp → `#,##0%` |
 
 ### 1.4 交叉视图指标清单（子模块二 / 子模块四独立）
 
@@ -675,7 +675,8 @@ Label & PT Table MD Value =
 // Display Folder: Label & Product Type Inventory Structure\Base Metrics
 // 用途: 当前行商品维度值 This Period 平均折扣，主视图六维度行切换共享
 // 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
-// 口径: 时间范围看 this period；1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)
+// 口径: 时间范围看 this period；1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)
+//       （v1.2 口径变更（业务确认）：分子由 md_net_sales_amt 改为 net_sales_amt）
 // 数据底表: a02_e2e_product_performance_sales_summary_d
 // 边界: 分母（吊牌金额）空或 0 时返回 BLANK，避免 1 - BLANK() = 1（即 100% 折扣）失真
 // 说明: 分子分母为同表金额字段（底表 CNY），折扣率不受币种选择影响
@@ -685,10 +686,10 @@ Label & PT Table MD Value =
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 折扣价净销售金额（分子）与吊牌价净销售金额（分母）──
-VAR __MdAmt =
+// ── 销售金额（分子，v1.2 口径变更：原 md_net_sales_amt）与吊牌价净销售金额（分母）──
+VAR __SalesAmt =
     CALCULATE(
-        SUM('a02_e2e_product_performance_sales_summary_d'[md_net_sales_amt]),
+        SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
@@ -703,7 +704,7 @@ RETURN
     IF(
         ISBLANK(__MsrpAmt) || __MsrpAmt = 0,
         BLANK(),
-        1 - DIVIDE(__MdAmt, __MsrpAmt)
+        1 - DIVIDE(__SalesAmt, __MsrpAmt)
     )
 ```
 
@@ -1549,7 +1550,7 @@ GROUP BY brand, product_type
 5. **ALLSELECTED 六维度表整表机制**：行维度六选一，其余五个未上行维度表的 ALLSELECTED 为无操作；ALLSELECTED 仅移除视觉对象内部筛选、保留外部切片器筛选，与 REMOVEFILTERS（连外部筛选一并移除）的语义差异是分母正确性的关键。**必须整表移除而不能只移除值列**：值列配置「按列排序」后，视觉对象查询经 auto-existence（同表共存）把排序列隐式并入 GroupBy 并合并为表粒度组合筛选；只移除值列时排序列筛选独自存活，排序键与业务值 1:1（Sort 表内唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，分母与分子聚合范围重合 → 占比恒 100%（1:1 的指纹；Sort 不唯一则占比异常但非恒 100%）
 6. **行字段必须从 Slicer_ 维度表拉取**：行筛选直接落在维度表字段上，ALLSELECTED(维度表字段) 才能正确移除；若误用事实表字段（如 sales[brand]）作行字段，维度表字段上无视觉对象内部筛选，ALLSELECTED 为无效操作，事实表字段的行筛选不被移除，占比恒 100%
 7. **交叉视图度量值专用性**：Cross Label / Cross PT 度量值分别绑定对应柱形图（x 轴基数维度筛选是分母机制的组成部分）；在无基数维度筛选的上下文中复用时，分母退化为全量占比（等同主视图口径），勿跨视觉对象混用
-8. **MD 空值保护**：吊牌金额（msrp_net_sales_amt）空或 0 时返回 BLANK（显示 "-"），避免 1 − BLANK() = 1（即 100% 折扣）失真
+8. **MD 空值保护**：吊牌金额（msrp_net_sales_amt）空或 0 时返回 BLANK（显示 "-"），避免 1 − BLANK() = 1（即 100% 折扣）失真；**v1.2 起 MD 分子改用 net_sales_amt（销售额口径，业务确认变更），原 md_net_sales_amt 分子口径废止**（底表字段本身保留，另处沿用）
 9. **vs LP 空值规则**：任一期占比为 BLANK 时差值返回 BLANK（显示 "-"），避免单侧缺失产生失真差值；×10000 转 bp 在 Display 层实现，Value 层差值保持原始小数可复用
 10. **主视图总计行**：占比类总计 = 100%（分子分母同范围）、数量类总计 = 全量合计、YTD ST% / MD 总计 = 全量分子分母重算，均为汇总语义下的正确行为
 11. **币种**：主视图占比 / 数量 / 比率类指标分子分母同表同币种（底表 CNY），不受币种切片器影响，无需汇率换算；交叉视图金额类附属（Cross Label / Cross PT 的 SLS Amt、EOH Amt）按 currency 口径处理——Value 层 ÷ Currency_ExchangeRate 换算为当前币种（RMB 汇率 = 1 时换算前后值相同），Display 层拼接 Currency_Symbol（`#,##0`）

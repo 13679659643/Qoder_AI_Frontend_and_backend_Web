@@ -1,6 +1,6 @@
 # Sales & Inventory Penetration Trend 表格解决方案
 
-> **版本**: v1.4（商品维度 category → ax_class 字段替换：Slicer_Category → Slicer_AX_Class 维度表（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §3.3 / 注意事项 8 / 9）。v1.3（新增全局 this period 区间框定：全部指标与所选行区间取交集，期末类取交集最后一天 MIN(行 TimeFrame_Max, Max_This[TimeFrame_Max])；新增切片器 A 框定度量 §4.25。v1.2 期末日期直接取 TimeFrame_Max 单日过滤；v1.1 对齐 Label_&_Product_Type_table.md 度量值写法）
+> **版本**: v1.6（MD 新增 LY 版：`S&I Sales MD LY Value` / `S&I Sales MD LY Display`（§4.29 / §4.30，口径与 TY 版一致，时间换 LY 交集区间），Sales 表 11 列 → 12 列，度量值合计 28 → 30 个）。v1.5（新增 Sales 表 MD（平均折扣，TY）指标：MD = 1 − sum(net_sales_amt) / sum(msrp_net_sales_amt)（业务确认口径，分子原 md_net_sales_amt，与 Label & PT / Core KPI / Sales Performance Details 板块口径变更同步），Value + Display 成对（percent 类 Display 特例，业务明确要求），Sales 表 9 列 → 11 列，新增 §4.27 / §4.28；SLS Amt% 拆分 TY / LY 两版（原 `S&I Sales SLS Amt% Value` 更名为 TY 版 §4.1 + 新增 LY 版 §4.26，分子分母同为对应区间交集，视觉对象需重拖值列））。v1.4（商品维度 category → ax_class 字段替换：Slicer_Category → Slicer_AX_Class 维度表（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §3.3 / 注意事项 8 / 9）。v1.3（新增全局 this period 区间框定：全部指标与所选行区间取交集，期末类取交集最后一天 MIN(行 TimeFrame_Max, Max_This[TimeFrame_Max])；新增切片器 A 框定度量 §4.25）。v1.2（期末日期直接取 TimeFrame_Max 单日过滤）。v1.1（对齐 Label_&_Product_Type_table.md 度量值写法）
 > **模块**: RL E2E Merch Dashboard - Merchandise Performance Overview Tab - Sales & Inventory Penetration Trend
 > **关联口径**: 口径文档/口径Markdown格式/Sales & Inventory Penetration Trend.md - 子模块一【Sales】（§1-§9）+ 子模块二【Inventory】（§10-§20）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
@@ -19,7 +19,7 @@
 
 | 视觉对象 | 覆盖口径 | 结构 |
 | --- | --- | --- |
-| Sales 表格 | 子模块一【Sales】（§1-§9） | 行维度六选一 + 9 列指标 |
+| Sales 表格 | 子模块一【Sales】（§1-§9） | 行维度六选一 + 12 列指标 |
 | Inventory 表格 | 子模块二【Inventory】（§10-§20） | 行维度六选一 + 11 列指标 |
 | 切片器 A | 时间单选 | `Slicer_Time_Frame_Sales_Trend[TimeFrame_Value]`，视觉对象级别筛选 `[S&I TimeFrame Slicer IsVisible] = 1`（仅保留与全局 This Period **重叠**的时间值，见 §4.25） |
 | 按钮切片器 B | 切片器 A 粒度 | `Slicer_Time_Frame_Sales_Trend[TimeFrame_ID]`（Week / Month / Year），同表筛选天然限制切片器 A 的粒度 |
@@ -31,7 +31,7 @@
 **与矩阵方案（Merchandising Core KPI）的关键差异**：
 
 1. 本次为**表格**而非矩阵：无 Dim_ColMetric 列路由维度、无 Amt/Unit 按钮路由、无商品标签按钮路由，**每个指标独立输出单独的 Value 度量**
-2. **Display 度量仅输出数据类型为 currency 的指标**（SLS Amt TY / SLS Amt LY / EOH Amt TY / EOH Amt LY，共 4 个），其余指标（percent / integer）直接使用 Value 度量 + 度量值静态格式
+2. **Display 度量覆盖 currency 类 + MD 特例**：currency 类 4 个（SLS Amt TY / SLS Amt LY / EOH Amt TY / EOH Amt LY，货币符号由币种切片器决定，千分位整数，Value 层换算汇率 / Display 层拼符号）+ **MD（TY、LY）为 percent 类 Display 特例**（v1.5、v1.6 业务明确要求 Value + Display 成对输出，Display 层做 percent_0dp 格式化与 BLANK→"-"），其余指标（percent / integer）直接使用 Value 度量 + 度量值静态格式
 3. 时间筛选器使用**单选模式** `Slicer_Time_Frame_Sales_Trend`（单选 TimeFrame_Value），LY 读**表内预计算的 `TimeFrame_Min_LY` / `TimeFrame_Max_LY`**（区别于 Merchandising Core KPI / Label & PT 的 Min_Last / Max_Last 独立筛选器模式，本模块无 last period 筛选器）
 4. **全部指标叠加全局 This Period 区间框定**（v1.3）：与所选行区间取交集——全局筛选器在单选切片器之外二次约束所有指标的数据范围
 5. 六个商品维度表与两张事实表均一对多关联，行维度筛选经模型关系自动传递，无需任何 TREATAS
@@ -56,8 +56,8 @@
 
 | 口径 | 时间范围 | 适用指标 |
 | --- | --- | --- |
-| This Period 区间（TY） | data_date ∈ 所选行 [TimeFrame_Min, TimeFrame_Max] **∩ 全局** [Min_This[TimeFrame_Min], Max_This[TimeFrame_Max]] | SLS Unit（TY）、SLS Amt（TY）、SLS Amt% 分子分母、ST%（TY）分子 |
-| LY 区间 | data_date ∈ 所选行 [TimeFrame_Min_LY, TimeFrame_Max_LY] **∩ 全局 LY** [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]] | SLS Unit（LY）、SLS Amt（LY）、ST%（LY）分子 |
+| This Period 区间（TY） | data_date ∈ 所选行 [TimeFrame_Min, TimeFrame_Max] **∩ 全局** [Min_This[TimeFrame_Min], Max_This[TimeFrame_Max]] | SLS Unit（TY）、SLS Amt（TY）、SLS Amt%（TY）分子分母、MD（TY）分子分母、ST%（TY）分子 |
+| LY 区间 | data_date ∈ 所选行 [TimeFrame_Min_LY, TimeFrame_Max_LY] **∩ 全局 LY** [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]] | SLS Unit（LY）、SLS Amt（LY）、SLS Amt%（LY）分子分母、MD（LY）分子分母、ST%（LY）分子 |
 | End Period 期末时点（TY） | **所选时间范围 ∩ 全局区间的最后一天** = MIN(所选行 TimeFrame_Max, Max_This[TimeFrame_Max])（单日时点） | EOH Amt%（分子分母）、EOH Unit / Amt（TY）、In-transit Unit（TY）、ST%（TY）分母 |
 | End Period 期末时点（LY） | MIN(所选行 TimeFrame_Max_LY, Max_This[TimeFrame_Max_LY])（LY 交集最后一天，单日时点） | EOH Unit（LY）、EOH Amt（LY）、In-transit Unit（LY） |
 | ST%（LY）分母 | **当前**交集最后一天 MIN(所选行 TimeFrame_Max, Max_This[TimeFrame_Max])（非 LY 期末，口径原文如此） | ST%（LY）期末库存金额 |
@@ -74,12 +74,12 @@
 
 ### 1.4 币种口径
 
-- 占比 / 比率 / 数量类指标（SLS Amt% / EOH Amt% / ST% / YOY / SLS Unit / EOH Unit / In-transit Unit）不涉及金额展示，无需币种换算：占比分子分母为同表同币种金额字段（底表金额均存储 CNY），换算与否比值不变
+- 占比 / 比率 / 数量类指标（SLS Amt%（TY / LY）/ EOH Amt% / ST% / MD / YOY / SLS Unit / EOH Unit / In-transit Unit）不涉及金额展示，无需币种换算：占比分子分母为同表同币种金额字段（底表金额均存储 CNY），换算与否比值不变
 - currency 类 4 个指标（SLS Amt TY / LY、EOH Amt TY / LY）：货币符号由币种切片器（Slicer_Currency_Selection）决定，千分位整数；数据底表金额仅存储 CNY，**Value 层完成汇率换算**（原始值 ÷ Currency_ExchangeRate，RMB 汇率 = 1 时换算前后值相同），**Display 层仅拼接币种符号**
 
 ### 1.5 指标清单
 
-**Sales 表（9 列）**：SLS Amt%、SLS Unit（TY）、SLS Amt（TY）、ST%（TY）、SLS Unit（LY）、SLS Amt（LY）、ST%（LY）、SLS Amt YOY、SLS Unit YOY
+**Sales 表（12 列，v1.6）**：SLS Amt%（TY）、SLS Unit（TY）、SLS Amt（TY）、ST%（TY）、SLS Amt%（LY）、SLS Unit（LY）、SLS Amt（LY）、ST%（LY）、MD（TY）、MD（LY）、SLS Amt YOY、SLS Unit YOY
 
 **Inventory 表（11 列）**：EOH Amt%、EOH Unit（TY）、EOH Amt（TY）、In-transit Unit（TY）、ST%（TY）、EOH Unit（LY）、EOH Amt（LY）、In-transit Unit（LY）、ST%（LY）、EOH Amt YOY、EOH Unit YOY
 
@@ -87,7 +87,7 @@
 
 ## 2. 现状分析
 
-- 数据底表 `a02_e2e_product_performance_sales_summary_d`（日粒度）：net_sales_amt（净销售金额）、net_sales_qty（净销售数量）；维度含 platform、shop_name 及 brand / super_season / product_type / md_type / division / framework / ax_class 等全部商品维度；日期字段为 data_date（date 类型）；platform 已在数据源层过滤 IN ('JD','TM','RLE','DY')
+- 数据底表 `a02_e2e_product_performance_sales_summary_d`（日粒度）：net_sales_amt（净销售金额）、net_sales_qty（净销售数量）、msrp_net_sales_amt（吊牌价净销售金额，v1.5 起 MD 分母使用）；维度含 platform、shop_name 及 brand / super_season / product_type / md_type / division / framework / ax_class 等全部商品维度；日期字段为 data_date（date 类型）；platform 已在数据源层过滤 IN ('JD','TM','RLE','DY')
 - 数据底表 `a02_e2e_product_performance_inv_summary_d`（日快照）：msrp_inv_amt（库存吊牌价金额，期末库存金额口径）、inv_qty（库存数量）、msrp_in_trans_inv_amt（在途库存吊牌价金额）、in_trans_inv_qty（在途库存数量）；商品维度字段与 sales 表同名同构；**无 platform / shop_name 字段**（渠道筛选不影响库存侧指标）；日期字段为 data_date（date 类型）
 - 全局日期体系：`Slicer_Time_Frame`（主时间筛选器，粒度含 Day / Week / Month / Year / Quarter）、`Slicer_Time_Frame_Min_This` / `Max_This`（this period 区间端点表，经模型关系由主筛选器驱动，**两表均含 TimeFrame_Min / TimeFrame_Max / TimeFrame_Min_LY / TimeFrame_Max_LY 字段**）——全局 This Period = [Min_This[TimeFrame_Min], Max_This[TimeFrame_Max]]，其去年同期 = [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]]
 - 模型关系：Slicer_Label（值域 = sales 表 brand distinct，label 字段）/ Slicer_Super_Season / Slicer_Product_Type / Slicer_AX_Class / Slicer_Md_Type / Slicer_Division 商品维度表与两张事实表均一对多关联，筛选自动传递双表；Slicer_Platform_Selection、Slicer_Store_Name 与 sales 表一对多关联；**切片器 A / B（Slicer_Time_Frame_Sales_Trend）与事实表断开维度，时间范围在 DAX 中显式筛选**；Slicer_Currency_Selection 为断开维度
@@ -109,16 +109,17 @@ Value（口径计算）
    - LY 指标：data_date ∈ 所选行 LY 区间 ∩ [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]]
    - 期末类：交集最后一天 MIN(行 TimeFrame_Max[_LY], Max_This[TimeFrame_Max[_LY]])
 ←  维度表 1:N 关系自然传递行 / 切片器筛选（无需 TREATAS）
-←  SLS Amt% / EOH Amt% 分母：ALLSELECTED 六个商品维度表【整表】（移除行维度筛选——含按列排序隐式带入的排序列筛选，保留外部切片器）
+←  SLS Amt%（TY / LY）/ EOH Amt% 分母：ALLSELECTED 六个商品维度表【整表】（移除行维度筛选——含按列排序隐式带入的排序列筛选，保留外部切片器）
 ←  currency 4 个 Value 层完成币种汇率换算（原始 CNY ÷ Currency_ExchangeRate）
 ↓
 YOY Value（比率）
 ←  框定后 TY Value / LY Value - 1；LY 空或 0 时返回 BLANK（自动继承框定，无需改动）
 ↓
-Display（仅 currency 类，格式化显示）
+Display（currency 类 4 个 + MD percent 特例 2 个（TY / LY，v1.5 / v1.6），格式化显示）
 ←  币种符号 & FORMAT(#,##0)；BLANK 显示 "-"（引用层自动继承框定）
 
 其余（percent_0dp / integer）不建 Display 度量，直接使用 Value 度量 + 度量值静态格式（`#,##0%` / `#,##0`）。
+（MD 为 percent 类特例：业务明确要求 Value + Display 成对，Display 层做 percent_0dp 格式化与 BLANK→"-"，见 §4.28 / §4.30）
 
 ↓
 切片器 A 框定度量（S&I TimeFrame Slicer IsVisible，视觉对象筛选）
@@ -129,29 +130,32 @@ Display（仅 currency 类，格式化显示）
 
 | # | 表格 | 指标（口径§） | 度量值名称 | 数据底表 | 时间口径 | 计算公式 | 数据类型 | 数据格式 | 输出 |
 | - | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Sales | SLS Amt%（§1） | S&I Sales SLS Amt% Value | sales | TY 区间 ∩ 全局 TY 区间 | 分子 sum(net_sales_amt) / 分母 ALLSELECTED 六维度 sum(net_sales_amt) | percent_0dp | `#,##0%` | Value |
+| 1 | Sales | SLS Amt%（TY）（§1） | S&I Sales SLS Amt% TY Value | sales | TY 区间 ∩ 全局 TY 区间 | 分子 sum(net_sales_amt) / 分母 ALLSELECTED 六维度 sum(net_sales_amt) | percent_0dp | `#,##0%` | Value |
 | 2 | Sales | SLS Unit（TY）（§2） | S&I Sales SLS Unit TY Value | sales | TY 区间 ∩ 全局 TY 区间 | sum(net_sales_qty) | integer | `#,##0` | Value |
 | 3 | Sales | SLS Amt（TY）（§3） | S&I Sales SLS Amt TY Value | sales | TY 区间 ∩ 全局 TY 区间 | sum(net_sales_amt) | currency | 币种符号 + `#,##0` | Value + Display |
 | 4 | 两表共享 | ST%（TY）（§4 / §14） | S&I ST% TY Value | sales + inv | 分子 TY 区间 ∩ 全局 TY / 分母当前交集最后一天 | sales.net_sales_amt / (sales.net_sales_amt + inv.msrp_inv_amt) | percent_0dp | `#,##0%` | Value |
-| 5 | Sales | SLS Unit（LY）（§5） | S&I Sales SLS Unit LY Value | sales | LY 区间 ∩ 全局 LY 区间 | sum(net_sales_qty) | integer | `#,##0` | Value |
-| 6 | Sales | SLS Amt（LY）（§6） | S&I Sales SLS Amt LY Value | sales | LY 区间 ∩ 全局 LY 区间 | sum(net_sales_amt) | currency | 币种符号 + `#,##0` | Value + Display |
-| 7 | 两表共享 | ST%（LY）（§7 / §18） | S&I ST% LY Value | sales + inv | 分子 LY 区间 ∩ 全局 LY / 分母**当前**交集最后一天 | LY sales.net_sales_amt / (LY sales.net_sales_amt + inv.msrp_inv_amt) | percent_0dp | `#,##0%` | Value |
-| 8 | Sales | SLS Amt YOY（§8） | S&I Sales SLS Amt YOY Value | sales | 框定后 TY / LY | TY / LY - 1 | percent_0dp | `#,##0%` | Value |
-| 9 | Sales | SLS Unit YOY（§9） | S&I Sales SLS Unit YOY Value | sales | 框定后 TY / LY | TY / LY - 1 | percent_0dp | `#,##0%` | Value |
-| 10 | Inventory | EOH Amt%（§10） | S&I Inventory EOH Amt% Value | inv | 当前交集最后一天 | 分子 sum(msrp_inv_amt) / 分母 ALLSELECTED 六维度 sum(msrp_inv_amt) | percent_0dp | `#,##0%` | Value |
-| 11 | Inventory | EOH Unit（TY）（§11） | S&I Inventory EOH Unit TY Value | inv | 当前交集最后一天 | sum(inv_qty) | integer | `#,##0` | Value |
-| 12 | Inventory | EOH Amt（TY）（§12） | S&I Inventory EOH Amt TY Value | inv | 当前交集最后一天 | sum(msrp_inv_amt) | currency | 币种符号 + `#,##0` | Value + Display |
-| 13 | Inventory | In-transit Unit（TY）（§13） | S&I Inventory In-transit Unit TY Value | inv | 当前交集最后一天 | sum(in_trans_inv_qty) | integer | `#,##0` | Value |
-| 14 | Inventory | EOH Unit（LY）（§15） | S&I Inventory EOH Unit LY Value | inv | LY 交集最后一天 | sum(inv_qty) | integer | `#,##0` | Value |
-| 15 | Inventory | EOH Amt（LY）（§16） | S&I Inventory EOH Amt LY Value | inv | LY 交集最后一天 | sum(msrp_inv_amt) | currency | 币种符号 + `#,##0` | Value + Display |
-| 16 | Inventory | In-transit Unit（LY）（§17） | S&I Inventory In-transit Unit LY Value | inv | LY 交集最后一天 | sum(in_trans_inv_qty) | integer | `#,##0` | Value |
-| 17 | Inventory | EOH Amt YOY（§19） | S&I Inventory EOH Amt YOY Value | inv | 框定后 TY / LY | TY / LY - 1（金额口径） | percent_0dp | `#,##0%` | Value |
-| 18 | Inventory | EOH Unit YOY（§20） | S&I Inventory EOH Unit YOY Value | inv | 框定后 TY / LY | TY / LY - 1（数量口径） | percent_0dp | `#,##0%` | Value |
-| 19 | 切片器 | 切片器可见性 | S&I TimeFrame Slicer IsVisible | — | 全局 This Period | 切片器项与全局区间重叠 → 1 | integer（0/1） | 不展示 | 切片器 A 视觉筛选 |
+| 5 | Sales | SLS Amt%（LY）（§1，v1.5 拆分） | S&I Sales SLS Amt% LY Value | sales | LY 区间 ∩ 全局 LY 区间 | 分子 sum(net_sales_amt) / 分母 ALLSELECTED 六维度 sum(net_sales_amt)（同 TY 版换 LY 区间） | percent_0dp | `#,##0%` | Value |
+| 6 | Sales | SLS Unit（LY）（§5） | S&I Sales SLS Unit LY Value | sales | LY 区间 ∩ 全局 LY 区间 | sum(net_sales_qty) | integer | `#,##0` | Value |
+| 7 | Sales | SLS Amt（LY）（§6） | S&I Sales SLS Amt LY Value | sales | LY 区间 ∩ 全局 LY 区间 | sum(net_sales_amt) | currency | 币种符号 + `#,##0` | Value + Display |
+| 8 | 两表共享 | ST%（LY）（§7 / §18） | S&I ST% LY Value | sales + inv | 分子 LY 区间 ∩ 全局 LY / 分母**当前**交集最后一天 | LY sales.net_sales_amt / (LY sales.net_sales_amt + inv.msrp_inv_amt) | percent_0dp | `#,##0%` | Value |
+| 9 | Sales | MD（TY）（业务新增，v1.5） | S&I Sales MD TY Value | sales | TY 区间 ∩ 全局 TY 区间 | 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（分母空或 0 → BLANK） | percent_0dp | `#,##0%` | Value + Display（percent 类 Display 特例） |
+| 10 | Sales | MD（LY）（业务新增，v1.6） | S&I Sales MD LY Value | sales | LY 区间 ∩ 全局 LY 区间 | 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（同 TY 版换 LY 区间；分母空或 0 → BLANK） | percent_0dp | `#,##0%` | Value + Display（percent 类 Display 特例） |
+| 11 | Sales | SLS Amt YOY（§8） | S&I Sales SLS Amt YOY Value | sales | 框定后 TY / LY | TY / LY - 1 | percent_0dp | `#,##0%` | Value |
+| 12 | Sales | SLS Unit YOY（§9） | S&I Sales SLS Unit YOY Value | sales | 框定后 TY / LY | TY / LY - 1 | percent_0dp | `#,##0%` | Value |
+| 13 | Inventory | EOH Amt%（§10） | S&I Inventory EOH Amt% Value | inv | 当前交集最后一天 | 分子 sum(msrp_inv_amt) / 分母 ALLSELECTED 六维度 sum(msrp_inv_amt) | percent_0dp | `#,##0%` | Value |
+| 14 | Inventory | EOH Unit（TY）（§11） | S&I Inventory EOH Unit TY Value | inv | 当前交集最后一天 | sum(inv_qty) | integer | `#,##0` | Value |
+| 15 | Inventory | EOH Amt（TY）（§12） | S&I Inventory EOH Amt TY Value | inv | 当前交集最后一天 | sum(msrp_inv_amt) | currency | 币种符号 + `#,##0` | Value + Display |
+| 16 | Inventory | In-transit Unit（TY）（§13） | S&I Inventory In-transit Unit TY Value | inv | 当前交集最后一天 | sum(in_trans_inv_qty) | integer | `#,##0` | Value |
+| 17 | Inventory | EOH Unit（LY）（§15） | S&I Inventory EOH Unit LY Value | inv | LY 交集最后一天 | sum(inv_qty) | integer | `#,##0` | Value |
+| 18 | Inventory | EOH Amt（LY）（§16） | S&I Inventory EOH Amt LY Value | inv | LY 交集最后一天 | sum(msrp_inv_amt) | currency | 币种符号 + `#,##0` | Value + Display |
+| 19 | Inventory | In-transit Unit（LY）（§17） | S&I Inventory In-transit Unit LY Value | inv | LY 交集最后一天 | sum(in_trans_inv_qty) | integer | `#,##0` | Value |
+| 20 | Inventory | EOH Amt YOY（§19） | S&I Inventory EOH Amt YOY Value | inv | 框定后 TY / LY | TY / LY - 1（金额口径） | percent_0dp | `#,##0%` | Value |
+| 21 | Inventory | EOH Unit YOY（§20） | S&I Inventory EOH Unit YOY Value | inv | 框定后 TY / LY | TY / LY - 1（数量口径） | percent_0dp | `#,##0%` | Value |
+| 22 | 切片器 | 切片器可见性 | S&I TimeFrame Slicer IsVisible | — | 全局 This Period | 切片器项与全局区间重叠 → 1 | integer（0/1） | 不展示 | 切片器 A 视觉筛选 |
 
-注：ST%（TY）/ ST%（LY）为两表共享度量（§4 与 §14、§7 与 §18 口径完全一致，Label & Product Type 模块同款共享模式）；共享度量不带 Sales / Inventory 子模块前缀。指标度量合计 18 Value + 4 Display = 22 个；辅助文本度量 2 个（§4.23 / §4.24，**不加全局框定**）；切片器框定度量 1 个（§4.25），合计 25 个。
+注：ST%（TY）/ ST%（LY）为两表共享度量（§4 与 §14、§7 与 §18 口径完全一致，Label & Product Type 模块同款共享模式）；共享度量不带 Sales / Inventory 子模块前缀。指标度量合计 21 Value + 6 Display = 27 个（v1.5：SLS Amt% 拆分 TY / LY、新增 MD（TY）Value + Display；v1.6：新增 MD（LY）Value + Display）；辅助文本度量 2 个（§4.23 / §4.24，**不加全局框定**）；切片器框定度量 1 个（§4.25），合计 30 个。
 
-### 3.3 占比分母机制（ALLSELECTED 六维度整表移除，SLS Amt% / EOH Amt%）
+### 3.3 占比分母机制（ALLSELECTED 六维度整表移除，SLS Amt% TY / LY / EOH Amt%）
 
 口径「单品类占总品类的比例」的分母 = 外部筛选上下文下的全量合计：
 
@@ -194,16 +198,18 @@ ALLSELECTED('Slicer_Division')
 
 ## 4. 度量值实现
 
-### 4.1 S&I Sales SLS Amt% Value（销售金额占比）
+### 4.1 S&I Sales SLS Amt% TY Value（销售金额占比 TY）
 
 ```dax
-S&I Sales SLS Amt% Value =
+S&I Sales SLS Amt% TY Value =
 // ========================================
-// 度量值: S&I Sales SLS Amt% Value
-// 中文名: 销售金额占比
+// 度量值: S&I Sales SLS Amt% TY Value
+// 中文名: 销售金额占比（TY）
 // Display Folder: Sales & Inventory Penetration Trend\Base Metrics
-// 用途: 当前行商品维度值占 total 的销售金额比例（单品类占总品类的比例），
+// 用途: 当前行商品维度值占 total 的销售金额比例（单品类占总品类的比例，本期），
 //       Sales 表六维度行切换共享
+// 说明: v1.5 拆分——原 `S&I Sales SLS Amt% Value` 更名为本度量（TY 版，逻辑不变），
+//       同步新增 LY 版 `S&I Sales SLS Amt% LY Value`（§4.26）；视觉对象值列需重拖
 // 依赖: Slicer_Time_Frame_Sales_Trend[TimeFrame_Min] / [TimeFrame_Max]（单选 TimeFrame_Value 所选行）；
 //       Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
 //       （全局 this period 区间范围框定）
@@ -1218,40 +1224,275 @@ RETURN
     )
 ```
 
+### 4.26 S&I Sales SLS Amt% LY Value（销售金额占比 LY，v1.5 新增）
+
+```dax
+S&I Sales SLS Amt% LY Value =
+// ========================================
+// 度量值: S&I Sales SLS Amt% LY Value
+// 中文名: 销售金额占比（LY）
+// Display Folder: Sales & Inventory Penetration Trend\Base Metrics
+// 用途: 当前行商品维度值占 total 的销售金额比例（单品类占总品类的比例，去年同期），
+//       Sales 表六维度行切换共享
+// 说明: v1.5 拆分新增（原单一 SLS Amt% 度量拆为 TY / LY 两版；本度量结构与
+//       §4.1 TY 版完全同构，仅时间区间整体换为 LY 交集）
+// 依赖: Slicer_Time_Frame_Sales_Trend[TimeFrame_Min_LY] / [TimeFrame_Max_LY]
+//       （单选所选行表内预计算 LY 区间）；
+//       Slicer_Time_Frame_Min_This[TimeFrame_Min_LY] / Slicer_Time_Frame_Max_This[TimeFrame_Max_LY]
+//       （全局 this period 区间的去年同期，LY 指标范围框定）
+// 口径: 口径文档 Sales & Inventory Penetration Trend.md §1（LY 版）；时间范围看
+//       所选时间范围去年同期；分子：各维度值下 sum(net_sales_amt)；
+//       分母：sum(net_sales_amt)（占 total 比例）
+// 全局框定: LY 数据位于去年，取全局 this period 区间的去年同期框定（直接套当前
+//       区间会把 LY 值全部清空）；与所选行 LY 区间取交集
+// 数据底表: a02_e2e_product_performance_sales_summary_d
+// 分母机制: ALLSELECTED 六个商品维度表【整表】（同 §4.1 TY 版：移除视觉对象内部
+//       的行维度筛选（含按列排序隐式带入的排序列筛选），保留外部切片器筛选；
+//       整表而非值列的原因见 §3.3）；分母时间范围与分子同为 LY 交集
+// 币种: 分子分母为同表同币种金额（底表 CNY），占比不受币种选择影响
+// 数据类型: percent_0dp；数据格式: #,##0%（不含正号，度量值静态格式）
+// ========================================
+
+// ── LY 时间区间（日期表预计算去年同期）──
+VAR __PeriodMinLY = SELECTEDVALUE(Slicer_Time_Frame_Sales_Trend[TimeFrame_Min_LY])
+VAR __PeriodMaxLY = SELECTEDVALUE(Slicer_Time_Frame_Sales_Trend[TimeFrame_Max_LY])
+
+// ── 全局 LY 区间（全局 this period 的去年同期，LY 指标范围框定）──
+VAR __ThisMinLY = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min_LY])
+VAR __ThisMaxLY = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_LY])
+
+// ── 分子：当前行维度值 LY 净销售金额（所选行 LY 区间 ∩ 全局 LY 区间）──
+VAR __Numerator =
+    CALCULATE(
+        SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMinLY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMaxLY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __ThisMinLY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __ThisMaxLY
+    )
+
+// ── 分母：外部筛选上下文下的全量 LY 净销售金额 ──
+// ALLSELECTED 六维度【整表移除】：机制与原因同 §4.1 TY 版（详见 §3.3）
+VAR __Denominator =
+    CALCULATE(
+        SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        ALLSELECTED('Slicer_Label'),
+        ALLSELECTED('Slicer_Super_Season'),
+        ALLSELECTED('Slicer_Product_Type'),
+        ALLSELECTED('Slicer_AX_Class'),
+        ALLSELECTED('Slicer_Md_Type'),
+        ALLSELECTED('Slicer_Division'),
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMinLY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMaxLY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __ThisMinLY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __ThisMaxLY
+    )
+
+RETURN
+    DIVIDE(__Numerator, __Denominator)
+```
+
+### 4.27 S&I Sales MD TY Value（平均折扣 TY，v1.5 新增）
+
+```dax
+S&I Sales MD TY Value =
+// ========================================
+// 度量值: S&I Sales MD TY Value
+// 中文名: 平均折扣（TY）
+// Display Folder: Sales & Inventory Penetration Trend\Base Metrics
+// 用途: 当前行商品维度值 This Period 平均折扣，Sales 表六维度行切换共享
+// 说明: v1.5 新增；口径与 Label & PT / Merchandising Core KPI / Sales
+//       Performance Details 板块 MD 一致（业务确认口径）
+// 依赖: Slicer_Time_Frame_Sales_Trend[TimeFrame_Min] / [TimeFrame_Max]；
+//       Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
+//       （全局 this period 区间范围框定）
+// 口径: 时间范围看 this period（所选行区间 ∩ 全局区间）；
+//       1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)
+//       （业务确认口径：分子为 net_sales_amt，原 md_net_sales_amt 分子口径废止，
+//        与其他板块 v1.2 / v1.3 口径变更同步）
+// 数据底表: a02_e2e_product_performance_sales_summary_d
+// 边界: 分母（吊牌金额）空或 0 时返回 BLANK，避免 1 - BLANK() = 1（即 100% 折扣）失真
+// 币种: 分子分母为同表同币种金额（底表 CNY），折扣率不受币种选择影响（不换算）
+// 数据类型: percent_0dp；数据格式: #,##0%（不含正号，Display 层同格式）
+// ========================================
+
+// ── This Period 时间区间（单选 TimeFrame_Value 所选行）──
+VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Sales_Trend[TimeFrame_Min])
+VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Sales_Trend[TimeFrame_Max])
+
+// ── 全局 this period 区间（全局时间筛选器范围框定）──
+VAR __ThisMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
+VAR __ThisMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+
+// ── 销售金额（分子）与吊牌价净销售金额（分母）：同区间交集 ──
+VAR __SalesAmt =
+    CALCULATE(
+        SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __ThisMin,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __ThisMax
+    )
+VAR __MsrpAmt =
+    CALCULATE(
+        SUM('a02_e2e_product_performance_sales_summary_d'[msrp_net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __ThisMin,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __ThisMax
+    )
+
+RETURN
+    IF(
+        ISBLANK(__MsrpAmt) || __MsrpAmt = 0,
+        BLANK(),
+        1 - DIVIDE(__SalesAmt, __MsrpAmt)
+    )
+```
+
+### 4.28 S&I Sales MD TY Display（平均折扣 TY 显示，v1.5 新增）
+
+```dax
+S&I Sales MD TY Display =
+// ========================================
+// 度量值: S&I Sales MD TY Display
+// 中文名: 平均折扣（TY）显示
+// Display Folder: Sales & Inventory Penetration Trend\Formatting
+// 用途: percent_0dp 格式化显示（#,##0%，不含正号）；BLANK 显示 "-"
+// 说明: percent 类 Display 特例（v1.5 业务明确要求 MD 以 Value + Display 成对
+//       输出——区别于本模块其余 percent / integer 类只用 Value + 度量值静态格式）；
+//       引用 Value 层自动继承全局框定与空值保护
+// 依赖: [S&I Sales MD TY Value]
+// 数据格式: #,##0%（同 Value 层静态格式，Display 层用于统一 "-" 空值显示）
+// ========================================
+    VAR __Value = [S&I Sales MD TY Value]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",
+            FORMAT(__Value, "#,##0%")
+        )
+```
+
+### 4.29 S&I Sales MD LY Value（平均折扣 LY，v1.6 新增）
+
+```dax
+S&I Sales MD LY Value =
+// ========================================
+// 度量值: S&I Sales MD LY Value
+// 中文名: 平均折扣（LY）
+// Display Folder: Sales & Inventory Penetration Trend\Base Metrics
+// 用途: 当前行商品维度值去年同期平均折扣，Sales 表六维度行切换共享
+// 说明: v1.6 新增，口径与 TY 版（§4.27）完全一致，仅时间换 LY 区间；
+//       公式仍为 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（业务确认口径）
+// 依赖: Slicer_Time_Frame_Sales_Trend[TimeFrame_Min_LY] / [TimeFrame_Max_LY]
+//       （单选所选行表内预计算 LY 区间）；
+//       Slicer_Time_Frame_Min_This[TimeFrame_Min_LY] / Slicer_Time_Frame_Max_This[TimeFrame_Max_LY]
+//       （全局 this period 区间的去年同期，LY 指标范围框定）
+// 口径: 时间范围看去年同期（所选行 LY 区间 ∩ 全局 LY 区间）；
+//       1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)
+// 数据底表: a02_e2e_product_performance_sales_summary_d
+// 边界: 分母（吊牌金额）空或 0 时返回 BLANK，避免 1 - BLANK() = 1（即 100% 折扣）失真
+// 币种: 分子分母为同表同币种金额（底表 CNY），折扣率不受币种选择影响（不换算）
+// 数据类型: percent_0dp；数据格式: #,##0%（不含正号，Display 层同格式）
+// ========================================
+
+// ── LY 时间区间（日期表预计算去年同期）──
+VAR __PeriodMinLY = SELECTEDVALUE(Slicer_Time_Frame_Sales_Trend[TimeFrame_Min_LY])
+VAR __PeriodMaxLY = SELECTEDVALUE(Slicer_Time_Frame_Sales_Trend[TimeFrame_Max_LY])
+
+// ── 全局 LY 区间（全局 this period 的去年同期，LY 指标范围框定）──
+VAR __ThisMinLY = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min_LY])
+VAR __ThisMaxLY = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_LY])
+
+// ── 销售金额（分子）与吊牌价净销售金额（分母）：同 LY 区间交集 ──
+VAR __SalesAmt =
+    CALCULATE(
+        SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMinLY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMaxLY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __ThisMinLY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __ThisMaxLY
+    )
+VAR __MsrpAmt =
+    CALCULATE(
+        SUM('a02_e2e_product_performance_sales_summary_d'[msrp_net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMinLY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMaxLY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __ThisMinLY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __ThisMaxLY
+    )
+
+RETURN
+    IF(
+        ISBLANK(__MsrpAmt) || __MsrpAmt = 0,
+        BLANK(),
+        1 - DIVIDE(__SalesAmt, __MsrpAmt)
+    )
+```
+
+### 4.30 S&I Sales MD LY Display（平均折扣 LY 显示，v1.6 新增）
+
+```dax
+S&I Sales MD LY Display =
+// ========================================
+// 度量值: S&I Sales MD LY Display
+// 中文名: 平均折扣（LY）显示
+// Display Folder: Sales & Inventory Penetration Trend\Formatting
+// 用途: percent_0dp 格式化显示（#,##0%，不含正号）；BLANK 显示 "-"
+// 说明: percent 类 Display 特例（v1.6，与 TY 版 §4.28 成对模式一致）；
+//       引用 Value 层自动继承 LY 全局框定与空值保护
+// 依赖: [S&I Sales MD LY Value]
+// 数据格式: #,##0%（同 Value 层静态格式，Display 层用于统一 "-" 空值显示）
+// ========================================
+    VAR __Value = [S&I Sales MD LY Value]
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",
+            FORMAT(__Value, "#,##0%")
+        )
+```
+
 ---
 
 ## 5. 度量值清单
 
 | # | 度量值 | 中文名 | 指标类型 | 度量值静态格式 | 用于视觉对象 |
 | - | --- | --- | --- | --- | --- |
-| 1 | S&I Sales SLS Amt% Value | 销售金额占比 | percent_0dp | `#,##0%` | Sales 表 |
+| 1 | S&I Sales SLS Amt% TY Value | 销售金额占比（TY） | percent_0dp | `#,##0%` | Sales 表 |
 | 2 | S&I Sales SLS Unit TY Value | DCom净销售数量（TY） | integer | `#,##0` | Sales 表 |
 | 3 | S&I Sales SLS Amt TY Value | DCom净销售额（TY） | currency | `#,##0` | Sales 表（经 Display） |
 | 4 | S&I Sales SLS Amt TY Display | DCom净销售额（TY）显示 | currency 文本 | 文本 | Sales 表 |
 | 5 | S&I ST% TY Value | 售罄率%（金额，TY） | percent_0dp | `#,##0%` | Sales 表 + Inventory 表（共享） |
-| 6 | S&I Sales SLS Unit LY Value | DCom净销售数量（LY） | integer | `#,##0` | Sales 表 |
-| 7 | S&I Sales SLS Amt LY Value | DCom净销售额（LY） | currency | `#,##0` | Sales 表（经 Display） |
-| 8 | S&I Sales SLS Amt LY Display | DCom净销售额（LY）显示 | currency 文本 | 文本 | Sales 表 |
-| 9 | S&I ST% LY Value | 售罄率%（金额，LY） | percent_0dp | `#,##0%` | Sales 表 + Inventory 表（共享） |
-| 10 | S&I Sales SLS Amt YOY Value | DCom净销售额 YOY | percent_0dp | `#,##0%` | Sales 表 |
-| 11 | S&I Sales SLS Unit YOY Value | DCom净销售数量 YOY | percent_0dp | `#,##0%` | Sales 表 |
-| 12 | S&I Inventory EOH Amt% Value | 期末库存金额占比 | percent_0dp | `#,##0%` | Inventory 表 |
-| 13 | S&I Inventory EOH Unit TY Value | 期末库存数量（TY） | integer | `#,##0` | Inventory 表 |
-| 14 | S&I Inventory EOH Amt TY Value | 期末库存金额（TY） | currency | `#,##0` | Inventory 表（经 Display） |
-| 15 | S&I Inventory EOH Amt TY Display | 期末库存金额（TY）显示 | currency 文本 | 文本 | Inventory 表 |
-| 16 | S&I Inventory In-transit Unit TY Value | 在途库存数量（TY） | integer | `#,##0` | Inventory 表 |
-| 17 | S&I Inventory EOH Unit LY Value | 期末库存数量（LY） | integer | `#,##0` | Inventory 表 |
-| 18 | S&I Inventory EOH Amt LY Value | 期末库存金额（LY） | currency | `#,##0` | Inventory 表（经 Display） |
-| 19 | S&I Inventory EOH Amt LY Display | 期末库存金额（LY）显示 | currency 文本 | 文本 | Inventory 表 |
-| 20 | S&I Inventory In-transit Unit LY Value | 在途库存数量（LY） | integer | `#,##0` | Inventory 表 |
-| 21 | S&I Inventory EOH Amt YOY Value | 期末库存金额 YOY | percent_0dp | `#,##0%` | Inventory 表 |
-| 22 | S&I Inventory EOH Unit YOY Value | 期末库存数量 YOY | percent_0dp | `#,##0%` | Inventory 表 |
-| 23 | S&I TimeFrame Value TY | 当前所选时间值（TY） | text（辅助） | 文本 | 卡片 / 标题 / 表头（当前期间；**不加框定**） |
-| 24 | S&I TimeFrame Value LY | 当前所选时间值（LY） | text（辅助） | 文本 | 卡片 / 标题 / 表头（LY 期间；**不加框定**） |
-| 25 | S&I TimeFrame Slicer IsVisible | 切片器时间值可见性 | integer（0/1） | 不展示 | 切片器 A 视觉对象级别筛选（= 1） |
+| 6 | S&I Sales SLS Amt% LY Value | 销售金额占比（LY） | percent_0dp | `#,##0%` | Sales 表 |
+| 7 | S&I Sales SLS Unit LY Value | DCom净销售数量（LY） | integer | `#,##0` | Sales 表 |
+| 8 | S&I Sales SLS Amt LY Value | DCom净销售额（LY） | currency | `#,##0` | Sales 表（经 Display） |
+| 9 | S&I Sales SLS Amt LY Display | DCom净销售额（LY）显示 | currency 文本 | 文本 | Sales 表 |
+| 10 | S&I ST% LY Value | 售罄率%（金额，LY） | percent_0dp | `#,##0%` | Sales 表 + Inventory 表（共享） |
+| 11 | S&I Sales MD TY Value | 平均折扣（TY） | percent_0dp | `#,##0%` | Sales 表（经 Display） |
+| 12 | S&I Sales MD TY Display | 平均折扣（TY）显示 | percent 文本 | 文本 | Sales 表 |
+| 13 | S&I Sales MD LY Value | 平均折扣（LY） | percent_0dp | `#,##0%` | Sales 表（经 Display） |
+| 14 | S&I Sales MD LY Display | 平均折扣（LY）显示 | percent 文本 | 文本 | Sales 表 |
+| 15 | S&I Sales SLS Amt YOY Value | DCom净销售额 YOY | percent_0dp | `#,##0%` | Sales 表 |
+| 16 | S&I Sales SLS Unit YOY Value | DCom净销售数量 YOY | percent_0dp | `#,##0%` | Sales 表 |
+| 17 | S&I Inventory EOH Amt% Value | 期末库存金额占比 | percent_0dp | `#,##0%` | Inventory 表 |
+| 18 | S&I Inventory EOH Unit TY Value | 期末库存数量（TY） | integer | `#,##0` | Inventory 表 |
+| 19 | S&I Inventory EOH Amt TY Value | 期末库存金额（TY） | currency | `#,##0` | Inventory 表（经 Display） |
+| 20 | S&I Inventory EOH Amt TY Display | 期末库存金额（TY）显示 | currency 文本 | 文本 | Inventory 表 |
+| 21 | S&I Inventory In-transit Unit TY Value | 在途库存数量（TY） | integer | `#,##0` | Inventory 表 |
+| 22 | S&I Inventory EOH Unit LY Value | 期末库存数量（LY） | integer | `#,##0` | Inventory 表 |
+| 23 | S&I Inventory EOH Amt LY Value | 期末库存金额（LY） | currency | `#,##0` | Inventory 表（经 Display） |
+| 24 | S&I Inventory EOH Amt LY Display | 期末库存金额（LY）显示 | currency 文本 | 文本 | Inventory 表 |
+| 25 | S&I Inventory In-transit Unit LY Value | 在途库存数量（LY） | integer | `#,##0` | Inventory 表 |
+| 26 | S&I Inventory EOH Amt YOY Value | 期末库存金额 YOY | percent_0dp | `#,##0%` | Inventory 表 |
+| 27 | S&I Inventory EOH Unit YOY Value | 期末库存数量 YOY | percent_0dp | `#,##0%` | Inventory 表 |
+| 28 | S&I TimeFrame Value TY | 当前所选时间值（TY） | text（辅助） | 文本 | 卡片 / 标题 / 表头（当前期间；**不加框定**） |
+| 29 | S&I TimeFrame Value LY | 当前所选时间值（LY） | text（辅助） | 文本 | 卡片 / 标题 / 表头（LY 期间；**不加框定**） |
+| 30 | S&I TimeFrame Slicer IsVisible | 切片器时间值可见性 | integer（0/1） | 不展示 | 切片器 A 视觉对象级别筛选（= 1） |
 
-- 全部度量值存放于 `_Measures` 隐藏表；Display Folder：`Sales & Inventory Penetration Trend\Base Metrics`（Value 层 18 个 + 辅助文本度量 2 个）、`Sales & Inventory Penetration Trend\Formatting`（Display 层 4 个）、`Sales & Inventory Penetration Trend\Visual Filters`（切片器框定度量 1 个），合计 25 个
-- 18 个指标 Value 度量均已完成全局 this period 区间框定（YOY / Display 为引用层自动继承）；§4.23 / §4.24 辅助文本度量不聚合数据、不加框定（按需求排除）
+- 全部度量值存放于 `_Measures` 隐藏表；Display Folder：`Sales & Inventory Penetration Trend\Base Metrics`（Value 层 21 个 + 辅助文本度量 2 个）、`Sales & Inventory Penetration Trend\Formatting`（Display 层 6 个：currency 4 个 + MD percent 特例 2 个（TY / LY））、`Sales & Inventory Penetration Trend\Visual Filters`（切片器框定度量 1 个），合计 30 个
+- 21 个指标 Value 度量均已完成全局 this period 区间框定（YOY / Display 为引用层自动继承）；§4.23 / §4.24 辅助文本度量不聚合数据、不加框定（按需求排除）
 
 ---
 
@@ -1264,7 +1505,7 @@ RETURN
 │  字段: data_date, platform, shop_name,                              │
 │        brand, super_season, product_type, ax_class,                 │
 │        md_type, division, framework, ...                            │
-│        net_sales_amt, net_sales_qty                                 │
+│        net_sales_amt, net_sales_qty, msrp_net_sales_amt             │
 │  a02_e2e_product_performance_inv_summary_d（库存类，日快照）        │
 │  字段: data_date + 同名商品维度（无 platform / shop_name）,         │
 │        msrp_inv_amt, inv_qty,                                       │
@@ -1281,26 +1522,26 @@ RETURN
         │ Md_Type / Division                               │ │    Value（+视觉筛  │
         ▼                                                  │ │    选 §4.25 重叠   │
 ┌─────────────────────────────────────────────────────────────────────┐ │ B: 按钮控制粒度） │
-│  Value 度量层（18 个：Sales 专属 7 + Inventory 专属 9 + ST% 共享 2） │ │ → 行区间 / LY 区 │
+│  Value 度量层（21 个：Sales 专属 10 + Inventory 专属 9 + ST% 共享 2） │ │ → 行区间 / LY 区 │
 │  - 全局 this period 区间框定：与所选行区间取交集                      │ │   间 / 期末日期    │
 │    TY ∩ [Min_This[TimeFrame_Min], Max_This[TimeFrame_Max]]          │ │   （当前值来源）   │
 │    LY ∩ [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]]    │ └────────────────────┘
 │  - 期末类 = 交集最后一天 MIN(行 TimeFrame_Max[_LY], Max_This[...])   │ ┌────────────────────┐
-│  - SLS Amt% / EOH Amt% 分母 ALLSELECTED 六个商品维度表（整表移除）    │ │ 全局日期体系        │
+│  - SLS Amt%（TY / LY）/ EOH Amt% 分母 ALLSELECTED 六个商品维度表（整表移除） │ 全局日期体系        │
 │    （移除视觉内部行维度筛选，保留外部切片器）                        │ │ Slicer_Time_Frame  │
 │  - currency 4 个含汇率换算 ÷ Currency_ExchangeRate                  │ │ + Min_This /       │
 │  - YOY 4 个 = 框定后 TY / LY - 1（引用 Value 自动继承）             │ │ Max_This（this     │
 └──────────────────────────────┬──────────────────────────────────────┘ │ period：全部指标  │
                                ▼                                        │ 区间框定 + 切片器  │
 ┌─────────────────────────────────────────────────────────────────────┐ │ A 框定，含 LY 同  │
-│  Display 度量层（4 个 currency）+ 辅助文本度量 2 个（不加框定）      │ │ 期字段）          │
+│  Display 度量层（4 个 currency + 2 个 percent MD 特例）+ 辅助文本度量 2 个（不加框定）│ │ 期字段）          │
 └──────────────────────────────┬──────────────────────────────────────┘ └────────────────────┘
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                     可视化层                                         │
 │  切片器 A: TimeFrame_Value 单选 + 视觉筛选 [S&I TimeFrame Slicer     │
 │            IsVisible] = 1（保留与全局区间重叠的时间值，含部分覆盖）  │
-│  Sales 表:    行 = 商品维度六选一；9 列（currency 列用 Display）    │
+│  Sales 表:    行 = 商品维度六选一；12 列（currency 列 + MD 列用 Display）│
 │  Inventory 表: 行 = 同一行字段；11 列（currency 列用 Display）      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -1315,9 +1556,9 @@ RETURN
 | --- | --- |
 | 视觉对象类型 | 表格 |
 | 行 | Slicer_ 六维度字段六选一（切换时替换行区域字段，度量值层无感知） |
-| 值列（按口径顺序） | S&I Sales SLS Amt% Value → S&I Sales SLS Unit TY Value → S&I Sales SLS Amt TY **Display** → S&I ST% TY Value → S&I Sales SLS Unit LY Value → S&I Sales SLS Amt LY **Display** → S&I ST% LY Value → S&I Sales SLS Amt YOY Value → S&I Sales SLS Unit YOY Value |
-| 列标题 | 按口径指标名（SLS Amt% / SLS Unit（TY）/ SLS Amt（TY）/ ST%（TY）/ SLS Unit（LY）/ SLS Amt（LY）/ ST%（LY）/ SLS Amt YOY / SLS Unit YOY） |
-| 总计 | 若开启：占比列 = 100%（分子分母同范围）、数量类 = 全量合计、ST% / YOY = 全量分子分母重算，均为汇总语义下的正确行为 |
+| 值列（按口径顺序） | S&I Sales SLS Amt% TY Value → S&I Sales SLS Unit TY Value → S&I Sales SLS Amt TY **Display** → S&I ST% TY Value → S&I Sales SLS Amt% LY Value → S&I Sales SLS Unit LY Value → S&I Sales SLS Amt LY **Display** → S&I ST% LY Value → S&I Sales MD TY **Display** → S&I Sales MD LY **Display** → S&I Sales SLS Amt YOY Value → S&I Sales SLS Unit YOY Value |
+| 列标题 | 按口径指标名（SLS Amt%（TY）/ SLS Unit（TY）/ SLS Amt（TY）/ ST%（TY）/ SLS Amt%（LY）/ SLS Unit（LY）/ SLS Amt（LY）/ ST%（LY）/ MD（TY）/ MD（LY）/ SLS Amt YOY / SLS Unit YOY） |
+| 总计 | 若开启：占比列 = 100%（分子分母同范围）、数量类 = 全量合计、ST% / MD / YOY = 全量分子分母重算，均为汇总语义下的正确行为 |
 
 ### 7.2 Inventory 表格（子模块二）
 
@@ -1345,7 +1586,7 @@ RETURN
 
 验证 SQL 为 ClickHouse 语法；时间范围与外部筛选条件按页面实际选择替换附加，与 Power BI 模型值逐项对齐。示例按单选 Month 粒度 `TimeFrame_Value = '2027-04'` + 全局 This Period = 2027-04-01 ~ 2027-04-30（示例按自然月示意，实际以财月区间为准；此时所选行完全落在全局区间内，交集 = 所选行区间）。
 
-### 8.1 SLS Amt%（行维度 = label 示例）
+### 8.1 SLS Amt%（TY，行维度 = label 示例）
 
 ```sql
 SELECT
@@ -1368,6 +1609,9 @@ FROM (
 
 - 部分覆盖示例：全局 Day 2027-03-28 ~ 2027-04-04 且所选 2027-04 → 两行条件分别取所选行区间 [2027-04-01, 2027-04-30] 与全局区间 [2027-03-28, 2027-04-04]，交集 = [2027-04-01, 2027-04-04]（SQL 即取两组条件的 AND）
 - 分母窗口 `SUM(...) OVER ()` 对应 ALLSELECTED 六维度的全量合计（外部筛选下）；换行维度验证时将 brand 替换为对应维度字段
+- SLS Amt%（LY）验证见 §8.4（分子与窗口分母的区间整体换 LY 交集，同法重算）
+- MD（TY）（v1.5 新增）：同 8.1 去掉窗口列，改为 `1 - SUM(net_sales_amt) / SUM(msrp_net_sales_amt)`——分子分母同一交集区间、同一外部筛选；分母空或 0 的行 SQL 输出 NULL（对齐 DAX 拦截显示空）；Power BI 页面对比 [S&I Sales MD TY Display] 的 `#,##0%` 格式化值
+- MD（LY）（v1.6 新增）：公式与 MD（TY）相同，仅两组日期条件整体换 LY 交集区间（所选行 TimeFrame_Min_LY / TimeFrame_Max_LY 与全局 Min_This[TimeFrame_Min_LY] / Max_This[TimeFrame_Max_LY]）；对比 [S&I Sales MD LY Display]
 
 ### 8.2 EOH Amt%（交集最后一天时点）
 
@@ -1431,6 +1675,7 @@ FULL OUTER JOIN __inv i ON s.label = i.label
 ### 8.4 LY 指标与 YOY
 
 - **LY 区间 = 所选行 [TimeFrame_Min_LY, TimeFrame_Max_LY] ∩ 全局 LY [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]]**（注意与 Merchandising Core KPI / Label & PT 模块不同，本模块 LY 读 `Slicer_Time_Frame_Sales_Trend` 表内预计算字段 + 全局 LY 框定，**不读 Min_Last / Max_Last 筛选器**）——SQL 即 8.1 / 8.3 的销售区间两组条件均换 LY 日期（示例 '2026-04-01' ~ '2026-04-30'）
+- SLS Amt%（LY）（v1.5 拆分新增）：同 8.1 结构整体换 LY 交集区间——分子分组聚合与 `SUM(...) OVER ()` 窗口分母均按 LY 交集重算（窗口对应 ALLSELECTED 六维度分母的 LY 全量合计）
 - LY 库存类（EOH Unit / EOH Amt / In-transit Unit LY）：期末 = `least(c.ly_timeframe_max, 全局 TimeFrame_Max_LY)`（LY 交集最后一天，8.2 JOIN 换 `least(c.ly_timeframe_max, toDate('<全局LY末日>'))`）
 - ST%（LY）：sales 侧时间换 LY 交集区间、inv 侧仍用**当前**交集最后一天（8.3 仅改 `__sales` 的时间范围）——口径不对称为原始口径定义，需业务确认
 - YOY：框定后 TY / LY - 1，两侧按上述口径分别取数后计算；LY 空或 0 时 Power BI 显示空（Value 层 BLANK）
@@ -1474,16 +1719,18 @@ ORDER BY id_sort
 5. **ST% 空值保护**：期末库存缺失（交集最后一天无快照数据）时 ST%（TY / LY）返回 BLANK，避免 `DIVIDE(SLS, SLS + BLANK) = 100%`（即 100% 售罄）失真；期末有库存而期间无销售时仍为 0%（数学正确）。
 6. **EOH Amt YOY / EOH Unit YOY 名称交叉错位**：原始口径两行的 Name_EN / Name_CN 交叉（EOH Amt YOY ↔ 期末库存数量YOY、EOH Unit YOY ↔ 期末库存金额YOY）；本方案按 EN 名称实现——EOH Amt YOY = EOH Amt（TY）/ EOH Amt（LY）- 1（金额口径），EOH Unit YOY = EOH Unit（TY）/ EOH Unit（LY）- 1（数量口径），需业务确认。
 7. **inv 表无渠道字段**：a02_e2e_product_performance_inv_summary_d 无 platform / shop_name，渠道筛选（Slicer_Platform_Selection / Slicer_Store_Name）不影响 Inventory 侧全部指标（EOH / In-transit / EOH Amt% / ST% 分母）；ST% 分子（sales 侧）受渠道筛选影响、分母不受影响（渠道口径不对称，需业务知悉）；SLS Amt% 分子分母同为 sales 侧、同受渠道筛选，比率语义不受影响。
-8. **占比分母的 ALLSELECTED（整表写法）**：SLS Amt% / EOH Amt% 分母同时对六个商品维度表**整表**应用 `ALLSELECTED('Slicer_Label')` … `ALLSELECTED('Slicer_Division')`——一次只有一个维度表在表格行上，其余五个表为无操作；移除视觉对象内部的行维度筛选、保留外部切片器。**ALLSELECTED 与 REMOVEFILTERS 的语义差异是分母正确性的关键**：REMOVEFILTERS 连外部切片器一并移除，分母会脱离业务筛选条件；ALLSELECTED 仅移除视觉对象内部行筛选。**整表而非值列的原因（按列排序的隐藏筛选传播）**：值列配置「按列排序」后，视觉对象查询经 auto-existence（同表共存）把排序列隐式并入 GroupBy 并合并为表粒度组合筛选（绑定发生在查询生成阶段）；只移除值列筛选时排序列筛选独自存活，排序键与业务值 1:1（Sort 在表内唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，分母与分子聚合范围重合 → 占比恒 100%（1:1 的指纹）；Sort 不唯一则占比异常但非恒 100%。**无论行字段切换到哪个维度，一个度量即可覆盖六个维度**。
+8. **占比分母的 ALLSELECTED（整表写法）**：SLS Amt%（TY / LY）/ EOH Amt% 分母同时对六个商品维度表**整表**应用 `ALLSELECTED('Slicer_Label')` … `ALLSELECTED('Slicer_Division')`——一次只有一个维度表在表格行上，其余五个表为无操作；移除视觉对象内部的行维度筛选、保留外部切片器。**ALLSELECTED 与 REMOVEFILTERS 的语义差异是分母正确性的关键**：REMOVEFILTERS 连外部切片器一并移除，分母会脱离业务筛选条件；ALLSELECTED 仅移除视觉对象内部行筛选。**整表而非值列的原因（按列排序的隐藏筛选传播）**：值列配置「按列排序」后，视觉对象查询经 auto-existence（同表共存）把排序列隐式并入 GroupBy 并合并为表粒度组合筛选（绑定发生在查询生成阶段）；只移除值列筛选时排序列筛选独自存活，排序键与业务值 1:1（Sort 在表内唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，分母与分子聚合范围重合 → 占比恒 100%（1:1 的指纹）；Sort 不唯一则占比异常但非恒 100%。**无论行字段切换到哪个维度，一个度量即可覆盖六个维度**。
 9. **行字段必须从 Slicer_ 维度表拉取**：行筛选直接落在维度表上，`ALLSELECTED(维度表整表)` 才能连同按列排序隐式带入的排序列筛选一并正确移除；若误用事实表字段（如 sales[brand]）作行字段，维度表上无视觉对象内部筛选，ALLSELECTED 为无效操作，事实表字段的行筛选不被移除，占比恒 100%。
 10. **label / brand 字段说明**：口径中的 "label" 维度对应事实表字段 `brand`（Slicer_Label 表 [label] 字段由 `select distinct brand as label` 生成，数据字典已由 label 统一更新为 brand）；本方案行字段与 ALLSELECTED 均作用于 Slicer_Label 维度表，字段映射由模型关系完成。
 11. **币种换算分层**：currency 类 4 个指标在 Value 度量内完成换算（原始 CNY ÷ Currency_ExchangeRate，RMB 汇率 = 1 时值不变）；Display 度量仅拼接 Currency_Symbol；YOY 为 TY / LY 同汇率相除，比率不受币种选择影响；占比 / 比率 / 数量类不涉及换算（分子分母同表同币种）。
-12. **Display 度量仅覆盖 currency 类（本模块需求范围）**：percent_0dp / integer 类直接使用 Value 度量 + 度量值静态格式（`#,##0%` / `#,##0`，均不含正号，负值自动带负号）；BLANK 在 Value 列显示为空、在 Display 列显示 "-"。
+12. **Display 度量覆盖 currency 类 + MD 特例（v1.5 / v1.6）**：currency 类 4 个 Display（币种符号 + 千分位）；其余 percent_0dp / integer 类直接使用 Value 度量 + 度量值静态格式（`#,##0%` / `#,##0`，均不含正号，负值自动带负号）；**MD（TY、LY）为 percent 类 Display 特例**——业务明确要求 Value + Display 成对输出（§4.28 / §4.30，格式化 `#,##0%` 与 BLANK 显示 "-"）；BLANK 在 Value 列显示为空、在 Display 列显示 "-"。
 13. **YOY 空值规则**：LY 空或 0 时 YOY 返回 BLANK（避免 `DIVIDE` 返回 BLANK 后 `- 1` 变成 -100% 的失真）。
 14. **维度表 1:N 自动传递（无 TREATAS）**：六个商品维度表与 sales / inv 两张事实表均建立一对多关系，行维度与外部切片器筛选全部经模型关系自动传递——区别于 Sales Performance Details 方案（行字段取自 sales 表 + inv 侧 TREATAS 显式传递），本模块无需任何 TREATAS。
 15. **ST% 两表共享度量**：ST%（TY）/ ST%（LY）在 Sales 与 Inventory 两表口径完全一致，按 Label & Product Type 模块共享模式输出一套度量（`S&I ST% TY Value` / `S&I ST% LY Value`，不带子模块前缀），两表各引用一次。
 16. **度量值命名与组织**：模块前缀 `S&I` + 子模块前缀 `Sales` / `Inventory`（共享度量不带子模块前缀）+ 指标名 + 层次后缀 Value / Display；全部度量值存放于 `_Measures` 隐藏表；Display Folder 分 `Base Metrics` / `Formatting` / `Visual Filters` 三层。
-17. **全局 this period 区间框定（v1.3 新增）**：全局切片器（粒度可为 Day / Week / Month / Year / Quarter）确定 data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]，全部 18 个指标 Value 度量叠加该范围（与所选行区间取交集）——TY 用当前区间、LY 用其去年同期 [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]]（**LY 数据位于去年，直接套当前区间会把 LY 值全部清空**）；期末类取交集最后一天（见注意事项 3）；YOY / Display 为引用层自动继承；§4.23 / §4.24 辅助文本度量不加框定（按需求明确排除）；全局未选择时不框定（__ThisMin / __ThisMax 为 BLANK，谓词放行，与模版兜底一致）。所选行完全落在全局区间内时全部结果与 v1.2 一致（交集 = 所选行区间）。
+17. **全局 this period 区间框定（v1.3 新增）**：全局切片器（粒度可为 Day / Week / Month / Year / Quarter）确定 data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]，全部 21 个指标 Value 度量叠加该范围（与所选行区间取交集）——TY 用当前区间、LY 用其去年同期 [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]]（**LY 数据位于去年，直接套当前区间会把 LY 值全部清空**）；期末类取交集最后一天（见注意事项 3）；YOY / Display 为引用层自动继承；§4.23 / §4.24 辅助文本度量不加框定（按需求明确排除）；全局未选择时不框定（__ThisMin / __ThisMax 为 BLANK，谓词放行，与模版兜底一致）。所选行完全落在全局区间内时全部结果与 v1.2 一致（交集 = 所选行区间）。
 18. **切片器 A 框定度量（§4.25）与柱形图 IsVisible 的语义差异**：切片器 A 用**重叠**判定（行 TimeFrame_Min <= 全局 ThisMax && 行 TimeFrame_Max >= 全局 ThisMin，含部分覆盖月份——如全局 Day 2027-03-28~04-04、Month 粒度保留 2027-03、2027-04），服务表格的交集统计；柱形图 `S&I Trend TimeFrame IsVisible` 用**完全包含 + 粒度一致**判定（部分覆盖时间单位不显示柱子）——两套机制服务不同视觉对象，语义差异需知悉（如全局粒度为 Day 时柱形图无整月柱、但切片器 A 可选部分覆盖月份供表格用）。切片器粒度由按钮切片器 B 同表筛选天然限制，框定度量不做粒度判断；全局区间变化导致已选值不再重叠时选择自然失效，需重新选择。
-19. **字段名已核对数据字典**：net_sales_amt / net_sales_qty（sales 表）；msrp_inv_amt / inv_qty / msrp_in_trans_inv_amt / in_trans_inv_qty（inv 表）；日期字段统一为 data_date（Date 类型）；TimeFrame_Min / TimeFrame_Max / TimeFrame_Min_LY / TimeFrame_Max_LY 为日期表预计算日期字段（Min_This / Max_This 表同样含 TimeFrame_Min_LY / TimeFrame_Max_LY 字段）。
+19. **字段名已核对数据字典**：net_sales_amt / net_sales_qty / msrp_net_sales_amt（sales 表）；msrp_inv_amt / inv_qty / msrp_in_trans_inv_amt / in_trans_inv_qty（inv 表）；日期字段统一为 data_date（Date 类型）；TimeFrame_Min / TimeFrame_Max / TimeFrame_Min_LY / TimeFrame_Max_LY 为日期表预计算日期字段（Min_This / Max_This 表同样含 TimeFrame_Min_LY / TimeFrame_Max_LY 字段）。
 20. **口径与语法**：口径文档中定义的所有指标必须遵守其数据类型与数据格式，与解决方案存在争议时一切以口径文档为准；DAX 文本常量使用双引号，单引号仅用于表名，列名使用方括号，例如：`[md_type] = "FP"`。
+21. **MD（TY）新增与 SLS Amt% 拆分（v1.5，业务指令）**：MD = 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（业务确认口径，分子原为 md_net_sales_amt——与 Label & PT（v1.2）/ Merchandising Core KPI（v1.3）/ Sales Performance Details（v1.3）板块口径变更同步），时间范围为 TY 区间 ∩ 全局区间，分母（吊牌金额）空或 0 时返回 BLANK（同款空值保护）。SLS Amt% 由单一度量拆分为 TY（§4.1，原度量更名、逻辑不变）与 LY（§4.26，分子分母同 LY 交集）两版——视觉对象值列需按 §7.1 顺序重拖（原 S&I Sales SLS Amt% Value 度量名已不存在）；MD 为 percent 类 Display 特例（§4.28），视觉对象建议拖 [S&I Sales MD TY Display]（BLANK 统一显示 "-"）。
+22. **MD（LY）新增（v1.6，业务指令）**：口径与 TY 版（§4.27）完全一致，公式同为 `1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)`，仅时间范围换 LY 区间 ∩ 全局 LY 区间（所选行 TimeFrame_Min_LY / TimeFrame_Max_LY ∩ Min_This[TimeFrame_Min_LY] / Max_This[TimeFrame_Max_LY]），分母空或 0 同款空值保护（§4.29）；同为 percent 类 Display 特例（§4.30），Sales 表拖 [S&I Sales MD LY Display]，与 MD（TY）成对展示；未新增 MD YOY（业务未要求）。

@@ -18,6 +18,8 @@
 --   段 4: Store 各个     —— 7 指标（同段 2），行 = shop_name × brand
 --
 -- 渠道上下文对齐（对齐方案 §3.2）:
+--   MD 口径（对齐方案 v1.3，业务确认变更）：1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)
+--   （分子原为 md_net_sales_amt；md_amt 列与 sls_amt 同值，保留独立列便于对数）
 --   TTL（两组）   = ALLSELECTED(platform) + ALLSELECTED(shop_name) → 全渠道，SQL 不带渠道条件
 --   Platform 非 TTL = platform = Label_Value（TM/JD/RLE/DY），shop_name 不限
 --   Store 非 TTL    = shop_name = Label_Value（TM/JD/RLE_CN/DY_Family/DY_W/DY_M），platform 不限
@@ -65,7 +67,7 @@ trade_this AS (
     SELECT brand,
            SUM(net_sales_qty)     AS sls_unit,
            SUM(net_sales_amt)     AS sls_amt,
-           SUM(md_net_sales_amt)  AS md_amt,
+           SUM(net_sales_amt)   AS md_amt,    -- v1.3 MD 口径变更（业务确认）：分子 = net_sales_amt（原 md_net_sales_amt，与 sls_amt 同值，保留独立列便于对数）
            SUM(msrp_net_sales_amt) AS msrp_amt
     FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d
     WHERE data_date BETWEEN '2026-03-29' AND '2026-07-25'
@@ -155,7 +157,7 @@ trade_this AS (
     SELECT platform, brand,
            SUM(net_sales_qty)      AS sls_unit,
            SUM(net_sales_amt)      AS sls_amt,
-           SUM(md_net_sales_amt)   AS md_amt,
+           SUM(net_sales_amt)   AS md_amt,    -- v1.3 MD 口径变更（业务确认）：分子 = net_sales_amt（原 md_net_sales_amt，与 sls_amt 同值，保留独立列便于对数）
            SUM(msrp_net_sales_amt) AS msrp_amt
     FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d
     WHERE data_date BETWEEN '2026-03-29' AND '2026-07-25'
@@ -231,7 +233,7 @@ trade_this AS (
     SELECT brand,
            SUM(net_sales_qty)      AS sls_unit,
            SUM(net_sales_amt)      AS sls_amt,
-           SUM(md_net_sales_amt)   AS md_amt,
+           SUM(net_sales_amt)   AS md_amt,    -- v1.3 MD 口径变更（业务确认）：分子 = net_sales_amt（原 md_net_sales_amt，与 sls_amt 同值，保留独立列便于对数）
            SUM(msrp_net_sales_amt) AS msrp_amt
     FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d
     WHERE data_date BETWEEN '2026-03-29' AND '2026-07-25'
@@ -318,7 +320,7 @@ trade_this AS (
     SELECT shop_name, brand,
            SUM(net_sales_qty)      AS sls_unit,
            SUM(net_sales_amt)      AS sls_amt,
-           SUM(md_net_sales_amt)   AS md_amt,
+           SUM(net_sales_amt)   AS md_amt,    -- v1.3 MD 口径变更（业务确认）：分子 = net_sales_amt（原 md_net_sales_amt，与 sls_amt 同值，保留独立列便于对数）
            SUM(msrp_net_sales_amt) AS msrp_amt
     FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d
     WHERE data_date BETWEEN '2026-03-29' AND '2026-07-25'

@@ -2,7 +2,7 @@
 -- 测试 SQL: Item Stockout Table（两段：SPU 维度 / SKU 维度）
 -- 所属模块: RL E2E Merch Dashboard - Dimension Cross Analysis - Item
 --           Stockout & Slow Mover Alert【单列主键 Top 100 双表格】
--- 关联方案: Item_Stockout_Table.md（v2.6）
+-- 关联方案: Item_Stockout_Table.md（v2.7）
 -- 语法: MySQL 8.0+（CTE / 窗口函数 / GROUP_CONCAT）
 -- 结构: SQL 1/2 SPU 维度（GROUP BY spu_id）+ SQL 2/2 SKU 维度
 --       （GROUP BY sku_id），两段独立执行；每段按 SLS Amt 降序 +
@@ -15,7 +15,7 @@
 -- Store Name:            'ALL'（全选，等价不筛选，SQL 中不附加条件）
 -- This Period:     dt ∈ ['2026-03-29', '2026-07-25']（区间汇总——SLS
 --                  Amt / SLS Units / AUR / MD / 属性字段"最新日期"判定）
--- Last Period:     dt ∈ ['2025-03-30', '2025-09-27']（本方案十三个指标
+-- Last Period:     dt ∈ ['2025-03-30', '2025-09-27']（本方案十五个指标（v2.7 含 Price / MD Price）
 --                  无 vs LP / vs LY 派生，该组参数不参与计算，仅参数区
 --                  留档）
 -- This Year:       dt ∈ ['2026-03-29', '2026-07-25']（同上不参与计算）
@@ -48,6 +48,11 @@
 --      经 NULLIF(TRIM(x), '') 排除（对齐 DAX FILTER 排空白）；区间内无
 --      记录 → 全属性 NULL。Product Type（v2.6）例外：区间内全部 distinct
 --      值顿号拼接（独立 C trade_product_type，不 JOIN trade_maxdt）
+--   3.5 Price / MD Price（v2.7 新增）：取值规则同属性最新日期值——
+--      trade_price C JOIN trade_maxdt 取最新日期当天 MAX(msrp) /
+--      MAX(md_price)（数值型防御性 MAX 非拼接，一对一价格属性退化单值；
+--      当日全 NULL → NULL；RMB 原始值输出，对齐 PBI Value 层 ÷
+--      Currency_ExchangeRate 的换算后口径，RMB 汇率 = 1 时直接对比）
 --   4. Product Tag（computed_product_tag，inv 类独有）：SKU 段 = 快照日下该
 --      主键全部行的 distinct 值顿号拼接（不套用"最新值"规则——快照日本身
 --      即最新），空白值排除；SPU 段（v2.4）= 直取 spu 预聚合表单行值
@@ -137,6 +142,19 @@ trade_product_type AS (
     FROM trade_base
     GROUP BY spu_id
 ),
+-- ── Price / MD Price（v2.7）：最新日期当天 msrp / md_price（取值规则同
+--    US Style；数值型防御性 MAX，一对一价格属性退化单值；当日全
+--    NULL → NULL）──
+trade_price AS (
+    SELECT
+        b.spu_id,
+        MAX(b.msrp)     AS price,
+        MAX(b.md_price) AS md_price
+    FROM trade_base b
+    JOIN trade_maxdt m
+        ON b.spu_id = m.spu_id AND b.dt = m.max_dt
+    GROUP BY b.spu_id
+),
 -- ── trade 侧指标聚合（主键粒度；net_sales_amt 行级还原）──
 trade_agg AS (
     SELECT
@@ -206,6 +224,8 @@ SELECT
         WHEN t.md_amt IS NULL OR t.msrp_amt IS NULL OR t.msrp_amt = 0 THEN NULL
         ELSE 1 - t.md_amt / t.msrp_amt
     END                                                                                   AS MD_Pct,
+    p.price                                                                              AS Price_RMB,       -- v2.7 吊牌价（最新日期当天 MAX(msrp)，RMB 原始值）
+    p.md_price                                                                           AS MD_Price_RMB,    -- v2.7 折扣价（最新日期当天 MAX(md_price)，RMB 原始值）
     i.alert                                                                               AS Alert,               -- v2.4 预聚合行直判（其他情况 NULL）
     i.available_sizes                                                                     AS Available_Sizes,
     i.reph_count                                                                          AS Replenishment_Count,
@@ -214,6 +234,7 @@ FROM trade_agg t
 LEFT JOIN trade_attr a ON a.spu_id = t.spu_id
 LEFT JOIN trade_product_type pt ON pt.spu_id = t.spu_id
 LEFT JOIN inv_agg   i ON i.spu_id = t.spu_id
+LEFT JOIN trade_price p ON p.spu_id = t.spu_id
 ORDER BY t.sls_amt_this DESC, t.spu_id ASC
 LIMIT 100;
 
@@ -268,6 +289,19 @@ trade_product_type AS (
         GROUP_CONCAT(DISTINCT NULLIF(TRIM(product_type), '') ORDER BY NULLIF(TRIM(product_type), '') SEPARATOR '、') AS product_type
     FROM trade_base
     GROUP BY sku_id
+),
+-- ── Price / MD Price（v2.7）：最新日期当天 msrp / md_price（取值规则同
+--    US Style；数值型防御性 MAX，一对一价格属性退化单值；当日全
+--    NULL → NULL）──
+trade_price AS (
+    SELECT
+        b.sku_id,
+        MAX(b.msrp)     AS price,
+        MAX(b.md_price) AS md_price
+    FROM trade_base b
+    JOIN trade_maxdt m
+        ON b.sku_id = m.sku_id AND b.dt = m.max_dt
+    GROUP BY b.sku_id
 ),
 trade_agg AS (
     SELECT
@@ -333,6 +367,8 @@ SELECT
         WHEN t.md_amt IS NULL OR t.msrp_amt IS NULL OR t.msrp_amt = 0 THEN NULL
         ELSE 1 - t.md_amt / t.msrp_amt
     END                                                                                   AS MD_Pct,
+    p.price                                                                              AS Price_RMB,       -- v2.7 吊牌价（最新日期当天 MAX(msrp)，RMB 原始值）
+    p.md_price                                                                           AS MD_Price_RMB,    -- v2.7 折扣价（最新日期当天 MAX(md_price)，RMB 原始值）
     CASE
         WHEN i.inv_rows IS NULL THEN NULL                                                 -- 快照日无 inv 记录
         WHEN i.has_oos = 1 THEN '缺货'                                                     -- 单行互斥（数据不变量），条件顺序无优先级语义
@@ -346,5 +382,6 @@ FROM trade_agg t
 LEFT JOIN trade_attr a ON a.sku_id = t.sku_id
 LEFT JOIN trade_product_type pt ON pt.sku_id = t.sku_id
 LEFT JOIN inv_agg   i ON i.sku_id = t.sku_id
+LEFT JOIN trade_price p ON p.sku_id = t.sku_id
 ORDER BY t.sls_amt_this DESC, t.sku_id ASC
 LIMIT 100;

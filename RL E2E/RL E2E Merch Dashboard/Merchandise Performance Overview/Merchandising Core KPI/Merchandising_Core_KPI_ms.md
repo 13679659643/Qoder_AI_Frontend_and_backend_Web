@@ -1,6 +1,6 @@
 # Merchandising Core KPI 矩阵解决方案
 
-> **版本**: v1.2（期末时点口径调整：end period 最后一天直接取 Slicer_Time_Frame_Max_This / Max_Last 表 TimeFrame_Max 单日过滤，移除「范围内最后一个有数据的快照日」回退模式）
+> **版本**: v1.3（AVG MD 口径变更（业务确认）：分子由 md_net_sales_amt 改为 net_sales_amt，AVG MD = 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)，Act / LY 两段同步，vs LY 差值 bp（ID 8）自动继承）。v1.2（期末时点口径调整：end period 最后一天直接取 Slicer_Time_Frame_Max_This / Max_Last 表 TimeFrame_Max 单日过滤，移除「范围内最后一个有数据的快照日」回退模式）
 > **模块**: RL E2E Merch Dashboard - Merchandise Performance Overview Tab - Merchandising Core KPI
 > **关联口径**: 口径文档/口径Markdown格式/Merchandise Performance Overview.md - 子模块一【Amt】（§1-§10）+ 子模块二【Unit】（§11-§20）+ 口径文档/口径Markdown格式/actual除target逻辑详情.md（TAR 类指标五粒度规则）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
@@ -95,7 +95,7 @@ Cell Font Color / Cell Background Color
 | -------------------- | ---------------------------------------------------------- | -------------------------------------------- | -------------------------------------------- |
 | SLS                  | sum(net_sales_amt)                                         | sum(net_sales_qty)                           | 否                                           |
 | ST%                  | net_sales_amt / (net_sales_amt + msrp_inv_amt)             | net_sales_qty / (net_sales_qty + inv_qty)    | 结构一致（复用模式路由后的 SLS 与 EOH 结果） |
-| AVG MD               | 1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)        | 同左                                         | 是（口径明确可直接复用）                     |
+| AVG MD               | 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（v1.3 分子变更） | 同左                                         | 是（口径明确可直接复用）                     |
 | Fullprice%           | sum(net_sales_amt where md_type="FP") / sum(net_sales_amt) | sum(msrp_net_sales_amt) / sum(net_sales_amt) | 否（口径已确认两套公式）                     |
 | AUR                  | sum(net_sales_amt) / sum(net_sales_qty)                    | 同左                                         | 是（口径明确可直接复用）                     |
 | EOH                  | sum(msrp_inv_amt)                                          | sum(inv_qty)                                 | 否                                           |
@@ -243,8 +243,10 @@ VAR __NetSalesQty_Act =
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
 VAR __MDNetSalesAmt_Act =
+    // v1.3 口径变更（业务确认）：AVG MD 分子由 md_net_sales_amt 改为 net_sales_amt
+    //（与 __NetSalesAmt_Act 同源；保留独立变量便于 AVG MD 口径独立演进与回退）
     CALCULATE(
-        SUM('a02_e2e_product_performance_sales_summary_d'[md_net_sales_amt]),
+        SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
         __TagFilter_Sales,
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
@@ -360,7 +362,7 @@ VAR __EOH_Act = IF(__IsAmt, __MsrpInvAmt_End, __InvQty_End)
 VAR __STPct_Act = DIVIDE(__SLS_Act, __SLS_Act + __EOH_Act)
 
 // ═══ Metric_ID=7: AVG MD（Amt/Unit 同一套逻辑，直接复用）═══
-// 1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)
+// 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（v1.3 口径变更：分子原为 md_net_sales_amt）
 // 分母空/0 时返回 BLANK，避免 1 - BLANK() = 1 的失真
 VAR __AVGMD_Act =
     IF(
@@ -498,8 +500,10 @@ VAR __NetSalesQty_LY =
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
     )
 VAR __MDNetSalesAmt_LY =
+    // v1.3 口径变更（业务确认）：AVG MD 分子由 md_net_sales_amt 改为 net_sales_amt
+    //（与 __NetSalesAmt_LY 同源；保留独立变量便于 AVG MD 口径独立演进与回退）
     CALCULATE(
-        SUM('a02_e2e_product_performance_sales_summary_d'[md_net_sales_amt]),
+        SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
         __TagFilter_Sales,
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
@@ -1274,7 +1278,7 @@ Merchandising Core KPI Cell Background Color =
 12. **汇率换算分层**：Base Value 层始终保留 RMB 原始值（Act / LY 派生计算口径一致）；换算集中在展示层 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1）；Cell Display 只拼接 Currency_Symbol。金额类判定为模式相关：IF(__IsAmt, Metric_Format_Amt = "currency", Metric_Format_Unit = "currency")，Unit 模式下仅 AUR 换算。
 13. **delta_bp 转换位置**：Base Value 返回原始差值（如 0.04），Cell Display 中 ×10000 转 bp（+400bp），乘法不落在 Base 层，保证派生值可复用。
 14. **vs LY 派生空值规则**：变化率在 LY 空或 0 时返回 BLANK；差值 bp 在 Act 或 LY 任一为空时返回 BLANK。
-15. **AVG MD 空值保护**：分母（msrp_net_sales_amt）空或 0 时返回 BLANK，避免 1 - BLANK() = 1（即 100% 折扣）的失真。
+15. **AVG MD 空值保护**：分母（msrp_net_sales_amt）空或 0 时返回 BLANK，避免 1 - BLANK() = 1（即 100% 折扣）的失真。**v1.3 起 AVG MD 分子改用 net_sales_amt（销售额口径，业务确认变更），原 md_net_sales_amt 分子口径废止**（底表字段保留，另处沿用）；Act / LY / vs LY 差值 bp（ID 8）三层自动继承同一口径。
 16. **字段名已核对数据字典**：net_sales_amt / net_sales_qty / md_net_sales_amt / msrp_net_sales_amt / msrp_inbound_amt / inbound_qty / md_outbound_amt / outbound_qty（sales 表）；msrp_inv_amt / inv_qty / msrp_in_trans_inv_amt / in_trans_inv_qty / msrp_o2o_inv_amt / o2o_inv_qty（inv 表）；日期字段统一为 data_date（date 类型）。
 17. **DAX 语法规范**：文本常量使用双引号（如 [md_type] = "FP"），单引号仅用于表名，列名使用方括号；与解决方案存在争议时一切以口径文档为准。
 18. **TAR 类 Amt/Unit 字段路由**：actual = sales[net_sales_amt]（Amt）/ [net_sales_qty]（Unit）；target = a05[fcst_sales_amt]（Amt）/ [fcst_sales_qty]（Unit）。三指标双模式格式列相同（TAR ACH% 为 percent_0dp、MTD / YTD 为 percent_1dp）；比率为同模式同币种相除，不受币种选择影响（Cell Value 层仅 currency 格式触发换算，percent 类不涉及）。

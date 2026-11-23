@@ -40,7 +40,8 @@
 --      侧按 0 处理（对应 DAX 算术运算 BLANK 当 0：销售侧有值 + 库存侧空 →
 --      分母 = 销售侧值）；vs LP 任一期 NULL 时差值输出 NULL（对应 DAX
 --      ISBLANK 拦截）；MD 分母（吊牌金额）NULL 或 0 时输出 NULL（对应
---      DAX 显式拦截，避免 1 - BLANK() = 1 失真）
+--      DAX 显式拦截，避免 1 - BLANK() = 1 失真）；MD 分子口径（对齐方案
+--      v1.2）：net_sales_amt（原 md_net_sales_amt，业务确认变更）
 --   7. vs LP 输出原始差值（×10000 转 bp 在 PBI Display 层实现，如 -0.0152
 --      → PBI 显示 -152bp）
 --   8. 输出列顺序对齐方案 §6.1 值列顺序：SLS Amt% → EOH Amt% →
@@ -66,7 +67,7 @@ trade_agg AS (
         SUM(CASE WHEN data_date BETWEEN '2026-03-29' AND '2026-07-25'
                  THEN net_sales_qty END)                        AS ytd_qty,      -- YTD 区间 = This（FY27 第一天与 This 起点重合，见参数区）
         SUM(CASE WHEN data_date BETWEEN '2026-03-29' AND '2026-07-25'
-                 THEN md_net_sales_amt END)                     AS md_amt,
+                 THEN net_sales_amt END)                         AS md_amt,      -- v1.2 MD 口径变更（业务确认）：分子 = net_sales_amt（与 sls_amt_this 同值，保留独立列便于对数）
         SUM(CASE WHEN data_date BETWEEN '2026-03-29' AND '2026-07-25'
                  THEN msrp_net_sales_amt END)                   AS msrp_amt
     FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d

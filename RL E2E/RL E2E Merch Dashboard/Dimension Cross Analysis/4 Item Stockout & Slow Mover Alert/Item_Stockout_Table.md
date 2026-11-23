@@ -1,6 +1,6 @@
 # Item Stockout_Table 解决方案
 
-> **版本**: v2.6
+> **版本**: v2.7
 > **模块**: RL E2E Merch Dashboard - Dimension Cross Analysis Tab - Item Stockout & Slow Mover Alert
 > **关联口径**: 口径文档/口径Markdown格式/Dimension Cross Analysis.md - 子模块七（§21~§33）
 > **数据底表（销售/属性类）**: s02_trade_sku_data_d
@@ -9,6 +9,7 @@
 > **筛选影响范围**: dt（断开维度，DAX 显式筛选）+ Platform / Store Name（模型关系自动传导）+ 其余与两张事实表已建关系的商品维度切片器
 >
 > **版本记录**:
+> v2.7（2026-11-23）——新增两个指标列 Price（吊牌价，s02_trade_sku_data_d[msrp]）与 MD Price（折扣价，s02_trade_sku_data_d[md_price]）：取值规则与 Item Stockout US Style 一致——This Period 区间 + 当前主键筛选下 MAX(dt) 当天的值（数值型价格属性当日多行防御性取 MAX，一对一属性自然退化为单值；区间无记录或当日字段全 BLANK → BLANK 显示 "-"）；currency 类指标（Value 层 ÷ Currency_ExchangeRate，Display 层币种符号 + #,##0，同 AUR）；Value / Display 成对新增（§4.36~§4.39），指标清单 13→15、度量值合计 35→39；MD 加权口径不变（分子分母仍为区间内行级乘积 SUM，Price / MD Price 仅展示不参与 MD 计算）；测试 SQL 两段各新增 trade_price CTE（JOIN trade_maxdt 取最新日期当天 MAX(msrp) / MAX(md_price)）与输出列 Price_RMB / MD_Price_RMB
 > v2.6（2026-11-19）——两项口径调整（业务确认）：① Item Stockout Product Type（属性列）取值规则由"最新日期当天 distinct 拼接"改为"This Period 区间内全部值去重后顿号拼接"（不再限定最大 dt——同一主键不同日期可持有不同 product_type，全部展示）；② Weeks Cover 改为数仓预计算 weeks_cover 字段直读（s02_inventory_stock_sales_detail_d / _spu 均含该字段）：取所选时间范围 end period 最后一天（快照日单日）该主键的值，防御性写法取 MAX(weeks_cover)（SPU/SKU + day 不保证唯一行，单行时 MAX 退化为行值）；v2.5"(期末库存 + 在途) / 近四周日均销售数量"计算逻辑整体废止，度量名称不变（Value / Display）；测试 SQL 同步调整（trade_agg 移除近四周窗口 sls_unit_4w，inv_agg 两段新增 MAX(weeks_cover)（SPU 段整体改 GROUP BY + MAX 对齐 DAX 标量聚合语义），trade_attr 两段移除 product_type 改独立 C trade_product_type 区间全值拼接）
 > v2.5（2026-11-09）——Weeks Cover 分母口径调整（业务确认）：由 This Period 区间销售数量改为近四周日均销售数量——截止日期 = end period 最后一天（TimeFrame_Max），窗口 = 截止日期往前推 28 天（含截止日共 28 天，起点 = 截止日期 − 27 天），日均 = 窗口内 sum(product_qty) ÷ 28；度量名称不变（Item Stockout Weeks Cover Value / Display），分子（期末库存 + 在途，快照日单日）不变；测试 SQL 同步调整（trade_agg 新增近四周条件聚合 sls_unit_4w，Weeks_Cover 分母改用 日均 = sls_unit_4w / 28）；窗口起点日期算术经 DATEVALUE 转换 + FORMAT 回 yyyy-MM-dd 文本实现（TimeFrame_Max 为文本格式，直接 - 27 因文本无法隐式转数值报错）
 > v2.4（2026-10-30）——SPU 表分支 inv 类指标（EOH / In-transit / Replenishment / Weeks Cover 分子 / ST% 库存加项 / Alert / Available Sizes / Product Tag）取数源整体切换为 s02_inventory_stock_sales_detail_d_spu（数仓 SPU 粒度预聚合表：快照日每 spu 单行，sku_size 为预拼接串逗号分隔）；Alert 判定修订（业务确认）：oos_tag = "1" → 缺货，computed_product_tag = 'slow mover' → 滞销，其他情况返回 BLANK（v2.3"其他"类别废止），SPU 分支新表直判（最高预警级别聚合废止），SKU 分支由 CALCULATETABLE 整表物化 + FILTER 迭代简化为 MAX 标量聚合（单行退化行值）；Available Sizes SPU 分支直读预拼接 sku_size（VALUES + CONCATENATEX + inv_qty > 0 过滤废止）；SKU 表分支全部保持原状
@@ -30,7 +31,7 @@
 | ---------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | 字段井（行分组） | s02_trade_sku_data_d[spu_id]（单列）                                                                             | s02_trade_sku_data_d[sku_id]（单列）          |
 | 值区域（属性列） | US Style / AX Class / Product Type / Special Series / SPU Image / Product Tag / Special Supply（度量，见 §1.3） | 同左                                          |
-| 值区域（指标列） | 十三个指标 Display + Rank 度量（行排序依据）                                                                     | 同左（共用同一套指标度量）                    |
+| 值区域（指标列） | 十五个指标 Display + Rank 度量（行排序依据；v2.7 新增 Price / MD Price）                                                                     | 同左（共用同一套指标度量）                    |
 | 视觉级筛选器     | SPU Rank 介于 1 与 100 + SLS Amt Value 不为空                                                                    | SKU Rank 介于 1 与 100 + SLS Amt Value 不为空 |
 | 显隐控制         | 按钮（书签）切换，两表互斥显示                                                                                   | 同左                                          |
 
@@ -56,6 +57,8 @@
 | 11   | Alert                | §31     | End Period（期末时点） | oos_tag = "1" → 缺货；computed_product_tag = 'slow mover' → 滞销；其他情况 BLANK；两条件互斥（单状态）；SPU 取 spu 预聚合表直判 / SKU 取 inv 表单行判定（分源） | 文本                            |
 | 12   | Available Sizes      | §32     | End Period（期末时点） | SPU：spu 预聚合表 sku_size 预拼接串直读（逗号分隔）；SKU：distinct sku_size where inv_qty > 0 顿号拼接                                      | 文本枚举                        |
 | 13   | Replenishment Count  | §33     | End Period（期末时点） | 该 spu_id/sku_id 下 sum(reph_qty)（快照日单日）                                                                                         | integer →`#,##0`             |
+| 14   | Price                | ——（v2.7 新增） | This Period（最新日期单日） | 该 spu_id/sku_id 区间内最大 dt 当天 MAX(msrp)——取值规则同 US Style（§1.3 / §4.36） | currency → 币种符号 +`#,##0` |
+| 15   | MD Price             | ——（v2.7 新增） | This Period（最新日期单日） | 该 spu_id/sku_id 区间内最大 dt 当天 MAX(md_price)——取值规则同 US Style（§1.3 / §4.38） | currency → 币种符号 +`#,##0` |
 
 属性列（非口径指标，指标化输出，共 7 个）：
 
@@ -105,7 +108,7 @@
 
 | 口径                     | 时间范围                                                                                                                                  | 适用指标                                                                                                      |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| This Period（区间类）    | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                                              | SLS Amt、SLS Units、AUR、MD、ST% 销售侧、Top 100 排序金额、trade 侧属性字段（Product Type 除外）的"最新日期"判定、Product Type（区间去重拼接，v2.6） |
+| This Period（区间类）    | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                                              | SLS Amt、SLS Units、AUR、MD、ST% 销售侧、Top 100 排序金额、Price / MD Price（v2.7 最新日期单日值）、trade 侧属性字段（Product Type 除外）的"最新日期"判定、Product Type（区间去重拼接，v2.6） |
 | End Period（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个有数据的快照日** | EOH、In-transit、Replenishment、Alert、Available Sizes、Product Tag、Weeks Cover、ST% 库存侧             |
 | 近四周（滚动 28 天区间） | ——（v2.6 废止：Weeks Cover 改 weeks_cover 字段直读，窗口不再使用） | 已废止（v2.5 日均口径留档）                                               |
 | MTD（财月至今区间）      | dt ∈ [Slicer_Time_Frame_Max_This[Fiscal_Month_First_Day], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                                     | MTD SLS Unit                                                                                                  |
@@ -120,7 +123,7 @@
 
 ### 1.5 币种口径
 
-- SLS Amt / AUR 为 currency 类指标：货币符号由币种切片器（Slicer_Currency_Selection）决定，千分位整数；数据底表金额仅存储 CNY，Value 层完成汇率换算（原始值 ÷ Currency_ExchangeRate，RMB 汇率 = 1 时换算前后值相同），Display 层仅拼接币种符号
+- SLS Amt / AUR / Price / MD Price（v2.7 新增吊牌价、折扣价）为 currency 类指标：货币符号由币种切片器（Slicer_Currency_Selection）决定，千分位整数；数据底表金额仅存储 CNY，Value 层完成汇率换算（原始值 ÷ Currency_ExchangeRate，RMB 汇率 = 1 时换算前后值相同），Display 层仅拼接币种符号
 - 数量 / 占比 / 比率 / 周数类指标与属性字段不涉及币种换算
 
 ### 1.6 Top 100 排名机制
@@ -140,7 +143,7 @@
 | 指标类别                                                                                                                 | 双表复用机制                                                                                                                                      | 分支需求                                                                                                                                           |
 | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | trade 侧指标（SLS Amt / SLS Units / MTD / YTD / AUR / MD / ST% 销售侧）                               | 行分组筛选（spu_id 或 sku_id 单列）自动落在 trade 表对应列上，聚合自动限定当前行主键                                                              | **零分支**——聚合与主键列是哪个无关                                                                                                         |
-| trade 侧属性（US Style / AX Class / Product Type / Special Series / SPU Image / Special Supply）                         | MAX(trade[dt])（Product Type 无此依赖——v2.6 区间取值）与 VALUES(字段) 求值均随行分组筛选自动生效——主键筛选限定取值范围，字段拼接结果与主键列是哪个无关                                 | **零分支**                                                                                                                                   |
+| trade 侧属性（US Style / AX Class / Product Type / Special Series / SPU Image / Special Supply + 数值型价格 Price / MD Price——v2.7）                         | MAX(trade[dt])（Product Type 无此依赖——v2.6 区间取值）与 VALUES(字段) 求值均随行分组筛选自动生效——主键筛选限定取值范围，字段拼接结果与主键列是哪个无关                                 | **零分支**                                                                                                                                   |
 | inv 侧指标（EOH / In-transit / Replenishment / Weeks Cover / Alert / Available Sizes / Product Tag + ST% 库存分母） | `ISINSCOPE(trade[spu_id])` 判定当前表格（SPU 表 TRUE / SKU 表 FALSE——两表互斥显示，行分组必含其一），TREATAS 主键单列桥接按判定结果切换锚点列**与取数源表**（SPU 分支 → s02_inventory_stock_sales_detail_d_spu；SKU 分支 → s02_inventory_stock_sales_detail_d） | **IF 标量双分支**——分支内 CALCULATE / CONCATENATEX 返回标量后经 IF 选择（分支返回表会被降级为标量，TREATAS / CALCULATETABLE 不经 IF 传递） |
 | Rank                                                                                                                     | 两表 relation 与 ORDERBY 绑定不同主键列（relation 候选集模式）                                                                                    | 各写一个                                                                                                                                           |
 
@@ -180,7 +183,7 @@ Rank（值区域展示 + 行排序依据，两个度量）
 ←  行筛选：视觉级「主键 前 100 个（按 SLS Amt Value 降序）」列筛选器
       （引擎单遍取 TopN，Rank 仅对可见 100 行求值，候选表跨行共享）
 ↓
-Value（口径计算，13 个指标各一）
+Value（口径计算，15 个指标各一——v2.7 新增 Price / MD Price 数值型最新日期值，取值规则同 US Style 属性）
 ←  trade 侧：时间范围显式筛选，行分组筛选（主键单列）自动传导，零分支
 ←  inv 侧：ISINSCOPE(trade[spu_id]) 判定 → IF 标量双分支（分源）
       TREATAS 主键单列桥接 + [dt] = 快照日（单日时点）
@@ -1773,6 +1776,144 @@ RETURN
     )
 ```
 
+### 4.36 Item Stockout Price Value（吊牌价，v2.7 新增）
+
+```dax
+Item Stockout Price Value =
+// ========================================
+// 度量值: Item Stockout Price Value
+// 中文名: 吊牌价
+// Display Folder: Item Stockout & Slow Mover Alert\Base Metrics
+// 用途: 当前行主键的吊牌价（msrp），主键粒度，单度量双表通用
+// 数据底表: s02_trade_sku_data_d
+// 取值规则（同 US Style §4.29）: This Period 区间 + 当前主键筛选下
+//       MAX(dt) 那天的值——数值型价格属性，当日多行防御性取 MAX
+//       （一对一价格属性自然退化为单值；MAX 天然忽略 BLANK 行）；
+//       区间内无记录（最大 dt 为 BLANK）或当天该字段全为 BLANK 时
+//       返回 BLANK（显示 "-"）
+// 行维度传递: MAX(dt) 与 MAX(msrp) 均随行分组（主键单列）筛选自动
+//       生效——零分支，单度量双表通用
+// 币种: msrp 为 CNY 单价，Value 层 ÷ 汇率换算为当前币种单价（同 AUR）
+// ========================================
+
+// ── This Period 时间区间 ──
+VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
+VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+
+// ── 币种汇率 ──
+VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
+
+// ── 最新日期：区间内该主键的最大 dt ──
+VAR __MaxDt =
+    CALCULATE(
+        MAX('s02_trade_sku_data_d'[dt]),
+        's02_trade_sku_data_d'[dt] >= __PeriodMin,
+        's02_trade_sku_data_d'[dt] <= __PeriodMax
+    )
+
+RETURN
+    IF(
+        ISBLANK(__MaxDt),
+        BLANK(),
+        DIVIDE(
+            CALCULATE(
+                MAX('s02_trade_sku_data_d'[msrp]),
+                's02_trade_sku_data_d'[dt] = __MaxDt
+            ),
+            __ExchangeRate
+        )
+    )
+```
+
+### 4.37 Item Stockout Price Display（吊牌价显示，v2.7 新增）
+
+```dax
+Item Stockout Price Display =
+// ========================================
+// 度量值: Item Stockout Price Display
+// 中文名: 吊牌价显示
+// Display Folder: Item Stockout & Slow Mover Alert\Formatting
+// 用途: currency 格式化（币种符号 + 千分位整数）；BLANK 显示 "-"
+// 依赖: [Item Stockout Price Value], Slicer_Currency_Selection[Currency_Symbol]
+// 数据格式: 币种符号 & #,##0（如 ¥599）
+// ========================================
+    VAR __Value = [Item Stockout Price Value]
+    VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",
+            __CurrencySymbol & FORMAT(__Value, "#,##0")
+        )
+```
+
+### 4.38 Item Stockout MD Price Value（折扣价，v2.7 新增）
+
+```dax
+Item Stockout MD Price Value =
+// ========================================
+// 度量值: Item Stockout MD Price Value
+// 中文名: 折扣价
+// Display Folder: Item Stockout & Slow Mover Alert\Base Metrics
+// 用途: 当前行主键的折扣价（md_price），主键粒度，单度量双表通用
+// 数据底表: s02_trade_sku_data_d
+// 取值规则: 同 Price（§4.36）——This Period 区间 + 当前主键筛选下
+//       MAX(dt) 那天 MAX(md_price)；当日多行防御性 MAX（一对一属性
+//       退化单值）；区间无记录或当天全 BLANK → BLANK（显示 "-"）
+// 币种: md_price 为 CNY 单价，Value 层 ÷ 汇率换算（同 AUR / Price）
+// ========================================
+
+// ── This Period 时间区间 ──
+VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
+VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+
+// ── 币种汇率 ──
+VAR __ExchangeRate = SELECTEDVALUE(Slicer_Currency_Selection[Currency_ExchangeRate], 1)
+
+// ── 最新日期：区间内该主键的最大 dt ──
+VAR __MaxDt =
+    CALCULATE(
+        MAX('s02_trade_sku_data_d'[dt]),
+        's02_trade_sku_data_d'[dt] >= __PeriodMin,
+        's02_trade_sku_data_d'[dt] <= __PeriodMax
+    )
+
+RETURN
+    IF(
+        ISBLANK(__MaxDt),
+        BLANK(),
+        DIVIDE(
+            CALCULATE(
+                MAX('s02_trade_sku_data_d'[md_price]),
+                's02_trade_sku_data_d'[dt] = __MaxDt
+            ),
+            __ExchangeRate
+        )
+    )
+```
+
+### 4.39 Item Stockout MD Price Display（折扣价显示，v2.7 新增）
+
+```dax
+Item Stockout MD Price Display =
+// ========================================
+// 度量值: Item Stockout MD Price Display
+// 中文名: 折扣价显示
+// Display Folder: Item Stockout & Slow Mover Alert\Formatting
+// 用途: currency 格式化（币种符号 + 千分位整数）；BLANK 显示 "-"
+// 依赖: [Item Stockout MD Price Value], Slicer_Currency_Selection[Currency_Symbol]
+// 数据格式: 币种符号 & #,##0（如 ¥299）
+// ========================================
+    VAR __Value = [Item Stockout MD Price Value]
+    VAR __CurrencySymbol = SELECTEDVALUE(Slicer_Currency_Selection[Currency_Symbol], "¥")
+    RETURN
+        IF(
+            ISBLANK(__Value),
+            "-",
+            __CurrencySymbol & FORMAT(__Value, "#,##0")
+        )
+```
+
 ---
 
 ## 5. 度量值清单
@@ -1796,9 +1937,10 @@ RETURN
 | 15 | Item Stockout Replenishment Count Value / Display                                              | integer                            | 两表共用                        |
 | 16 | Item Stockout US Style / AX Class / Product Type / Special Series / SPU Image / Special Supply | trade 属性（五个最新日期拼接 + Product Type 区间去重拼接，零分支） | 两表共用（值区域）              |
 | 17 | Item Stockout Product Tag                                                                      | inv 属性（快照日拼接，IF 双分支，SPU 分支取预聚合表） | 两表共用（值区域）              |
+| 18 | Item Stockout Price Value / Display（吊牌价）、Item Stockout MD Price Value / Display（折扣价） | currency（数值型最新日期单日值，v2.7） | 两表共用（值区域） |
 
 - 全部度量值存放于 `_Measures` 隐藏表；Display Folder：`Item Stockout & Slow Mover Alert\Rank`、`Item Stockout & Slow Mover Alert\Attributes`、`Item Stockout & Slow Mover Alert\Base Metrics`、`Item Stockout & Slow Mover Alert\Formatting`
-- 十三个口径指标各 Value / Display 成对输出（26 个）；Rank 2 个；属性度量 7 个（trade 侧 6 + inv 侧 1）——合计 35 个度量值
+- 十五个口径指标各 Value / Display 成对输出（30 个，v2.7 新增 Price / MD Price 两对）；Rank 2 个；属性度量 7 个（trade 侧 6 + inv 侧 1）——合计 39 个度量值
 - 除 Rank 外全部指标单度量双表通用（trade 侧与属性零分支，inv 侧 ISINSCOPE 判定 + IF 标量双分支 + 分源：SPU 分支 → s02_inventory_stock_sales_detail_d_spu，SKU 分支 → s02_inventory_stock_sales_detail_d）
 
 ---
@@ -1832,8 +1974,9 @@ RETURN
 | 9    | Weeks Cover                   | Item Stockout Weeks Cover Display                                      |
 | 10   | MTD / YTD                     | Item Stockout MTD SLS Unit Display、Item Stockout YTD SLS Unit Display |
 | 11   | ST% / AUR / MD                | Item Stockout ST% / AUR / MD Display                                   |
-| 12   | Alert / Sizes / Replenishment | Item Stockout Alert / Available Sizes / Replenishment Count Display    |
-| 13   | Rank（排序依据）              | Item Stockout SPU Rank（或 SKU Rank），置于最后并收窄列宽              |
+| 12   | Price / MD Price              | Item Stockout Price Display / Item Stockout MD Price Display（v2.7 新增，吊牌价 / 折扣价） |
+| 13   | Alert / Sizes / Replenishment | Item Stockout Alert / Available Sizes / Replenishment Count Display    |
+| 14   | Rank（排序依据）              | Item Stockout SPU Rank（或 SKU Rank），置于最后并收窄列宽              |
 
 配置要点：
 
@@ -1856,7 +1999,7 @@ RETURN
 | Slicer_Time_Frame                             | 主时间筛选器     | 驱动 Min_This / Max_This 断开维度表，经 SELECTEDVALUE 读入度量值（MTD / YTD 起点同读 Max_This 表；属性字段"最新日期"判定同读 Min_This / Max_This） |
 | Slicer_Platform_Selection / Slicer_Store_Name | 一对多关系切片器 | 经模型关系自动传导至 trade 侧（指标与 Top 100 候选随渠道收窄），DAX 不显式处理；inv 侧不受影响                                                     |
 | 其余商品维度切片器                            | 一对多关系切片器 | 与两张事实表已建关系的自动传导（候选金额与指标同口径收窄）                                                                                         |
-| Slicer_Currency_Selection                     | 断开维度         | SLS Amt / AUR 的汇率与符号来源；数量 / 占比 / 比率类不受影响                                                                                       |
+| Slicer_Currency_Selection                     | 断开维度         | SLS Amt / AUR / Price / MD Price（v2.7）的汇率与符号来源；数量 / 占比 / 比率类不受影响                                                                                       |
 
 ---
 
@@ -1867,6 +2010,7 @@ RETURN
 | 指标                             | 测试 SQL 还原                                                                                                                                                                 |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SLS Amt / SLS Units / AUR / MD   | trade 侧按 spu_id / sku_id 单列 GROUP BY（net_sales_amt = ROUND(product_qty × sales_price, 6) 行级还原；MD 分子分母行级乘积 SUM，NULL 行忽略 + 分母 0 拦截）                 |
+| Price / MD Price（v2.7） | trade_price CTE：JOIN trade_maxdt 取最新日期当天 MAX(msrp) / MAX(md_price)（数值型防御性 MAX，一对一属性退化单值；当日全 NULL → NULL；RMB 原始值输出，对齐 PBI Value 层 ÷ 汇率） |
 | MTD / YTD SLS Unit               | 条件聚合 dt ∈ [财月首日 '2026-06-28' / 财年首日 '2026-03-29', '2026-07-25']（本参数下 YTD 与 This Period 重合）                                                              |
 | EOH / In-transit / Replenishment | inv 侧按主键单列 GROUP BY，WHERE dt = 快照日 '2026-07-25'；不附加渠道条件（inv 无渠道字段）；SPU 段改查 s02_inventory_stock_sales_detail_d_spu（data_type = 'spu' 预聚合行，直接取单行值，v2.4）                                                              |
 | ST%                              | 销售侧数量与库存侧数量按主键各自聚合后相除（分母加法 NULL 按 0，销售侧 NULL → 整体 NULL）                                                                                    |
@@ -1902,3 +2046,4 @@ RETURN
 16. **总计行为**：总计行不做特判，交由表格视觉对象默认生成（总计行主键为 BLANK，Rank / 属性度量返回 BLANK，数值指标为全量聚合）
 17. **口径与语法**：口径文档中定义的所有指标必须遵守其数据类型与数据格式，与解决方案存在争议时一切以口径文档为准；DAX 文本常量使用双引号，单引号仅用于表名，列名使用方括号
 18. **SPU 表分支取数源切换（v2.4）**：inv 类指标 SPU 分支统一改读 s02_inventory_stock_sales_detail_d_spu（与 s02_inventory_stock_sales_detail_d 同源——均取自 s02_inventory_stock_sales_detail_result_d，按 data_type = 'spu' / 'sku' 分流；spu 行快照日每 spu 单行，sku_size 为逗号分隔预拼接串，oos_tag / computed_product_tag 等标签为数仓预聚合结果），SKU 分支保持原状；**建模前提**：spu 表需建立与 inv 表同款的外部维度关系（Division 等），否则 SPU 分支丢失切片器收窄；Available Sizes 两表分隔符不一致（SPU 逗号 / SKU 顿号）为已知显示差异，如需统一在 Display 层加 SUBSTITUTE 转换
+19. **Price / MD Price（v2.7 新增）**：取值规则同 US Style——This Period 区间内该主键最大 dt 当天的值（数值型防御性 MAX，非 distinct 拼接）；currency 类指标（Value 层 ÷ Currency_ExchangeRate，Display 层币种符号 + #,##0，同 AUR）；不参与 MD 加权公式（MD 分子分母仍为区间内行级乘积 SUM，口径不变）；当日多行价格不一致时取最大值展示（一对一价格属性预期单值，多值为数据异常场景的防御性规则）；零分支零 TREATAS——纯 trade 侧度量，渠道切片器经关系自动传导

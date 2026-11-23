@@ -1,6 +1,6 @@
 # Sales Performance Details by Channel 矩阵解决方案
 
-> **版本**: v1.2（商品维度 category → ax_class 字段替换（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §4.1 / 注意事项 5）。v1.1（期末时点口径调整：end period 最后一天直接取 Slicer_Time_Frame_Max_This 表 TimeFrame_Max 单日过滤，移除「范围内最后一个有数据的快照日」回退模式）
+> **版本**: v1.3（MD 口径变更（业务确认）：分子由 md_net_sales_amt 改为 net_sales_amt，MD = 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)，时间范围仍 This Period，详见 §1.1 / §3.3 / 注意事项 17）。v1.2（商品维度 category → ax_class 字段替换（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §4.1 / 注意事项 5）。v1.1（期末时点口径调整：end period 最后一天直接取 Slicer_Time_Frame_Max_This 表 TimeFrame_Max 单日过滤，移除「范围内最后一个有数据的快照日」回退模式）
 > **模块**: RL E2E Merch Dashboard - Merchandise Performance Overview Tab - Sales Performance Details by Channel
 > **关联口径**: 口径文档/口径Markdown格式/Merchandise Performance Overview.md - 子模块六：Sales Performance Details by Channel（§33-§41）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
@@ -20,7 +20,7 @@ Sales Performance Details by Channel 是按渠道展开的销售明细矩阵：
   - Store 组：TTL（8 列）+ Tmall / JD / RLE / DY_Family / DY_W / DY_MN（各 7 列）
   - TTL 列组合：SLS Unit、SLS Amt、vs LP、SLS Amt%、LTD ST%、EOH Unit、AUR、MD
   - 非 TTL 列组合：SLS Unit、SLS Amt、vs LP、Vert. Amt%、Horiz. Amt%、AUR、MD
-  - MD（本次新增，12 列每组末位）：1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)，percent_0dp；口径来源为业务新增指令（原口径文档 §33-§41 未含 MD）
+  - MD（本次新增，12 列每组末位）：1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（v1.3 口径变更：分子原为 md_net_sales_amt，业务确认），percent_0dp；口径来源为业务新增指令（原口径文档 §33-§41 未含 MD）
 - **行**：商品维度字段六选一拉到矩阵（`brand` / `super_season` / `product_type` / `ax_class` / `md_type` / `division`，均取自 sales 表）
 
 ### 1.2 路由维度
@@ -120,7 +120,7 @@ Cell Font Color / Cell Background Color
 | LTD ST%     | sales + inv | LTD 区间 / 期末最后一天 | LTD 销售金额 /（LTD 销售金额 + 期末库存金额）                                                  | percent_0dp   |
 | EOH Unit    | inv         | 期末最后一天（单日）    | sum(inv_qty)（口径 §40 原文写作 sum(msrp_inv_amt)，按「数量」定义实现为 inv_qty，需业务确认） | integer       |
 | AUR         | sales       | This Period 区间        | sum(net_sales_amt) / sum(net_sales_qty)                                                        | currency      |
-| MD          | sales       | This Period 区间        | 1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)（分母空或 0 → BLANK）                     | percent_0dp   |
+| MD          | sales       | This Period 区间        | 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（分母空或 0 → BLANK；v1.3 分子变更）          | percent_0dp   |
 
 ### 3.4 占比指标分子分母
 
@@ -242,12 +242,14 @@ VAR __SLSUnit_This =
 // ═══ AUR（件单价 = SLS Amt / SLS Unit；金额类，双模式无关，汇率换算在 Cell Value 层）═══
 VAR __AUR = DIVIDE(__SLSAmt_This, __SLSUnit_This)
 
-// ═══ MD（平均折扣 = 1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)；12 列，每组末位）═══
+// ═══ MD（平均折扣 = 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)；12 列，每组末位）═══
+// v1.3 口径变更（业务确认）：分子由 md_net_sales_amt 改为 net_sales_amt
 // 边界: 分母（吊牌金额）空或 0 时返回 BLANK，避免 1 - BLANK() = 1（即 100% 折扣）失真；
 //       分子分母为同表金额字段（底表 RMB），折扣率不受币种选择影响
 VAR __MdAmt =
+    //（v1.3 后与 __SLSAmt_This 同源；保留独立变量便于 MD 口径独立演进与回退）
     CALCULATE(
-        SUM('a02_e2e_product_performance_sales_summary_d'[md_net_sales_amt]),
+        SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
         __PlatformCtx,
         __ShopNameCtx,
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
@@ -771,4 +773,4 @@ Sales Performance Details Cell Background Color =
 14. **渠道上下文过滤器构造**：`__PlatformCtx` / `__ShopNameCtx` 用 UNION+FILTER 构造（避免 IF/SWITCH 分支退化表变量），作为 CALCULATE 表过滤器统一传入所有 sales 侧聚合，八种聚合（SLS Amt / SLS Unit / MD 双字段 / 渠道合计 / 行合计 / LTD 销售）共用同一渠道上下文。
 15. **字段名已核对数据字典**：net_sales_amt / net_sales_qty / platform / shop_name / brand / super_season / product_type / ax_class / md_type / division（sales 表）；msrp_inv_amt / inv_qty + 同名商品维度（inv 表）；日期字段统一为 data_date（date 类型）。
 16. **DAX 语法规范**：文本常量使用双引号（如 [md_type] = "FP"），单引号仅用于表名，列名使用方括号；与解决方案存在争议时一切以口径文档为准。
-17. **MD 指标（本次新增，12 列，每组末位 ColName_Sort=600）**：1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)，This Period 区间，渠道上下文随列位置（TTL = ALLSELECTED 全渠道；非 TTL = 对应 Label_Value 渠道）；percent_0dp 不含正号；分母（吊牌金额）空或 0 时返回 BLANK（避免 1 - BLANK() = 1 即 100% 折扣伪值，与 Label & Product Type 板块 MD 同款保护）；分子分母同表同币种，折扣率不受币种选择影响（Metric_IsCurrencyAmount = FALSE 不换算）。口径来源为业务新增指令，原口径文档 §33-§41 未含 MD，待口径文档同步补录。
+17. **MD 指标（本次新增，12 列，每组末位 ColName_Sort=600）**：1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（**v1.3 口径变更（业务确认）：分子由 md_net_sales_amt 改为 net_sales_amt，原 md_net_sales_amt 分子口径废止**——底表字段保留），This Period 区间，渠道上下文随列位置（TTL = ALLSELECTED 全渠道；非 TTL = 对应 Label_Value 渠道）；percent_0dp 不含正号；分母（吊牌金额）空或 0 时返回 BLANK（避免 1 - BLANK() = 1 即 100% 折扣伪值，与 Label & Product Type 板块 MD 同款保护）；分子分母同表同币种，折扣率不受币种选择影响（Metric_IsCurrencyAmount = FALSE 不换算）。口径来源为业务新增指令，原口径文档 §33-§41 未含 MD，待口径文档同步补录。

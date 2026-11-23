@@ -127,13 +127,13 @@ CROSS JOIN inv_end i;
 
 -- ════════════════════════════════════════════════════════════════
 -- 段 3：AVG MD — 平均折扣（sales 表，区间汇总；Amt/Unit 同一套逻辑，不重复输出）
--- 口径: 1 - sum(md_net_sales_amt) / sum(msrp_net_sales_amt)
+-- 口径: 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（v1.3 口径变更：分子原为 md_net_sales_amt，业务确认）
 -- 附属: vs LY = This - Last（差值 bp，展示时 ×10000 转 bp）
 -- ════════════════════════════════════════════════════════════════
 WITH agg AS (
     SELECT
-        SUM(CASE WHEN data_date BETWEEN '2026-03-29' AND '2026-09-26' THEN md_net_sales_amt ELSE 0 END)   AS md_amt_this,
-        SUM(CASE WHEN data_date BETWEEN '2025-03-30' AND '2025-09-27' THEN md_net_sales_amt ELSE 0 END)   AS md_amt_last,
+        SUM(CASE WHEN data_date BETWEEN '2026-03-29' AND '2026-09-26' THEN net_sales_amt ELSE 0 END)        AS md_amt_this,   -- v1.3 分子 = net_sales_amt（原 md_net_sales_amt）
+        SUM(CASE WHEN data_date BETWEEN '2025-03-30' AND '2025-09-27' THEN net_sales_amt ELSE 0 END)        AS md_amt_last,   -- v1.3 分子 = net_sales_amt（原 md_net_sales_amt）
         SUM(CASE WHEN data_date BETWEEN '2026-03-29' AND '2026-09-26' THEN msrp_net_sales_amt ELSE 0 END)  AS msrp_amt_this,
         SUM(CASE WHEN data_date BETWEEN '2025-03-30' AND '2025-09-27' THEN msrp_net_sales_amt ELSE 0 END)  AS msrp_amt_last
     FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d

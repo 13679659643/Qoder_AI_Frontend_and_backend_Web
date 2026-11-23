@@ -40,7 +40,7 @@ WITH channel_source AS (
     FROM (
         -- 先按 platform/channel/channel_type 去重，保证后续统计的是渠道数而非事实记录数。
         SELECT DISTINCT platform, channel, channel_type
-        FROM `indep_rl_ads`.a05_e2e_paid_media_channel_data_d
+        FROM `dec2_gold`.a05_e2e_paid_media_channel_data_d
         WHERE platform IN ('JD', 'TM')
             AND channel_type IS NOT NULL AND channel_type != ''
             AND channel_type IN ('JCGP', 'RTB', '品销宝', 'Brandzone', 'Branzone')
