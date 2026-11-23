@@ -278,3 +278,47 @@ RETURN
 - 单选场景：切片器设置为"单选"，确保 `SELECTEDVALUE` 始终返回非空值
 - 多选场景：使用 `ISFILTERED` 或 `VALUES` 遍历所有选中值，配合 `CONTAINSROW` 判断
 - 默认值处理：若需要"全部"选项，在 `_Label` 中加入"全部"行，`_ID` 设为空字符串或 `"ALL"`
+
+---
+
+## 7. 按列排序的函数依赖校验（踩坑：粗排细）
+
+> 规范条文见 `rules/modeling-standards.md` §6，本节是校验方法与实际案例。
+
+### 核心逻辑
+「按列排序」= 被排序列 → 排序列 必须多对一。**每个值只能有一个排序号；同一个排序号可以给多个值。**
+- **细排粗，可以**：`ColName`（带 ID 前缀，全表唯一）按 `ColType` 排序 —— 一个 ColName 只属于一个 ColType
+- **粗排细，报错**：`ColType`（取值重复）按 `ColName_Sort` 排序 —— 只要某个 ColType 在不同分组下用了两个排序号就失败
+
+### 踩坑案例：Dim_ColMetric_Platform_Merchandising_Performance
+三层列头 `ChannelGroup > Label > ColName`，排序链 `ColName` 按 `ColType` 排、`ColType` 再按 `ColName_Sort` 排。
+
+TTL 组 9 列用 100~900；渠道/店铺组只有 5 列，建表时把 TAR 三列压缩编号成 500/600/700：
+
+| ColType | TTL 组排序号 | 渠道/店铺组排序号 | 结果 |
+|---------|------------|----------------|------|
+| SLS Amt% / vs LP | 100 / 200 | 100 / 200 | 通过 |
+| EOH Units / EOH Amt / EOH Amt% / ST% | 300 / 400 / 500 / 600 | （不展示） | 通过 |
+| TAR ACH% | 700 | 500 | ❌ 两个排序号 |
+| MTD TAR Progress | 800 | 600 | ❌ 两个排序号 |
+| YTD TAR Progress | 900 | 700 | ❌ 两个排序号 |
+
+修复：TAR 三列在全表统一为 700/800/900，EOH Amt% / ST% 的 500/600 档位在渠道组留空。**列顺序不变**（矩阵列序由排序值相对大小决定，不要求连号）。
+
+### 自检 DAX（返回 0 行才能设置按列排序）
+在 DAX 查询视图 / DAX Studio 中执行（把 `T` 换成目标表、两个列换成被排序列与排序列）：
+```dax
+EVALUATE
+FILTER(
+    ADDCOLUMNS(
+        VALUES(T[被排序列]),
+        "@SortCnt", CALCULATE(COUNTROWS(VALUES(T[排序列])))
+    ),
+    [@SortCnt] > 1
+)
+```
+有返回行 = 这些值对应了多个排序号，逐个改成唯一排序号后再设置排序链。
+
+### 注意事项
+- 排序列与被排序列之间存在 auto-existence：对排序列的筛选会收窄被排序列。切换排序列前，先确认没有视觉对象筛选器 / 度量值引用原排序列做判断
+- 同一指标在多个分组重复出现时，排序号按「指标」定，不按「分组内第几列」定

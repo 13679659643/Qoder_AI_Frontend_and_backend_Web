@@ -1,13 +1,13 @@
 # Sales & Inventory Penetration Trend 表格解决方案
 
-> **版本**: v1.6（MD 新增 LY 版：`S&I Sales MD LY Value` / `S&I Sales MD LY Display`（§4.29 / §4.30，口径与 TY 版一致，时间换 LY 交集区间），Sales 表 11 列 → 12 列，度量值合计 28 → 30 个）。v1.5（新增 Sales 表 MD（平均折扣，TY）指标：MD = 1 − sum(net_sales_amt) / sum(msrp_net_sales_amt)（业务确认口径，分子原 md_net_sales_amt，与 Label & PT / Core KPI / Sales Performance Details 板块口径变更同步），Value + Display 成对（percent 类 Display 特例，业务明确要求），Sales 表 9 列 → 11 列，新增 §4.27 / §4.28；SLS Amt% 拆分 TY / LY 两版（原 `S&I Sales SLS Amt% Value` 更名为 TY 版 §4.1 + 新增 LY 版 §4.26，分子分母同为对应区间交集，视觉对象需重拖值列））。v1.4（商品维度 category → ax_class 字段替换：Slicer_Category → Slicer_AX_Class 维度表（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §3.3 / 注意事项 8 / 9）。v1.3（新增全局 this period 区间框定：全部指标与所选行区间取交集，期末类取交集最后一天 MIN(行 TimeFrame_Max, Max_This[TimeFrame_Max])；新增切片器 A 框定度量 §4.25）。v1.2（期末日期直接取 TimeFrame_Max 单日过滤）。v1.1（对齐 Label_&_Product_Type_table.md 度量值写法）
+> **版本**: v1.7（ST%（TY / LY）改为全渠道口径：分子（sales 侧）以 `REMOVEFILTERS('Slicer_Platform_Selection')` + `REMOVEFILTERS('Slicer_Store_Name')` 移除渠道维度表筛选，与天然全渠道的分母（inv 表无渠道字段）对齐；不加 `REMOVEFILTERS(事实表)`，原因见 §3.4 / 注意事项 23）。v1.6（MD 新增 LY 版：`S&I Sales MD LY Value` / `S&I Sales MD LY Display`（§4.29 / §4.30，口径与 TY 版一致，时间换 LY 交集区间），Sales 表 11 列 → 12 列，度量值合计 28 → 30 个）。v1.5（新增 Sales 表 MD（平均折扣，TY）指标：MD = 1 − sum(net_sales_amt) / sum(msrp_net_sales_amt)（业务确认口径，分子原 md_net_sales_amt，与 Label & PT / Core KPI / Sales Performance Details 板块口径变更同步），Value + Display 成对（percent 类 Display 特例，业务明确要求），Sales 表 9 列 → 11 列，新增 §4.27 / §4.28；SLS Amt% 拆分 TY / LY 两版（原 `S&I Sales SLS Amt% Value` 更名为 TY 版 §4.1 + 新增 LY 版 §4.26，分子分母同为对应区间交集，视觉对象需重拖值列））。v1.4（商品维度 category → ax_class 字段替换：Slicer_Category → Slicer_AX_Class 维度表（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §3.3 / 注意事项 8 / 9）。v1.3（新增全局 this period 区间框定：全部指标与所选行区间取交集，期末类取交集最后一天 MIN(行 TimeFrame_Max, Max_This[TimeFrame_Max])；新增切片器 A 框定度量 §4.25）。v1.2（期末日期直接取 TimeFrame_Max 单日过滤）。v1.1（对齐 Label_&_Product_Type_table.md 度量值写法）
 > **模块**: RL E2E Merch Dashboard - Merchandise Performance Overview Tab - Sales & Inventory Penetration Trend
 > **关联口径**: 口径文档/口径Markdown格式/Sales & Inventory Penetration Trend.md - 子模块一【Sales】（§1-§9）+ 子模块二【Inventory】（§10-§20）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
 > **数据底表（库存类）**: a02_e2e_product_performance_inv_summary_d
 > **关联维度**: Slicer_Time_Frame（全局时间主筛选器）；Slicer_Time_Frame_Min_This / Max_This（**全局 This Period 区间：全部指标范围框定 + 切片器 A 框定**）；Slicer_Time_Frame_Sales_Trend（切片器 A 单选 TimeFrame_Value + 按钮 B 控制粒度，断开维度，表内预计算 LY 区间与期末日期）；Slicer_Currency_Selection（币种，断开维度）；Slicer_Label / Slicer_Super_Season / Slicer_Product_Type / Slicer_AX_Class / Slicer_Md_Type / Slicer_Division（商品维度，行字段来源，与双事实表一对多关联）
 > **参考方案**: Label_&_Product_Type_table.md（Value/Display 度量写法、ALLSELECTED 分母机制、验证 SQL 结构参考——**日期表不同，本模块单选 + 全局框定双机制**）；Sales_&_Inventory_Trend.md（同板块柱形图方案，全局框定同款模式）
-> **筛选影响范围**: 时间（全局区间框定 + 单选行区间交集，DAX 显式筛选 data_date）+ 渠道（Platform + Store Name，仅销售侧）+ 商品维度切片器（与双表已建关系，自动传递）
+> **筛选影响范围**: 时间（全局区间框定 + 单选行区间交集，DAX 显式筛选 data_date）+ 渠道（Platform + Store Name，仅销售侧；**ST% 除外——全渠道，分子移除渠道筛选**）+ 商品维度切片器（与双表已建关系，自动传递）
 
 ---
 
@@ -110,6 +110,8 @@ Value（口径计算）
    - 期末类：交集最后一天 MIN(行 TimeFrame_Max[_LY], Max_This[TimeFrame_Max[_LY]])
 ←  维度表 1:N 关系自然传递行 / 切片器筛选（无需 TREATAS）
 ←  SLS Amt%（TY / LY）/ EOH Amt% 分母：ALLSELECTED 六个商品维度表【整表】（移除行维度筛选——含按列排序隐式带入的排序列筛选，保留外部切片器）
+←  ST%（TY / LY）分子（sales 侧）：REMOVEFILTERS 渠道两张维度表（Platform + Store，全渠道口径）
+   ——分母（inv 表无渠道字段）天然全渠道；不可写成 REMOVEFILTERS(事实表)，见 §3.4
 ←  currency 4 个 Value 层完成币种汇率换算（原始 CNY ÷ Currency_ExchangeRate）
 ↓
 YOY Value（比率）
@@ -133,11 +135,11 @@ Display（currency 类 4 个 + MD percent 特例 2 个（TY / LY，v1.5 / v1.6�
 | 1 | Sales | SLS Amt%（TY）（§1） | S&I Sales SLS Amt% TY Value | sales | TY 区间 ∩ 全局 TY 区间 | 分子 sum(net_sales_amt) / 分母 ALLSELECTED 六维度 sum(net_sales_amt) | percent_0dp | `#,##0%` | Value |
 | 2 | Sales | SLS Unit（TY）（§2） | S&I Sales SLS Unit TY Value | sales | TY 区间 ∩ 全局 TY 区间 | sum(net_sales_qty) | integer | `#,##0` | Value |
 | 3 | Sales | SLS Amt（TY）（§3） | S&I Sales SLS Amt TY Value | sales | TY 区间 ∩ 全局 TY 区间 | sum(net_sales_amt) | currency | 币种符号 + `#,##0` | Value + Display |
-| 4 | 两表共享 | ST%（TY）（§4 / §14） | S&I ST% TY Value | sales + inv | 分子 TY 区间 ∩ 全局 TY / 分母当前交集最后一天 | sales.net_sales_amt / (sales.net_sales_amt + inv.msrp_inv_amt) | percent_0dp | `#,##0%` | Value |
+| 4 | 两表共享 | ST%（TY）（§4 / §14） | S&I ST% TY Value | sales + inv | 分子 TY 区间 ∩ 全局 TY / 分母当前交集最后一天 | **全渠道** sales.net_sales_amt / (全渠道 sales.net_sales_amt + inv.msrp_inv_amt)（v1.7） | percent_0dp | `#,##0%` | Value |
 | 5 | Sales | SLS Amt%（LY）（§1，v1.5 拆分） | S&I Sales SLS Amt% LY Value | sales | LY 区间 ∩ 全局 LY 区间 | 分子 sum(net_sales_amt) / 分母 ALLSELECTED 六维度 sum(net_sales_amt)（同 TY 版换 LY 区间） | percent_0dp | `#,##0%` | Value |
 | 6 | Sales | SLS Unit（LY）（§5） | S&I Sales SLS Unit LY Value | sales | LY 区间 ∩ 全局 LY 区间 | sum(net_sales_qty) | integer | `#,##0` | Value |
 | 7 | Sales | SLS Amt（LY）（§6） | S&I Sales SLS Amt LY Value | sales | LY 区间 ∩ 全局 LY 区间 | sum(net_sales_amt) | currency | 币种符号 + `#,##0` | Value + Display |
-| 8 | 两表共享 | ST%（LY）（§7 / §18） | S&I ST% LY Value | sales + inv | 分子 LY 区间 ∩ 全局 LY / 分母**当前**交集最后一天 | LY sales.net_sales_amt / (LY sales.net_sales_amt + inv.msrp_inv_amt) | percent_0dp | `#,##0%` | Value |
+| 8 | 两表共享 | ST%（LY）（§7 / §18） | S&I ST% LY Value | sales + inv | 分子 LY 区间 ∩ 全局 LY / 分母**当前**交集最后一天 | LY **全渠道** sales.net_sales_amt / (LY 全渠道 sales.net_sales_amt + inv.msrp_inv_amt)（v1.7） | percent_0dp | `#,##0%` | Value |
 | 9 | Sales | MD（TY）（业务新增，v1.5） | S&I Sales MD TY Value | sales | TY 区间 ∩ 全局 TY 区间 | 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（分母空或 0 → BLANK） | percent_0dp | `#,##0%` | Value + Display（percent 类 Display 特例） |
 | 10 | Sales | MD（LY）（业务新增，v1.6） | S&I Sales MD LY Value | sales | LY 区间 ∩ 全局 LY 区间 | 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（同 TY 版换 LY 区间；分母空或 0 → BLANK） | percent_0dp | `#,##0%` | Value + Display（percent 类 Display 特例） |
 | 11 | Sales | SLS Amt YOY（§8） | S&I Sales SLS Amt YOY Value | sales | 框定后 TY / LY | TY / LY - 1 | percent_0dp | `#,##0%` | Value |
@@ -186,6 +188,12 @@ ALLSELECTED('Slicer_Division')
   - 所选行完全落在全局区间内时 = 所选行 TimeFrame_Max（与口径「end period 最后一天」一致）；部分覆盖超出全局末日时取全局末日（如全局 Day 至 2027-04-04、所选月 2027-04 → 期末 = 2027-04-04）；全局未选择时不框定
   - inv 聚合并附 `data_date >= __ThisMin` 防御谓词（所选时间单位整体在全局区间之前时返回空；__ThisMin 为 BLANK 时谓词放行）
 - ST%（LY）分母：分子（LY 销售）读 LY 交集区间，分母（期末库存）读**当前**交集最后一天（口径原文如此，需业务确认）
+- ST%（TY / LY）全渠道口径（v1.7）：分子（sales 侧）的 CALCULATE 内追加 `REMOVEFILTERS('Slicer_Platform_Selection')` 与 `REMOVEFILTERS('Slicer_Store_Name')`（**维度表整表**），分母（inv 侧）不变：
+  - **移除维度表整表即可切断对事实表的筛选，无需再加 `REMOVEFILTERS(事实表)`**：渠道切片器的筛选落在维度表的列上，事实表本身并不持有渠道筛选——事实表对渠道的过滤是维度表筛选在求值时经 1:N 关系传播过去的（筛选上下文展开）。把维度表整表从筛选上下文中移除后，没有任何渠道筛选可再向事实表传播，等价于全渠道
+  - **不能加 `REMOVEFILTERS(事实表)`**：事实表上除渠道外还承载商品维度表（行字段 + 外部切片器）经 1:N 关系传播过来的筛选，整表移除会把商品维度筛选一并清掉——分子变成全部商品、分母（inv 侧）仍是当前行商品，比率失真
+  - **必须整表而非列级**：维度表值列配置「按列排序」后，切片器查询会隐式带入排序列筛选，只移除值列时排序列筛选独自存活，渠道筛选切不干净；整表移除同时清掉值列与排序列筛选（与 §3.3 ALLSELECTED 整表同理）
+  - 生效前提（三条均不成立时整表移除才充分）：① 渠道筛选只来自这两张维度表（没有切片器 / 视觉对象级别 / 页面级别筛选器直接使用事实表的 platform / shop 字段）；② 两张渠道维度表到 sales 表的关系为单向（维度 → 事实），没有经其他表的双向关系绕道传导；③ 没有其他视觉对象按事实表 platform / shop 字段分组后对本表做交叉突出显示。若将来出现 ①，应补 `REMOVEFILTERS(sales[platform])` 这类**事实表列级**移除，仍不能用整表移除
+  - 口径结果：切换 Platform / Store 切片器时，SLS 系列指标随之变化，ST%（TY / LY）不变（分子分母同为全渠道）
 - 全局框定为叠加机制：单选切片器 A 所选行是指标计算的「当前值」来源，全局区间是其外层边界
 
 ### 3.5 度量值命名与组织
@@ -399,8 +407,10 @@ S&I ST% TY Value =
 // 数据底表: a02_e2e_product_performance_sales_summary_d（sales）；
 //           a02_e2e_product_performance_inv_summary_d（inv）
 // 说明: 跨双表时间口径不同——分子为区间汇总（交集），分母为期末单日值，不可混用；
-//       行维度经维度表关系自动传导双表；分子（sales 侧）受渠道筛选影响，
-//       分母（inv 侧）不受渠道筛选影响（inv 表无渠道字段）
+//       行维度经维度表关系自动传导双表
+// 全渠道口径（v1.7）: ST% 只计算全渠道——分子（sales 侧）移除渠道维度表筛选
+//       （REMOVEFILTERS Platform / Store 维度表整表），分母（inv 表无渠道字段）天然全渠道，
+//       分子分母渠道口径对齐；不加 REMOVEFILTERS(事实表)，原因见 §3.4 / 注意事项 23
 // 边界保护: 期末库存缺失（交集最后一天无快照数据）时返回 BLANK，
 //           避免 DIVIDE(SLS, SLS + BLANK) = 100% 失真
 // 数据类型: percent_0dp；数据格式: #,##0%（不含正号，度量值静态格式）
@@ -428,17 +438,23 @@ VAR __EndPeriodDate =
         )
     )
 
-// ── 分子：This Period 区间净销售金额（sales 表，所选行区间 ∩ 全局区间）──
+// ── 分子：This Period 区间净销售金额（sales 表，所选行区间 ∩ 全局区间，全渠道）──
+// REMOVEFILTERS 渠道两张维度表【整表】：渠道切片器的筛选落在维度表上，经 1:N 关系传播到
+// sales；移除维度表整表即无渠道筛选可传播，等价于全渠道。整表而非列级：维度表有按列排序
+// 字段，只移除值列时排序列隐藏筛选独自存活，渠道筛选切不干净。
+// 不要写 REMOVEFILTERS(sales)：会把行字段 / 商品切片器经关系传播过来的筛选一并清掉
 VAR __SLSAmt =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        REMOVEFILTERS('Slicer_Platform_Selection'),
+        REMOVEFILTERS('Slicer_Store_Name'),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax,
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __ThisMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __ThisMax
     )
 
-// ── 库存加项：期末库存金额（交集最后一天单日值，inv 表）──
+// ── 库存加项：期末库存金额（交集最后一天单日值，inv 表，天然全渠道）──
 VAR __InvAmt =
     CALCULATE(
         SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
@@ -582,7 +598,10 @@ S&I ST% LY Value =
 // 特殊说明: 分子分母时间基准不对称为原始口径明文定义（口径文档已标注需业务确认），
 //           DAX 按口径原文实现；若业务确认应为 LY 期末，仅需将 __InvAmt 的
 //           __EndPeriodDate 换为 LY 交集最后一天
+// 全渠道口径（v1.7）: 分子（sales 侧）移除渠道维度表筛选，分母（inv 侧）天然全渠道
 // 边界保护: 期末库存缺失时返回 BLANK，避免 DIVIDE(SLS, SLS + BLANK) = 100% 失真
+// 全渠道口径（v1.7）: 同 TY 版——分子（sales 侧）移除渠道维度表筛选，分母（inv 表）
+//       天然全渠道；不加 REMOVEFILTERS(事实表)，原因见 §3.4 / 注意事项 23
 // 数据底表: a02_e2e_product_performance_sales_summary_d（sales）；
 //           a02_e2e_product_performance_inv_summary_d（inv）
 // 数据类型: percent_0dp；数据格式: #,##0%（不含正号，度量值静态格式）
@@ -611,10 +630,14 @@ VAR __EndPeriodDate =
         )
     )
 
-// ── 分子：LY 区间净销售金额（去年同期，sales 表，LY 交集）──
+// ── 分子：LY 区间净销售金额（去年同期，sales 表，LY 交集，全渠道）──
+// REMOVEFILTERS 渠道两张维度表【整表】（全渠道口径，机制同 §4.5）；
+// 不要写 REMOVEFILTERS(sales)，会误删商品维度筛选
 VAR __SLSAmtLY =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        REMOVEFILTERS('Slicer_Platform_Selection'),
+        REMOVEFILTERS('Slicer_Store_Name'),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMinLY,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMaxLY,
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __ThisMinLY,
@@ -1576,7 +1599,7 @@ S&I Sales MD LY Display =
 | Slicer_Time_Frame（全局日期主筛选器） | 默认交互（开启） | 经 Min_This / Max_This 驱动：全部指标的全局区间框定（TY 当前区间 / LY 同期区间）+ 切片器 A 框定（重叠判定） |
 | 切片器 A（Slicer_Time_Frame_Sales_Trend[TimeFrame_Value]） | 单选时间筛选器；**视觉对象级别筛选 `[S&I TimeFrame Slicer IsVisible] = 1`** | 驱动度量的 TY / LY 行区间与期末日期（读表内 TimeFrame_Min / Max / Min_LY / Max_LY 预计算字段）；视觉筛选仅保留与全局 This Period **重叠**的时间值（含部分覆盖月份，如全局 Day 2027-03-28~04-04 时 Month 粒度显示 2027-03、2027-04） |
 | 按钮切片器 B（Slicer_Time_Frame_Sales_Trend[TimeFrame_ID]） | 按钮切片器（Week / Month / Year） | 同表筛选限制切片器 A 的粒度 |
-| Slicer_Platform_Selection / Slicer_Store_Name | 一对多关联（仅 sales 表） | 渠道筛选自动传递销售侧指标 |
+| Slicer_Platform_Selection / Slicer_Store_Name | 一对多关联（仅 sales 表） | 渠道筛选自动传递销售侧指标；**ST%（TY / LY）分子除外**（度量内 `REMOVEFILTERS` 两张渠道维度表，全渠道，v1.7） |
 | 商品维度切片器（Slicer_Label / Slicer_Division 等） | 一对多关联（双表） | 外部筛选自动传递；占比分母经 ALLSELECTED 保留该外部筛选 |
 | Slicer_Currency_Selection | 断开维度 | currency 4 个指标 Value 层汇率换算 + Display 层币种符号 |
 
@@ -1649,7 +1672,8 @@ WITH __sales AS (
         -- 所选行区间
         AND data_date >= '2027-04-01' AND data_date <= '2027-04-30'
         -- 全局区间（交集）
-        -- sales 侧附加渠道条件（若渠道切片器有选择）
+        -- sales 侧【不】附加渠道条件：ST% 全渠道（度量内 REMOVEFILTERS 渠道维度表）
+        -- 外部商品维度条件同步附加
     GROUP BY brand
 ),
 __inv AS (
@@ -1669,7 +1693,8 @@ FROM __sales s
 FULL OUTER JOIN __inv i ON s.label = i.label
 ```
 
-- sales 侧附加渠道条件（若渠道切片器有选择）、inv 侧不附加（无渠道字段）；外部商品维度条件双表同步附加
+- sales 侧**不附加渠道条件**（v1.7 全渠道口径：ST% 分子已 `REMOVEFILTERS` 渠道两张维度表，即使 Platform / Store 切片器有选择也按全渠道取数）、inv 侧不附加（无渠道字段）；外部商品维度条件双表同步附加
+- 切换 Platform / Store 切片器时 SQL 的 ST% 结果不变；若 Power BI 的 ST% 随渠道切片器变化，说明渠道筛选未落在这两张维度表上（见 §3.4 生效前提）
 - 期末库存缺失的行（inv 侧无数据）：Power BI ST% 显示空（空值保护返回 BLANK）
 
 ### 8.4 LY 指标与 YOY
@@ -1677,7 +1702,7 @@ FULL OUTER JOIN __inv i ON s.label = i.label
 - **LY 区间 = 所选行 [TimeFrame_Min_LY, TimeFrame_Max_LY] ∩ 全局 LY [Min_This[TimeFrame_Min_LY], Max_This[TimeFrame_Max_LY]]**（注意与 Merchandising Core KPI / Label & PT 模块不同，本模块 LY 读 `Slicer_Time_Frame_Sales_Trend` 表内预计算字段 + 全局 LY 框定，**不读 Min_Last / Max_Last 筛选器**）——SQL 即 8.1 / 8.3 的销售区间两组条件均换 LY 日期（示例 '2026-04-01' ~ '2026-04-30'）
 - SLS Amt%（LY）（v1.5 拆分新增）：同 8.1 结构整体换 LY 交集区间——分子分组聚合与 `SUM(...) OVER ()` 窗口分母均按 LY 交集重算（窗口对应 ALLSELECTED 六维度分母的 LY 全量合计）
 - LY 库存类（EOH Unit / EOH Amt / In-transit Unit LY）：期末 = `least(c.ly_timeframe_max, 全局 TimeFrame_Max_LY)`（LY 交集最后一天，8.2 JOIN 换 `least(c.ly_timeframe_max, toDate('<全局LY末日>'))`）
-- ST%（LY）：sales 侧时间换 LY 交集区间、inv 侧仍用**当前**交集最后一天（8.3 仅改 `__sales` 的时间范围）——口径不对称为原始口径定义，需业务确认
+- ST%（LY）：sales 侧时间换 LY 交集区间、inv 侧仍用**当前**交集最后一天（8.3 仅改 `__sales` 的时间范围）——口径不对称为原始口径定义，需业务确认；全渠道口径同 TY 版（sales 侧不附加渠道条件）
 - YOY：框定后 TY / LY - 1，两侧按上述口径分别取数后计算；LY 空或 0 时 Power BI 显示空（Value 层 BLANK）
 
 ### 8.5 金额类（SLS Amt / EOH Amt，currency 4 个）
@@ -1718,7 +1743,7 @@ ORDER BY id_sort
 4. **ST%（LY）分子分母时间基准不对称**：分子（LY 销售）取 LY 交集区间，分母（期末库存金额）取**当前**交集最后一天（非 LY 期末）——原始口径明文如此定义（口径文档 §7 / §18 标注"需业务确认"），DAX 按口径原文实现；若业务确认应为 LY 期末，仅需将 `__InvAmt` 的 `__EndPeriodDate` 换为 LY 交集最后一天。
 5. **ST% 空值保护**：期末库存缺失（交集最后一天无快照数据）时 ST%（TY / LY）返回 BLANK，避免 `DIVIDE(SLS, SLS + BLANK) = 100%`（即 100% 售罄）失真；期末有库存而期间无销售时仍为 0%（数学正确）。
 6. **EOH Amt YOY / EOH Unit YOY 名称交叉错位**：原始口径两行的 Name_EN / Name_CN 交叉（EOH Amt YOY ↔ 期末库存数量YOY、EOH Unit YOY ↔ 期末库存金额YOY）；本方案按 EN 名称实现——EOH Amt YOY = EOH Amt（TY）/ EOH Amt（LY）- 1（金额口径），EOH Unit YOY = EOH Unit（TY）/ EOH Unit（LY）- 1（数量口径），需业务确认。
-7. **inv 表无渠道字段**：a02_e2e_product_performance_inv_summary_d 无 platform / shop_name，渠道筛选（Slicer_Platform_Selection / Slicer_Store_Name）不影响 Inventory 侧全部指标（EOH / In-transit / EOH Amt% / ST% 分母）；ST% 分子（sales 侧）受渠道筛选影响、分母不受影响（渠道口径不对称，需业务知悉）；SLS Amt% 分子分母同为 sales 侧、同受渠道筛选，比率语义不受影响。
+7. **inv 表无渠道字段**：a02_e2e_product_performance_inv_summary_d 无 platform / shop_name，渠道筛选（Slicer_Platform_Selection / Slicer_Store_Name）不影响 Inventory 侧全部指标（EOH / In-transit / EOH Amt% / ST% 分母）；ST% 分子（sales 侧）自 v1.7 起在度量内移除渠道筛选——**ST% 为全渠道口径，分子分母渠道口径一致**（原 v1.6 及以前分子受渠道筛选、分母不受的口径不对称已消除，见注意事项 23）；SLS Amt% 分子分母同为 sales 侧、同受渠道筛选，比率语义不受影响。
 8. **占比分母的 ALLSELECTED（整表写法）**：SLS Amt%（TY / LY）/ EOH Amt% 分母同时对六个商品维度表**整表**应用 `ALLSELECTED('Slicer_Label')` … `ALLSELECTED('Slicer_Division')`——一次只有一个维度表在表格行上，其余五个表为无操作；移除视觉对象内部的行维度筛选、保留外部切片器。**ALLSELECTED 与 REMOVEFILTERS 的语义差异是分母正确性的关键**：REMOVEFILTERS 连外部切片器一并移除，分母会脱离业务筛选条件；ALLSELECTED 仅移除视觉对象内部行筛选。**整表而非值列的原因（按列排序的隐藏筛选传播）**：值列配置「按列排序」后，视觉对象查询经 auto-existence（同表共存）把排序列隐式并入 GroupBy 并合并为表粒度组合筛选（绑定发生在查询生成阶段）；只移除值列筛选时排序列筛选独自存活，排序键与业务值 1:1（Sort 在表内唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，分母与分子聚合范围重合 → 占比恒 100%（1:1 的指纹）；Sort 不唯一则占比异常但非恒 100%。**无论行字段切换到哪个维度，一个度量即可覆盖六个维度**。
 9. **行字段必须从 Slicer_ 维度表拉取**：行筛选直接落在维度表上，`ALLSELECTED(维度表整表)` 才能连同按列排序隐式带入的排序列筛选一并正确移除；若误用事实表字段（如 sales[brand]）作行字段，维度表上无视觉对象内部筛选，ALLSELECTED 为无效操作，事实表字段的行筛选不被移除，占比恒 100%。
 10. **label / brand 字段说明**：口径中的 "label" 维度对应事实表字段 `brand`（Slicer_Label 表 [label] 字段由 `select distinct brand as label` 生成，数据字典已由 label 统一更新为 brand）；本方案行字段与 ALLSELECTED 均作用于 Slicer_Label 维度表，字段映射由模型关系完成。
@@ -1734,3 +1759,4 @@ ORDER BY id_sort
 20. **口径与语法**：口径文档中定义的所有指标必须遵守其数据类型与数据格式，与解决方案存在争议时一切以口径文档为准；DAX 文本常量使用双引号，单引号仅用于表名，列名使用方括号，例如：`[md_type] = "FP"`。
 21. **MD（TY）新增与 SLS Amt% 拆分（v1.5，业务指令）**：MD = 1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)（业务确认口径，分子原为 md_net_sales_amt——与 Label & PT（v1.2）/ Merchandising Core KPI（v1.3）/ Sales Performance Details（v1.3）板块口径变更同步），时间范围为 TY 区间 ∩ 全局区间，分母（吊牌金额）空或 0 时返回 BLANK（同款空值保护）。SLS Amt% 由单一度量拆分为 TY（§4.1，原度量更名、逻辑不变）与 LY（§4.26，分子分母同 LY 交集）两版——视觉对象值列需按 §7.1 顺序重拖（原 S&I Sales SLS Amt% Value 度量名已不存在）；MD 为 percent 类 Display 特例（§4.28），视觉对象建议拖 [S&I Sales MD TY Display]（BLANK 统一显示 "-"）。
 22. **MD（LY）新增（v1.6，业务指令）**：口径与 TY 版（§4.27）完全一致，公式同为 `1 - sum(net_sales_amt) / sum(msrp_net_sales_amt)`，仅时间范围换 LY 区间 ∩ 全局 LY 区间（所选行 TimeFrame_Min_LY / TimeFrame_Max_LY ∩ Min_This[TimeFrame_Min_LY] / Max_This[TimeFrame_Max_LY]），分母空或 0 同款空值保护（§4.29）；同为 percent 类 Display 特例（§4.30），Sales 表拖 [S&I Sales MD LY Display]，与 MD（TY）成对展示；未新增 MD YOY（业务未要求）。
+23. **ST% 全渠道口径与渠道筛选移除方式（v1.7，业务指令）**：ST% 只计算全渠道——`S&I ST% TY Value` / `S&I ST% LY Value` 的分子（sales 侧）在 CALCULATE 内追加 `REMOVEFILTERS('Slicer_Platform_Selection')`、`REMOVEFILTERS('Slicer_Store_Name')`，分母（inv 表无渠道字段）不变。三条结论：① **`REMOVEFILTERS` 渠道维度表整表即可切断切片器对事实表的筛选**——渠道筛选落在维度表列上，事实表对渠道的过滤是它经 1:N 关系传播的结果（筛选上下文展开），维度表整表移除后无渠道筛选可传播，**不需要再加 `REMOVEFILTERS(事实表)`**；② **不能加 `REMOVEFILTERS(事实表)`**——事实表上还承载商品维度（行字段 + 外部切片器）经关系传播过来的筛选，整表移除会把它们一并清掉，分子变全部商品而分母仍是当前行商品；③ **必须维度表整表而非列级**——维度表有按列排序字段，只移除值列时排序列隐藏筛选独自存活，渠道筛选切不干净（同 §3.3 ALLSELECTED 整表的原因）。生效前提：渠道筛选只来自这两张维度表、两张维度表到 sales 的关系为单向、没有其他视觉对象按事实表 platform / shop 字段分组后交叉筛选本表；若将来有筛选器直接使用事实表渠道字段，补事实表**列级** `REMOVEFILTERS(sales[platform])` 类写法，仍不可用整表移除。验证：切换 Platform / Store 切片器，SLS 系列变化、ST%（TY / LY）不变；Merchandising Core KPI 的 ST%（Metric_ID 5 / 6）同口径同步（见该方案 v1.4）。

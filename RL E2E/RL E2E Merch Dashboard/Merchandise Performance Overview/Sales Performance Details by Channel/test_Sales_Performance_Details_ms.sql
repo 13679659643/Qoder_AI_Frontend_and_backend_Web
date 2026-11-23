@@ -34,8 +34,10 @@
 --      分组、保留渠道 + 时间）：段 1/3 为全渠道全 brand 合计（每列一行），段 2/4 为每渠道全
 --      brand 合计；Horiz. Amt% 分母不 ALLSELECTED 商品字段（保留行 brand），改为每 brand
 --      全渠道合计（不限 platform / shop_name）
---   5. LTD ST% 分子 = LTD 区间（财年第一天至 This end）销售金额，TTL 全渠道；库存侧 = inv 表
---      快照日单日 msrp_inv_amt（TREATAS(brand) 传递，无渠道字段不受渠道影响）
+--   5. LTD ST% 分子 = LTD 区间（财年第一天至 This end）销售金额，全渠道（对齐方案 v1.4：分子整表
+--      REMOVEFILTERS Slicer_Platform_Selection / Slicer_Store_Name，不随 Platform / Store 切片器变化，
+--      ltd_sales CTE 不带渠道条件）；库存侧 = inv 表快照日单日 msrp_inv_amt（TREATAS(brand) 传递，
+--      无渠道字段不受渠道影响）；Platform TTL（段 1）与 Store TTL（段 3）同值
 --   6. NULL 语义逐项对齐 DAX:
 --      SLS Unit / SLS Amt / EOH Unit 无记录 → NULL（页面 BLANK，Display 显示 "-"）
 --      vs LP: Last NULL 或 0 → NULL；this NULL 按 0 处理（DIVIDE(BLANK,x)=0 → 结果 -1）
@@ -47,7 +49,9 @@
 --   7. 金额为底表 RMB 原值（Cell Value 层汇率换算与 Display 符号拼接不在 SQL 范围）；
 --      vs LP 页面显示含正号（+26%），SQL 输出原始小数；MD / 占比 / LTD ST% 页面 #,##0% 不含正号
 --   8. 对数假设无外部切片器筛选（Slicer_Platform_Selection / Slicer_Store_Name /
---      Slicer_AX_Class 等全选状态）；若页面存在外部筛选，两侧需同步收窄
+--      Slicer_AX_Class 等全选状态）；若页面存在外部筛选，两侧需同步收窄。
+--      例外（v1.4）：LTD ST% 分子全渠道——即使页面选了 Platform / Store 切片器，该列也不收窄，
+--      对数时其余指标按切片器收窄、ltd_st_pct 仍用本文件无渠道条件的结果
 --   9. 全部指标为 NULL 的行页面经矩阵设置隐藏或不显示，对数时以页面实际展示为准
 -- ============================================================
 
@@ -87,7 +91,7 @@ trade_total AS (
     FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d
     WHERE data_date BETWEEN '2026-03-29' AND '2026-07-25'
 ),
--- LTD 销售聚合（LTD 区间 = 财年第一天至 This end；TTL 全渠道）
+-- LTD 销售聚合（LTD 区间 = 财年第一天至 This end；全渠道，v1.4：不受渠道切片器影响，无渠道条件）
 ltd_sales AS (
     SELECT brand,
            SUM(net_sales_amt) AS ltd_amt
@@ -221,7 +225,8 @@ ORDER BY FIELD(p.platform_label, 'Tmall', 'JD', 'RLE', 'DY'), dv.brand;
 
 -- ══════════════════════════════════════════════════════════════
 -- 段 3: Store TTL —— Store 组 TTL 列（Label_Value = "TTL"）
--- 渠道上下文 = ALLSELECTED(platform) + ALLSELECTED(shop_name) = 全渠道（与段 1 相同）
+-- 渠道上下文 = ALLSELECTED(platform) + ALLSELECTED(shop_name) = 全渠道（与段 1 相同；
+-- LTD ST% 例外 = 全渠道 REMOVEFILTERS 两张渠道维度表，v1.4）
 -- 行 = brand，8 指标；数值应与段 1 完全一致（互验）
 -- ══════════════════════════════════════════════════════════════
 WITH

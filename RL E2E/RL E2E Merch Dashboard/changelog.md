@@ -796,3 +796,51 @@
   - Top_SKUs_Analysis_Table.md 升版 v2.5 → v2.6（版本记录、§1.3 属性规则补零销售回退条目、五度量代码与头注释、§7 NULL 语义）；OPP_SKUs_Analysis_Table.md 升版 v2.4 → v2.5（版本记录、§4.4 复用说明补兜底条目，度量代码不另建）
 - **关联文件**: Dimension Cross Analysis/6 Top & OPP SKUs Analysis/Top_SKUs_Analysis_Table.md；Dimension Cross Analysis/6 Top & OPP SKUs Analysis/OPP_SKUs_Analysis_Table.md
 - **备注**: 必须同步操作：PBI 内整段替换五个属性度量（Top SKUs Product Photo / Product Type / Price / Predictive Buy / SPU ID），度量名称不变；验证：OPP 表零销售行（SLS Units 列为空 / "-"）的 Photo / Type / SPU ID / Price / Predictive Buy 应展示最近已知值，Top 表展示结果与改前完全一致
+
+## [2026-11-25 10:52] DAX 修改 — ColType 按 ColName_Sort 排序失败修复（Platform Merchandising Performance 列维度表）
+
+- **模块**: DAX
+- **任务**: 用户在 PBI 中设置 ColType 按 ColName_Sort 排序报错，自查定位为 TAR ACH% / MTD TAR Progress / YTD TAR Progress 三个值
+- **操作**: 修改
+- **变更内容**:
+  - 根因（粗排细违反函数依赖）：按列排序要求被排序列 → 排序列多对一（每个值只能有一个排序号）；TTL 组 9 列用 100-900，渠道/店铺组 5 列压缩编号，TAR ACH% = 700 / 500、MTD TAR Progress = 800 / 600、YTD TAR Progress = 900 / 700，各对应两个排序号
+  - 修复：Platform / Store 共 10 个非 TTL 组（Metric_ID 10-12、15-17、20-22、25-27、37-39、42-44、47-49、52-54、57-59、62-64）的 ColName_Sort 改为 TAR ACH% = 700、MTD TAR Progress = 800、YTD TAR Progress = 900；EOH Amt% / ST% 的 500 / 600 档位在这些组留空
+  - ColName_Sort 字段头注释补充「排序值按指标全局唯一」规则
+  - 度量值仅按 ColType 路由，不引用 ColName_Sort 具体数值，度量无需改动
+- **关联文件**: Dimension Cross Analysis/5 Platform Merchandising Performance/Dim_ColMetric_Platform_Merchandising_Performance.md
+- **备注**: 必须同步操作：PBI 内整段替换 Dim_ColMetric_Platform_Merchandising_Performance 计算表，再依次设置 ColType 按 ColName_Sort 排序、ColName 按 ColType 排序；验证：两个排序均设置成功、矩阵列序不变（SLS Amt% / vs LP / TAR ACH% / MTD TAR Progress / YTD TAR Progress）；若矩阵上有基于 ColName_Sort 的视觉对象筛选器，切换排序列后需复核其是否仍生效。规则与案例已沉淀到 pbi Skill（rules/modeling-standards.md §6、knowledge/slicer-tips.md §7、knowledge/index.md）
+
+<<<<<<< HEAD
+=======
+## [2026-11-25 15:33] DAX 修改 — ST% 改为全渠道口径（Sales & Inventory 表格 v1.7 / Merchandising Core KPI v1.4）
+
+- **模块**: DAX
+- **任务**: ST% 只计算全渠道——库存表无 Platform / Store 维度，销售分子需移除渠道筛选，与分母口径对齐；并核对占比分母 ALLSELECTED 整表写法
+- **操作**: 修改
+- **变更内容**:
+  - `S&I ST% TY Value` / `S&I ST% LY Value`：分子（sales 侧）CALCULATE 内追加 `REMOVEFILTERS('Slicer_Platform_Selection')`、`REMOVEFILTERS('Slicer_Store_Name')`（维度表整表），度量名称不变；分母（inv 侧）不变
+  - `Merchandising Core KPI Act Base Value` / `LY Base Value`：ST%（Metric_ID 5）分子不再复用受渠道筛选的 `__SLS_Act` / `__SLS_LY`，改为新增 `__STSLSAmt_Act` / `__STSLSQty_Act` / `__STSLS_Act`（LY 同构三个变量）独立聚合并移除渠道两张维度表；vs LY 差值 bp（ID 6）自动继承；度量名称不变
+  - 结论（写入两份方案注意事项）：`REMOVEFILTERS` 渠道维度表整表即可切断切片器对事实表的筛选（事实表的渠道过滤是维度表筛选经 1:N 关系传播的结果），**不需要也不应该加 `REMOVEFILTERS(事实表)`**——整表移除会误删商品维度经关系传播的筛选；必须整表而非列级（维度表有按列排序字段）
+  - 核对 ALLSELECTED：Sales_&_Inventory_Trend.md、Sales_&_Inventory_Table.md 六个商品维度表均已是整表写法且 DAX 内已有备注；Merchandising_Core_KPI_ms.md 无 ALLSELECTED 维度表语句，无需修改
+  - `Merchandising_Core_KPI_test_MySQL.sql`：段 2 ST% 注明 sales 分子不附加切片器渠道条件（platform IN 仅对齐加载层过滤）；头部过时注释同步（TAR 类为 actual ÷ target 无 SQL 段、期末无快照日回退）
+- **关联文件**: Merchandise Performance Overview/Sales & Inventory Penetration Trend/Sales_&_Inventory_Table.md（§3.4 / §4.5 / §4.9 / 注意事项 23）；Merchandise Performance Overview/Merchandising Core KPI/Merchandising_Core_KPI_ms.md（§4.1 / §4.2 / 注意事项 4、5）；Merchandise Performance Overview/Merchandising Core KPI/Merchandising_Core_KPI_test_MySQL.sql
+- **备注**: 必须同步操作：PBI 内整段替换四个度量（S&I ST% TY Value、S&I ST% LY Value、Merchandising Core KPI Act Base Value、Merchandising Core KPI LY Base Value）；验证：切换 Platform / Store 切片器，SLS 等销售侧指标随之变化，ST%（TY / LY）与 Core KPI 的 ST% / ST% vs LY 数值不变。前提：渠道筛选只来自这两张维度表、两张维度表到 sales 表的关系为单向；若有筛选器直接使用事实表 platform / shop 字段，需补事实表列级 REMOVEFILTERS。未改动项：Core KPI ST% 的 EOH 空值保护仍待业务确认（注意事项 3）；Sales_Performance_Details_ms.md 的 LTD ST%（分渠道口径，按渠道展示）未在本次范围内
+
+---
+
+## [2026-11-25 16:25] DAX 修改 — LTD ST% 改为全渠道口径（Sales Performance Details by Channel v1.4）
+
+- **模块**: DAX
+- **任务**: Sales_Performance_Details_ms.md 的 LTD ST% 改为全渠道（库存表无 Platform / Store 维度，分子需与分母对齐）；核对文件内已有 ALLSELECTED 是否需要整表写法
+- **操作**: 修改
+- **变更内容**:
+  - `Sales Performance Details Act Base Value`：`__LTDSalesAmt` 不再传入 `__PlatformCtx` / `__ShopNameCtx`（TTL 分支 = ALLSELECTED([platform])，保留外部渠道切片器），改为 `REMOVEFILTERS('Slicer_Platform_Selection')`、`REMOVEFILTERS('Slicer_Store_Name')`（维度表整表）；分母 `__InvAmt_End` 不变；度量名称不变。原写法在外部选了渠道切片器时分子被收窄而分母不变，比率失真
+  - 仅影响 ColType = "LTD ST%"（Platform TTL / Store TTL 各一列），两列同值；其余 8 种基础 ColType 代码零改动；LY Base Value / Base Value / Cell 层度量不涉及
+  - ALLSELECTED 核对结论：六个商品维度表（Slicer_Label / Slicer_Super_Season / Slicer_Product_Type / Slicer_AX_Class / Slicer_Md_Type / Slicer_Division）自 v1.2 已是整表写法；其余为事实表列级 `ALLSELECTED(sales[platform])` / `ALLSELECTED(sales[shop_name])`（渠道上下文构造、Horiz. Amt% 分母）——事实表这两列无按列排序、无排序列隐藏筛选，保持不变；不可改成 `ALLSELECTED(sales)` 整表（会连行维度筛选一并移除，破坏渠道路由）
+  - Sales_Performance_Details_ms.md 升版 v1.3 → v1.4（版本记录、§1.2 TTL 例外与 ALLSELECTED 清单、§1.3、§2、§3.1、§3.2、§3.3、新增 §3.6 LTD ST% 全渠道口径、§4.1 度量代码与头注释、§5、注意事项 3 / 8 / 10 / 14、新增注意事项 18）
+  - `test_Sales_Performance_Details_ms.sql`：仅注释同步（LTD ST% 分子全渠道、ltd_sales CTE 不带渠道条件、外部渠道筛选器下的对数例外说明），SQL 逻辑不变（ltd_sales 原本即无渠道条件）
+  - `Dim_ColMetric_Sales_Performance_Details.md`：Label_Value 字段说明补 LTD ST% 例外；表定义不变，无需在 PBI 内重做
+- **关联文件**: Merchandise Performance Overview/Sales Performance Details by Channel/Sales_Performance_Details_ms.md（§3.6 / §4.1 / 注意事项 18）；同目录 test_Sales_Performance_Details_ms.sql、Dim_ColMetric_Sales_Performance_Details.md
+- **备注**: 必须同步操作：PBI 内整段替换度量 `Sales Performance Details Act Base Value`（度量名称不变）。验证：切换 Platform / Store 切片器，SLS Amt / vs LP / 占比等随切片器变化，LTD ST% 数值不变，且 Platform TTL 与 Store TTL 两列 LTD ST% 同值。前提：渠道筛选只来自这两张维度表、关系单向；若有筛选器直接使用事实表 platform / shop_name 字段，需补事实表列级 REMOVEFILTERS。未改动项：LTD ST% 空值保护（分母缺失返回 BLANK 而非 100%）仍待业务确认（注意事项 11）；§4.1 的 inv 侧代码（`__InvAmt_End` / `__EOHUnit`）实际未写 TREATAS，与文档「TREATAS 传递」的描述不一致，属既有问题，本次未处理
+>>>>>>> 430231e (RL E2E Merch Dashboard UAT - 17:)
+---
