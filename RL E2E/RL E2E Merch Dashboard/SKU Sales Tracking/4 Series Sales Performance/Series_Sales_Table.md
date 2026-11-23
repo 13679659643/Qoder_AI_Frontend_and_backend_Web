@@ -5,8 +5,8 @@
 > **关联口径**: 口径文档/口径Markdown格式/SKU Sales Tracking.md - 子模块七 Series Sales Performance（§13~§27）
 > **数据底表（销售类）**: s02_trade_sku_data_d
 > **数据底表（库存类）**: s02_inventory_stock_sales_detail_d
-> **关联维度**: Slicer_Time_Frame_Min_This / Max_This（时间，断开维度）；Slicer_Currency_Selection（币种，断开维度）
-> **筛选影响范围**: date + 渠道（Platform + Store Name，仅销售侧）+ 商品维度（Label / Division / Product Type / Framework / Category / AX Class / Category Summary / Special Supply / Predictive Buy；库存侧受与 s02_inventory_stock_sales_detail_d 已建关系的商品维度切片器影响）
+> **关联维度**: Slicer_Time_Frame_Min_This / Max_This（时间，断开维度）；Slicer_Currency_Selection（币种，断开维度）；s02_trade_sku_data_d[special_series]（页面多选切片器，项可见性由度量框定，见 §1.7）
+> **筛选影响范围**: date + 渠道（Platform + Store Name，仅销售侧）+ 商品维度（Label / Division / Product Type / Framework / Category / AX Class / Category Summary / Special Supply / Predictive Buy；库存侧受与 s02_inventory_stock_sales_detail_d 已建关系的商品维度切片器影响）+ Series 多选（special_series，仅销售侧与行轴）
 
 ---
 
@@ -34,7 +34,8 @@ Series Sales Performance 是 SKU Sales Tracking Tab 的特别系列子模块，�
 - **special_series 非空**：表格视觉对象级筛选器对 s02_trade_sku_data_d[special_series] 配置「不为空」，落地为该列的视觉级筛选；空白（NULL / 空字符 / 纯空格）series 不出现在行轴。口径「仅统计 special_series 有值的商品（含全部指标及占比分母）」由该筛选器与各度量值内部分母条件共同保证（逐类核查见 §1.6）
 - **行小计**：series 汇总行 = 该 series 下全部 AXC 的上卷汇总（series 粒度），显示位置由表格格式面板的小计位置设置控制；Sort Key 中 series 汇总行编码为组内最后（SpuRank = 999,999），与小计显示在组底部的常规形态一致；行区域为三层结构时若同时开启 spu 层小计，spu 汇总行同样走 ISINSCOPE(spu_id) 分支（TREATAS 传 spu_id，值为该 spu 全部 url 记录汇总，行为正确）
 - **总计行（若开启）**：全部有效 series 的汇总，行维度值不传递（不限定单个 series），仅保留 special_series 非空与外部筛选（实现见 §3.2 总计分支）
-- **跨表无关系**：s02_trade_sku_data_d 与 s02_inventory_stock_sales_detail_d 之间无模型关系，行维度值（special_series / spu_id）对库存类指标不自动传递，经 DAX TREATAS 显式桥接（见 §3.2）
+- **special_series 多选切片器**：页面新增基于 s02_trade_sku_data_d[special_series] 的多选切片器，选择结果直接收紧表格行轴（series 及其下 AXC 行）；切片器**仅展示本 This Period 区间内存在销售记录的 series 值**（项可见性由 [Series Sales Slicer IsVisible] 度量框定，见 §1.7 / §4.33），与行轴是否已有该 series 无关
+- **跨表无关系**：s02_trade_sku_data_d 与 s02_inventory_stock_sales_detail_d 之间无模型关系，行维度值（special_series / spu_id）对库存类指标不自动传递，经 DAX TREATAS 显式桥接（见 §3.2）；special_series 切片器落在 trade 列上，同样不直接筛选 inv 表（影响范围见 §8 注意事项 17）
 
 ### 1.3 指标清单
 
@@ -93,6 +94,23 @@ Series Sales Performance 是 SKU Sales Tracking Tab 的特别系列子模块，�
 | 库存类分母（§18 / §20）                             | inv 表不受行维度与视觉级筛选影响，若不加条件会包含空白 series 商品的库存，占比偏小                                                                                                                                              | 符合，度量值内部分母显式加 inv 表`NOT ISBLANK && LEN(TRIM()) > 0` 条件                                                                          |
 | Sort Key 排名                                         | L1 relation 为`ALL(special_series)` 且 FILTER 内排除空白 / 空字符 series（视觉级筛选被 ALL 移除，空白排除在度量值内部实现，双保险）；L1 / L2 候选金额均按排名粒度上卷——L1 清除 spu_id + spu_img_url 子级行筛选（series 粒度金额）、L2 清除 spu_img_url 子级行筛选（spu 粒度金额），当前行 series 筛选在 L2 保留，候选自动限定在当前有效 series 内 | 符合                                                                                                                                              |
 
+### 1.7 special_series 多选切片器（仅展示当期有值的 series）
+
+**需求**：页面新增 special_series 多选切片器，其**候选项只展示当前日期筛选（This Period）下有数据的 series**，避免用户选到当期无销售记录的 series 造成整表空白。
+
+| 项 | 设计 |
+| -- | ---- |
+| 切片器字段 | `s02_trade_sku_data_d[special_series]`（多选，直接绑定事实表列，无需新建维度表） |
+| 项可见性 | 视觉对象级别筛选：`[Series Sales Slicer IsVisible] = 1`（度量实现见 §4.33） |
+| 判定口径 | 该 series 在本 This Period 区间（`Slicer_Time_Frame_Min_This[TimeFrame_Min]` ~ `Slicer_Time_Frame_Max_This[TimeFrame_Max]`）内存在销售记录（`COUNTROWS > 0`） |
+| 空白项 | 空白 / 空字符 / 纯空格 series 返回 0，不出现在切片器中（与表格视觉级「不为空」筛选一致） |
+| 日期未选 | This Period 未选择时度量返回 1，全部有效 series 显示（兜底，与看板既有日期切片器使用方式一致） |
+| 选择生效范围 | 选择后收紧表格行轴与销售类指标（同一 trade 列筛选自动传导）；**不影响库存类指标取值与占比分母**（见 §8 注意事项 17） |
+| 排序 / 排名 | 选择只缩减可见行，Sort Key 名次保持全局名次（L1 的 `ALL(special_series)` 本就移除切片器筛选），行序仍为金额降序，无需调整排名逻辑 |
+| 占比分母 | SLS Amt% / SLS Unit% 分母 `REMOVEFILTERS(三列)` 会一并移除切片器筛选 → 占比仍以全量有效 series 为分母；如需改为「所选 series 内占比」，见 §8 注意事项 18 的替代写法 |
+
+**项级判定上下文说明**：视觉对象级别筛选在切片器逐项求值时，该项的 series 值即筛选上下文，度量内再叠加 This Period 的 dt 筛选得到该 series 当期记录数；页面其他切片器（渠道、Division 等）如已生效会一并级联（列为页面筛选，属预期行为）。
+
 ---
 
 ## 2. 现状分析
@@ -100,6 +118,7 @@ Series Sales Performance 是 SKU Sales Tracking Tab 的特别系列子模块，�
 - 数据底表 `s02_trade_sku_data_d`（SKU 粒度交易表，dt 日粒度）：net_sales_amt 为 Power Query 取数时新增列（`ROUND(product_qty * sales_price, 6) AS net_sales_amt`）；数量口径字段为 product_qty（net_sales_amt 由 product_qty × sales_price 行级计算而来，二者同源）；MD 分子字段 md_price、分母字段 msrp 均为行级字段（行级乘积后求和）；维度含 dt、platform、shop_name、division 及 special_series、spu_id、spu_img_url 等全部商品维度字段
 - 数据底表 `s02_inventory_stock_sales_detail_d`（库存+销售+补货 SKU 模型表，dt 日快照）：msrp_inv_amt（吊牌库存金额）为期末库存金额口径字段；stock_inv_qty（在库库存数量）为 §19 EOH Unit 口径字段；inv_qty（库存数量）为 §24 / §25 / §27 ST% 库存分母口径字段；维度含 dt、division、special_series、spu_id 等商品维度字段；**无 platform / shop_name 字段**（渠道筛选不影响库存侧指标，口径限制见注意事项 1）
 - 模型关系：两张事实表之间**无模型关系**，行维度值（special_series / spu_id）向库存类指标传递不依赖模型关系，全部经 DAX TREATAS 显式桥接；日期筛选器（Slicer_Time_Frame_Min_This / Max_This）为断开维度，时间范围在 DAX 中显式筛选；渠道切片器（Platform / Store Name）与 trade 表一对多关联自动传递；商品维度切片器与两张事实表已建关系的筛选自动传递（Division 确认与两表关联）；Slicer_Currency_Selection 为断开维度，币种符号与汇率经 SELECTEDVALUE 读取
+- **新增 special_series 多选切片器**：直接绑定 `s02_trade_sku_data_d[special_series]`（事实表列，多选），不新建维度表、不加模型关系；因日期筛选器为断开维度，切片器项不会随日期自动收敛，需要以度量做的视觉对象级筛选显式实现「仅展示当期有值项」（见 §1.7 / §4.33）
 - Slicer_Time_Frame_Max_This 已含 Fiscal_Year_First_Day 字段（取数 SQL 按 TimeFrame_Min 落入的财年区间自关联 dim_t00_bi_fiscal_calendar 生成），YTD 区间起点直接读取该字段，无需在 DAX 内推导财年
 - 字段名已逐一核对数据字典与取数 SQL（两表日期字段统一为 dt，date 类型）
 - **模型加载窗口限制**：Power Query 取数限定了数据窗口——trade 表为 `(dt >= '2026-03-29' AND dt <= '2026-09-26') OR (dt >= '2025-03-30' AND dt <= '2025-09-27')`，inv 表为 `(dt >= '2026-03-29' AND dt <= '2026-07-25') OR (dt >= '2025-03-30' AND dt <= '2025-07-26')`。LTD「开店以来」与 YTD「财年第一天起」在模型中实际统计范围为**加载窗口 ∩ 口径区间**：窗口外历史数据不在模型中，LTD / YTD 模型值小于全量口径值；如需全量口径需扩窗重新取数。测试 SQL 默认附加相同窗口条件与 Power BI 模型值逐行对齐（去窗口即全量口径，见测试 SQL 说明）
@@ -124,6 +143,10 @@ Value（口径计算，保留小数原值）
 Display（格式化显示）
 ←  currency: 币种符号 & FORMAT(#,##0)；integer: FORMAT(#,##0)；percent_0dp: FORMAT(#,##0%)
 ←  BLANK 统一显示 "-"
+↓
+Visual Filters（视觉对象筛选，0/1）
+←  Slicer IsVisible: special_series 切片器逐项判定 This Period 是否有销售记录（仅切片器使用）
+←  IsEmpty: 表格行非空判定（表格视觉级筛选 = 1）
 ```
 
 ### 3.2 行维度值跨表传递（TREATAS 桥接）
@@ -151,6 +174,7 @@ Display（格式化显示）
 - **销售类分母（§14 / §16）**：`REMOVEFILTERS(s02_trade_sku_data_d[special_series], s02_trade_sku_data_d[spu_id], s02_trade_sku_data_d[spu_img_url])` 移除三列的全部筛选（含行维度筛选、spu_img_url 行筛选与视觉级「不为空」筛选落地的列筛选），保留外部切片器筛选；随后以布尔筛选参数显式重加 `NOT ISBLANK(special_series) && LEN(TRIM(special_series)) > 0`（布尔筛选中列引用经引擎转换为对该列全量值的 FILTER，空白 / 空字符 / 纯空格一并排除），分母覆盖当前外部筛选下全部有效 series 商品（含表格未显示行）的金额 / 数量
 - **库存类分母（§18 / §20）**：inv 表不受行维度与视觉级筛选影响，分母直接显式加 inv 表 `NOT ISBLANK(special_series) && LEN(TRIM(special_series)) > 0` 条件 + 期末快照日 + 外部筛选（Division 等已建关系切片器）
 - 占比不受币种选择影响：分子分母均为原始 RMB 聚合（不经汇率换算）
+- **与 special_series 切片器的关系**：切片器筛选落在同名列上，同样被 `REMOVEFILTERS(special_series, ...)` 移除——占比分母保持全量有效 series，不随切片器收缩（如需「所选内占比」的替代写法见 §8 注意事项 18）
 
 ### 3.4 Sort Key 排序机制
 
@@ -169,8 +193,8 @@ Display（格式化显示）
 
 ### 3.5 度量值命名与组织
 
-- 命名规则：模块前缀 `Series Sales` + 指标名 + 层次后缀（Value / Display），排序键为 `Series Sales Sort Key`
-- Display Folder：`Series Sales Performance\Rank`、`Series Sales Performance\Base Metrics`、`Series Sales Performance\Formatting`
+- 命名规则：模块前缀 `Series Sales` + 指标名 + 层次后缀（Value / Display），排序键为 `Series Sales Sort Key`，切片器框定度量为 `Series Sales Slicer IsVisible`
+- Display Folder：`Series Sales Performance\Rank`、`Series Sales Performance\Base Metrics`、`Series Sales Performance\Formatting`、`Series Sales Performance\Visual Filters`
 - 度量值统一存放于 `_Measures` 隐藏表（与看板既有组织方式一致）
 
 ---
@@ -1486,6 +1510,72 @@ Series Sales IsEmpty =
     )
 ```
 
+### 4.33 Series Sales Slicer IsVisible（special_series 切片器项可见性）
+
+```dax
+Series Sales Slicer IsVisible =
+// ========================================
+// 度量值: Series Sales Slicer IsVisible
+// 中文名: special_series 切片器项可见性（当期是否有销售记录）
+// Display Folder: Series Sales Performance\Visual Filters
+// 用途: special_series 多选切片器的视觉对象级别筛选——仅保留本 This Period
+//       区间内存在销售记录的 series 值（切片器项逐项求值）
+// 返回: 1（显示）或 0（隐藏）
+// 判定: 当前切片器项的 series 在 This Period 区间内 COUNTROWS > 0
+// 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
+// 使用方式: 切片器 → 筛选器窗格「此视觉对象上的筛选器」→ 添加
+//       [Series Sales Slicer IsVisible] → 条件 = 1 → 应用筛选
+// 设计说明:
+//   1. 空白 / 空字符 / 纯空格 series 返回 0（与表格视觉级「不为空」筛选一致）
+//   2. This Period 未选择（SELECTEDVALUE 返回 BLANK）时返回 1：全部有效
+//      series 显示（兜底，与看板既有日期切片器使用方式一致）
+//   3. 判定标准为「存在销售记录」：仅退货等 0 金额记录也会显示该项；
+//      如需改为「SLS Amt 非空」，将 COUNTROWS 判定替换为
+//      NOT ISBLANK(CALCULATE(SUM(net_sales_amt), 同区间 dt 筛选))
+//   4. 页面 / 报表级其他切片器（渠道、商品维度）会参与判定（度量在视觉
+//      上下文评估，级联收缩，属预期行为）；如仅需按日期判定，可在
+//      CALCULATE 内加 REMOVEFILTERS 对应列
+//   5. 该项可见性只控制切片器候选项，不改变表格度量口径；选择后收紧
+//      表格行轴与销售类指标（同一 trade 列筛选自动传导），库存类指标
+//      经 TREATAS 按行值传递、占比分母不受影响（见 §8 注意事项 17）
+//   6. 逐项判定以 TREATAS({当前项 series}, series) 显式重建该项筛选：
+//      切片器自身的多选状态存在于视觉筛选上下文，若不覆盖，未选中项的
+//      COUNTROWS 会被压成 0 而误隐藏（表现为只能保留已选项、无法新增）
+// ========================================
+
+// ── This Period 时间区间 ──
+VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
+VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+
+// ── 当前切片器项的 series（切片器项行上下文）──
+VAR __Series = SELECTEDVALUE('s02_trade_sku_data_d'[special_series])
+
+// ── 显式重建「仅当前项」的 series 筛选（TREATAS 覆盖该列已有筛选，
+//    防止切片器自身的多选状态把非选中项的计数压成 0 而被误隐藏）──
+VAR __ItemFilter =
+    TREATAS({__Series}, 's02_trade_sku_data_d'[special_series])
+
+RETURN
+    IF(
+        ISBLANK(__Series) || LEN(TRIM(__Series)) = 0,
+        0,                                          // 空白 / 空字符 series：隐藏
+        IF(
+            ISBLANK(__PeriodMin) || ISBLANK(__PeriodMax),
+            1,                                      // 日期未选择：全部有效 series 显示（兜底）
+            IF(
+                CALCULATE(
+                    COUNTROWS('s02_trade_sku_data_d'),
+                    __ItemFilter,
+                    's02_trade_sku_data_d'[dt] >= __PeriodMin,
+                    's02_trade_sku_data_d'[dt] <= __PeriodMax
+                ) > 0,
+                1,                                  // 当期有销售记录：显示
+                0                                   // 当期无销售记录：隐藏
+            )
+        )
+    )
+```
+
 ---
 
 ## 5. 度量值清单与 Display Folder
@@ -1524,8 +1614,9 @@ Series Sales IsEmpty =
 | 30   | Series Sales LTD SLS Unit Display   | Formatting     | 文本          | LTD SLS Unit 格式化显示（整数千分位）                     |
 | 31   | Series Sales LTD ST% (Unit) Display   | Formatting     | 文本          | LTD ST% (Unit) 格式化显示（百分比整数）                 |
 | 32   | Series Sales IsEmpty                   | Rank           | 整数（0/1）   | 行非空判定（视觉级筛选器 IsEmpty = 1 显示有数据行）   |
+| 33   | Series Sales Slicer IsVisible           | Visual Filters | 整数（0/1）   | 切片器项可见性（special_series 切片器视觉级筛选 = 1，仅展示当期有值项） |
 
-> 表格视觉对象值区域的绑定选择见 §7：15 列指标绑定 Display（文本格式化统一，金额列含动态币种符号），排序依据 Sort Key 置于最后一列并收窄列宽；如需为占比列配置数据条，可整体改绑对应 Value 度量并设置列格式（数值格式支持数据条，文本格式不支持）。
+> 表格视觉对象值区域的绑定选择见 §7：15 列指标绑定 Display（文本格式化统一，金额列含动态币种符号），排序依据 Sort Key 置于最后一列并收窄列宽；如需为占比列配置数据条，可整体改绑对应 Value 度量并设置列格式（数值格式支持数据条，文本格式不支持）。切片器框定度量（序号 33）不进值区域，仅用于切片器视觉对象级别筛选。
 
 ---
 
@@ -1571,20 +1662,28 @@ Series Sales IsEmpty =
 │  │ 15 列 Display（currency / integer / percent_0dp 格式化，  │       │
 │  │ BLANK 显示 "-"）                                         │       │
 │  └──────────────────────────────────────────────────────────┘       │
+│  ┌──────────────────────────────────────────────────────────┐       │
+│  │ Visual Filters（0/1）                                     │       │
+│  │ IsEmpty：行非空判定 → 表格视觉级筛选 = 1                  │       │
+│  │ Slicer IsVisible：切片器项当期记录数 > 0 → 切片器筛选 = 1  │       │
+│  └──────────────────────────────────────────────────────────┘       │
 │        ▲ Slicer_Time_Frame_Min_This / Max_This（断开维度，            │
 │          DAX 显式时间筛选；Max 表含 Fiscal_Year_First_Day）           │
 │        ▲ Slicer_Currency_Selection（币种符号 + 汇率）                 │
+│        ▲ special_series 多选切片器（trade 列筛选，收紧行轴与销售类）   │
 └─────────────────────────────────────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        可视化层（表格 × 1）                           │
+│                        可视化层（表格 × 1 + 切片器 × 1）               │
 │  行: s02_trade_sku_data_d[special_series] > [spu_id] >               │
 │      [spu_img_url]（三层，图片列数据类别 = 图像 URL；                │
 │      行小计开启：series 汇总行；视觉级筛选器:                         │
 │      special_series 不为空 + IsEmpty = 1）                            │
 │  值: 15 列指标 Display                                                │
 │      + Sort Key（排序依据，最后一列收窄列宽，升序）                   │
+│  切片器: s02_trade_sku_data_d[special_series]（多选，                │
+│      视觉级筛选器 Slicer IsVisible = 1，仅展示当期有值项）            │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1612,6 +1711,18 @@ Series Sales IsEmpty =
 - series 汇总行 Sort Key = SeriesRank × 1,000,000 + 999,999（组内最后），与小计显示在组底部的形态一致；如后续将小计位置调整为组顶部，需同步将该编码改为 0（组内最前）
 - 如需为 SLS Amt% / SLS Unit% / EOH Amt% / EOH Unit% / MD / ST% 列配置条件格式数据条，需改绑对应 Value 度量并设置列格式（数据条仅支持数值绑定）
 
+### 7.2 special_series 多选切片器配置
+
+| 配置项 | 内容 |
+| ------ | ---- |
+| 视觉对象类型 | 切片器 |
+| 字段 | s02_trade_sku_data_d[special_series] |
+| 选择模式 | 多选（支持 Ctrl / 全选） |
+| 视觉级筛选器 | [Series Sales Slicer IsVisible] = 1（仅展示 This Period 有销售记录的 series，§4.33） |
+| 交互 | 对表格视觉对象：默认筛选（收紧行轴）；对库存类指标：仅经行值 TREATAS 传递，不做跨表筛选 |
+| 日期联动 | 随 Slicer_Time_Frame_Min_This / Max_This 变化实时重算候选项；已选但新区间无数据的 series 项被隐藏并自动失效 |
+| 排序 | 按 special_series 值升序（切片器默认排序，无需额外设置） |
+
 ---
 
 ## 8. 注意事项
@@ -1633,3 +1744,6 @@ VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 14. **行小计口径**：series 汇总行 = 该 series 下全部 AXC 的上卷汇总——销售类指标（SLS / AUR / MD / YTD / LTD）为 series 粒度汇总或加权值（AUR = 总金额 ÷ 总数量、MD = 1 − 总折扣 ÷ 总吊牌）；库存类指标为 inv 表中该 series 全部库存的 TREATAS 汇总（含 trade 侧无销售记录的 spu）；占比分母不随行层级变化（始终全量有效 series）。汇总行的显示位置由表格格式面板控制，Sort Key 编码与之匹配（组内最后）
 15. **spu_img_url 行维度与一对多异常**：行粒度为 (special_series, spu_id, spu_img_url) 三元组，spu_id 与 spu_img_url 正常一对一（行粒度即 spu）；一对多异常时同一 spu 按 url 拆为多行——销售类指标按 (spu, url) 记录集合拆分（历史换图的记录按各自 url 归属）、库存类指标为 spu 级值（url 行显示该 spu 全部库存，inv 表 url 与 trade 表 url 不保证同步，按 (spu, url) 双列传递存在库存漏计风险，故不拆分）；Sort Key 中同一 spu 的多个 url 行共享 (SeriesRank, SpuRank)（L2 候选金额为 spu 粒度），键值相同行序由表格呈现确定
 16. **IsEmpty 行可见性筛选**：[Series Sales IsEmpty] 为 1 的视觉级筛选器仅显示有数据的行（当期 / YTD / LTD / 期末库存任一非空）；判断组合按分子依赖简化——SLS Amt 为空则 SLS Amt% 必为空（占比类不单独判断），同理 SLS Unit% / EOH Amt% / EOH Unit%，AUR / MD / ST% 的空值由原子指标组合决定；全部核心指标为空的行返回 0 被筛选器排除
+17. **special_series 切片器的影响范围**：切片器绑定 trade 表列，选择后销售类指标（SLS / AUR / MD / YTD / LTD 销售侧）与行轴自动收紧；库存类指标不受影响——inv 表无模型关系，明细行经 TREATAS(spu_id) 取值、汇总行经 TREATAS(special_series) 取值，值本身与切片器无关；库存占比分母（§18 / §20）与表格总计行的库存汇总不受切片器影响（分母口径为 inv 表全量有效 series）。如需库存侧也跟随切片器，须在对应分支 / 分母加 `KEEPFILTERS(TREATAS(VALUES('s02_trade_sku_data_d'[special_series]), 's02_inventory_stock_sales_detail_d'[special_series]))`，属口径变更需先与业务确认
+18. **占比分母与切片器的关系**：SLS Amt% / SLS Unit% 分母 `REMOVEFILTERS(special_series, spu_id, spu_img_url)` 会一并移除切片器在 special_series 上的筛选，占比仍以**全量有效 series** 为分母（符合「移除表格中所有维度字段」口径，选中部分 series 后占比合计 < 100%）。如需改为「所选 series 内占比」，将分母的 `REMOVEFILTERS(三列)` 改为 `REMOVEFILTERS(spu_id, spu_img_url) + ALLSELECTED('s02_trade_sku_data_d'[special_series])`（ALLSELECTED 还原切片器选择、仅移除当前行 series 筛选），并同步更新口径文档
+19. **切片器项显示的实现方式与兼容性**：「仅展示当期有值项」依赖度量做的**视觉对象级别筛选**（切片器 →「此视觉对象上的筛选器」→ [Series Sales Slicer IsVisible] = 1）。该方式要求度量在切片器项上下文逐项求值（Power BI Desktop 2022 年及以后版本可用）；若个别旧版本不生效，可退化为对切片器项不做限制、由表格 IsEmpty 筛选保证空白行不显示，或改用 Power Query 生成的 series 维度表（静态标记，无法随日期动态收敛，不推荐）。另：已选 series 在日期区间切换后若无数据，其项虽被隐藏但选择可能保留在筛选器状态中，需用户重新选择或点「清除筛选」

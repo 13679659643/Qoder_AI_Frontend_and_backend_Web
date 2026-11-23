@@ -3,9 +3,9 @@
 -- 所属模块: RL E2E Merch Dashboard - SKU Sales Tracking - Series Sales Performance
 -- 关联方案: Series_Sales_Table.md
 -- 语法: MySQL 8.0+（CTE / 窗口函数）
--- 结构: SQL 1/2 明细行（三元组粒度）+ SQL 2/2 series 汇总行，两段独立执行
+-- 结构: SQL 1/2 明细行（三元组粒度）+ SQL 2/2 series 汇总行 + SQL 3/3 切片器候选值清单，三段独立执行
 --
--- ★参数区★（当前为字面量直嵌，修改参数时对两段全文替换对应日期 / 维度值）
+-- ★参数区★（当前为字面量直嵌，修改参数时对三段全文替换对应日期 / 维度值）
 -- Division:              'CW' / 'HM' / 'MN' / 'WM' 四值全选（对应切片器全选，
 --                        等价不筛选；如需单选，将 division IN (...) 替换为
 --                        division = 'WM'）
@@ -62,6 +62,12 @@
 --      的窗口条件即为全量口径（开店以来 / 财年第一天起）
 -- 11. 行序 = Sort_Key 升序（series 金额降序分组 → series 内 AXC 金额降序，
 --      汇总行组内最后，对应 PBI 侧按 Sort Key 列升序排序）
+-- 12. SQL 3/3 验证 special_series 多选切片器的候选值清单：仅输出 This
+--      Period 区间内存在销售记录的有效 series（对应 DAX [Series Sales
+--      Slicer IsVisible] = 1 的判定：COUNTROWS > 0 + series 非空）；
+--      切片器选择后表格行轴只保留所选 series，但占比分母仍为全量有效
+--      series（对应 DAX 分母 REMOVEFILTERS(series, spu_id, spu_img_url)，
+--      分母不随切片器收缩）
 -- ======================================================================
 
 -- ======================================================================
@@ -341,3 +347,23 @@ CROSS JOIN inv_total it
 ORDER BY
     Sort_Key ASC,
     Series ASC;                                          -- 行序对应 PBI 侧 Sort Key 升序（垫底行内按 series 决胜）
+
+-- ======================================================================
+-- SQL 3/3: special_series 多选切片器候选值清单
+--          对应 DAX [Series Sales Slicer IsVisible] = 1（切片器视觉级筛选）
+--          判定：This Period 区间内存在销售记录（COUNTROWS > 0）且 series 非空
+--          说明：切片器选择只收紧表格行轴；占比分母仍为全量有效 series，
+--                故本清单与 SQL 2/2 的占比分母互不影响
+-- ======================================================================
+SELECT
+    special_series                                      AS Series,
+    COUNT(*)                                            AS This_Period_Row_Cnt,
+    SUM(ROUND(product_qty * sales_price, 6))            AS This_Period_SLS_Amt_RMB
+FROM indep_rl_dw.s02_trade_sku_data_d
+WHERE dt >= '2026-03-29' AND dt <= '2026-07-25'         -- This Period 区间（切片器判定的日期框定）
+  AND special_series IS NOT NULL                        -- 空白 / 空字符 series 不出现在切片器中
+  AND TRIM(special_series) <> ''
+  AND division IN ('CW', 'HM', 'MN', 'WM')              -- 与表格口径一致的 Division 切片器全选
+GROUP BY special_series
+HAVING COUNT(*) > 0                                     -- This Period 有销售记录才显示（COUNTROWS > 0）
+ORDER BY special_series ASC;                            -- 切片器默认按 series 升序展示

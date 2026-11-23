@@ -4,26 +4,28 @@
 -- 关联方案: Top_Color_Sales_Performance_table.md
 -- 语法: MySQL 8.0+（CTE / 窗口函数 / 用户变量；低于 8.0 不支持）
 -- 用途: 验证 Power BI 两个表格视觉对象的数值口径
---       Sales: SLS Amt / SLS Amt% / SLS Unit / SLS Unit%
+--       Sales: SLS Amt / SLS Amt% / SLS Amt vs LP / SLS Amt% vs LP /
+--              SLS Unit / SLS Unit%
 --       Inventory: EOH Amt / EOH Amt% / EOH Unit / EOH Unit%
 --
--- ★参数区★（修改 @division 后需重新执行 SET 语句及全部两段；单独执行任一段前需先执行 SET）
+-- ★参数区★（修改 @division / @lp_min / @lp_max 后需重新执行 SET 语句及全部两段；单独执行任一段前需先执行 SET）
 -- Division:              'WM'（单选，可选 WM / CW / HM / MN，每次只选一个值）
 -- Platform:              'ALL'（全选，等价不筛选，SQL 中不附加条件）
 -- Store Name:            'ALL'（全选，等价不筛选，SQL 中不附加条件）
 -- Sales This Period:     dt ∈ ['2026-03-29', '2026-09-26']（区间汇总）
+-- Sales Last Period:     dt ∈ ['2025-03-29', '2025-09-27']（区间汇总，对应 PBI Slicer_Time_Frame_Max_Last[TimeFrame_Min/Max]）
 -- Inventory This 时点:   dt = '2026-07-25'（This Period 最后一天，单日快照）
 --
 -- 口径还原说明:
 --   1. 两表实际日期字段为 dt（非 data_date），已按数据字典核对
 --   2. net_sales_amt 为 Power Query 取数新增列（数据库不存在），按行级
 --      ROUND(product_qty × sales_price, 6) 等价还原后再聚合
---   3. Top10 排名 = 金额降序 + color_name 字母序升序决胜（DENSE_RANK
---      双列 ORDER BY），名次严格连续唯一（1,2,3,4），对应 DAX
---      RANK(DENSE, ..., ORDERBY(金额 DESC, color_name ASC))；
+--   3. Top10 排名 = This Period 金额降序 + color_name 字母序升序决胜
+--      （DENSE_RANK 双列 ORDER BY），名次严格连续唯一（1,2,3,4），
+--      对应 DAX RANK(DENSE, ..., ORDERBY(金额 DESC, color_name ASC))；
 --      排名候选排除 NULL / 空字符 / 纯空格 color_name（对应 DAX
---      LEN(TRIM()) > 0），并排除聚合金额为 NULL 的 color（对应当期
---      无有效金额时 DAX Rank 返回 BLANK 被筛选器排除）
+--      LEN(TRIM()) > 0），并排除 This Period 聚合金额为 NULL 的 color
+--      （对应当期无有效金额时 DAX Rank 返回 BLANK 被筛选器排除）
 --   4. 排名 <= 10 的行返回——(金额, color_name) 元组唯一时名次即
 --      行位置，恰好 10 行、Top10 边界确定，对应视觉级筛选器
 --      「Rank 介于 1 与 10」语义
@@ -42,16 +44,30 @@
 --      口径定义的 end period 最后一天验证
 --   9. inv 表无 platform / shop_name 字段，Inventory 段仅 date +
 --      Division 筛选（渠道筛选不影响库存侧指标）
--- 10. 行序 = 排名升序（= 金额降序 + color_name 字母序决胜，对应
---      PBI 侧按 Color Rank 升序排序）
+-- 10. 行序 = 排名升序（= This Period 金额降序 + color_name 字母序决胜，
+--      对应 PBI 侧按 Color Rank 升序排序）
+-- 11. SLS Amt vs LP = This Period color 金额 / Last Period color 金额 − 1
+--      （变化率，分子分母均原始 RMB，不受币种影响）；LP 侧为 NULL 或 0
+--      时结果为 NULL（除零保护，对应 DAX DIVIDE 返回 BLANK）
+-- 12. SLS Amt% vs LP = This Period 占比 − Last Period 占比（差值，小数）；
+--      任一期占比为 NULL 时结果为 NULL（对应 DAX 任一侧 BLANK 返回 BLANK）
+--      bp 转换（×10000）仅在 PBI Display 层实现，SQL 侧输出原始差值小数
+-- 13. Last Period 区间 = Slicer_Time_Frame_Max_Last[TimeFrame_Min/Max]；
+--      本表 Top10 排名仍基于 This Period（与新增 vs LP 列无耦合）
 -- ======================================================================
 
 SET @division := 'WM';
 
+-- ★ Last Period 区间（对应 PBI Slicer_Time_Frame_Max_Last 表的 TimeFrame_Min / TimeFrame_Max）★
+SET @lp_min := '2025-03-29';
+SET @lp_max := '2025-09-27';
+
 -- ======================================================================
--- SQL 1/2: Sales Top10（color 维度排名）
+-- SQL 1/2: Sales Top10（color 维度排名，新增 vs LP 两列）
 -- ======================================================================
-WITH row_agg AS (
+WITH
+-- ── This Period color 粒度聚合 ──
+row_agg_this AS (
     SELECT
         color_name,
         SUM(ROUND(product_qty * sales_price, 6))    AS color_net_sales_amt,
@@ -62,35 +78,74 @@ WITH row_agg AS (
       AND division = @division
     GROUP BY color_name                                   -- NULL color_name 归为一组，进入分母汇总
 ),
-color_rank AS (
+
+-- ── Last Period color 粒度聚合（用于 vs LP 派生）──
+row_agg_lp AS (
     SELECT
         color_name,
-        color_net_sales_amt,
-        color_product_qty,
-        DENSE_RANK() OVER (ORDER BY color_net_sales_amt DESC, color_name ASC)    AS color_rank_no
-    FROM row_agg
-    WHERE color_name IS NOT NULL                          -- 排名候选排除空白/空字符（对应 DAX LEN(TRIM()) > 0）
-      AND TRIM(color_name) <> ''
-      AND color_net_sales_amt IS NOT NULL                 -- 当期无有效金额不参与排名（对应 DAX Rank 返回 BLANK）
+        SUM(ROUND(product_qty * sales_price, 6))    AS lp_color_net_sales_amt
+    FROM indep_rl_dw.s02_trade_sku_data_d
+    WHERE dt >= @lp_min
+      AND dt <= @lp_max
+      AND division = @division
+    GROUP BY color_name                                   -- NULL color_name 归为一组，进入分母汇总
 ),
-total AS (
+
+-- ── This Period 全量 color 汇总（Amt% / Unit% 分母）──
+total_this AS (
     SELECT
-        SUM(color_net_sales_amt)                          AS total_net_sales_amt,
-        SUM(color_product_qty)                            AS total_product_qty
-    FROM row_agg                                          -- 全量 color 汇总（含 Top10 之外与空白 color，对应 REMOVEFILTERS(color_name)）
+        SUM(color_net_sales_amt)                      AS total_net_sales_amt,
+        SUM(color_product_qty)                        AS total_product_qty
+    FROM row_agg_this                                    -- 全量 color 汇总（含 Top10 之外与空白 color，对应 REMOVEFILTERS(color_name)）
+),
+
+-- ── Last Period 全量 color 汇总（LP Amt% 分母）──
+total_lp AS (
+    SELECT
+        SUM(lp_color_net_sales_amt)                   AS lp_total_net_sales_amt
+    FROM row_agg_lp                                      -- 全量 color 汇总（对应 REMOVEFILTERS(color_name) at Last Period）
+),
+
+-- ── This Period Top10 排名（金额降序 + color_name 字母序决胜）──
+color_rank AS (
+    SELECT
+        a.color_name,
+        a.color_net_sales_amt,
+        a.color_product_qty,
+        DENSE_RANK() OVER (ORDER BY a.color_net_sales_amt DESC, a.color_name ASC)  AS color_rank_no
+    FROM row_agg_this a
+    WHERE a.color_name IS NOT NULL                        -- 排名候选排除空白/空字符（对应 DAX LEN(TRIM()) > 0）
+      AND TRIM(a.color_name) <> ''
+      AND a.color_net_sales_amt IS NOT NULL               -- 当期无有效金额不参与排名（对应 DAX Rank 返回 BLANK）
 )
+
 SELECT
-    cr.color_rank_no                                      AS Color_Rank,
-    cr.color_name                                         AS Color_Name,
-    cr.color_net_sales_amt                                AS SLS_Amt_Value_RMB,
-    cr.color_net_sales_amt  / NULLIF(t.total_net_sales_amt, 0)    AS SLS_Amt_Pct,
-    cr.color_product_qty                                  AS SLS_Unit_Value,
-    cr.color_product_qty    / NULLIF(t.total_product_qty, 0)      AS SLS_Unit_Pct
+    cr.color_rank_no                                          AS Color_Rank,
+    cr.color_name                                             AS Color_Name,
+
+    -- ── This Period 主指标 ──
+    cr.color_net_sales_amt                                    AS SLS_Amt_Value_RMB,
+    cr.color_net_sales_amt  / NULLIF(t.total_net_sales_amt, 0)        AS SLS_Amt_Pct,
+
+    -- ── vs LP 新增指标 ──
+    lp.lp_color_net_sales_amt                                 AS LP_SLS_Amt_Value_RMB,
+    lp.lp_color_net_sales_amt / NULLIF(lp_t.lp_total_net_sales_amt, 0)  AS LP_SLS_Amt_Pct,
+    cr.color_net_sales_amt  / NULLIF(lp.lp_color_net_sales_amt, 0) - 1  AS SLS_Amt_vs_LP,
+    (cr.color_net_sales_amt  / NULLIF(t.total_net_sales_amt, 0))
+      - (lp.lp_color_net_sales_amt / NULLIF(lp_t.lp_total_net_sales_amt, 0))  AS SLS_Amt_Pct_vs_LP,
+
+    -- ── This Period 数量指标 ──
+    cr.color_product_qty                                      AS SLS_Unit_Value,
+    cr.color_product_qty    / NULLIF(t.total_product_qty, 0)          AS SLS_Unit_Pct
+
 FROM color_rank cr
-CROSS JOIN total t
-WHERE cr.color_rank_no <= 10                              -- Top10 行（名次唯一，恰好 10 行，与 PBI 筛选器语义一致）
+CROSS JOIN total_this t
+CROSS JOIN total_lp lp_t
+LEFT JOIN row_agg_lp lp
+    ON lp.color_name = cr.color_name                         -- 同名关联，LP 侧 NULL → vs LP 分母为 NULL → 变化率为 NULL（除零保护）
+WHERE cr.color_rank_no <= 10                                 -- Top10 行（名次唯一，恰好 10 行，与 PBI 筛选器语义一致）
 ORDER BY
-    cr.color_rank_no ASC;                                 -- 行序对应 PBI 侧 Color Rank 升序（金额降序 + 名称决胜）
+    cr.color_rank_no ASC;                                    -- 行序对应 PBI 侧 Color Rank 升序（金额降序 + 名称决胜）
 
 -- ======================================================================
 -- SQL 2/2: Inventory Top10（color 维度排名，期末单日时点）
