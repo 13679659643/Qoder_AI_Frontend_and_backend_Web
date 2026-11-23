@@ -33,6 +33,7 @@
 - **格式类型清单**: 所有 Format Type 字符串定义（integer / percent / currency / delta_pct / delta_pt / delta_bp 等）→ 见 slicer-tips.md §4
 - **SELECTEDVALUE 读取模式**: SWITCH 格式化分支模板 + 条件颜色度量值标准写法 → 见 slicer-tips.md §5
 - **切片器最佳实践**: 命名规范（Slicer\_ / DIM\_ 前缀）、单选/多选配置、默认值处理 → 见 slicer-tips.md §6
+- **按列排序函数依赖**: 被排序列→排序列必须多对一（每个值一个排序号，一个排序号可给多个值）；细排粗可以、粗排细报错；排序号按指标全局统一，不按分组压缩编号；附自检 DAX → 见 slicer-tips.md §7，规范见 rules/modeling-standards.md §6
 
 # 业务知识
 
@@ -44,4 +45,4 @@
 
 # 踩坑记录
 
-（随实践积累补充）
+- **ColType 按 ColName_Sort 排序失败**: TTL 组 9 列、渠道组 5 列分别编号，TAR ACH% / MTD TAR Progress / YTD TAR Progress 各对应两个排序号 → 统一为 700/800/900，空档位不补 → 见 slicer-tips.md §7

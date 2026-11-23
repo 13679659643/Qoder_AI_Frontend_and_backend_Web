@@ -12,12 +12,15 @@
 --   期末快照日  : This = '2026-09-26'；LY = '2025-09-27'（单日时点）
 --   商品标签    : IsProductTagFilter = "ALL"
 --                 → computed_product_tag IN ('hero model', 'slow mover', 'normal')
---   其余筛选器  : 全选（platform / shop_name / label / division / ... 不附加条件）
+--   其余筛选器  : 全选（platform / shop_name / label / division / ... 不附加条件）；
+--                 页面若选择了渠道 / 商品维度切片器，各段按选择附加条件——
+--                 例外: 段 2 ST% 的 sales 分子【不】附加切片器渠道条件（全渠道口径，v1.4）
 --   sales 表额外对齐 PBI 数据源加载过滤: platform IN ('JD', 'TM', 'RLE', 'DY')
+--   （加载层过滤，非切片器筛选；段 2 ST% 全渠道口径下同样保留）
 --   （inv 表无 platform / shop_name 维度，不涉及）
 --
 -- 段落与 PBI 列（Dim_ColMetric_Merchandising_Core_KPI[Metric_ID]）对应关系:
---   段 1  SLS        → 1（Act）/ 2（vs LY）；3,4（TAR ACH% 占位，无 SQL）
+--   段 1  SLS        → 1（Act）/ 2（vs LY）；TAR 类 21 / 3 / 4 无 SQL 段
 --   段 2  ST%        → 5（Act）/ 6（vs LY）
 --   段 3  AVG MD     → 7（Act）/ 8（vs LY）
 --   段 4  Fullprice% → 9（Act）/ 10（vs LY）
@@ -34,9 +37,10 @@
 --      对比前先确认币种切片器（RMB 时汇率 = 1，可直接对比）
 --   3. vs LY 变化率 = This / Last - 1（如 0.1523 → PBI 显示 +15%）
 --   4. vs LY 差值 bp = This - Last（原始差值，如 -0.0152 → PBI 显示 -152bp，×10000 在展示层）
---   5. TAR ACH% Progress / Target 为占位符（返回 1 / 2），无计算公式，不提供测试 SQL
---   6. 期末快照当日缺数时，Power BI 度量值会回退到 end period 范围内最近一个快照日，
---      SQL 对比时如发现快照日无数据，需相应调整日期
+--   5. TAR 类三指标（Metric_ID 21 / 3 / 4）= actual ÷ target（target 取
+--      indep_rl_ads.a05_e2e_product_fcst_data_d），本文件未提供对应 SQL 段
+--   6. 期末快照日缺数时 Power BI 度量值返回 BLANK（v1.2 起无「范围内最近快照日」回退），
+--      SQL 对比时如发现快照日无数据，PBI 对应单元格应为空（"-"）
 --   7. 除法分母为 0 或 NULL 时 MySQL 返回 NULL，对应 Power BI 的 BLANK（显示 "-"）
 -- ========================================
 
@@ -44,7 +48,7 @@
 -- ════════════════════════════════════════════════════════════════
 -- 段 1：SLS — DCom 净销售额 / 净销售数量（sales 表，区间汇总）
 -- 口径: Amt = sum(net_sales_amt)；Unit = sum(net_sales_qty)
--- 附属: vs LY = This / Last - 1（变化率）；TAR ACH%（Metric_ID 3/4）为占位符，无 SQL
+-- 附属: vs LY = This / Last - 1（变化率）；TAR 类三指标（Metric_ID 21 / 3 / 4）无 SQL 段
 -- ════════════════════════════════════════════════════════════════
 WITH agg AS (
     SELECT
@@ -76,19 +80,25 @@ FROM agg;
 -- 段 2：ST% — 售罄率%（sales 分子区间汇总 + inv 分母期末快照，跨双表）
 -- 口径 Amt : net_sales_amt / (net_sales_amt + msrp_inv_amt)
 -- 口径 Unit: net_sales_qty / (net_sales_qty + inv_qty)
+-- 全渠道（v1.4）: sales 分子【不】附加切片器渠道条件——PBI 度量内已对分子
+--   REMOVEFILTERS('Slicer_Platform_Selection') / REMOVEFILTERS('Slicer_Store_Name')；
+--   即使页面 Platform / Store 切片器有选择，本段也按全渠道取数，结果不随渠道切片器变化；
+--   下方 platform IN ('JD','TM','RLE','DY') 是对齐 PBI 数据源加载过滤（加载层），必须保留。
+--   inv 分母无渠道维度，天然全渠道——分子分母渠道口径一致
 -- 附属: vs LY = This - Last（差值 bp，展示时 ×10000 转 bp）
 -- ════════════════════════════════════════════════════════════════
 WITH sales_agg AS (
     SELECT
-        -- Amt 模式分子
+        -- Amt 模式分子（全渠道，不附加切片器渠道条件）
         SUM(CASE WHEN data_date BETWEEN '2026-03-29' AND '2026-09-26' THEN net_sales_amt ELSE 0 END) AS net_sales_amt_this,
         SUM(CASE WHEN data_date BETWEEN '2025-03-30' AND '2025-09-27' THEN net_sales_amt ELSE 0 END) AS net_sales_amt_last,
-        -- Unit 模式分子
+        -- Unit 模式分子（全渠道）
         SUM(CASE WHEN data_date BETWEEN '2026-03-29' AND '2026-09-26' THEN net_sales_qty ELSE 0 END) AS net_sales_qty_this,
         SUM(CASE WHEN data_date BETWEEN '2025-03-30' AND '2025-09-27' THEN net_sales_qty ELSE 0 END) AS net_sales_qty_last
     FROM indep_rl_ads.a02_e2e_product_performance_sales_summary_d
     WHERE computed_product_tag IN ('hero model', 'slow mover', 'normal')   -- IsProductTagFilter = ALL
-      AND platform IN ('JD', 'TM', 'RLE', 'DY')                            -- 对齐 PBI 数据源加载过滤
+      -- 【不加】切片器渠道条件（platform = / shop_name = ...）—— ST% 全渠道
+      AND platform IN ('JD', 'TM', 'RLE', 'DY')                            -- 仅对齐 PBI 数据源加载过滤
       AND (
             data_date BETWEEN '2026-03-29' AND '2026-09-26'                -- This Period（分子 = 整个区间）
          OR data_date BETWEEN '2025-03-30' AND '2025-09-27'                -- Last Period

@@ -44,7 +44,8 @@ Dim_ColMetric_Sales_Performance_Details =
 //   ChannelGroup          Level 1: 渠道分组（Platform / Store）
 //   Label                 Level 2: 页面显示标签（TTL / Tmall / JD / RLE / DY / DY_Family / DY_W / DY_MN）
 //   Label_Value           Level 2 对应事实表实际值（Platform 组映射 platform 字段；Store 组映射
-//                         shop_name 字段；"TTL" 为特殊标记，度量值中走 ALLSELECTED 全渠道合计）
+//                         shop_name 字段；"TTL" 为特殊标记，度量值中走 ALLSELECTED 全渠道合计；
+//                         例外：LTD ST% 分子全渠道（整表 REMOVEFILTERS 两张渠道维度表），不随 TTL 渠道上下文）
 //   ColName               Level 3: 列名（Metric_ID + 指标名称，避免同名冲突，支持独立排序）
 //   ChannelGroup_Sort     Level 1 排序（Platform=10, Store=20）
 //   Label_Sort            Level 2 排序（TTL=10 首列；Tmall=20, JD=30, RLE=40, DY=50；

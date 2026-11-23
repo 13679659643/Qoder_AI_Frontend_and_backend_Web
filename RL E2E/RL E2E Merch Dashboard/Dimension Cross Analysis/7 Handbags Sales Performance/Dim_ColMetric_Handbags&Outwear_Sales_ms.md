@@ -107,7 +107,7 @@ DATATABLE(
         { 1, "Store", "TTL", "TTL", "1-SLS Unit",   10, 10, 100, "SLS Unit",   "integer",     FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 2, "Store", "TTL", "TTL", "2-SLS Amt",    10, 10, 200, "SLS Amt",     "currency",    TRUE,  "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 3, "Store", "TTL", "TTL", "3-SLS Amt%",   10, 10, 300, "SLS Amt%",    "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 4, "Store", "TTL", "TTL", "4-Amt vs LP",  10, 10, 400, "Amt vs LP",   "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 4, "Store", "TTL", "TTL", "4-Amt vs LP",  10, 10, 380, "Amt vs LP",   "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 5, "Store", "TTL", "TTL", "5-ST%",        10, 10, 500, "ST%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 6, "Store", "TTL", "TTL", "6-EOH",        10, 10, 600, "EOH",         "integer",     FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 7, "Store", "TTL", "TTL", "7-EOH vs LP",  10, 10, 700, "EOH vs LP",   "percent_0dp", FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },

@@ -73,6 +73,9 @@ Dim_ColMetric_Platform_Merchandising_Performance =
 //   ColName_Sort          Level 3 排序（SLS Amt%=100, vs LP=200, EOH Units=300 / EOH Amt=400 /
 //                         EOH Amt%=500（三者仅 TTL）, ST%=600（仅 TTL）, TAR ACH%=700,
 //                         MTD TAR Progress=800, YTD TAR Progress=900）
+//                         排序值按指标全局唯一（不按 Label 组压缩编号）：同一 ColType 在全表只能对应
+//                         一个 ColName_Sort（细排粗可以，粗排细要求每个值只有一个排序号），否则
+//                         ColType 按此列排序报错；渠道/店铺组 5 列不展示的 EOH / ST% 档位留空
 //   ColType               列类型标识（即指标路由键，详见上方 ColType 口径）
 //   Metric_Format         单一格式字段（integer_bp / currency / percent_0dp）
 //   Metric_IsCurrencyAmount 是否金额类（TRUE 才涉及汇率换算与币种符号拼接）
@@ -132,36 +135,36 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 8,  "Platform", "Tmall", "TM", "8-SLS Amt%",          10, 20, 100, "SLS Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 9,  "Platform", "Tmall", "TM", "9-vs LP",             10, 20, 200, "vs LP",            "integer_bp",  FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 10, "Platform", "Tmall", "TM", "10-TAR ACH%",         10, 20, 500, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 11, "Platform", "Tmall", "TM", "11-MTD TAR Progress", 10, 20, 600, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 12, "Platform", "Tmall", "TM", "12-YTD TAR Progress", 10, 20, 700, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 10, "Platform", "Tmall", "TM", "10-TAR ACH%",         10, 20, 700, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 11, "Platform", "Tmall", "TM", "11-MTD TAR Progress", 10, 20, 800, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 12, "Platform", "Tmall", "TM", "12-YTD TAR Progress", 10, 20, 900, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Platform / JD（Label_Sort=30，platform = "JD"，5 列）
         // ════════════════════════════════════════════════════════════════
         { 13, "Platform", "JD", "JD", "13-SLS Amt%",          10, 30, 100, "SLS Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 14, "Platform", "JD", "JD", "14-vs LP",             10, 30, 200, "vs LP",            "integer_bp",  FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 15, "Platform", "JD", "JD", "15-TAR ACH%",          10, 30, 500, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 16, "Platform", "JD", "JD", "16-MTD TAR Progress",  10, 30, 600, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 17, "Platform", "JD", "JD", "17-YTD TAR Progress",  10, 30, 700, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 15, "Platform", "JD", "JD", "15-TAR ACH%",          10, 30, 700, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 16, "Platform", "JD", "JD", "16-MTD TAR Progress",  10, 30, 800, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 17, "Platform", "JD", "JD", "17-YTD TAR Progress",  10, 30, 900, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Platform / RLE（Label_Sort=40，platform = "RLE"，5 列）
         // ════════════════════════════════════════════════════════════════
         { 18, "Platform", "RLE", "RLE", "18-SLS Amt%",          10, 40, 100, "SLS Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 19, "Platform", "RLE", "RLE", "19-vs LP",             10, 40, 200, "vs LP",            "integer_bp",  FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 20, "Platform", "RLE", "RLE", "20-TAR ACH%",          10, 40, 500, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 21, "Platform", "RLE", "RLE", "21-MTD TAR Progress",  10, 40, 600, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 22, "Platform", "RLE", "RLE", "22-YTD TAR Progress",  10, 40, 700, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 20, "Platform", "RLE", "RLE", "20-TAR ACH%",          10, 40, 700, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 21, "Platform", "RLE", "RLE", "21-MTD TAR Progress",  10, 40, 800, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 22, "Platform", "RLE", "RLE", "22-YTD TAR Progress",  10, 40, 900, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Platform / DY（Label_Sort=50，platform = "DY"，5 列）
         // ════════════════════════════════════════════════════════════════
         { 23, "Platform", "DY", "DY", "23-SLS Amt%",          10, 50, 100, "SLS Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 24, "Platform", "DY", "DY", "24-vs LP",             10, 50, 200, "vs LP",            "integer_bp",  FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 25, "Platform", "DY", "DY", "25-TAR ACH%",          10, 50, 500, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 26, "Platform", "DY", "DY", "26-MTD TAR Progress",  10, 50, 600, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 27, "Platform", "DY", "DY", "27-YTD TAR Progress",  10, 50, 700, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 25, "Platform", "DY", "DY", "25-TAR ACH%",          10, 50, 700, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 26, "Platform", "DY", "DY", "26-MTD TAR Progress",  10, 50, 800, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 27, "Platform", "DY", "DY", "27-YTD TAR Progress",  10, 50, 900, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Level 1 = Store（ChannelGroup_Sort=20，过滤事实表 [shop_name] 字段）
@@ -182,18 +185,18 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 35, "Store", "Tmall", "TM", "35-SLS Amt%",          20, 20, 100, "SLS Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 36, "Store", "Tmall", "TM", "36-vs LP",             20, 20, 200, "vs LP",            "integer_bp",  FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 37, "Store", "Tmall", "TM", "37-TAR ACH%",          20, 20, 500, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 38, "Store", "Tmall", "TM", "38-MTD TAR Progress",  20, 20, 600, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 39, "Store", "Tmall", "TM", "39-YTD TAR Progress",  20, 20, 700, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 37, "Store", "Tmall", "TM", "37-TAR ACH%",          20, 20, 700, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 38, "Store", "Tmall", "TM", "38-MTD TAR Progress",  20, 20, 800, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 39, "Store", "Tmall", "TM", "39-YTD TAR Progress",  20, 20, 900, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Store / JD（Label_Sort=30，shop_name = "JD"，5 列）
         // ════════════════════════════════════════════════════════════════
         { 40, "Store", "JD", "JD", "40-SLS Amt%",          20, 30, 100, "SLS Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 41, "Store", "JD", "JD", "41-vs LP",             20, 30, 200, "vs LP",            "integer_bp",  FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 42, "Store", "JD", "JD", "42-TAR ACH%",          20, 30, 500, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 43, "Store", "JD", "JD", "43-MTD TAR Progress",  20, 30, 600, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 44, "Store", "JD", "JD", "44-YTD TAR Progress",  20, 30, 700, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 42, "Store", "JD", "JD", "42-TAR ACH%",          20, 30, 700, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 43, "Store", "JD", "JD", "43-MTD TAR Progress",  20, 30, 800, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 44, "Store", "JD", "JD", "44-YTD TAR Progress",  20, 30, 900, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Store / RLE（Label_Sort=40，shop_name = "RLE_CN"，5 列）
@@ -201,27 +204,27 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 45, "Store", "RLE", "RLE_CN", "45-SLS Amt%",          20, 40, 100, "SLS Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 46, "Store", "RLE", "RLE_CN", "46-vs LP",             20, 40, 200, "vs LP",            "integer_bp",  FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 47, "Store", "RLE", "RLE_CN", "47-TAR ACH%",          20, 40, 500, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 48, "Store", "RLE", "RLE_CN", "48-MTD TAR Progress",  20, 40, 600, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 49, "Store", "RLE", "RLE_CN", "49-YTD TAR Progress",  20, 40, 700, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 47, "Store", "RLE", "RLE_CN", "47-TAR ACH%",          20, 40, 700, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 48, "Store", "RLE", "RLE_CN", "48-MTD TAR Progress",  20, 40, 800, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 49, "Store", "RLE", "RLE_CN", "49-YTD TAR Progress",  20, 40, 900, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Store / DY_Family（Label_Sort=50，shop_name = "DY_Family"，5 列）
         // ════════════════════════════════════════════════════════════════
         { 50, "Store", "DY_Family", "DY_Family", "50-SLS Amt%",          20, 50, 100, "SLS Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 51, "Store", "DY_Family", "DY_Family", "51-vs LP",             20, 50, 200, "vs LP",            "integer_bp",  FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 52, "Store", "DY_Family", "DY_Family", "52-TAR ACH%",          20, 50, 500, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 53, "Store", "DY_Family", "DY_Family", "53-MTD TAR Progress",  20, 50, 600, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 54, "Store", "DY_Family", "DY_Family", "54-YTD TAR Progress",  20, 50, 700, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 52, "Store", "DY_Family", "DY_Family", "52-TAR ACH%",          20, 50, 700, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 53, "Store", "DY_Family", "DY_Family", "53-MTD TAR Progress",  20, 50, 800, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 54, "Store", "DY_Family", "DY_Family", "54-YTD TAR Progress",  20, 50, 900, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Store / DY_W（Label_Sort=60，shop_name = "DY_W"，5 列）
         // ════════════════════════════════════════════════════════════════
         { 55, "Store", "DY_W", "DY_W", "55-SLS Amt%",          20, 60, 100, "SLS Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 56, "Store", "DY_W", "DY_W", "56-vs LP",             20, 60, 200, "vs LP",            "integer_bp",  FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 57, "Store", "DY_W", "DY_W", "57-TAR ACH%",          20, 60, 500, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 58, "Store", "DY_W", "DY_W", "58-MTD TAR Progress",  20, 60, 600, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 59, "Store", "DY_W", "DY_W", "59-YTD TAR Progress",  20, 60, 700, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 57, "Store", "DY_W", "DY_W", "57-TAR ACH%",          20, 60, 700, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 58, "Store", "DY_W", "DY_W", "58-MTD TAR Progress",  20, 60, 800, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 59, "Store", "DY_W", "DY_W", "59-YTD TAR Progress",  20, 60, 900, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
 
         // ════════════════════════════════════════════════════════════════
         // Store / DY_MN（Label_Sort=70，shop_name = "DY_M"，5 列）
@@ -229,8 +232,8 @@ DATATABLE(
         // ════════════════════════════════════════════════════════════════
         { 60, "Store", "DY_MN", "DY_M", "60-SLS Amt%",          20, 70, 100, "SLS Amt%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
         { 61, "Store", "DY_MN", "DY_M", "61-vs LP",             20, 70, 200, "vs LP",            "integer_bp",  FALSE, "pos_neg_zero", "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 62, "Store", "DY_MN", "DY_M", "62-TAR ACH%",          20, 70, 500, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 63, "Store", "DY_MN", "DY_M", "63-MTD TAR Progress",  20, 70, 600, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
-        { 64, "Store", "DY_MN", "DY_M", "64-YTD TAR Progress",  20, 70, 700, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" }
+        { 62, "Store", "DY_MN", "DY_M", "62-TAR ACH%",          20, 70, 700, "TAR ACH%",         "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 63, "Store", "DY_MN", "DY_M", "63-MTD TAR Progress",  20, 70, 800, "MTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" },
+        { 64, "Store", "DY_MN", "DY_M", "64-YTD TAR Progress",  20, 70, 900, "YTD TAR Progress", "percent_0dp", FALSE, "fixed_black",  "#1A9018", "#D64550", "#E1C233", "#5F6165" }
     }
 )
