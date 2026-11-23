@@ -845,7 +845,7 @@ Handbags Sales IsEmpty =
 Field_Parameter_Store_Name = {
     ("spu_model", NAMEOF('s02_trade_sku_data_d'[spu_model]), 0, "Model"),
     ("ax_sub_class", NAMEOF('s02_trade_sku_data_d'[ax_sub_class]), 1, "Subclass"),
-    ("product_type", NAMEOF('s02_trade_sku_data_d'[product_type]), 2, "Season"),
+    ("product_type", NAMEOF('s02_trade_sku_data_d'[product_type]), 2, "Product Type"),
     ("ax_class", NAMEOF('s02_trade_sku_data_d'[ax_class]), 3, "Category"),
     ("sku_size", NAMEOF('s02_trade_sku_data_d'[sku_size]), 4, "Size")
 }
