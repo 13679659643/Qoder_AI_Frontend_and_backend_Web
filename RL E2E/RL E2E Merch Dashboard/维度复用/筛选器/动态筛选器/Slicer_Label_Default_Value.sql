@@ -6,7 +6,7 @@ SELECT DISTINCT
        CASE 
          WHEN brand = 'M Polo' THEN 1
          WHEN brand = 'W Polo' THEN 2
-         WHEN brand = 'cw' THEN 3
+         WHEN brand = 'CW' THEN 3
          WHEN brand = 'RRL' THEN 4
          WHEN brand = 'Lauren' THEN 5
          WHEN brand = 'HM' THEN 6

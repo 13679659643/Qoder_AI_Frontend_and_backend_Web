@@ -1,11 +1,11 @@
 # Platform Merchandising Performance 卡片图 KPI 解决方案
 
-> **版本**: v1.0
+> **版本**: v1.1（品牌筛选器断开维度改造：Slicer_Label → Slicer_Label_Default_Value，VALUES + IN 显式过滤 sales / a05，默认值 "M Polo" 由报表保存时切片器初始选中状态实现）
 > **模块**: RL E2E Merch Dashboard - Dimension Cross Analysis Tab - Platform Merchandising Performance（子模块八，卡片图衍生场景）
 > **关联口径**: 口径文档/口径Markdown格式/Dimension Cross Analysis.md - 子模块八：Platform Merchandising Performance（§34-§39）+ 口径文档/口径Markdown格式/actual除target逻辑详情.md（TAR 类指标五粒度规则）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
 > **数据底表（目标类）**: a05_e2e_product_fcst_data_d
-> **关联维度**: Slicer_Time_Frame（时间粒度）、Slicer_Time_Frame_Min_This / Max_This / Min_Last / Max_Last（日期，断开维度）、Slicer_Framework（framework 视觉对象筛选单选，一对多自动传导）、Slicer_Category / Slicer_Platform_Selection / Slicer_Store_Name / Slicer_Label（页面筛选器，一对多自动传导）
+> **关联维度**: Slicer_Time_Frame（时间粒度）、Slicer_Time_Frame_Min_This / Max_This / Min_Last / Max_Last（日期，断开维度）、Slicer_Framework（framework 视觉对象筛选单选，一对多自动传导）、Slicer_Category / Slicer_Platform_Selection / Slicer_Store_Name（页面筛选器，一对多自动传导）、Slicer_Label_Default_Value（品牌，本模块专属，**与事实表断开维度**，度量值内 VALUES + IN 显式过滤 [brand]）
 
 ---
 
@@ -13,7 +13,7 @@
 
 ### 1.1 模块定位
 
-Platform Merchandising Performance 卡片图 KPI：五个指标以独立卡片展示，**无矩阵行 / 列维度**——筛选作用全部由页面筛选器（Slicer_Category / Slicer_Platform_Selection / Slicer_Store_Name / Slicer_Label 等，维度表与事实表一对多关联，自动传导）与视觉对象筛选器（固定单选 Slicer_Framework[framework]）提供。
+Platform Merchandising Performance 卡片图 KPI：五个指标以独立卡片展示，**无矩阵行 / 列维度**——筛选作用全部由页面筛选器（Slicer_Category / Slicer_Platform_Selection / Slicer_Store_Name 一对多自动传导；Slicer_Label_Default_Value 品牌断开维度，度量值内 VALUES + IN 显式过滤）与视觉对象筛选器（固定单选 Slicer_Framework[framework]）提供。
 
 | 指标 | 计算逻辑 | 数据类型 |
 | ---- | -------- | -------- |
@@ -31,7 +31,8 @@ Platform Merchandising Performance 卡片图 KPI：五个指标以独立卡片�
 | -------- | -------- | -------- |
 | Slicer_Time_Frame / Min_This / Max_This / Min_Last / Max_Last | 断开维度，SELECTEDVALUE 读取 | 时间粒度、This / Last 区间、财月财年区间、跨期判定字段，度量值内以 data_date 比较显式过滤两张事实表 |
 | Slicer_Framework[framework]（视觉对象筛选固定单选） | 与 sales / a05 一对多关联自动传导 | 分子（SLS Amt% / vs LP / TAR 类 actual 与 target）自然生效；SLS Amt% 与 vs LP 的**分母**需 ALLSELECTED 移除该视觉筛选 |
-| Slicer_Category / Slicer_Platform_Selection / Slicer_Store_Name / Slicer_Label（页面筛选器） | 一对多关联自动传导 | 自然生效，保留在 SLS Amt% 分母中（ALLSELECTED 不触碰这些列） |
+| Slicer_Category / Slicer_Platform_Selection / Slicer_Store_Name（页面筛选器） | 一对多关联自动传导 | 自然生效，保留在 SLS Amt% 分母中（ALLSELECTED 不触碰这些列） |
+| Slicer_Label_Default_Value[label]（品牌，本模块专属） | 断开维度，度量值内 VALUES + `'fact'[brand] IN __Labels` 显式过滤 | 五个 Value 度量值对 sales / a05 全部聚合增补 brand 条件；保留在 SLS Amt% 分母中（ALLSELECTED 仅作用于 Slicer_Framework 两列）；单选 / 多选 = 选中集合过滤，全不选 = 全部品牌；默认值 "M Polo" 由报表保存时切片器初始选中状态实现 |
 
 ### 1.3 SLS Amt% 占比口径（单 framework ÷ 总 framework）
 
@@ -122,6 +123,7 @@ Platform Merchandising Card SLS Amt% Value =
 //             This Period 区间全部 framework 合计
 // 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
 //       Slicer_Framework[framework, sort_order]
+//       Slicer_Label_Default_Value[label]（品牌，断开维度，VALUES + IN 显式过滤）
 // 数据底表: a02_e2e_product_performance_sales_summary_d
 // 说明: framework 按 sort_order 按列排序，视觉筛选以 framework + sort_order
 //       组合筛选落地，分母必须两列同时 ALLSELECTED（单列写法筛选残留
@@ -132,10 +134,14 @@ Platform Merchandising Card SLS Amt% Value =
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
+// ── 品牌筛选（Slicer_Label_Default_Value 断开维度，VALUES + IN；全不选 = 全部品牌）──
+VAR __Labels = VALUES(Slicer_Label_Default_Value[label])
+
 // ── 分子：视觉对象筛选单选 framework + 页面筛选器（关系自动传导）──
 VAR __SLSAmt_This =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[brand] IN __Labels,
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
@@ -145,6 +151,7 @@ VAR __SLSAmt_This =
 VAR __SLSAmt_Total =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[brand] IN __Labels,
         ALL(Slicer_Framework[framework], Slicer_Framework[sort_order]),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax,
@@ -190,6 +197,7 @@ Platform Merchandising Card SLS Amt% vs LP Value =
 //       分母 = ALLSELECTED(Slicer_Framework[framework], sort_order) 全部 framework 合计
 // 依赖: [Platform Merchandising Card SLS Amt% Value]（This 占比，上下文一致直接复用）
 //       Slicer_Time_Frame_Min_Last[TimeFrame_Min] / Slicer_Time_Frame_Max_Last[TimeFrame_Max]
+//       Slicer_Label_Default_Value[label]（品牌，断开维度，VALUES + IN 显式过滤 LP 侧聚合）
 // 类型: delta_bp（Value 层保持原始差值小数，×10000 转 bp 在 Display 层——
 //       卡片图无 Y 轴绑定，刻度无需 bp 数值）
 // 空值规则: 任一侧占比为空时返回 BLANK
@@ -199,10 +207,14 @@ Platform Merchandising Card SLS Amt% vs LP Value =
 VAR __PeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min_Last[TimeFrame_Min])
 VAR __PeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
 
+// ── 品牌筛选（Slicer_Label_Default_Value 断开维度，VALUES + IN；全不选 = 全部品牌）──
+VAR __Labels = VALUES(Slicer_Label_Default_Value[label])
+
 // ── LP 占比分子：视觉 framework 筛选 + 页面筛选器，LP 区间 ──
 VAR __SLSAmt_Last =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[brand] IN __Labels,
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
     )
@@ -211,6 +223,7 @@ VAR __SLSAmt_Last =
 VAR __SLSAmt_Total_Last =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[brand] IN __Labels,
         ALL(Slicer_Framework[framework], Slicer_Framework[sort_order]),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY,
@@ -265,6 +278,7 @@ Platform Merchandising Card TAR ACH% Value =
 //       actual: sales[net_sales_amt]（视觉 framework 筛选 + 页面筛选器自动传导）
 //       target: a05[fcst_sales_amt]（维度筛选经一对多关系同步传导）
 // 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
+//       Slicer_Label_Default_Value[label]（品牌，断开维度，VALUES + IN 显式过滤 actual / target）
 // 数据底表: a02_e2e_product_performance_sales_summary_d（actual）
 //           a05_e2e_product_fcst_data_d（target）
 // 汇率: actual / target 同币种相除，比率不受币种选择影响
@@ -274,10 +288,14 @@ Platform Merchandising Card TAR ACH% Value =
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
+// ── 品牌筛选（Slicer_Label_Default_Value 断开维度，VALUES + IN；全不选 = 全部品牌）──
+VAR __Labels = VALUES(Slicer_Label_Default_Value[label])
+
 // ── actual：This Period 区间销售金额 ──
 VAR __Actual =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[brand] IN __Labels,
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
@@ -286,6 +304,7 @@ VAR __Actual =
 VAR __Target =
     CALCULATE(
         SUM('a05_e2e_product_fcst_data_d'[fcst_sales_amt]),
+        'a05_e2e_product_fcst_data_d'[brand] IN __Labels,
         'a05_e2e_product_fcst_data_d'[data_date] >= __PeriodMin,
         'a05_e2e_product_fcst_data_d'[data_date] <= __PeriodMax
     )
@@ -341,6 +360,9 @@ Platform Merchandising Card MTD TAR Progress Value =
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
+// ── 品牌筛选（Slicer_Label_Default_Value 断开维度，VALUES + IN；全不选 = 全部品牌）──
+VAR __Labels = VALUES(Slicer_Label_Default_Value[label])
+
 // ── 财月区间（TimeFrame_Max 所在财月）──
 VAR __MonthFirstDay = SELECTEDVALUE(Slicer_Time_Frame_Max_This[Fiscal_Month_First_Day])
 VAR __MonthLastDay = SELECTEDVALUE(Slicer_Time_Frame_Max_This[Fiscal_Month_Last_Day])
@@ -355,6 +377,7 @@ VAR __IsCrossMonth =
 VAR __Actual =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[brand] IN __Labels,
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
@@ -370,6 +393,7 @@ VAR __Target =
                 BLANK(),    // 跨财月：不计算（外层 DIVIDE 返回 BLANK）
                 CALCULATE(
                     SUM('a05_e2e_product_fcst_data_d'[fcst_sales_amt]),
+                    'a05_e2e_product_fcst_data_d'[brand] IN __Labels,
                     'a05_e2e_product_fcst_data_d'[data_date] >= __MonthFirstDay,
                     'a05_e2e_product_fcst_data_d'[data_date] <= __MonthLastDay
                 )
@@ -377,6 +401,7 @@ VAR __Target =
         __TimeFrameID = "Month",
             CALCULATE(
                 SUM('a05_e2e_product_fcst_data_d'[fcst_sales_amt]),
+                'a05_e2e_product_fcst_data_d'[brand] IN __Labels,
                 'a05_e2e_product_fcst_data_d'[data_date] >= __PeriodMin,
                 'a05_e2e_product_fcst_data_d'[data_date] <= __PeriodMax
             ),
@@ -435,6 +460,9 @@ Platform Merchandising Card YTD TAR Progress Value =
 VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
 VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
+// ── 品牌筛选（Slicer_Label_Default_Value 断开维度，VALUES + IN；全不选 = 全部品牌）──
+VAR __Labels = VALUES(Slicer_Label_Default_Value[label])
+
 // ── 财年区间（TimeFrame_Max 所在财年）──
 VAR __YearFirstDay = SELECTEDVALUE(Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day])
 VAR __YearLastDay = SELECTEDVALUE(Slicer_Time_Frame_Max_This[Fiscal_Year_Last_Day])
@@ -449,6 +477,7 @@ VAR __IsCrossYear =
 VAR __Actual =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[brand] IN __Labels,
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
@@ -464,6 +493,7 @@ VAR __Target =
                 BLANK(),    // 跨财年：不计算（外层 DIVIDE 返回 BLANK）
                 CALCULATE(
                     SUM('a05_e2e_product_fcst_data_d'[fcst_sales_amt]),
+                    'a05_e2e_product_fcst_data_d'[brand] IN __Labels,
                     'a05_e2e_product_fcst_data_d'[data_date] >= __YearFirstDay,
                     'a05_e2e_product_fcst_data_d'[data_date] <= __YearLastDay
                 )
@@ -471,6 +501,7 @@ VAR __Target =
         __TimeFrameID = "Year",
             CALCULATE(
                 SUM('a05_e2e_product_fcst_data_d'[fcst_sales_amt]),
+                'a05_e2e_product_fcst_data_d'[brand] IN __Labels,
                 'a05_e2e_product_fcst_data_d'[data_date] >= __PeriodMin,
                 'a05_e2e_product_fcst_data_d'[data_date] <= __PeriodMax
             ),
@@ -523,7 +554,7 @@ Platform Merchandising Card YTD TAR Progress Display =
 | 数据标签 / 卡片主体 | 各指标 Display 度量值（文本） |
 | 数值类条件格式（如有） | 各指标 Value 度量值（数值） |
 | 视觉对象筛选器 | Slicer_Framework[framework] 固定单选（五张卡片统一配置；SLS Amt% / vs LP 的分子与 TAR 类的 actual / target 均按该 framework，SLS Amt% 与 vs LP 的分母经 ALLSELECTED 移除该筛选取全部 framework 合计） |
-| 页面筛选器 | Slicer_Category / Slicer_Platform_Selection / Slicer_Store_Name / Slicer_Label 等，关系一对多自动传导，全部指标分子分母统一生效 |
+| 页面筛选器 | Slicer_Category / Slicer_Platform_Selection / Slicer_Store_Name（关系一对多自动传导）；Slicer_Label_Default_Value[label]（品牌，断开维度，度量值内 VALUES + IN 显式过滤，默认值 "M Polo" 由保存时切片器初始选中实现，全不选 = 全部品牌）——全部指标分子分母统一生效 |
 | 时间筛选器 | Slicer_Time_Frame（粒度）+ Min_This / Max_This / Min_Last / Max_Last（断开维度，度量值内读取） |
 
 ---
@@ -536,8 +567,9 @@ Platform Merchandising Card YTD TAR Progress Display =
 4. **delta_bp 与 percent_1dp 的分层**：vs LP 的 ×10000 转 bp 在 Display 层（卡片图无 Y 轴绑定，Value 保持原始差值小数）；落地格式不含正号（-152bp / 0bp，负数自带负号）。若后续 vs LP 需绑定图表 Y 轴或数值排序，×10000 需移至 Value 层并同步调整 Display。其余四指标 percent_1dp：`#,##0.0%` 一位小数百分比，不含正号。
 5. **TAR 类粒度分支**：actual 恒为 This Period 区间；TAR ACH% 全粒度 This / This；MTD 在 Day / Week 不跨财月取所在财月汇总 target、Month 为 This / This、Quarter / Year 不计算；YTD 在 Day / Week / Month / Quarter 不跨财年取所在财年汇总 target、Year 始终计算且 This / This。"不计算"返回 BLANK，卡片显示空白。
 6. **跨财月 / 跨财年判定**：不区分粒度，直接比较 Min_This 与 Max_This 两表的 Month_Value / Year_Value 字段（财月年均为文本类型，如 "2027-08" / "2027"）；时间粒度另行读取 `SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])`。
-7. **日期表断开维度**：Slicer_Time_Frame 系列与 sales / a05 均无关系，全部时间区间在度量值内以 data_date 比较显式过滤；其余维度表（Slicer_Framework / Slicer_Category / Slicer_Platform_Selection / Slicer_Store_Name / Slicer_Label）与事实表一对多关联，筛选自动传导，无需显式 DAX。
-8. **a05 维度同步传导**：target 侧的 framework（视觉筛选）、category / 渠道 / 品牌页面筛选经一对多关系同步传导至 a05，与 actual 侧维度口径天然一致；a05 无 TTL 预聚合值，卡片全渠道（外部筛选上下文）合计由自然聚合取得。
+7. **日期表断开维度**：Slicer_Time_Frame 系列与 sales / a05 均无关系，全部时间区间在度量值内以 data_date 比较显式过滤；其余维度表（Slicer_Framework / Slicer_Category / Slicer_Platform_Selection / Slicer_Store_Name）与事实表一对多关联，筛选自动传导，无需显式 DAX；Slicer_Label_Default_Value（品牌）同样断开维度，以 VALUES + IN 显式过滤（见第 12 条）。
+8. **a05 维度同步传导**：target 侧的 framework（视觉筛选）、category / 渠道页面筛选经一对多关系同步传导至 a05，与 actual 侧维度口径天然一致；品牌经度量值内 `'a05'[brand] IN __Labels` 显式过滤（与 actual 侧同构）；a05 无 TTL 预聚合值，卡片全渠道（外部筛选上下文）合计由自然聚合取得。
 9. **Display 空值返回 BLANK()**：卡片图显示空白；TAR 类"不计算"场景（跨财月 / 跨财年 / Quarter / Year 的 MTD 等）由此消化。如需 "-" 占位可在 Display 层调整。
 10. **汇率说明**：TAR 三指标为 actual / target 同币种相除，SLS Amt% / vs LP 为比率或差值，均不受币种选择影响；本方案无金额类指标，不涉及汇率换算与币种符号。
 11. **DAX 语法规范**：文本常量使用双引号，单引号仅用于表名，列名使用方括号；与口径文档存在争议时一切以口径文档为准。
+12. **品牌筛选器断开维度（Slicer_Label_Default_Value，v1.1）**：本模块品牌筛选由原 Slicer_Label（一对多关系自动传导）改为 Slicer_Label_Default_Value（本模块专属，结构与 Slicer_Label 一致、值域 = 事实表 [brand] distinct 值，与 sales / a05 断开关系），五个 Value 度量值全部聚合（SLS Amt% 分子分母 / vs LP LP 侧分子分母 / TAR 类 actual 与 target 各区间分支）增补 `'fact'[brand] IN __Labels` 显式过滤；Display 度量值经 Value 继承，无需改动。语义：单选 / 多选 → 选中集合过滤；全不选 → VALUES 返回整表 → IN 等价无筛选（全部品牌）；**默认值 "M Polo" 由报表保存时切片器初始选中状态实现，DAX 层不兜底**（用户清空选择 = 回到全部品牌——此为有意取舍）。brand 谓词为普通显式过滤器，SLS Amt% 分母的 `ALL(Slicer_Framework[framework], sort_order)` 不会剥离 brand 过滤——分母仍限定在选中品牌内，占比口径不变。值域必须与 [brand] 严格一致（含大小写 / 空格）。**页面配置红线**：本页面原 Slicer_Label 切片器必须移除（关系仍在，保留会继续传导）；新切片器不与其他页面的 Slicer_Label 同步切片器；其他模块继续使用 Slicer_Label（关系保留），零影响。

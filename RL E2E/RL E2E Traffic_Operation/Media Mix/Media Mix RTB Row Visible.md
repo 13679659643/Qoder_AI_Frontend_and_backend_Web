@@ -132,3 +132,234 @@ Media Mix RTB Row Visible =
 
 `NOT(__IsRTBDetail)` 判断的是“当前行是否不属于处理对象”，不是“指标是否为 0”。只有进入 `IF` 的 FALSE 分支后，才用 `__CurrentSum13 = 0` 判断是否隐藏。
 
+# 3、Media Mix Cost Row Visible（v2.1 增量：Cost=0 行隐藏，按视觉周期自适应）
+
+> 本节为需求变更新增，独立成节；第 1、2 节的原度量 [Media Mix RTB Row Visible]
+> 及其口径、注释**保持原样不做任何修改**，保留在模型中随时可回退。
+
+需求变化：不再以“本期 13 项指标之和”作为 RTB 明细的隐藏依据，改为
+**Cost 为 0（含 BLANK，即显示“-”）的行一律隐藏**，范围从 RTB 明细扩大到全部行：
+DETAIL 明细行、SUMMARY 汇总行（含 RTB Total / JCGP Total / Total）、Platform 分组行均适用。
+
+v2.1 修订（LP 适配）：四个表格分别通过视觉对象筛选器限定了不同的 Indicator Type，
+隐藏判断**跟随各视觉对象当前限定的周期自适应**，而不是只看 This Year：
+
+| 视觉对象筛选上下文（Indicator Type） | 判断口径 | 说明 |
+|--------------------------------------|----------|------|
+| This Year | 本期 Cost 为 0/BLANK → 隐藏 | 同 v2.0 |
+| Last Year | **同期（LP）Cost 为 0/BLANK → 隐藏** | LP 日期覆盖与 [Media Mix Cell Value] 的 Last Year 分支同机制 |
+| YOY | **同期（LP）Cost 为 0/BLANK → 隐藏** | 同期无花费时 YOY 全行显示“-”，按同期判断 |
+| 未限定（完整三行矩阵或折叠行） | 本期与同期**任一非 0 即保留**，两者均为 0 才隐藏 | 兜底口径，避免折叠态误杀仅有历史花费的渠道 |
+
+四个表格**共用同一个度量**，无需为 LP / YOY 单独建度量；
+每个表格挂上 `[Media Mix Cost Row Visible] 为 1` 后，按各自筛选窗格里的周期条件自动生效。
+
+## 3.1 度量值定义（新增，与原度量互相独立）
+
+```dax
+Media Mix Cost Row Visible =
+// ========================================
+// 度量值: Media Mix Cost Row Visible（v2.1 LP 适配版）
+// 中文名: Media Mix Cost 行可见性（周期自适应）
+// Display Folder: Media Mix
+// 用途: 矩阵/表视觉对象筛选器，1=保留，0=隐藏。
+// 口径（v2.1）: 按当前视觉筛选上下文中的 Indicator Type 自适应判断：
+//   This Year → 本期 Cost 为 0/BLANK 隐藏；
+//   Last Year → 同期(LP) Cost 为 0/BLANK 隐藏（LP 日期覆盖走 Cell Value 同机制）；
+//   YOY       → 同期(LP) Cost 为 0/BLANK 隐藏（同期无花费时 YOY 全行显示“-”）；
+//   未限定周期（完整三行矩阵/折叠行）→ 本期与同期任一非 0 即保留，均为 0 才隐藏。
+// 适用行: DETAIL、SUMMARY（RTB Total / JCGP Total / Total）、Platform 分组行。
+// 差异: 独立于 [Media Mix RTB Row Visible] 新增，不修改任何既有度量；
+//       四个视觉对象筛选窗格统一挂本度量（条件=为 1），按各自周期筛选自动生效。
+// 依赖: [Media Mix Cell Value]、Dim_Media_Mix_Channel、DIM_ColMetric_Media_Mix、
+//       DIM_RowKPIs_Media_Mix、Dim_Date_Current、Dim_Date_Ly、
+//       Slicer_DataCaliber_Selection、a05_e2e_paid_media_channel_data_d。
+// ========================================
+    // ① 读取当前矩阵行的属性。
+    VAR __ChannelID =
+        SELECTEDVALUE(Dim_Media_Mix_Channel[Channel_ID])
+    VAR __Platform =
+        SELECTEDVALUE(Dim_Media_Mix_Channel[Platform])
+    // 判断周期来自两部分，取值一致：
+    //   a) 视觉对象筛选窗格对 Indicator Type 的限定（四个表格各自的配置）；
+    //   b) 完整矩阵展开时的子行上下文（This Year / Last Year / YOY 各自判断）。
+    // 未限定时为 BLANK → 走“本期与同期任一非 0”兜底分支。
+    VAR __Indicator =
+        SELECTEDVALUE(DIM_RowKPIs_Media_Mix[Indicator Type])
+
+    // ② 行身份判断：
+    //    渠道行 = Channel_Label 层级（DETAIL 与 SUMMARY/Total 行都在此层级）；
+    //    平台行 = Platform 层级且不在渠道层级（矩阵最外层分组行）；
+    //    其余（如矩阵原生总计行）不新增隐藏规则。
+    VAR __IsChannelRow =
+        ISINSCOPE(Dim_Media_Mix_Channel[Channel_Label])
+            && NOT ISBLANK(__ChannelID)
+    VAR __IsPlatformRow =
+        ISINSCOPE(Dim_Media_Mix_Channel[Platform])
+            && NOT __IsChannelRow
+
+    // ③ 渠道行（DETAIL / SUMMARY 通用）读取两个周期的 Cost。
+    //    强制 Indicator Type 后由 [Media Mix Cell Value] 路由：
+    //    DETAIL（单渠道）与 SUMMARY（Summary_Scope 枚举聚合）已有统一路径，无需区分；
+    //    Last Year 分支内部自动完成 LP 日期覆盖（Dim_Date_Ly → LP 范围），
+    //    因此同期判断与页面显示的 LP 数值口径完全一致。
+    VAR __TYCost =
+        CALCULATE(
+            [Media Mix Cell Value],
+            // 清除整个指标列维度的筛选（含 Metric_Name 及排序列），再固定为 Cost。
+            REMOVEFILTERS(DIM_ColMetric_Media_Mix),
+            DIM_ColMetric_Media_Mix[Metric_ID] = 1,
+            FILTER(
+                ALL(DIM_RowKPIs_Media_Mix),
+                DIM_RowKPIs_Media_Mix[Indicator Type] = "This Year"
+            )
+        )
+    VAR __LYCost =
+        CALCULATE(
+            [Media Mix Cell Value],
+            REMOVEFILTERS(DIM_ColMetric_Media_Mix),
+            DIM_ColMetric_Media_Mix[Metric_ID] = 1,
+            FILTER(
+                ALL(DIM_RowKPIs_Media_Mix),
+                DIM_RowKPIs_Media_Mix[Indicator Type] = "Last Year"
+            )
+        )
+
+    // ④ 平台分组行：断开维度在平台层级没有渠道路由（Cell Value 返回 BLANK），
+    //    直接按事实表聚合两个周期；同期沿用与 Cell Value 相同的 LP 日期覆盖机制。
+    VAR __TransCycle =
+        SELECTEDVALUE(Slicer_DataCaliber_Selection[DataCaliber_ID], "T+1")
+    VAR __LP_Start =
+        MIN(Dim_Date_Ly[LY_数据日期])
+    VAR __LP_End =
+        MAX(Dim_Date_Ly[LY_数据日期])
+    VAR __PlatformTYCost =
+        CALCULATE(
+            SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+            a05_e2e_paid_media_channel_data_d[platform] = __Platform,
+            a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle
+        )
+    VAR __PlatformLYCost =
+        IF(
+            ISBLANK(__LP_Start) || ISBLANK(__LP_End),
+            BLANK(),
+            CALCULATE(
+                SUM(a05_e2e_paid_media_channel_data_d[cost_amt]),
+                a05_e2e_paid_media_channel_data_d[platform] = __Platform,
+                a05_e2e_paid_media_channel_data_d[trans_cycle] = __TransCycle,
+                // 与 [Media Mix Cell Value] 同期分支一致的 LP 日期覆盖：
+                // 先移除本期日期筛选，再套用 LP 日期范围。
+                REMOVEFILTERS(Dim_Date_Current),
+                FILTER(
+                    ALL(Dim_Date_Current),
+                    Dim_Date_Current[数据日期] >= __LP_Start
+                        && Dim_Date_Current[数据日期] <= __LP_End
+                )
+            )
+        )
+
+    RETURN
+        IF(
+            __IsChannelRow,
+            // ⑤ 渠道行：按当前上下文周期自适应。
+            SWITCH(
+                TRUE(),
+                __Indicator = "This Year",
+                    // BLANK 按 0 处理；1=保留，0=隐藏，不是指标业务值。
+                    IF(COALESCE(__TYCost, 0) = 0, 0, 1),
+                __Indicator = "Last Year",
+                    IF(COALESCE(__LYCost, 0) = 0, 0, 1),
+                __Indicator = "YOY",
+                    // YOY 行的 Cost 列显示“-” ⇔ 同期 Cost 为 0/BLANK，故按同期判断。
+                    IF(COALESCE(__LYCost, 0) = 0, 0, 1),
+                // 未限定周期（完整矩阵折叠行等）：本期与同期任一非 0 即保留。
+                IF(
+                    COALESCE(__TYCost, 0) = 0 && COALESCE(__LYCost, 0) = 0,
+                    0,
+                    1
+                )
+            ),
+            IF(
+                __IsPlatformRow,
+                // ⑥ 平台分组行：与渠道行同一套周期规则，取平台合计 Cost。
+                SWITCH(
+                    TRUE(),
+                    __Indicator = "This Year",
+                        IF(COALESCE(__PlatformTYCost, 0) = 0, 0, 1),
+                    __Indicator = "Last Year",
+                        IF(COALESCE(__PlatformLYCost, 0) = 0, 0, 1),
+                    __Indicator = "YOY",
+                        IF(COALESCE(__PlatformLYCost, 0) = 0, 0, 1),
+                    IF(
+                        COALESCE(__PlatformTYCost, 0) = 0
+                            && COALESCE(__PlatformLYCost, 0) = 0,
+                        0,
+                        1
+                    )
+                ),
+                // ⑦ 矩阵原生总计行等其他位置：不新增隐藏规则。
+                1
+            )
+        )
+// 判断结果：
+// 渠道行（DETAIL / SUMMARY / Total）：按所在表格限定的周期判断 Cost；
+//   This Year 表 → 本期为 0 隐藏；Last Year / YOY 表 → 同期为 0 隐藏；
+//   未限定周期的视图 → 两个周期均为 0 才隐藏。
+// Platform 分组行：与渠道行同规则，取平台合计。
+// 矩阵原生总计行：恒为 1，不受本筛选影响（如需隐藏请关闭矩阵“总计”开关）。
+```
+
+## 3.2 与原度量 [Media Mix RTB Row Visible] 的行为差异
+
+| 行情况 | RTB Row Visible（原，保留不动） | Cost Row Visible（v2.1，新） |
+|--------------------------|----------------------------------|------------------------------|
+| RTB 明细，Cost=0 但其他指标非零（13 项和非零） | 保留（1） | **隐藏（0）** |
+| RTB 明细，13 项正负抵消和为 0 但 Cost≠0 | 隐藏（0） | **保留（1）** |
+| 非 RTB 的 DETAIL 渠道行，Cost=0 | 始终保留（1） | **隐藏（0）** |
+| RTB Total / JCGP Total / Total 等 SUMMARY 行，Cost=0 | 始终保留（1） | **隐藏（0）** |
+| Platform 分组行，平台整体 Cost=0 | 始终保留（1） | **隐藏（0）** |
+| 本期 Cost=0 但同期有花费（LP 表格视角） | 保留（1） | **LP 表格保留（1），TY 表格隐藏（0）** |
+| 本期 Cost≠0 但同期为 0（LP 表格视角，显示“-”） | 保留（1） | **LP 表格隐藏（0），TY 表格保留（1）** |
+| 本期与同期 Cost 均非 0 | 按 13 项之和判断 | 保留（1） |
+
+两个度量是口径不同的两套规则，**不要同时挂在同一个视觉对象的筛选窗格里**：
+同时生效时会取两者隐藏的并集（13 项抵消为 0 的行、以及 Cost=0 的行都被隐藏），既不是旧口径也不是新口径。
+
+## 3.3 应用步骤（四个表格统一操作，逐个执行）
+
+四个视觉对象（表格）的操作完全相同，**不需要按周期分别配置**——
+度量会自动读取每个表格筛选窗格里对 Indicator Type 的限定：
+
+1. 选中视觉对象 → 打开“筛选器”（Filters）窗格。
+2. 在窗格中**移除**原筛选字段 `[Media Mix RTB Row Visible]`（仅从窗格移除，度量本身保留在模型中，不删除、不修改）。
+3. 添加 `[Media Mix Cost Row Visible]`，筛选条件设为 **为 1**（is 1）。
+4. 点击“应用筛选器”，四个视觉对象逐一完成。
+5. 窗格中原有的其他筛选条件（Indicator Type 限定、日期、口径等）保持不动，本次只替换可见性筛选字段。
+
+## 3.4 回退步骤
+
+把筛选窗格中的 `[Media Mix Cost Row Visible]` 移除，重新拖入
+`[Media Mix RTB Row Visible]`，条件设为 **为 1**，即可整体回退到原口径。
+两个度量互相独立，回退不需要改任何代码。
+
+## 3.5 验证与注意事项
+
+- **周期自适应是本版本核心**：This Year 表按本期判断，Last Year / YOY 表按同期判断；
+  未限定周期的完整视图按“本期与同期任一非 0”兜底。四个表格共用一个度量，无需拆分。
+- 同期（LP）判断与页面显示的 LP 数值口径一致：走 [Media Mix Cell Value] 的 Last Year
+  分支，LP 日期覆盖（Dim_Date_Ly → REMOVEFILTERS + LP 范围）由其内部自动完成；
+  平台行在度量内复刻同一套 LP 日期覆盖。
+- LP 日期切片器未选择时，同期 Cost 视为 BLANK → Last Year / YOY 表格整表隐藏（全行“-”，符合口径）；
+  如希望“未选 LP 日期时不隐藏”，需另行确认调整。
+- YOY 表格按同期判断：同期无花费时 YOY 全行显示“-”故隐藏；本期有花费、同期为 0 的渠道
+  在 YOY 表格同样隐藏（其 YOY 显示为“-”）。如业务希望这类行保留显示“-100.0%”，
+  把 YOY 分支改为 `IF(COALESCE(__TYCost,0)=0 && COALESCE(__LYCost,0)=0, 0, 1)` 即可。
+- Cost 为 BLANK 按 0 处理（COALESCE）。
+- 币种切换不影响判断：汇率只做等比缩放，不改变是否为 0（汇率异常为空时 Cost 显示 BLANK，会被按 0 隐藏）。
+- 汇总口径不变：RTB Total 仍按 Summary_Scope 聚合全部明细，视觉隐藏不改变聚合计算。
+- 父子一致性：SUMMARY 行某周期 Cost=0 ⇒ 其全部明细该周期 Cost 必为 0，父子同隐藏；
+  极端场景（明细 Cost 正负抵消使 Total=0 而明细自身 Cost≠0）下，明细保留、Total 行隐藏，以“行为单位各自判断”为准。
+- 矩阵原生“总计”行恒显示（返回 1）；如需一并隐藏，关闭矩阵格式的“总计”开关。
+- 性能：渠道行执行 2 次 Cell Value 计算（本期 + 同期，各固定 Cost），平台行执行 2 次事实表 SUM，
+  均为标量聚合，开销低于原度量的 13 项 SUMX 迭代。
+
