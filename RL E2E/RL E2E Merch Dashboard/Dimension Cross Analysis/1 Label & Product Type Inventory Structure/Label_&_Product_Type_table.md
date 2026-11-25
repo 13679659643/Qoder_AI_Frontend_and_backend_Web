@@ -1,6 +1,6 @@
 # Label & Product Type Inventory Structure 表格解决方案
 
-> **版本**: v1.2（MD 口径变更（业务确认）：MD 分子由 md_net_sales_amt 改为 net_sales_amt，MD = 1 − sum(net_sales_amt) / sum(msrp_net_sales_amt)，时间范围仍为 This Period，详见 §4.17 / 指标清单 #8）。v1.1（商品维度 category → ax_class 字段替换（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §4.1 / §3.2）
+> **版本**: v1.3（YTD ST% 改为全渠道口径：分子（sales 侧）整表 REMOVEFILTERS Slicer_Platform_Selection / Slicer_Store_Name，与无渠道维度的分母库存对齐，度量名称不变；核对 ALLSELECTED：六 / 五个商品维度表均为整表写法，无列级残留，详见 §4.15 / 注意事项 1、14）。v1.2（MD 口径变更（业务确认）：MD 分子由 md_net_sales_amt 改为 net_sales_amt，MD = 1 − sum(net_sales_amt) / sum(msrp_net_sales_amt)，时间范围仍为 This Period，详见 §4.17 / 指标清单 #8）。v1.1（商品维度 category → ax_class 字段替换（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为六个商品维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §4.1 / §3.2）
 > **模块**: RL E2E Merch Dashboard - Dimension Cross Analysis Tab - Label & Product Type Inventory Structure
 > **关联口径**: 口径文档/口径Markdown格式/Dimension Cross Analysis.md - 子模块一~子模块四（§1~§16）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
@@ -47,7 +47,7 @@
 | 4    | EOH Amt% vs LP | §2 / §10 附属 | 快照日 this − 快照日 LP      | EOH Amt%（this 快照日）− EOH Amt%（LP 快照日），原始差值，×10000 转 bp 在 Display 层             | delta_bp → `#,##0bp`   |
 | 5    | SLS Unit       | §3 / §11      | This Period（区间）           | 行维度下 sum(net_sales_qty)                                                                        | integer → `#,##0`      |
 | 6    | EOH Unit       | §4 / §12      | End Period（期末时点）        | 行维度下 sum(inv_qty)                                                                              | integer → `#,##0`      |
-| 7    | YTD ST%        | §5 / §13      | YTD 区间 + 期末时点（跨双表） | sales.net_sales_qty / (sales.net_sales_qty + inv.inv_qty)，sales 侧为 YTD 区间，inv 侧为快照日单日 | percent_0dp → `#,##0%` |
+| 7    | YTD ST%        | §5 / §13      | YTD 区间 + 期末时点（跨双表） | sales.net_sales_qty / (sales.net_sales_qty + inv.inv_qty)，sales 侧为 YTD 区间（全渠道，v1.3），inv 侧为快照日单日 | percent_0dp → `#,##0%` |
 | 8    | MD             | §6 / §14      | This Period（区间）           | 1 − sum(net_sales_amt) / sum(msrp_net_sales_amt)                                               | percent_0dp → `#,##0%` |
 
 ### 1.4 交叉视图指标清单（子模块二 / 子模块四独立）
@@ -88,8 +88,8 @@
 
 | 视图                    | 分母范围                                                 | 分母机制                                                                                                                                                                                                 |
 | ----------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 主视图（子模块一/三）   | 各维度值占 **total**（外部筛选上下文下的全量合计） | `ALLSELECTED` 六个商品维度表字段：移除视觉对象内部的行维度筛选，保留外部切片器筛选；一次只有一个字段在行上，其余五个字段的 ALLSELECTED 为无操作，实现六维度切换一套逻辑通吃                            |
-| 交叉视图（子模块二/四） | 各交叉维度值占 **单个柱形**（该基数维度值内合计）  | `ALLSELECTED` 五个交叉维度表字段：移除视觉对象内部的图例维度筛选，保留外部切片器筛选；x 轴基数维度筛选不被触及（等价于移除全部视觉对象字段筛选后重新保留当前柱形的基数维度值），分母自然限定在该柱形内 |
+| 主视图（子模块一/三）   | 各维度值占 **total**（外部筛选上下文下的全量合计） | `ALLSELECTED` 六个商品维度表【整表】：移除视觉对象内部的行维度筛选，保留外部切片器筛选；一次只有一个维度表在行上，其余五个整表 ALLSELECTED 为无操作，实现六维度切换一套逻辑通吃                            |
+| 交叉视图（子模块二/四） | 各交叉维度值占 **单个柱形**（该基数维度值内合计）  | `ALLSELECTED` 五个交叉维度表【整表】：移除视觉对象内部的图例维度筛选，保留外部切片器筛选；x 轴基数维度筛选不被触及（等价于移除全部视觉对象字段筛选后重新保留当前柱形的基数维度值），分母自然限定在该柱形内 |
 
 ---
 
@@ -110,7 +110,7 @@
 ```
 Value（口径计算，保留原始小数）
 ←  分子 / 分母时间范围显式筛选（This Period / Last Period / 快照日）
-←  主视图占比分母：ALLSELECTED 六个商品维度表字段（移除行维度筛选，保留外部切片器）
+←  主视图占比分母：ALLSELECTED 六个商品维度表【整表】（移除行维度筛选，保留外部切片器）
 ←  交叉视图占比分母：ALLSELECTED 五个交叉维度表字段（移除图例筛选，保留 x 轴基数维度与外部切片器）
 ←  期末快照日先经 REMOVEFILTERS(整表) 确定性取值，不随行上下文 / 切片器漂移
 ←  LP 中间度量值（LP SLS Amt% / LP EOH Amt%）供 vs LP 派生引用
@@ -607,8 +607,9 @@ Label & PT Table YTD ST% Value =
 // 数据底表: a02_e2e_product_performance_sales_summary_d（sales）；
 //           a02_e2e_product_performance_inv_summary_d（inv）
 // 说明: 跨双表时间口径不同——分子为 YTD 区间汇总，分母为快照日单日值，不可混用；
-//       行维度经维度表关系自动传导双表；分子（sales 侧）受渠道筛选影响，
-//       分母（inv 侧）不受渠道筛选影响（inv 表无渠道字段）；
+//       行维度经维度表关系自动传导双表；分子（sales 侧）与分母（inv 侧）均为全渠道
+//       （v1.3：分子整表 REMOVEFILTERS Slicer_Platform_Selection / Slicer_Store_Name，
+//       与无渠道字段的 inv 侧对齐）；
 //       YTD 起点 Fiscal_Year_First_Day 为 TimeFrame_Min 落入的财年第一天，
 //       财年型时间选项内 TimeFrame_Min 与 TimeFrame_Max 同属一个财年，
 //       与口径「end period 所在财年」等价
@@ -625,10 +626,16 @@ VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 分子：YTD 销售数量（YTD 区间，sales 表，行筛选自动传导）──
+// ── 分子：YTD 销售数量（YTD 区间，sales 表，行筛选自动传导；全渠道，v1.3）──
+// REMOVEFILTERS 渠道两张维度表【整表】：渠道切片器的筛选落在维度表上，经 1:N 关系传播到
+// sales；移除维度表整表即无渠道筛选可传播，等价于全渠道。整表而非列级：维度表有按列排序
+// 字段，只移除值列时排序列隐藏筛选独自存活，渠道筛选切不干净。
+// 不要写 REMOVEFILTERS(sales)：会把行维度经关系传播过来的筛选一并清掉。
 VAR __SLSQty_YTD =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_qty]),
+        REMOVEFILTERS('Slicer_Platform_Selection'),
+        REMOVEFILTERS('Slicer_Store_Name'),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __YTDStart,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
@@ -1414,7 +1421,7 @@ PT & Product Dimensions Cross IsEmpty =
 | 切片器                                              | 类型                      | 作用                                                                                   |
 | --------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------- |
 | Slicer_Time_Frame                                   | 主时间筛选器              | 驱动 Min_This / Max_This / Min_Last / Max_Last 断开维度表，经 SELECTEDVALUE 读入度量值 |
-| Slicer_Platform_Selection / Slicer_Store_Name       | 一对多关联（仅 sales 表） | 渠道筛选自动传递销售侧指标                                                             |
+| Slicer_Platform_Selection / Slicer_Store_Name       | 一对多关联（仅 sales 表） | 渠道筛选自动传递销售侧指标；例外：YTD ST% 分子整表 REMOVEFILTERS 两张维度表 = 全渠道（v1.3）                                                             |
 | 商品维度切片器（Slicer_Label / Slicer_Division 等） | 一对多关联（双表）        | 外部筛选自动传递；占比分母经 ALLSELECTED 保留该外部筛选                                |
 | Slicer_Currency_Selection                           | 断开维度                  | 本板块无金额展示指标，不影响任何指标值                                                 |
 
@@ -1516,7 +1523,7 @@ FROM __sales s
 FULL OUTER JOIN __inv i ON s.label = i.label
 ```
 
-- sales 侧附加渠道条件（若渠道切片器有选择）、inv 侧不附加（无渠道字段）；外部商品维度条件双表同步附加
+- sales 侧不附加渠道条件（YTD ST% 分子全渠道，v1.3：DAX 内整表 REMOVEFILTERS 两张渠道维度表，即使渠道切片器有选择也不收窄）、inv 侧不附加（无渠道字段）；外部商品维度条件双表同步附加
 
 ### 7.5 vs LP 附属
 
@@ -1543,7 +1550,7 @@ GROUP BY brand, product_type
 
 ## 8. 注意事项
 
-1. **inv 表无渠道字段**：EOH Amt% / EOH Unit / Cross EOH Amt% 的分子分母及 YTD ST% 库存分母均不受渠道切片器影响；SLS Amt% / SLS Unit / YTD ST% 分子受渠道筛选影响。YTD ST% 分子分母的渠道口径不对称为模型物理限制（渠道字段仅存在于 sales 表），业务需知悉该口径影响
+1. **inv 表无渠道字段与 YTD ST% 全渠道**：EOH Amt% / EOH Unit / Cross EOH Amt% 的分子分母及 YTD ST% 库存分母均不受渠道切片器影响；SLS Amt% / SLS Unit 分子受渠道筛选影响。YTD ST% 分子自 v1.3 起改为全渠道（整表 REMOVEFILTERS Slicer_Platform_Selection / Slicer_Store_Name），与分母库存对齐——原写法分子随渠道切片器收窄而分母不变，比率失真（详见注意事项 14）。EOH Unit 仍为库存侧单表口径，不受渠道影响
 2. **期末时点口径**：end period 范围 [Max_This[TimeFrame_Min], Max_This[TimeFrame_Max]] 内最后一个有数据的快照日，快照缺数时自动回退到范围内最近一天；快照表按日存储只取单日，对整段区间求和会把库存重复计数；LP 侧同法取 Max_Last 表范围
 3. **YTD ST% 跨双表口径**：分子（sales）为财年第一天至今的区间汇总，分母（inv）为快照日单日值，两者时间口径不同不可混用；YTD 起点 Fiscal_Year_First_Day 为 TimeFrame_Min 落入财年的第一天，财年型时间选项内 TimeFrame_Min 与 TimeFrame_Max 同属一个财年，与口径「end period 所在财年」等价
 4. **Last Period 读取方式**：直接读 Min_Last / Max_Last 筛选器的 TimeFrame_Min / TimeFrame_Max（非 _LY / _LP 字段对称映射），依赖模型中 Last 表与主时间筛选器的既有关系配置
@@ -1556,3 +1563,4 @@ GROUP BY brand, product_type
 11. **币种**：主视图占比 / 数量 / 比率类指标分子分母同表同币种（底表 CNY），不受币种切片器影响，无需汇率换算；交叉视图金额类附属（Cross Label / Cross PT 的 SLS Amt、EOH Amt）按 currency 口径处理——Value 层 ÷ Currency_ExchangeRate 换算为当前币种（RMB 汇率 = 1 时换算前后值相同），Display 层拼接 Currency_Symbol（`#,##0`）
 12. **口径与语法**：口径文档中定义的所有指标必须遵守其数据类型与数据格式，与解决方案存在争议时一切以口径文档为准；DAX 文本常量使用双引号，单引号仅用于表名，列名使用方括号，例如：`[md_type] = "FP"`
 13. **金额附属口径**：交叉视图金额类附属与对应占比主指标的分子同维度同时间口径（SLS Amt = SLS Amt% 分子，This Period 区间；EOH Amt = EOH Amt% 分子，快照日单日），仅为金额绝对值，不涉及占比分母；SLS Amt 受渠道筛选影响（sales 侧），EOH Amt 不受（inv 表无渠道字段）
+14. **YTD ST% 全渠道（v1.3）**：`Label & PT Table YTD ST% Value` 的分子 `__SLSQty_YTD` 不再受渠道切片器筛选，CALCULATE 内追加 `REMOVEFILTERS('Slicer_Platform_Selection')` + `REMOVEFILTERS('Slicer_Store_Name')`（整表）；分母 `__InvQty_End` 不变；度量名称不变。三条结论：① `REMOVEFILTERS` 渠道维度表整表即可切断切片器对 sales 的筛选（sales 的渠道过滤是维度表筛选经 1:N 关系传播的结果），**不需要也不应该加 `REMOVEFILTERS(sales)`**——整表移除会误删行维度经关系传播的筛选；② 必须整表而非列级（维度表有按列排序字段，排序列隐藏筛选会独自存活）；③ 前提是渠道筛选只来自这两张维度表且关系单向，若有筛选器直接使用事实表 platform / shop_name 字段，需补事实表列级 REMOVEFILTERS。预期：切换渠道切片器，SLS Amt% / SLS Unit 变化，YTD ST% 不变；测试 SQL 1/3 主视图的 YTD 段本就不带渠道条件，无需改 SQL 逻辑

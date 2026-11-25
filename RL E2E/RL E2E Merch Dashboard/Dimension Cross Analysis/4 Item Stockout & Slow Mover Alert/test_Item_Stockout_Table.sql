@@ -73,7 +73,10 @@
 --      NULL（对齐 DAX 显式拦截，避免 1 - NULL = 1 虚高 100%）
 --   9. ST% 跨双口径：销售侧 This Period 区间，库存侧快照日单日——分母加法
 --      任一侧 NULL 按 0（对齐 DAX 算术 BLANK 当 0）；销售侧 NULL → 整体
---      NULL（DIVIDE 分子 BLANK）。Weeks Cover（v2.6）：数仓预计算
+--      NULL（DIVIDE 分子 BLANK）。销售侧 v2.8 起全渠道（DAX 内整表
+--      REMOVEFILTERS Slicer_Platform_Selection / Slicer_Store_Name）——即使页面
+--      选了渠道切片器，ST_Pct 也不收窄；本文件聚合本就不带渠道条件，无需改动，
+--      对数时其余指标按渠道收窄、ST_Pct 仍用本文件结果。Weeks Cover（v2.6）：数仓预计算
 --      weeks_cover 字段直读——取快照日该主键的值，防御性 MAX（SPU/SKU + day
 --      不保证唯一行，单行时 MAX = 行值；SPU 段 inv_agg 整体改 GROUP BY +
 --      MAX 对齐 DAX 标量聚合语义）；v2.5 近四周日均分母计算废止；快照日无

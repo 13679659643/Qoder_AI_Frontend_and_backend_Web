@@ -1,6 +1,6 @@
 # Item Stockout_Table 解决方案
 
-> **版本**: v2.7
+> **版本**: v2.8（ST% 改为全渠道口径：销售侧分子整表 REMOVEFILTERS Slicer_Platform_Selection / Slicer_Store_Name，与无渠道字段的库存侧分母对齐，度量名称不变，详见 §4.17 / 注意事项 9、13。v2.7 及以前见下方逐版记录）
 > **模块**: RL E2E Merch Dashboard - Dimension Cross Analysis Tab - Item Stockout & Slow Mover Alert
 > **关联口径**: 口径文档/口径Markdown格式/Dimension Cross Analysis.md - 子模块七（§21~§33）
 > **数据底表（销售/属性类）**: s02_trade_sku_data_d
@@ -51,7 +51,7 @@
 | 5    | Weeks Cover          | §25     | End Period（期末时点） | 数仓预计算 weeks_cover 字段直读（v2.6）：取 end period 最后一天（快照日单日）该主键的 weeks_cover，防御性取 MAX(weeks_cover)（SPU/SKU + day 不保证唯一行，单行时 MAX 退化为行值） | decimal_1dp →`#,##0.0`       |
 | 6    | MTD SLS Unit         | §26     | 财月至今（区间）       | end period 所在财月第一天至 end period 最后一天 sum(product_qty)                                                                        | integer →`#,##0`             |
 | 7    | YTD SLS Unit         | §27     | 财年至今（区间）       | end period 所在财年第一天至 end period 最后一天 sum(product_qty)                                                                        | integer →`#,##0`             |
-| 8    | ST%                  | §28     | 跨双口径               | sales.sum(product_qty) / (sales.sum(product_qty) + inv.sum(stock_inv_qty))；数量口径                                                    | percent_0dp →`#,##0%`        |
+| 8    | ST%                  | §28     | 跨双口径               | sales.sum(product_qty)（全渠道，v2.8）/ (sales.sum(product_qty) + inv.sum(stock_inv_qty))；数量口径                                                    | percent_0dp →`#,##0%`        |
 | 9    | AUR                  | §29     | This Period（区间）    | sum(net_sales_amt) / sum(product_qty)                                                                                                   | currency → 币种符号 +`#,##0` |
 | 10   | MD                   | §30     | This Period（区间）    | 1 - sum(product_qty×md_price) / sum(product_qty×msrp)                                                                                 | percent_0dp →`#,##0%`        |
 | 11   | Alert                | §31     | End Period（期末时点） | oos_tag = "1" → 缺货；computed_product_tag = 'slow mover' → 滞销；其他情况 BLANK；两条件互斥（单状态）；SPU 取 spu 预聚合表直判 / SKU 取 inv 表单行判定（分源） | 文本                            |
@@ -150,7 +150,8 @@
 ### 1.8 渠道上下文
 
 - Slicer_Platform_Selection / Slicer_Store_Name 与 s02_trade_sku_data_d 一对多关联，筛选经模型关系自动传导——trade 侧指标与 Top 100 候选金额随渠道筛选收窄，DAX 不显式处理
-- 两张 inv 类表（s02_inventory_stock_sales_detail_d / s02_inventory_stock_sales_detail_d_spu）均无 platform / shop_name 字段：库存侧指标（EOH / In-transit / Replenishment / Alert / Available Sizes / Product Tag / ST% 库存分母 / Weeks Cover 分子）不受渠道筛选影响——trade 侧受筛选、inv 侧全量的口径不对称为模型物理限制（ST% / Weeks Cover 分子分母渠道口径不对称，业务需知悉）
+- 两张 inv 类表（s02_inventory_stock_sales_detail_d / s02_inventory_stock_sales_detail_d_spu）均无 platform / shop_name 字段：库存侧指标（EOH / In-transit / Replenishment / Alert / Available Sizes / Product Tag / ST% 库存分母 / Weeks Cover）不受渠道筛选影响（Weeks Cover 为 inv 侧字段直读，整体不受渠道影响）
+- **ST% 例外（v2.8）**：ST% 销售侧分子改为全渠道——不随渠道切片器收窄，与库存侧分母对齐；原写法 trade 侧随渠道收窄、inv 侧全量，比率失真
 
 ---
 
@@ -887,8 +888,8 @@ Item Stockout ST% Value =
 //       s02_inventory_stock_sales_detail_d（原状）
 // 行维度传递: 销售侧行分组（主键单列）筛选自动传导；库存侧 TREATAS 主键
 //       单列 + IF 标量双分支
-// 渠道: 销售侧受 Platform / Store 筛选影响，库存侧不受（inv 表无渠道字段）——
-//       分子分母渠道口径不对称为模型物理限制，业务需知悉
+// 渠道: ST% 销售侧为全渠道（v2.8：分子整表 REMOVEFILTERS 两张渠道维度表），库存侧不受
+//       渠道影响（inv 表无渠道字段）——两侧均为全渠道，口径对齐
 // ========================================
 
 // ── This Period 时间区间（销售侧）──
@@ -905,10 +906,16 @@ VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 表判定 ──
 VAR __InSpuId = ISINSCOPE('s02_trade_sku_data_d'[spu_id])
 
-// ── 分子：This Period 净销售数量（行分组筛选自动传导）──
+// ── 分子：This Period 净销售数量（行分组筛选自动传导；全渠道，v2.8）──
+// REMOVEFILTERS 渠道两张维度表【整表】：渠道切片器的筛选落在维度表上，经 1:N 关系传播到
+// trade；移除维度表整表即无渠道筛选可传播，等价于全渠道，与库存侧分母口径对齐。
+// 整表而非列级：维度表有按列排序字段，只移除值列时排序列隐藏筛选独自存活，渠道筛选切不干净。
+// 不要写 REMOVEFILTERS(trade)：会把行分组（主键）筛选经关系传播过来的筛选一并清掉。
 VAR __SlsUnits =
     CALCULATE(
         SUM('s02_trade_sku_data_d'[product_qty]),
+        REMOVEFILTERS('Slicer_Platform_Selection'),
+        REMOVEFILTERS('Slicer_Store_Name'),
         's02_trade_sku_data_d'[dt] >= __PeriodMin,
         's02_trade_sku_data_d'[dt] <= __PeriodMax
     )
@@ -1997,7 +2004,7 @@ Item Stockout MD Price Display =
 | 切片器                                        | 类型             | 作用                                                                                                                                               |
 | --------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Slicer_Time_Frame                             | 主时间筛选器     | 驱动 Min_This / Max_This 断开维度表，经 SELECTEDVALUE 读入度量值（MTD / YTD 起点同读 Max_This 表；属性字段"最新日期"判定同读 Min_This / Max_This） |
-| Slicer_Platform_Selection / Slicer_Store_Name | 一对多关系切片器 | 经模型关系自动传导至 trade 侧（指标与 Top 100 候选随渠道收窄），DAX 不显式处理；inv 侧不受影响                                                     |
+| Slicer_Platform_Selection / Slicer_Store_Name | 一对多关系切片器 | 经模型关系自动传导至 trade 侧（指标与 Top 100 候选随渠道收窄），DAX 不显式处理；inv 侧不受影响；例外：ST% 分子整表 REMOVEFILTERS 两张维度表 = 全渠道（v2.8） |
 | 其余商品维度切片器                            | 一对多关系切片器 | 与两张事实表已建关系的自动传导（候选金额与指标同口径收窄）                                                                                         |
 | Slicer_Currency_Selection                     | 断开维度         | SLS Amt / AUR / Price / MD Price（v2.7）的汇率与符号来源；数量 / 占比 / 比率类不受影响                                                                                       |
 
@@ -2013,7 +2020,7 @@ Item Stockout MD Price Display =
 | Price / MD Price（v2.7） | trade_price CTE：JOIN trade_maxdt 取最新日期当天 MAX(msrp) / MAX(md_price)（数值型防御性 MAX，一对一属性退化单值；当日全 NULL → NULL；RMB 原始值输出，对齐 PBI Value 层 ÷ 汇率） |
 | MTD / YTD SLS Unit               | 条件聚合 dt ∈ [财月首日 '2026-06-28' / 财年首日 '2026-03-29', '2026-07-25']（本参数下 YTD 与 This Period 重合）                                                              |
 | EOH / In-transit / Replenishment | inv 侧按主键单列 GROUP BY，WHERE dt = 快照日 '2026-07-25'；不附加渠道条件（inv 无渠道字段）；SPU 段改查 s02_inventory_stock_sales_detail_d_spu（data_type = 'spu' 预聚合行，直接取单行值，v2.4）                                                              |
-| ST%                              | 销售侧数量与库存侧数量按主键各自聚合后相除（分母加法 NULL 按 0，销售侧 NULL → 整体 NULL）                                                                                    |
+| ST%                              | 销售侧数量与库存侧数量按主键各自聚合后相除（分母加法 NULL 按 0，销售侧 NULL → 整体 NULL）；销售侧全渠道（v2.8），SQL 两侧均不带渠道条件                                                                                    |
 | Weeks Cover                      | inv 侧快照日 MAX(weeks_cover) 直读（v2.6：SPU 段 spu 预聚合表 / SKU 段 inv 表，两表均含数仓预计算 weeks_cover 字段，防御性 MAX——SPU/SKU + day 不保证唯一行）；快照日无对应表行 / 字段 NULL → NULL           |
 | Alert                            | 缺货 = oos_tag = '1'（String）；滞销 = computed_product_tag = 'slow mover'；其他情况 NULL（v2.4 起不再输出 '其他'）；SPU 段直取 spu 预聚合表单行判定（无优先级聚合），SKU 段取 inv 表单行直判；无对应表行 → NULL |
 | Available Sizes                  | SPU 段直取 spu 预聚合表 sku_size 预拼接串（逗号分隔，原样输出）；SKU 段 GROUP_CONCAT(DISTINCT CASE WHEN inv_qty > 0 THEN sku_size END ORDER BY ...) 顿号拼接                                                                                          |
@@ -2036,11 +2043,11 @@ Item Stockout MD Price Display =
 6. **行筛选必须用原生「前 N 个」列筛选器，禁止「Rank 介于 1 与 100」度量筛选器**：视觉级筛选器三条——①「spu_id / sku_id 前 100 个（按 Item Stockout SLS Amt Value 降序）」（引擎单遍分组求值排序度量取 TopN，Rank 仅对可见 100 行求值，候选表跨行共享缓存）②「SLS Amt Value 不为空」③「主键 不为空」；度量筛选器须对全部主键分组逐组求值 Rank（每组物化一次候选集，O(行数 × 候选集)）——数万主键量级下明显卡顿，为本次性能问题根源；边界并列提示：TopN 引擎并列打破不确定（非按主键字母序），金额完全相等且恰跨第 100 名边界时入选行与 Rank 决胜链可能不一致（6 位小数精度下概率极低）
 7. **inv 桥接为 IF 标量双分支**：TREATAS / CALCULATETABLE 不经 IF 传递（IF 分支返回表会被降级为标量）——各分支聚合返回标量后经 IF 选择；表判定用 ISINSCOPE(trade[spu_id])，两表互斥显示，行分组必含其一
 8. **Alert 判定规则（v2.4 业务确认修订）**：缺货 = oos_tag = "1"（String 字面量）；滞销 = computed_product_tag = 'slow mover'；其他情况返回 BLANK()（v2.3"其他"类别废止；无对应表行同径 BLANK）；两条件互斥为数据不变量——单行判定必出且仅出一个状态，两条件同时成立属数据异常（SWITCH 顺序仅为异常下确定性兜底，非业务优先级）；SPU 分支取 spu 预聚合表直判（最高预警级别聚合废止），SKU 分支取 inv 表单行直判（CALCULATETABLE 整表物化 + FILTER 迭代已简化为 MAX 标量聚合；行存在性用 COUNTROWS 判定——标签字段可为 NULL / 空串，不能以其非空反推行存在）
-9. **渠道口径不对称**：Platform / Store 切片器经关系自动传导仅作用于 trade 侧（SLS 系列指标 + Top 100 候选）；两张 inv 类表均无渠道字段，库存侧指标全量口径——ST% / Weeks Cover 分子分母渠道不对称为模型物理限制，业务需知悉
+9. **渠道口径（v2.8 起 ST% 全渠道）**：Platform / Store 切片器经关系自动传导作用于 trade 侧（SLS 系列指标 + Top 100 候选）；两张 inv 类表均无渠道字段，库存侧指标全量口径。**ST% 例外**：销售侧分子 v2.8 起整表 REMOVEFILTERS Slicer_Platform_Selection / Slicer_Store_Name = 全渠道，与库存侧分母对齐；Weeks Cover 为 inv 侧字段直读，整体不受渠道影响。三条结论：① `REMOVEFILTERS` 渠道维度表整表即可切断切片器对 trade 的筛选（trade 的渠道过滤是维度表筛选经 1:N 关系传播的结果），**不需要也不应该加 `REMOVEFILTERS(trade)`**——整表移除会误删行分组（主键）经关系传播的筛选；② 必须整表而非列级（维度表有按列排序字段）；③ 前提是渠道筛选只来自这两张维度表且关系单向，若有筛选器直接使用事实表 platform / shop_name 字段，需补事实表列级 REMOVEFILTERS。
 10. **期末时点口径**：This 期末快照日 = end period 范围内最后一个有数据的日期（快照缺数自动回退）；快照表按日存储只取单日，对整段区间求和会重复计数库存
 11. **net_sales_amt 列来源**：模型内为 Power Query 行级计算列（ROUND(product_qty × sales_price, 6)），数据库无此列——测试 SQL 验证时按行级乘积还原
 12. **MD 空值拦截**：分子分母行级乘积对任一字段 NULL 的行不计入（直接算术相乘会把 BLANK 当 0，无折扣价行 MD 虚高 100%）；分母为 0 或任一侧 BLANK 时整体返回 BLANK（1 - BLANK = 1 失真，必须显式拦截）
-13. **ST% 数量口径（业务确认修正，不可回退）/ Weeks Cover 字段直读（v2.6）**：ST% 为数量口径（§28 金额→数量修正，不可回退）；Weeks Cover 由 v2.5"(期末库存 + 在途) / 近四周日均销售数量"计算改为数仓预计算 weeks_cover 字段直读——取 end period 最后一天（快照日单日）该主键的值，防御性 MAX(weeks_cover)（SPU/SKU + day 不保证唯一行，单行时 MAX 退化为行值；两分支同构，度量名称不变）；近四周窗口 / 分子分母计算逻辑整体废止；快照日无对应表行或字段 NULL → BLANK（显示 "-"）
+13. **ST% 数量口径（业务确认修正，不可回退）/ Weeks Cover 字段直读（v2.6）**：ST% 为数量口径（§28 金额→数量修正，不可回退）；**v2.8 起销售侧分子改为全渠道**（整表 REMOVEFILTERS 两张渠道维度表，与库存侧分母对齐，见注意事项 9）；Weeks Cover 由 v2.5"(期末库存 + 在途) / 近四周日均销售数量"计算改为数仓预计算 weeks_cover 字段直读——取 end period 最后一天（快照日单日）该主键的值，防御性 MAX(weeks_cover)（SPU/SKU + day 不保证唯一行，单行时 MAX 退化为行值；两分支同构，度量名称不变）；近四周窗口 / 分子分母计算逻辑整体废止；快照日无对应表行或字段 NULL → BLANK（显示 "-"）
 14. **MTD / YTD 起点**：读 Slicer_Time_Frame_Max_This 表 Fiscal_Month_First_Day / Fiscal_Year_First_Day 字段，终点 TimeFrame_Max（口径 §26 / §27 指定）
 15. **RANK / ORDERBY 版本要求**：Power BI Desktop 2022 年 9 月及以后版本
 16. **总计行为**：总计行不做特判，交由表格视觉对象默认生成（总计行主键为 BLANK，Rank / 属性度量返回 BLANK，数值指标为全量聚合）

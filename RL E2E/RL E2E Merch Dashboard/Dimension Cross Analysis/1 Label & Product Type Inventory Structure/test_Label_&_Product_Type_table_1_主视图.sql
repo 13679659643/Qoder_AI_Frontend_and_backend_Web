@@ -46,6 +46,9 @@
 --      → PBI 显示 -152bp）
 --   8. 输出列顺序对齐方案 §6.1 值列顺序：SLS Amt% → EOH Amt% →
 --      SLS Amt% vs LP → EOH Amt% vs LP → SLS Unit → EOH Unit → YTD ST% → MD
+--   9. YTD ST% 分子全渠道（对齐方案 v1.3）：DAX 内整表 REMOVEFILTERS 两张渠道维度表
+--      （Slicer_Platform_Selection / Slicer_Store_Name），即使页面选了渠道切片器也不收窄；
+--      本文件所有聚合本就不带渠道条件，无需改动，仅对数时知悉 YTD_ST_Pct 不随渠道变化
 -- ======================================================================
 
 WITH

@@ -810,8 +810,7 @@
 - **关联文件**: Dimension Cross Analysis/5 Platform Merchandising Performance/Dim_ColMetric_Platform_Merchandising_Performance.md
 - **备注**: 必须同步操作：PBI 内整段替换 Dim_ColMetric_Platform_Merchandising_Performance 计算表，再依次设置 ColType 按 ColName_Sort 排序、ColName 按 ColType 排序；验证：两个排序均设置成功、矩阵列序不变（SLS Amt% / vs LP / TAR ACH% / MTD TAR Progress / YTD TAR Progress）；若矩阵上有基于 ColName_Sort 的视觉对象筛选器，切换排序列后需复核其是否仍生效。规则与案例已沉淀到 pbi Skill（rules/modeling-standards.md §6、knowledge/slicer-tips.md §7、knowledge/index.md）
 
-<<<<<<< HEAD
-=======
+
 ## [2026-11-25 15:33] DAX 修改 — ST% 改为全渠道口径（Sales & Inventory 表格 v1.7 / Merchandising Core KPI v1.4）
 
 - **模块**: DAX
@@ -842,5 +841,37 @@
   - `Dim_ColMetric_Sales_Performance_Details.md`：Label_Value 字段说明补 LTD ST% 例外；表定义不变，无需在 PBI 内重做
 - **关联文件**: Merchandise Performance Overview/Sales Performance Details by Channel/Sales_Performance_Details_ms.md（§3.6 / §4.1 / 注意事项 18）；同目录 test_Sales_Performance_Details_ms.sql、Dim_ColMetric_Sales_Performance_Details.md
 - **备注**: 必须同步操作：PBI 内整段替换度量 `Sales Performance Details Act Base Value`（度量名称不变）。验证：切换 Platform / Store 切片器，SLS Amt / vs LP / 占比等随切片器变化，LTD ST% 数值不变，且 Platform TTL 与 Store TTL 两列 LTD ST% 同值。前提：渠道筛选只来自这两张维度表、关系单向；若有筛选器直接使用事实表 platform / shop_name 字段，需补事实表列级 REMOVEFILTERS。未改动项：LTD ST% 空值保护（分母缺失返回 BLANK 而非 100%）仍待业务确认（注意事项 11）；§4.1 的 inv 侧代码（`__InvAmt_End` / `__EOHUnit`）实际未写 TREATAS，与文档「TREATAS 传递」的描述不一致，属既有问题，本次未处理
->>>>>>> 430231e (RL E2E Merch Dashboard UAT - 17:)
+
+## [2026-11-25 17:10] DAX 修改 — ST% / YTD ST% 改为全渠道口径（Dimension Cross Analysis 五个子模块）
+
+- **模块**: DAX
+- **任务**: Dimension Cross Analysis 五个子模块的 ST% / YTD ST% 统一改为全渠道——库存侧无 Platform / Store 维度字段，销售侧分子需移除渠道筛选与分母对齐；同时核对占比分母 ALLSELECTED 维度表是否整表写法
+- **操作**: 修改
+- **变更内容**:
+  - `Label & PT Table YTD ST% Value`（1 Label & Product Type Inventory Structure，v1.2 → v1.3）：§4.15 `__SLSQty_YTD` CALCULATE 内追加 `REMOVEFILTERS('Slicer_Platform_Selection')`、`REMOVEFILTERS('Slicer_Store_Name')`（维度表整表）；度量名称不变。ALLSELECTED 核对：六个商品维度表均已是整表写法，无列级残留
+  - `Item Stockout ST% Value`（4 Item Stockout & Slow Mover Alert，v2.7 → v2.8）：§4.17 `__SlsUnits` 聚合追加同两条整表 REMOVEFILTERS；销售侧与库存侧（inv 无渠道字段）均为全渠道，口径对齐；度量名称不变
+  - `Platform Merchandising Act Base Value` / `Platform Merchandising LY Base Value`（5 Platform Merchandising Performance，v1.1 → v1.2）：§4.1 ST% 新增 `__STSLSAmt_This`（整表 REMOVEFILTERS 两张渠道维度表）；同时 SLS Amt% 分母 `__SLSAmt_Total_Channel`（§4.1）与 LY `__SLSAmt_Total_LP`（§4.2）的 `Slicer_Framework` / `Slicer_Category` ALLSELECTED 由列级改为**整表**——原列级 + 显式排序列组合存在 sort_order auto-existence 残留，占比有恒 100% 隐患；度量名称不变
+  - `Handbags & Outwear Sales Act Base Value`（7 Handbags Sales Performance，v1.0 → v1.1）：§4.1 ST% 新增 `__STSLSAmt_This`（整表 `REMOVEFILTERS('Slicer_Platform_Selection')` / `REMOVEFILTERS('Slicer_Store_Name')`，不带 `__ShopNameCtx`），`__STPct` 改用新变量；仅影响 ST%（TTL 列），其余指标保持 `__ShopNameCtx` 路由；度量名称不变
+  - `Handbags Sales ST% Value`（8 Handbags Sales Analysis by Dimension，v1.0 → v1.1）：§4.15 分子 `__SLSAmt` 移除 `__StoreFilter` 及 `__Store` / `__IsAllStore` 变量，并追加整表 `REMOVEFILTERS('Slicer_Platform_Selection')` / `REMOVEFILTERS('Slicer_Store_Name')` —— 全局渠道切片器与 trade 表一对多关系、筛选经关系传导，仅去掉 Button 过滤不足以全渠道；ST% 不再随渠道按钮 / 全局渠道切片器变化；度量名称不变
+  - 测试 SQL 同步：`test_..._1_主视图.sql` 加口径说明（YTD ST% 全渠道，SQL 无渠道条件）；`test_Item_Stockout_Table.sql` 注意事项 9 更新；`test_Handbags_&_Outwear_ms.sql` 注意事项 4 / 6 / 8 更新（段 1 原本无渠道条件）；`test_Handbags_Sales_ms.sql` 四段新增 `st_agg` / `st_total` CTE（ST% 分子不带 shop_name 条件）并把 ST_Pct 指向新 CTE，头部参数与口径说明同步；M5 测试 SQL 本条无逻辑变化
+  - 结论（五份方案注意事项同步）：渠道筛选经维度表 1:N 关系传播到事实表，整表 `REMOVEFILTERS(渠道维度表)` 即可切断，**不需要也不应该对事实表做整表移除**；必须整表而非列级（维度表含 sort_order 按列排序字段）；事实表列上的 `ALLSELECTED`（商品维度列 / 渠道列）保持列级不变
+- **关联文件**: Dimension Cross Analysis/1 Label & Product Type Inventory Structure/Label_&_Product_Type_table.md；4 Item Stockout & Slow Mover Alert/Item_Stockout_Table.md；5 Platform Merchandising Performance/Platform_Merchandising_ms.md；7 Handbags Sales Performance/Handbags_&_Outwear_ms.md；8 Handbags Sales Analysis by Dimension/Handbags_Sales_ms.md；同目录各自测试 SQL
+- **备注**: 必须同步操作：PBI 内整段替换六个度量（名称均不变）——Label & PT Table YTD ST% Value、Item Stockout ST% Value、Platform Merchandising Act Base Value、Platform Merchandising LY Base Value、Handbags & Outwear Sales Act Base Value、Handbags Sales ST% Value。验证：切换 Platform / Store 切片器与 Store 按钮，SLS 类指标随之变化，ST% / YTD ST% 保持不变；M5 若历史 SLS Amt% 出现恒 100%，替换后恢复正常。前提：渠道筛选只来自渠道维度表、关系单向；若有筛选器直接使用事实表 platform / shop_name 字段，需补事实表列级 REMOVEFILTERS。未改动项：M8 的 SLS Amt% 分母为事实表五列列级 ALLSELECTED，保持不变（事实表列无按列排序）
+
+---
+
+## [2026-11-25 17:35] DAX 修改 — YTD / LTD ST% 改为全渠道口径（Series Sales Performance v1.1）
+
+- **模块**: SKU Sales Tracking - 4 Series Sales Performance
+- **任务**: 三个 ST% 指标（§24 YTD ST% Unit、§25 YTD ST% Amt、§27 LTD ST% Unit）销售侧改为全渠道，与无渠道字段的库存分母对齐，口径同 Dimension Cross Analysis 五个子模块
+- **操作**: 修改
+- **变更内容**:
+  - `Series Sales YTD ST% (Unit) Value`（§4.13）：`__YtdSalesQty` CALCULATE 内、日期条件前追加整表 `REMOVEFILTERS('Slicer_Platform_Selection')`、`REMOVEFILTERS('Slicer_Store_Name')`；度量名称不变
+  - `Series Sales YTD ST% (Amt) Value`（§4.14）：`__YtdSalesAmt` 同样追加两条整表 REMOVEFILTERS；度量名称不变
+  - `Series Sales LTD ST% (Unit) Value`（§4.16）：`__LtdSalesQty` 同样追加两条整表 REMOVEFILTERS；度量名称不变
+  - 文档同步：版本头 v1.0 → v1.1；§1 指标表 §24 / §25 / §27 与时间口径表 YTD / LTD 标注全渠道；§2 库存底表说明；§3 ST% 双分母结构说明；series 非空影响表新增「ST% 销售侧渠道口径」行；注意事项 1 改题并补例外，新增注意事项 20（1:N 传播原理、必须整表移除、禁止 REMOVEFILTERS(事实表)、仅限这三个指标）
+  - 测试 SQL 同步（仅注释，无逻辑变化）：`test_Series_Sales_Table.sql` 参数区补渠道例外说明，口径说明第 6 条补 ST% 销售侧全渠道，新增第 13 条（ST% 与其余销售类指标渠道口径不同，验证单项渠道时不可整段统一加条件）
+- **关联文件**: SKU Sales Tracking/4 Series Sales Performance/Series_Sales_Table.md；同目录 test_Series_Sales_Table.sql
+- **备注**: 必须同步操作：PBI 内整段替换三个度量（名称均不变）——Series Sales YTD ST% (Unit) Value、Series Sales YTD ST% (Amt) Value、Series Sales LTD ST% (Unit) Value。验证：切换全局 Platform / Store Name 切片器，SLS Qty / SLS Amt / AUR / MD 等随之变化，三个 ST% 保持不变；SQL 两段本就无渠道条件，验证结果应与替换后的 PBI 一致，逻辑无需改。未改动项：This Period 及其他 YTD / LTD 销售类指标仍随渠道筛选；§24 / §25 / §27 的库存侧 inv 表无渠道字段，天然全渠道；占比分母 `REMOVEFILTERS(series, spu_id, spu_img_url)` 为事实表列级移除，保持不变
+
 ---

@@ -1,6 +1,6 @@
 # Series Sales Performance 表格解决方案
 
-> **版本**: v1.0
+> **版本**: v1.1（YTD ST% (Unit) / YTD ST% (Amt) / LTD ST% (Unit) 改为全渠道口径：销售侧分子整表 `REMOVEFILTERS('Slicer_Platform_Selection')` / `REMOVEFILTERS('Slicer_Store_Name')`，与无渠道字段的库存侧分母对齐，度量名称不变，详见 §2 / §3 / §4.13 / §4.14 / §4.16 / 注意事项 1、20。v1.0 为首版）
 > **模块**: RL E2E Merch Dashboard - SKU Sales Tracking Tab - Series Sales Performance
 > **关联口径**: 口径文档/口径Markdown格式/SKU Sales Tracking.md - 子模块七 Series Sales Performance（§13~§27）
 > **数据底表（销售类）**: s02_trade_sku_data_d
@@ -52,10 +52,10 @@ Series Sales Performance 是 SKU Sales Tracking Tab 的特别系列子模块，�
 | §21 | AUR            | 该 spu_id 下`sum(net_sales_amt) / sum(product_qty)`                                                                      | This Period（区间）                               | currency → 币种符号 +`#,##0` |
 | §22 | MD             | 该 spu_id 下`1 - sum(product_qty*md_price) / sum(product_qty*msrp)`                                                      | This Period（区间）                               | percent_0dp →`#,##0%`        |
 | §23 | YTD SLS Unit   | 该 spu_id 下`sum(product_qty)`                                                                                           | this period 所在财年第一天至 this period 最后一天 | integer →`#,##0`             |
-| §24 | YTD ST% (Unit) | `sales.product_qty / (sales.product_qty + inv.inv_qty)`（sales 为 YTD 区间，inv 为期末时点 inv_qty）                     | 跨表（区间 + 时点）                               | percent_0dp →`#,##0%`        |
-| §25 | YTD ST% (Amt)  | `sales.net_sales_amt / (sales.net_sales_amt + inv.msrp_inv_amt)`（sales 为 YTD 区间，inv 为期末时点 msrp_inv_amt）       | 跨表（区间 + 时点）                               | percent_0dp →`#,##0%`        |
+| §24 | YTD ST% (Unit) | `sales.product_qty / (sales.product_qty + inv.inv_qty)`（sales 为 YTD 区间且全渠道（v1.1），inv 为期末时点 inv_qty）                     | 跨表（区间 + 时点）                               | percent_0dp →`#,##0%`        |
+| §25 | YTD ST% (Amt)  | `sales.net_sales_amt / (sales.net_sales_amt + inv.msrp_inv_amt)`（sales 为 YTD 区间且全渠道（v1.1），inv 为期末时点 msrp_inv_amt）       | 跨表（区间 + 时点）                               | percent_0dp →`#,##0%`        |
 | §26 | LTD SLS Unit   | 该 spu_id 下`sum(product_qty)`                                                                                           | 开店以来：≤ this period 最后一天（无固定起始日） | integer →`#,##0`             |
-| §27 | LTD ST% (Unit) | `sales.product_qty / (sales.product_qty + inv.inv_qty)`（sales 为 LTD 区间，inv 为期末时点 inv_qty）                     | 跨表（区间 + 时点）                               | percent_0dp →`#,##0%`        |
+| §27 | LTD ST% (Unit) | `sales.product_qty / (sales.product_qty + inv.inv_qty)`（sales 为 LTD 区间且全渠道（v1.1），inv 为期末时点 inv_qty）                     | 跨表（区间 + 时点）                               | percent_0dp →`#,##0%`        |
 
 说明：
 
@@ -68,8 +68,8 @@ Series Sales Performance 是 SKU Sales Tracking Tab 的特别系列子模块，�
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
 | This Period（区间类）    | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]]                                              | SLS 系列、AUR、MD 及其占比分子分母 |
 | End Period（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个有数据的快照日** | EOH 系列、ST% 库存分母             |
-| YTD（财年区间类）        | dt ∈ [Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day], Slicer_Time_Frame_Max_This[TimeFrame_Max]]，与 last period 无关                 | YTD SLS Unit、YTD ST% 销售侧       |
-| LTD（开店以来类）        | dt ≤ Slicer_Time_Frame_Max_This[TimeFrame_Max]（无固定起始日），与 last period 无关                                                      | LTD SLS Unit、LTD ST% 销售侧       |
+| YTD（财年区间类）        | dt ∈ [Slicer_Time_Frame_Max_This[Fiscal_Year_First_Day], Slicer_Time_Frame_Max_This[TimeFrame_Max]]，与 last period 无关                 | YTD SLS Unit、YTD ST% 销售侧（全渠道，v1.1）       |
+| LTD（开店以来类）        | dt ≤ Slicer_Time_Frame_Max_This[TimeFrame_Max]（无固定起始日），与 last period 无关                                                      | LTD SLS Unit、LTD ST% 销售侧（全渠道，v1.1）       |
 
 说明：
 
@@ -91,6 +91,7 @@ Series Sales Performance 是 SKU Sales Tracking Tab 的特别系列子模块，�
 | 销售类分子（§13 / §15 / §21 / §22 / §23 / §26） | 行维度来自 s02_trade_sku_data_d，行筛选（series / spu_id）与视觉级 series 非空筛选共同限定聚合范围，空白 series 商品自动排除                                                                                                    | 符合，自动生效                                                                                                                                    |
 | 销售类占比分母（§14 / §16）                         | 分母`REMOVEFILTERS(special_series, spu_id, spu_img_url)` 上卷时会把视觉级「不为空」筛选与 url 行筛选一并移除（均为相应列的列筛选），若不重新限定 series 非空，分母会混入空白 series 商品的金额 / 数量，占比偏小；若不移除 url 列（行区域含 spu_img_url 时），分母被当前行 url 筛选收窄为分子自身，占比恒 100%                                           | 符合，度量值内部分母显式移除三列并重加`NOT ISBLANK && LEN(TRIM()) > 0` 条件（口径原文同样要求 series 非空）                                                           |
 | 库存类分子（§17 / §19 / ST% 库存分母）              | inv 表与 trade 表无模型关系，视觉级 series 筛选不影响 inv 表；行维度值经 TREATAS 桥接传递——明细行传 spu_id（该 spu 来自有效 series 行）、series 汇总行传 special_series（值为当前行的有效 series）                            | 符合，传递值本身来自有效 series 行；inv 表中 special_series 为空白但 spu_id 与传递值匹配的记录按 spu_id 精确匹配语义计入（spu_id 为商品唯一标识） |
+| ST% 销售侧渠道口径（§24 / §25 / §27）               | 全局 Platform / Store Name 切片器与 s02_trade_sku_data_d 一对多关联，筛选经关系传导到销售侧聚合；ST% 库存分母 inv 表无渠道字段 → 两侧渠道口径不一致                                                                        | 符合，v1.1 起分子整表 `REMOVEFILTERS('Slicer_Platform_Selection')` / `('Slicer_Store_Name')` = 全渠道，与库存侧对齐 |
 | 库存类分母（§18 / §20）                             | inv 表不受行维度与视觉级筛选影响，若不加条件会包含空白 series 商品的库存，占比偏小                                                                                                                                              | 符合，度量值内部分母显式加 inv 表`NOT ISBLANK && LEN(TRIM()) > 0` 条件                                                                          |
 | Sort Key 排名                                         | L1 relation 为`ALL(special_series)` 且 FILTER 内排除空白 / 空字符 series（视觉级筛选被 ALL 移除，空白排除在度量值内部实现，双保险）；L1 / L2 候选金额均按排名粒度上卷——L1 清除 spu_id + spu_img_url 子级行筛选（series 粒度金额）、L2 清除 spu_img_url 子级行筛选（spu 粒度金额），当前行 series 筛选在 L2 保留，候选自动限定在当前有效 series 内 | 符合                                                                                                                                              |
 
@@ -116,7 +117,7 @@ Series Sales Performance 是 SKU Sales Tracking Tab 的特别系列子模块，�
 ## 2. 现状分析
 
 - 数据底表 `s02_trade_sku_data_d`（SKU 粒度交易表，dt 日粒度）：net_sales_amt 为 Power Query 取数时新增列（`ROUND(product_qty * sales_price, 6) AS net_sales_amt`）；数量口径字段为 product_qty（net_sales_amt 由 product_qty × sales_price 行级计算而来，二者同源）；MD 分子字段 md_price、分母字段 msrp 均为行级字段（行级乘积后求和）；维度含 dt、platform、shop_name、division 及 special_series、spu_id、spu_img_url 等全部商品维度字段
-- 数据底表 `s02_inventory_stock_sales_detail_d`（库存+销售+补货 SKU 模型表，dt 日快照）：msrp_inv_amt（吊牌库存金额）为期末库存金额口径字段；stock_inv_qty（在库库存数量）为 §19 EOH Unit 口径字段；inv_qty（库存数量）为 §24 / §25 / §27 ST% 库存分母口径字段；维度含 dt、division、special_series、spu_id 等商品维度字段；**无 platform / shop_name 字段**（渠道筛选不影响库存侧指标，口径限制见注意事项 1）
+- 数据底表 `s02_inventory_stock_sales_detail_d`（库存+销售+补货 SKU 模型表，dt 日快照）：msrp_inv_amt（吊牌库存金额）为期末库存金额口径字段；stock_inv_qty（在库库存数量）为 §19 EOH Unit 口径字段；inv_qty（库存数量）为 §24 / §25 / §27 ST% 库存分母口径字段；维度含 dt、division、special_series、spu_id 等商品维度字段；**无 platform / shop_name 字段**（渠道筛选不影响库存侧指标；ST% 销售侧自 v1.1 起同步改为全渠道，见注意事项 1、20）
 - 模型关系：两张事实表之间**无模型关系**，行维度值（special_series / spu_id）向库存类指标传递不依赖模型关系，全部经 DAX TREATAS 显式桥接；日期筛选器（Slicer_Time_Frame_Min_This / Max_This）为断开维度，时间范围在 DAX 中显式筛选；渠道切片器（Platform / Store Name）与 trade 表一对多关联自动传递；商品维度切片器与两张事实表已建关系的筛选自动传递（Division 确认与两表关联）；Slicer_Currency_Selection 为断开维度，币种符号与汇率经 SELECTEDVALUE 读取
 - **新增 special_series 多选切片器**：直接绑定 `s02_trade_sku_data_d[special_series]`（事实表列，多选），不新建维度表、不加模型关系；因日期筛选器为断开维度，切片器项不会随日期自动收敛，需要以度量做的视觉对象级筛选显式实现「仅展示当期有值项」（见 §1.7 / §4.33）
 - Slicer_Time_Frame_Max_This 已含 Fiscal_Year_First_Day 字段（取数 SQL 按 TimeFrame_Min 落入的财年区间自关联 dim_t00_bi_fiscal_calendar 生成），YTD 区间起点直接读取该字段，无需在 DAX 内推导财年
@@ -165,7 +166,7 @@ Visual Filters（视觉对象筛选，0/1）
 - **明细行传递 spu_id 而非 series 值，且不传递 url**：单 spu 的库存值与渠道筛选无关（inv 表无渠道字段，spu_id 为精确值匹配），渠道筛选只影响哪些 AXC 行出现在表格中，不影响单 AXC 的库存值；行区域含 spu_img_url 时，url 明细行与 spu 层小计行均满足 ISINSCOPE(spu_id)（url 是 spu 的子级属性，不参与库存传递粒度）——一对多异常时同一 spu 的多个 url 行显示相同的 spu 级库存值，为可接受的降级行为（inv 表 url 与 trade 表 url 不保证同步，按 (spu, url) 双列传递存在库存漏计风险）
 - **汇总行传递 special_series 而非 spu_id 集合**：`VALUES(trade[spu_id])` 在汇总行受渠道 / 商品维度筛选约束（trade 侧可见 spu 集合），若传递 spu 集合会使库存汇总随渠道筛选收窄，与「库存侧指标不受渠道筛选影响」口径矛盾；传递 series 单值时 inv 侧聚合该 series 全部库存，仅受与 inv 表已建关系的商品维度切片器（Division）影响
 - **期末快照日先经 REMOVEFILTERS(整表) 确定性取值**：`__EndPeriodDate` 在 TREATAS 分支之外计算，快照日不随行上下文或切片器漂移
-- ST% 类（§24 / §25 / §27）为跨表双分母结构：销售侧分子沿用 trade 表行筛选自动传递，库存侧加项按同一分层 TREATAS 桥接，分子与库存加项在同一行粒度（明细 = spu、汇总 = series）上配对相除
+- ST% 类（§24 / §25 / §27）为跨表双分母结构：销售侧分子沿用 trade 表行筛选自动传递（v1.1 起整表 `REMOVEFILTERS` 两张渠道维度表 = 全渠道，不再受全局 Platform / Store Name 切片器影响），库存侧加项按同一分层 TREATAS 桥接，分子与库存加项在同一行粒度（明细 = spu、汇总 = series）上配对相除
 
 ### 3.3 占比分母的维度移除与 series 非空还原
 
@@ -919,6 +920,9 @@ Series Sales YTD ST% (Unit) Value =
 // 说明: ST% 库存字段为 inv_qty（库存数量），与 EOH Unit 的 stock_inv_qty
 //       为不同字段，按口径文档分别使用；分子分母同步上卷后相除；
 //       数量口径不涉及币种换算
+// 渠道: 销售侧分子全渠道（v1.1）——整表 REMOVEFILTERS('Slicer_Platform_Selection') /
+//       ('Slicer_Store_Name')，切断全局渠道切片器经 1:N 关系的传导；
+//       库存侧 inv 表无 platform / shop_name 字段，天然全渠道
 // ========================================
 
 // ── YTD 时间区间（财年第一天 ~ this period 最后一天）──
@@ -932,10 +936,12 @@ VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 分子：该行粒度 YTD 销售数量（trade 表行筛选自动传递）──
+// ── 分子：该行粒度 YTD 销售数量（trade 表行筛选自动传递；全渠道，v1.1）──
 VAR __YtdSalesQty =
     CALCULATE(
         SUM('s02_trade_sku_data_d'[product_qty]),
+        REMOVEFILTERS('Slicer_Platform_Selection'),
+        REMOVEFILTERS('Slicer_Store_Name'),
         's02_trade_sku_data_d'[dt] >= __FyFirstDay,
         's02_trade_sku_data_d'[dt] <= __PeriodMax
     )
@@ -994,6 +1000,9 @@ Series Sales YTD ST% (Amt) Value =
 // 数据底表: s02_trade_sku_data_d（sales）；s02_inventory_stock_sales_detail_d（inv）
 // 行维度传递: 同 YTD ST% (Unit) Value（明细传 spu_id / 汇总传 special_series / 总计不传）
 // 说明: 分子分母均为原始 RMB 聚合（不经汇率换算），占比不受币种选择影响
+// 渠道: 销售侧分子全渠道（v1.1）——整表 REMOVEFILTERS('Slicer_Platform_Selection') /
+//       ('Slicer_Store_Name')，切断全局渠道切片器经 1:N 关系的传导；
+//       库存侧 inv 表无 platform / shop_name 字段，天然全渠道
 // ========================================
 
 // ── YTD 时间区间（财年第一天 ~ this period 最后一天）──
@@ -1007,10 +1016,12 @@ VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 分子：该行粒度 YTD 销售金额（原始 RMB）──
+// ── 分子：该行粒度 YTD 销售金额（原始 RMB；全渠道，v1.1）──
 VAR __YtdSalesAmt =
     CALCULATE(
         SUM('s02_trade_sku_data_d'[net_sales_amt]),
+        REMOVEFILTERS('Slicer_Platform_Selection'),
+        REMOVEFILTERS('Slicer_Store_Name'),
         's02_trade_sku_data_d'[dt] >= __FyFirstDay,
         's02_trade_sku_data_d'[dt] <= __PeriodMax
     )
@@ -1098,6 +1109,9 @@ Series Sales LTD ST% (Unit) Value =
 // 行维度传递: 同 YTD ST% (Unit) Value（明细传 spu_id / 汇总传 special_series / 总计不传）
 // 说明: ST% 库存字段为 inv_qty；LTD 销售侧受模型加载窗口限制（见注意事项 7）；
 //       数量口径不涉及币种换算
+// 渠道: 销售侧分子全渠道（v1.1）——整表 REMOVEFILTERS('Slicer_Platform_Selection') /
+//       ('Slicer_Store_Name')，切断全局渠道切片器经 1:N 关系的传导；
+//       库存侧 inv 表无 platform / shop_name 字段，天然全渠道
 // ========================================
 
 // ── LTD 时间上限（this period 最后一天）──
@@ -1110,10 +1124,12 @@ VAR __EndPeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 // ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
 VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 
-// ── 分子：该行粒度 LTD 销售数量（trade 表行筛选自动传递）──
+// ── 分子：该行粒度 LTD 销售数量（trade 表行筛选自动传递；全渠道，v1.1）──
 VAR __LtdSalesQty =
     CALCULATE(
         SUM('s02_trade_sku_data_d'[product_qty]),
+        REMOVEFILTERS('Slicer_Platform_Selection'),
+        REMOVEFILTERS('Slicer_Store_Name'),
         's02_trade_sku_data_d'[dt] <= __PeriodMax
     )
 
@@ -1727,7 +1743,7 @@ RETURN
 
 ## 8. 注意事项
 
-1. **inv 表无渠道字段**：s02_inventory_stock_sales_detail_d 无 platform / shop_name 字段，库存类全部指标（EOH 系列、ST% 库存加项）与库存占比分母不受 Platform / Store Name 筛选影响，仅受 date + 与 inv 表已建关系的商品维度切片器（Division）影响；销售类全部指标受 date + 渠道 + 商品维度筛选影响。series 汇总行的 EOH / ST% 覆盖 inv 表中该 series 全部库存（含 trade 侧无销售记录的 spu），可能大于表格内可见 AXC 行库存之和——行为符合口径（库存为时点全量，与渠道筛选无关）
+1. **inv 表无渠道字段与 ST% 全渠道（v1.1）**：s02_inventory_stock_sales_detail_d 无 platform / shop_name 字段，库存类全部指标（EOH 系列、ST% 库存加项）与库存占比分母不受 Platform / Store Name 筛选影响，仅受 date + 与 inv 表已建关系的商品维度切片器（Division）影响；销售类指标受 date + 渠道 + 商品维度筛选影响，**例外：ST% 销售侧（§24 / §25 / §27）自 v1.1 起全渠道**——分子整表 `REMOVEFILTERS('Slicer_Platform_Selection')` / `REMOVEFILTERS('Slicer_Store_Name')`，与库存侧对齐（见注意事项 20）。series 汇总行的 EOH / ST% 覆盖 inv 表中该 series 全部库存（含 trade 侧无销售记录的 spu），可能大于表格内可见 AXC 行库存之和——行为符合口径（库存为时点全量，与渠道筛选无关）
 2. **行维度传递的层级判定**：库存类指标的 TREATAS 桥接依赖 ISINSCOPE(spu_id) / ISINSCOPE(special_series) 判定行层级（明细 / 汇总 / 总计三分支）。若后续在行区域增删字段或调整层级，需同步复核各库存类度量的分支判定
 3. **期末时点只取单日**：EOH 系列与 ST% 库存加项取 end period 范围内最后一个快照日的单日值；快照表按日存储，对整段区间求和会把库存重复计数。快照缺数时在 end period 窗口内自动回退到最近一天（口径定义为 this period 最后一天）
 4. **快照日 REMOVEFILTERS 机制**：`__EndPeriodDate` 用 // ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
@@ -1747,3 +1763,4 @@ VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
 17. **special_series 切片器的影响范围**：切片器绑定 trade 表列，选择后销售类指标（SLS / AUR / MD / YTD / LTD 销售侧）与行轴自动收紧；库存类指标不受影响——inv 表无模型关系，明细行经 TREATAS(spu_id) 取值、汇总行经 TREATAS(special_series) 取值，值本身与切片器无关；库存占比分母（§18 / §20）与表格总计行的库存汇总不受切片器影响（分母口径为 inv 表全量有效 series）。如需库存侧也跟随切片器，须在对应分支 / 分母加 `KEEPFILTERS(TREATAS(VALUES('s02_trade_sku_data_d'[special_series]), 's02_inventory_stock_sales_detail_d'[special_series]))`，属口径变更需先与业务确认
 18. **占比分母与切片器的关系**：SLS Amt% / SLS Unit% 分母 `REMOVEFILTERS(special_series, spu_id, spu_img_url)` 会一并移除切片器在 special_series 上的筛选，占比仍以**全量有效 series** 为分母（符合「移除表格中所有维度字段」口径，选中部分 series 后占比合计 < 100%）。如需改为「所选 series 内占比」，将分母的 `REMOVEFILTERS(三列)` 改为 `REMOVEFILTERS(spu_id, spu_img_url) + ALLSELECTED('s02_trade_sku_data_d'[special_series])`（ALLSELECTED 还原切片器选择、仅移除当前行 series 筛选），并同步更新口径文档
 19. **切片器项显示的实现方式与兼容性**：「仅展示当期有值项」依赖度量做的**视觉对象级别筛选**（切片器 →「此视觉对象上的筛选器」→ [Series Sales Slicer IsVisible] = 1）。该方式要求度量在切片器项上下文逐项求值（Power BI Desktop 2022 年及以后版本可用）；若个别旧版本不生效，可退化为对切片器项不做限制、由表格 IsEmpty 筛选保证空白行不显示，或改用 Power Query 生成的 series 维度表（静态标记，无法随日期动态收敛，不推荐）。另：已选 series 在日期区间切换后若无数据，其项虽被隐藏但选择可能保留在筛选器状态中，需用户重新选择或点「清除筛选」
+20. **ST% 全渠道口径（v1.1）**：§24 / §25 / §27 销售侧分子在原有时间条件前追加整表 `REMOVEFILTERS('Slicer_Platform_Selection')`、`REMOVEFILTERS('Slicer_Store_Name')`——两张渠道维度表与 `s02_trade_sku_data_d` 为一对多关系，全局 Platform / Store Name 切片器的筛选会经关系传导到 sales 侧聚合，仅库存侧天然全渠道会造成分子分母口径不一致（分数随渠道失真）。REMOVEFILTERS 必须作用于渠道维度表**整表**（维度表含 sort_order 按列排序字段，列级写法剥离不净），**不可写 `REMOVEFILTERS(事实表)`**（会把行维度 series / spu_id / spu_img_url 及商品维度经关系传播的筛选一并清掉）。改动仅影响三个 ST% 度量，其余销售类指标（SLS Amt / Unit / 占比 / AUR / MD / YTD·LTD SLS Unit）渠道行为不变；ST% 结果不再随渠道切片器变化

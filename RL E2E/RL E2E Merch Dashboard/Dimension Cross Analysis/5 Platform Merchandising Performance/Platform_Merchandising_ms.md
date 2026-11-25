@@ -1,6 +1,6 @@
 # Platform Merchandising Performance 矩阵解决方案
 
-> **版本**: v1.1
+> **版本**: v1.2（ST% 改为全渠道口径：分子（sales 侧）整表 REMOVEFILTERS Slicer_Platform_Selection / Slicer_Store_Name，与无渠道维度的分母库存对齐，度量名称不变；SLS Amt% 分母 ALLSELECTED 由列级 + 显式排序列组合改为 Slicer_Framework / Slicer_Category **整表**写法（与 EOH Amt% 统一，消除排序列 auto-existence 残留导致占比恒 100% 的隐患），详见 §3.4 / §3.6 / §4.1 / §4.2 / 注意事项 5、16、18）。v1.1
 > **模块**: RL E2E Merch Dashboard - Dimension Cross Analysis Tab - Platform Merchandising Performance（子模块八）
 > **关联口径**: 口径文档/口径Markdown格式/Dimension Cross Analysis.md - 子模块八：Platform Merchandising Performance（§34-§39）+ 口径文档/口径Markdown格式/actual除target逻辑详情.md（TAR 类指标五粒度规则）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
@@ -25,7 +25,7 @@ Platform Merchandising Performance 是按 Framework + Category 展开的渠道 �
   - Store 组 39 列：TTL（9 列）+ Tmall / JD / RLE / DY_Family / DY_W / DY_MN（各 5 列）
   - TTL 列组合（9 列）: SLS Amt% / vs LP / EOH Units / EOH Amt / EOH Amt% / ST% / TAR ACH% / MTD TAR Progress / YTD TAR Progress
   - 非 TTL 列组合（5 列）: SLS Amt% / vs LP / TAR ACH% / MTD TAR Progress / YTD TAR Progress
-  - EOH Units / EOH Amt / EOH Amt% / ST% 仅 TTL 列展示——库存类指标按全渠道口径（inv 表无渠道字段）；
+  - EOH Units / EOH Amt / EOH Amt% / ST% 仅 TTL 列展示——均为全渠道口径（库存表无渠道字段；ST% 分子自 v1.2 起整表 REMOVEFILTERS 两张渠道维度表）；
     TAR 三指标（TAR ACH% / MTD TAR Progress / YTD TAR Progress）按渠道口径在全部 Label 列展示
 - **行**：层级结构 `Slicer_Framework[framework]`（父层）> `Slicer_Category[category]`（子层），均取自 Slicer_ 维度表，与三张事实表一对多关联，行筛选经模型关系自动传导
 - **行自动隐藏**：矩阵在检测到该行所有度量值均为 BLANK() 时自动隐藏该行（包括层级行）；Display 度量值空值一律返回 BLANK()（非 "-""），由矩阵自动隐藏机制消化
@@ -48,6 +48,7 @@ Platform Merchandising Performance 是按 Framework + Category 展开的渠道 �
 | Store        | Tmall / JD / RLE / DY_Family / DY_W / DY_MN | TM / JD / RLE_CN / DY_Family / DY_W / DY_M | 过滤 [shop_name]                                                       |
 
 **TTL 特殊处理**：度量值中对 [platform] / [shop_name] 应用 ALLSELECTED——移除视觉对象内部的渠道筛选，保留外部切片器（Slicer_Platform_Selection / Slicer_Store_Name 等）的筛选，即 TTL = 外部筛选上下文下的全渠道合计。
+**ST% 例外（v1.2）**：ST% 仅存在于 TTL 列，分子整表 REMOVEFILTERS Slicer_Platform_Selection / Slicer_Store_Name = 全渠道，不随外部渠道切片器变化（与无渠道维度的分母库存对齐，见 §3.6）；其余 TTL 列仍保留外部切片器。
 
 **渠道上下文对三张事实表对称生效**：sales 侧（[platform] / [shop_name]）与 fcst 侧（a05[platform] / a05[shop_name]）各构造一组同构的渠道上下文过滤器；a05 事实表无 TTL 预聚合值，TTL 列 target 由 ALLSELECTED 汇总取得，不存在重复计数。inv 表无 platform / shop_name 字段，渠道上下文不作用于库存侧。
 
@@ -135,7 +136,7 @@ Platform Merchandising Performance 是按 Framework + Category 展开的渠道 �
 
 ```
 Act Base Value / LY Base Value
-    ←  渠道上下文路由（ChannelGroup + Label_Value，TTL 走 ALLSELECTED；sales 侧与 fcst 侧同构）
+    ←  渠道上下文路由（ChannelGroup + Label_Value，TTL 走 ALLSELECTED；sales 侧与 fcst 侧同构；ST% 分子例外 → 全渠道）
        + 品牌断开维度显式过滤（VALUES(Slicer_Label_Default_Value[label]) + 'fact'[brand] IN，sales / inv / a05 三侧）
        + ColType 指标路由 + 时间粒度分支（TAR 类）+ 行维度自然传导，保留 RMB 原始值
     ↓
@@ -161,18 +162,18 @@ Cell Font Color / Cell Background Color
 | Platform 组非 TTL | [platform] = Label_Value（与外部切片器取交集）            | ALLSELECTED([shop_name])（外部切片器自然生效）  |
 | Store 组非 TTL    | ALLSELECTED([platform])（外部切片器自然生效）             | [shop_name] = Label_Value（与外部切片器取交集） |
 
-实现为表变量：sales 侧 `__PlatformCtx` / `__ShopNameCtx`（基于 sales 表两列），fcst 侧 `__FcstPlatformCtx` / `__FcstShopNameCtx`（基于 a05 表两列，构造逻辑完全同构）——均为 UNION + FILTER 构造（保证表类型稳定），作为 CALCULATE 过滤器分别传入 sales 侧与 fcst 侧聚合。
+实现为表变量：sales 侧 `__PlatformCtx` / `__ShopNameCtx`（基于 sales 表两列），fcst 侧 `__FcstPlatformCtx` / `__FcstShopNameCtx`（基于 a05 表两列，构造逻辑完全同构）——均为 UNION + FILTER 构造（保证表类型稳定），作为 CALCULATE 过滤器分别传入 sales 侧与 fcst 侧聚合（**ST% 分子除外**，见 §3.6；品牌过滤 `[brand] IN __Labels` 与 ST% 分子共存，不受影响）。
 
 ### 3.3 指标口径（ColType 路由）
 
 | ColType          | 数据底表    | 时间口径             | 公式                                                                                  | 格式        |
 | ---------------- | ----------- | -------------------- | ------------------------------------------------------------------------------------- | ----------- |
-| SLS Amt%         | sales       | This Period 区间     | 单元格 SLS Amt / 该列渠道全部行合计（分母 ALLSELECTED framework + category 两行维度） | percent_0dp |
+| SLS Amt%         | sales       | This Period 区间     | 单元格 SLS Amt / 该列渠道全部行合计（分母 ALLSELECTED framework + category 两行维度表【整表】） | percent_0dp |
 | vs LP            | sales       | This / Last 区间     | SLS Amt% This - SLS Amt% Last（差值原始小数）                                         | integer_bp  |
 | EOH Units        | inv         | 期末快照单日         | sum(inv_qty)                                                                          | integer     |
 | EOH Amt          | inv         | 期末快照单日         | sum(msrp_inv_amt)（业务定义 EOH Units × msrp）                                        | currency    |
 | EOH Amt%         | inv         | 期末快照单日         | 当前行 EOH Amt ÷ ALLSELECTED 行维度下全部行合计（分母 ALLSELECTED 整表，计算同 SLS Amt% 模式） | percent_0dp |
-| ST%              | sales + inv | This 区间 / 期末快照 | This SLS Amt /（This SLS Amt + 期末库存金额）                                         | percent_0dp |
+| ST%              | sales + inv | This 区间 / 期末快照 | This SLS Amt（全渠道）/（This SLS Amt + 期末库存金额）                                | percent_0dp |
 | TAR ACH%         | sales + a05 | This / This 区间     | This actual / This target                                                             | percent_0dp |
 | MTD TAR Progress | sales + a05 | 见 §1.4 粒度矩阵    | This actual / 分母区间 target（随粒度分支）                                           | percent_0dp |
 | YTD TAR Progress | sales + a05 | 见 §1.4 粒度矩阵    | This actual / 分母区间 target（随粒度分支）                                           | percent_0dp |
@@ -181,12 +182,31 @@ Cell Font Color / Cell Background Color
 
 | 指标             | 分子                                                             | 分母                                                                                                                                                |
 | ---------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SLS Amt%         | 当前单元格 SLS Amt（列渠道上下文 + 当前行 framework / category） | 同渠道上下文 + ALLSELECTED(Slicer_Framework[framework],Slicer_Framework[sort_order]) + ALLSELECTED(Slicer_Category[category])（该列渠道全部行合计） |
+| SLS Amt%         | 当前单元格 SLS Amt（列渠道上下文 + 当前行 framework / category） | 同渠道上下文 + ALLSELECTED(Slicer_Framework) + ALLSELECTED(Slicer_Category)（两行维度表【整表】，该列渠道全部行合计）                                  |
 | vs LP（bp 差值） | SLS Amt% This（同渠道上下文，This Period 区间）                  | SLS Amt% Last（同渠道上下文，Last Period 区间，分母 ALLSELECTED 同构）                                                                              |
 
-- ALLSELECTED 两个行维度字段：移除视觉对象内部的行维度筛选、保留外部切片器；framework 上行时 category 无内部筛选（ALLSELECTED 为无操作），展开到 category 时同理——一套分母逻辑同时覆盖 §34-§36（framework 行）与 §37（category 行）
-- **EOH Amt% 分母与 SLS Amt% 分母的 ALLSELECTED 写法差异**：EOH Amt%（v1.1 新增）分母按整表 `ALLSELECTED(Slicer_Framework)` / `ALLSELECTED(Slicer_Category)` 移除——整表移除一并清除 sort_order 排序列经按列排序传递的隐藏筛选（列级写法在排序列 1:1 反推下分母退化为当前行、占比恒 100%）；SLS Amt% 分母沿用列级 + 显式排序列组合写法（v1.0 既有口径，按「不改变其余指标逻辑」保持不动）
+- ALLSELECTED 两个行维度表【整表】：移除视觉对象内部的行维度筛选、保留外部切片器；framework 上行时 category 无内部筛选（整表 ALLSELECTED 为无操作），展开到 category 时同理——一套分母逻辑同时覆盖 §34-§36（framework 行）与 §37（category 行）
+- **SLS Amt% 与 EOH Amt% 分母的 ALLSELECTED 写法已统一为整表（v1.2）**：两者均按 `ALLSELECTED(Slicer_Framework)` / `ALLSELECTED(Slicer_Category)` 整表移除——Slicer_ 维度表含 sort_order 排序列并经按列排序绑定，列级写法（含 v1.0 的列级 + 显式排序列组合）在排序列 1:1 反推（auto-existence）下排序列筛选独自存活，分母退化为当前行、占比恒 100%；整表移除一并清除值列与排序列筛选，分母恢复外部筛选下的全量
 - vs LP 值层为占比差值原始小数（如 -0.0152），×10000 转 bp 在 Cell Display 层完成（本模块为矩阵纯展示场景，无 Y 轴绑定）；落地格式不含正号（-152bp / 0bp）
+
+### 3.5 ALLSELECTED 写法规范（v1.2）
+
+本模块 ALLSELECTED 分两类：
+
+- **维度表**（Slicer_Framework / Slicer_Category）：一律【整表】写法。维度表含 sort_order 排序列并经按列排序绑定，行维度值列在视觉对象查询中被隐式并入 GroupBy 并合并为表粒度组合筛选（auto-existence），列级 ALLSELECTED 无法剥离排序列筛选，排序列与值列 1:1 反推等价于原值筛选 → 分母退化为当前行、占比恒 100%。
+- **事实表列**（sales[platform] / sales[shop_name] / a05[platform] / a05[shop_name]）：保持列级 `ALLSELECTED(fact[col])`。事实表这些列没有按列排序、无排序列隐藏筛选；且不能写 `ALLSELECTED(fact)` 整表——整表会连行维度（framework / category）与品牌筛选一并移除，破坏渠道路由与占比分母范围。
+
+### 3.6 ST% 全渠道口径（v1.2）
+
+| 指标 | 分子                                       | 分母                                          |
+| ---- | ------------------------------------------ | --------------------------------------------- |
+| ST%  | This Period 净销售金额（sales，**全渠道**） | This Period 销售金额 + 期末库存金额（inv，期末单日） |
+
+- **实现**：新增 `__STSLSAmt_This`（不传 `__PlatformCtx` / `__ShopNameCtx`，改为 `REMOVEFILTERS('Slicer_Platform_Selection')` + `REMOVEFILTERS('Slicer_Store_Name')` 整表），`__STPct = DIVIDE(__STSLSAmt_This, __STSLSAmt_This + __EOHAmt)`；品牌过滤 `[brand] IN __Labels` 保留。
+- **为什么只移除维度表就够**：渠道切片器的筛选落在维度表上，sales 的渠道过滤是它经 1:N 关系传播的结果；移除维度表整表后没有渠道筛选可传播，等价于全渠道。
+- **为什么不加 `REMOVEFILTERS(sales)`**：会把行维度（framework / category）与品牌经关系传播的筛选一并清掉，分子变成全量而分母仍为当前行 → 比率错误。
+- **成立前提**：渠道筛选只来自这两张维度表、维度表到 sales 的关系为单向。若有筛选器直接使用事实表 `platform` / `shop_name` 字段，需补事实表**列级** REMOVEFILTERS（仍不可整表）。
+- **预期表现**：切换 Platform / Store 切片器，SLS Amt% / vs LP / TAR 类随之变化，ST% 不变；Platform TTL 与 Store TTL 两列 ST% 同值。
 
 ---
 
@@ -347,17 +367,18 @@ VAR __SLSAmt_This =
     )
 
 // ═══ SLS Amt%（§34-§37 占比；分母 = 该列渠道全部行合计）═══
-// 分母 ALLSELECTED 两个行维度字段（framework / category，均取自 Slicer_ 维度表）：
-// 移除视觉对象内部行维度筛选，保留外部切片器；framework 上行时 category 无内部筛选
-//（ALLSELECTED 为无操作），展开到 category 时同理——一套逻辑覆盖 §34-§36 与 §37
+// 分母 ALLSELECTED 两个行维度表【整表】（Slicer_Framework / Slicer_Category，v1.2 起）：
+// 整表移除一并清掉值列与 sort_order 排序列经按列排序传递的隐藏筛选（列级写法在排序列
+// 1:1 反推下分母退化为当前行、占比恒 100%）；framework 上行时 category 整表 ALLSELECTED
+// 为无操作，展开到 category 时同理——一套逻辑覆盖 §34-§36 与 §37
 VAR __SLSAmt_Total_Channel =
     CALCULATE(
         SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
         __PlatformCtx,
         __ShopNameCtx,
         'a02_e2e_product_performance_sales_summary_d'[brand] IN __Labels,
-        ALLSELECTED(Slicer_Framework[framework],Slicer_Framework[sort_order]),
-        ALLSELECTED(Slicer_Category[category]),
+        ALLSELECTED(Slicer_Framework),
+        ALLSELECTED(Slicer_Category),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
     )
@@ -393,11 +414,26 @@ VAR __EOHAmt_Total =
     )
 VAR __EOHAmtPct = DIVIDE(__EOHAmt, __EOHAmt_Total)
 
-// ═══ ST%（售罄率%金额，仅 TTL 列，§39）═══
-// 分子: This Period SLS Amt（TTL 渠道上下文 + 行维度关系传导）
+// ═══ ST%（售罄率%金额，仅 TTL 列，§39；v1.2 全渠道口径）═══
+// 分子: This Period SLS Amt（全渠道）——不传 __PlatformCtx / __ShopNameCtx（TTL 分支 =
+//   ALLSELECTED([platform])，仍保留外部渠道切片器），改为 REMOVEFILTERS 渠道两张维度表
+//   【整表】：inv 表无 platform / shop_name，分母天然全渠道，分子同步全渠道才与分母对齐。
+//   切片器筛选落在维度表上经 1:N 关系传播到 sales，移除维度表整表即无渠道筛选可传播。
+//   整表而非列级（维度表有按列排序字段，排序列隐藏筛选会独自存活）。
+//   不要写 REMOVEFILTERS(sales)：会把行维度 / 品牌筛选经关系传播过来的筛选一并清掉。
+//   品牌过滤 [brand] IN __Labels 保留；Platform TTL 与 Store TTL 两列同值
 // 分母: This Period SLS Amt + 期末快照日单日库存金额；任一侧 BLANK 按 0 参与加法
 //（DAX 算术运算 BLANK 当 0），两侧均空时 DIVIDE 返回 BLANK
-VAR __STPct = DIVIDE(__SLSAmt_This, __SLSAmt_This + __EOHAmt)
+VAR __STSLSAmt_This =
+    CALCULATE(
+        SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        REMOVEFILTERS('Slicer_Platform_Selection'),
+        REMOVEFILTERS('Slicer_Store_Name'),
+        'a02_e2e_product_performance_sales_summary_d'[brand] IN __Labels,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+    )
+VAR __STPct = DIVIDE(__STSLSAmt_This, __STSLSAmt_This + __EOHAmt)
 
 // ═══ TAR target（a05 三区间汇总，渠道上下文与 sales 侧同构，行维度关系自动传导）═══
 // a05 与日期筛选器断开维度，三区间均为度量值内显式 data_date 过滤
@@ -467,7 +503,7 @@ RETURN
         "EOH Units",        __EOHUnits,       // EOH Units Act（仅 TTL 列，sum(inv_qty)）
         "EOH Amt",          __EOHAmt,        // EOH Amt Act（仅 TTL 列，sum(msrp_inv_amt)）
         "EOH Amt%",         __EOHAmtPct,     // EOH Amt% Act（仅 TTL 列，占比分母 ALLSELECTED 整表）
-        "ST%",              __STPct,          // ST% Act（仅 TTL 列）
+        "ST%",              __STPct,          // ST% Act（仅 TTL 列；全渠道，v1.2）
         "TAR ACH%",         IF(ISBLANK(__TARAchPct)&& NOT ISBLANK(__SLSAmtPct),"-",__TARAchPct),      // TAR ACH% Act（全部 Label 列，渠道上下文随列位置）
         "MTD TAR Progress", IF(ISBLANK(__MTDProgress)&& NOT ISBLANK(__SLSAmtPct),"-",__MTDProgress),    // MTD TAR Progress Act
         "YTD TAR Progress", IF(ISBLANK(__YTDProgress)&& NOT ISBLANK(__SLSAmtPct),"-",__YTDProgress),    // YTD TAR Progress Act
@@ -493,7 +529,7 @@ Platform Merchandising LY Base Value =
 // 度量值: Platform Merchandising LY Base Value
 // Display Folder: Platform Merchandising Performance\Base Metrics
 // 用途: vs LP 派生指标的 Last Period 基线 = SLS Amt% Last（LP 分子 / LP 分母，
-//       分母 ALLSELECTED 行维度与 This 侧同构），渠道上下文与 Act Base Value 完全一致
+//       分母 ALLSELECTED 行维度表【整表】与 This 侧同构），渠道上下文与 Act Base Value 完全一致
 //       （同列同渠道对比）
 // 说明: 仅在 Base Value 总路由的 vs LP 分支中被调用（ColType = "vs LP" 时有效）；
 //       Last Period 直接读 Slicer_Time_Frame_Min_Last / Max_Last 筛选器；
@@ -569,8 +605,8 @@ VAR __SLSAmt_Total_LP =
         __PlatformCtx,
         __ShopNameCtx,
         'a02_e2e_product_performance_sales_summary_d'[brand] IN __Labels,
-        ALLSELECTED(Slicer_Framework[framework],Slicer_Framework[sort_order]),
-        ALLSELECTED(Slicer_Category[category]),
+        ALLSELECTED(Slicer_Framework),
+        ALLSELECTED(Slicer_Category),
         'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
         'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
     )
@@ -928,16 +964,17 @@ Platform Merchandising Cell Background Color =
 2. **跨财月 / 跨财年判定**：不区分粒度，直接比较 Min_This 与 Max_This 两表的 Month_Value / Year_Value 字段（财月年均为文本类型，如 "2027-08" / "2027"）；时间粒度另行读取 `SELECTEDVALUE(Slicer_Time_Frame[TimeFrame_ID])`。两表各自独立被切片器筛选、互相无关系，SELECTEDVALUE 后拼接比较。
 3. **a05 无 TTL 预聚合值**：TTL 列 target 由 ALLSELECTED(a05[platform]) / ALLSELECTED(a05[shop_name]) 汇总取得（与 sales 侧同构），明细列按 Label_Value 直接过滤 a05 渠道字段；不存在汇总行重复计数问题。a05 与日期筛选器断开维度，target 三区间均为度量值内显式 data_date 过滤。
 4. **行维度关系传导**：矩阵行取自 Slicer_Framework[framework] / Slicer_Category[category] 维度表字段，与 sales / inv / a05 三张事实表均为一对多关联，行筛选自动传导——inv 侧（EOH / ST% 库存）与 fcst 侧（target）均无需 TREATAS 桥接。若模型中任一维度表与某事实表未建关系，对应侧需补建关系或回退 TREATAS 显式传递。
-5. **SLS Amt% 分母口径**：该列渠道上下文 + ALLSELECTED(Slicer_Framework[framework],Slicer_Framework[sort_order]) + ALLSELECTED(Slicer_Category[category])（该列渠道全部行合计）。口径文档待确认项「Platform Merchandising Category SLS Amt% 分母范围」按列指标表「SLS Amt% 路由键 + 行维度切换」设计实现；若业务确认为其他分母（如全局合计），仅需调整 `__SLSAmt_Total_Channel` 的 ALLSELECTED 范围（同步调整 LY Base Value 的 `__SLSAmt_Total_LP`）。
+5. **SLS Amt% 分母口径**：该列渠道上下文 + ALLSELECTED(Slicer_Framework) + ALLSELECTED(Slicer_Category)（两行维度表【整表】，该列渠道全部行合计）。口径文档待确认项「Platform Merchandising Category SLS Amt% 分母范围」按列指标表「SLS Amt% 路由键 + 行维度切换」设计实现；若业务确认为其他分母（如全局合计），仅需调整 `__SLSAmt_Total_Channel` 的 ALLSELECTED 范围（同步调整 LY Base Value 的 `__SLSAmt_Total_LP`）。**v1.2 起为整表写法**（原列级 + 显式排序列组合已废止，原因见注意事项 16 / §3.5）。
 6. **vs LP 分子重路由必须整表 REMOVEFILTERS 的原因**：矩阵列头三层（ChannelGroup > Label > ColName）在视觉对象查询（SUMMARIZECOLUMNS）中以 GroupBy 组合筛选形式存在，`REMOVEFILTERS(Dim[ColName])` 单列写法无法从组合筛选中剥离 ColName 部分，残留的 ColName（vs LP 列）筛选与新加的 `ColType = "SLS Amt%"` 互斥 → Dim 表空集 → 分子始终 BLANK；正确模式 = CALCULATE 外捕获 ChannelGroup / Label_Value 标量 + `REMOVEFILTERS(整表)` + 三条件重建（ChannelGroup + Label_Value + ColType 唯一定位单行）。ChannelGroup / Label 层汇总单元格无唯一 ColType → BLANK。
 7. **vs LP 为占比差值 bp 口径**：SLS Amt% This - SLS Amt% Last（差值原始小数），×10000 转 bp 在 Display 层完成（本模块为矩阵纯展示场景，无 Y 轴 / 数值排序绑定）；落地格式不含正号（-152bp / 0bp）。若后续 vs LP 需绑定图表 Y 轴或数值排序，×10000 需移至 Value 层并同步调整 Display。
-8. **TTL 的 ALLSELECTED 语义**：TTL 列对 [platform] / [shop_name] 应用 ALLSELECTED——移除视觉对象内部的渠道筛选，保留外部切片器，即外部筛选上下文下的全渠道合计；不选或多选 Label 时 SELECTEDVALUE 默认 "TTL"。
+8. **TTL 的 ALLSELECTED 语义**：TTL 列对 [platform] / [shop_name] 应用 ALLSELECTED——移除视觉对象内部的渠道筛选，保留外部切片器，即外部筛选上下文下的全渠道合计；**ST% 例外（v1.2）**：分子整表 REMOVEFILTERS 两张渠道维度表，不受外部渠道切片器影响（见注意事项 18）；不选或多选 Label 时 SELECTEDVALUE 默认 "TTL"。
 9. **非 TTL 列与外部渠道切片器的交集关系**：Platform / Store 列的渠道过滤基于 ALLSELECTED 集与 Label_Value 取交集。如外部 platform 切片器仅选 TM，则 JD 列返回空（外部切片器限定数据范围）。
-10. **inv 表无渠道字段**：a02_e2e_product_performance_inv_summary_d 无 platform / shop_name，渠道上下文不作用于库存侧；EOH Units / EOH Amt / EOH Amt% / ST% 仅 TTL 列展示，其值实际为全渠道口径。EOH Amt 与 EOH Units 业务上为「数量 × msrp」关系（同一快照日、同一行维度筛选下分别对 msrp_inv_amt / inv_qty 求和），二者口径独立、不互相推导。
+10. **inv 表无渠道字段**：a02_e2e_product_performance_inv_summary_d 无 platform / shop_name，渠道上下文不作用于库存侧；EOH Units / EOH Amt / EOH Amt% / ST% 仅 TTL 列展示，其值实际为全渠道口径（ST% 分子自 v1.2 起显式整表 REMOVEFILTERS 渠道维度表，与分母库存对齐，见注意事项 18）。EOH Amt 与 EOH Units 业务上为「数量 × msrp」关系（同一快照日、同一行维度筛选下分别对 msrp_inv_amt / inv_qty 求和），二者口径独立、不互相推导。
 11. **期末时点机制**：期末日期 = end period 最后一天，直接读 `SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])` 单日过滤（`__EndPeriodDate_This`；Max_This 表为断开维度，读值不随行维度 / 商品切片器漂移）；快照表按日存储只取单日，整段区间求和会重复计数库存；该日快照缺数时指标为空，不回退取范围内最近一天（与口径「end period 最后一天」一致）。EOH Units / EOH Amt / EOH Amt%（分子分母）/ ST% 分母库存共用此机制。
 12. **汇率换算分层**：Base Value 层始终保留 RMB 原始值；换算集中在 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1，仅 EOH Amt 金额类）；Cell Display 只拼接 Currency_Symbol。金额类判定用 Metric_IsCurrencyAmount；TAR / SLS Amt% / EOH Amt% / ST% / vs LP 为比率或差值，不受币种影响。
 13. **Display 空值返回 BLANK()**：区别于文本 "-" 占位，空值一律返回 BLANK()，使矩阵在整行所有度量值均为 BLANK 时自动隐藏该行（包括 framework / category 层级行），无需额外 IsEmpty 视觉级筛选器。
 14. **字段名已核对数据字典**：net_sales_amt / platform / shop_name / framework / category（sales 表）；inv_qty / msrp_inv_amt（inv 表）；fcst_sales_amt / data_date / platform / shop_name / brand / framework / category（a05 表）；日期字段统一为 data_date（date 类型）。
 15. **DAX 语法规范**：文本常量使用双引号，单引号仅用于表名，列名使用方括号；渠道上下文过滤器用 UNION + FILTER 构造（IF 分支返回表会被降级为标量）；与口径文档存在争议时一切以口径文档为准。
-16. **EOH Amt% 分母必须整表 ALLSELECTED**：`ALLSELECTED(Slicer_Framework)` / `ALLSELECTED(Slicer_Category)` 整表移除——Slicer_ 维度表含 sort_order 排序列（framework 按 sort_order 按列排序），列级 ALLSELECTED 写法下排序列筛选经按列排序 1:1 反推（auto-existence）残留，分母退化为当前行 → 占比恒 100%；整表移除一并清除排序列隐藏筛选，分母 = 该列渠道上下文下全部行合计。SLS Amt% 分母（v1.0 既有口径）采用列级 + 显式排序列组合写法，按「不改变其余指标逻辑」保持不动；若后续 SLS Amt% 也出现占比恒 100% 现象，可参照本条整体迁移至整表写法。
+16. **占比分母 ALLSELECTED 必须整表（v1.2 起 SLS Amt% 与 EOH Amt% 统一）**：`ALLSELECTED(Slicer_Framework)` / `ALLSELECTED(Slicer_Category)` 整表移除——Slicer_ 维度表含 sort_order 排序列（framework 按 sort_order 按列排序），列级写法（含 v1.0 的「列级 + 显式排序列」组合）下排序列筛选经按列排序 1:1 反推（auto-existence）残留，分母退化为当前行 → 占比恒 100%；整表移除一并清除值列与排序列隐藏筛选，分母 = 该列渠道上下文下全部行合计。This 侧（`__SLSAmt_Total_Channel`、`__EOHAmt_Total`）与 LY 侧（`__SLSAmt_Total_LP`）三处同构。
 17. **品牌筛选器断开维度（Slicer_Label_Default_Value，v1.2）**：本模块品牌筛选由原 Slicer_Label（一对多关系自动传导）改为 Slicer_Label_Default_Value（本模块专属，结构与 Slicer_Label 一致、值域 = 事实表 [brand] distinct 值，与 sales / inv / a05 三张事实表**全部断开关系**），度量值内 `VALUES(Slicer_Label_Default_Value[label])` + `'fact'[brand] IN __Labels` 显式过滤（Act 8 处 / LY 2 处 CALCULATE 全覆盖；Base Value 总路由的 vs LP 分支经 Act / LY 继承，无需另加）。语义：单选 / 多选 → 选中集合过滤；全不选 → VALUES 返回整表 → IN 等价无筛选（全部品牌）；**默认值 "M Polo" 由报表保存时切片器初始选中状态实现，DAX 层不兜底**（用户清空选择 = 回到全部品牌，而非回落 M Polo——此为有意取舍）。brand 谓词为普通显式过滤器，各占比分母的 ALLSELECTED 仅作用于 framework / category / platform / shop_name 列，不会剥离 brand 过滤——分母仍限定在选中品牌内，占比口径不变。值域必须与 [brand] 严格一致（含大小写 / 空格），不匹配将得到空结果。**页面配置红线**：本页面原 Slicer_Label 切片器必须移除（关系仍在，保留会继续传导并与显式过滤叠加冲突）；新切片器不与其他页面的 Slicer_Label 同步切片器；其他模块继续使用 Slicer_Label（关系保留），零影响。
+18. **ST% 全渠道（v1.2）**：ST% 分子新增 `__STSLSAmt_This`，不传 `__PlatformCtx` / `__ShopNameCtx`，改为 `REMOVEFILTERS('Slicer_Platform_Selection')` + `REMOVEFILTERS('Slicer_Store_Name')`（渠道两张维度表【整表】）；分母 `__EOHAmt` 不变；品牌过滤 `[brand] IN __Labels` 保留；度量名称不变。三条结论：① `REMOVEFILTERS` 渠道维度表整表即可切断切片器对事实表的筛选（事实表的渠道过滤是维度表筛选经 1:N 关系传播的结果），**不需要也不应该加 `REMOVEFILTERS(sales)`**——整表移除会误删行维度 / 品牌经关系传播的筛选；② 必须整表而非列级（维度表有按列排序字段）；③ 前提是渠道筛选只来自这两张维度表且关系单向，若有筛选器直接使用事实表 platform / shop_name 字段，需补事实表列级 REMOVEFILTERS。预期：切换渠道切片器，SLS Amt% / vs LP / TAR 类变化，ST% 不变。

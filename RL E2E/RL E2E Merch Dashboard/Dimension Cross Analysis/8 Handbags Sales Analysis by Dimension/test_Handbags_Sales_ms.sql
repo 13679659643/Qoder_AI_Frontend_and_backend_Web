@@ -15,7 +15,9 @@
 -- ★参数区★（当前为字面量直嵌，修改参数时对四段全文替换对应日期 / 维度值）
 -- 渠道 Button_Store_Name: 'TTL'（六店铺实际值 IN：TM / JD / RLE_CN / DY_Family /
 --                        DY_W / DY_M；单渠道对数时将 IN (...) 替换为
---                        shop_name = '对应实际值'，四段同步替换）
+--                        shop_name = '对应实际值'，四段同步替换）；
+--                        例外：ST% 分子（v1.1 全渠道）不替换——各段 st_agg
+--                        不带 shop_name 条件，单渠道时保持原样
 -- This Period:     dt ∈ ['2026-03-29', '2026-07-25']（区间汇总）
 -- Last Period:     dt ∈ ['2025-03-30', '2025-07-26']（区间汇总，vs LP 基线，
 --                  对比期由 Last Period 日期切片器决定，调整切片器时同步替换）
@@ -38,8 +40,10 @@
 --   4. 占比分母 = 窗口 SUM() OVER ()（对应 DAX ALLSELECTED(trade 五个动态
 --      维度列) 整体移除行区域分组——分母恒为 Handbags + 当前渠道 + 所选
 --      期间全量，与分组粒度 / 字段参数选择无关；LP 分母同理）
---   5. EOH 库存侧不附加渠道条件（inv 表无 shop_name 字段），与 trade 侧
---      渠道口径不对称为模型物理限制（ST% 分子分母同样不对称）
+--   5. EOH 库存侧不附加渠道条件（inv 表无 shop_name 字段）；ST% 销售侧自
+--      v1.1 起亦为全渠道（独立 st_agg CTE，不带 shop_name 条件；DAX 侧
+--      整表 REMOVEFILTERS 两张渠道维度表），两侧口径已对齐；ST% 结果
+--      不随渠道按钮 / 全局渠道切片器变化
 --   6. 期末时点只取快照日单日（不可区间求和）；快照当日缺数时 PBI 度量值
 --      回退到对应范围内最近一个快照日，SQL 对比时如发现快照日无数据需
 --      相应调整日期
@@ -87,6 +91,15 @@ inv_total AS (
     FROM indep_rl_dw.s02_inventory_stock_sales_detail_d
     WHERE ax_class = 'Handbags'
       AND dt IN ('2026-07-25', '2025-07-26')
+),
+-- ST% 分子（v1.1 全渠道）：不带 shop_name 条件，与库存侧对齐
+st_total AS (
+    SELECT
+        SUM(CASE WHEN dt BETWEEN '2026-03-29' AND '2026-07-25'
+                 THEN ROUND(product_qty * sales_price, 6) END)     AS st_sls_amt_this
+    FROM indep_rl_dw.s02_trade_sku_data_d
+    WHERE ax_class = 'Handbags'
+      AND dt BETWEEN '2026-03-29' AND '2026-07-25'
 )
 SELECT
     'TOTAL'                                                         AS Row_Dimension,
@@ -104,11 +117,12 @@ SELECT
           OR i.eoh_unit_lp = 0 THEN NULL
         ELSE i.eoh_unit_this / i.eoh_unit_lp - 1
     END                                                             AS EOH_Unit_vs_LP,
-    COALESCE(t.sls_amt_this, 0)
-        / NULLIF(COALESCE(t.sls_amt_this, 0) + COALESCE(i.inv_amt_this, 0), 0)
+    COALESCE(s.st_sls_amt_this, 0)
+        / NULLIF(COALESCE(s.st_sls_amt_this, 0) + COALESCE(i.inv_amt_this, 0), 0)
                                                                     AS ST_Pct
 FROM trade_total t
-CROSS JOIN inv_total i;
+CROSS JOIN inv_total i
+CROSS JOIN st_total s;
 
 
 -- ======================================================================
@@ -148,6 +162,16 @@ inv_agg AS (
     WHERE ax_class = 'Handbags'
       AND dt IN ('2026-07-25', '2025-07-26')
     GROUP BY spu_model
+),
+-- ST% 分子（v1.1 全渠道）：不带 shop_name 条件，与库存侧对齐
+st_agg AS (
+    SELECT
+        spu_model,
+        SUM(ROUND(product_qty * sales_price, 6))                   AS st_sls_amt_this
+    FROM indep_rl_dw.s02_trade_sku_data_d
+    WHERE ax_class = 'Handbags'
+      AND dt BETWEEN '2026-03-29' AND '2026-07-25'
+    GROUP BY spu_model
 )
 SELECT
     'spu_model'                                                     AS Row_Dimension,
@@ -167,12 +191,13 @@ SELECT
           OR i.eoh_unit_lp = 0 THEN NULL
         ELSE i.eoh_unit_this / i.eoh_unit_lp - 1
     END                                                             AS EOH_Unit_vs_LP,
-    COALESCE(t.sls_amt_this, 0)
-        / NULLIF(COALESCE(t.sls_amt_this, 0) + COALESCE(i.inv_amt_this, 0), 0)
+    COALESCE(s.st_sls_amt_this, 0)
+        / NULLIF(COALESCE(s.st_sls_amt_this, 0) + COALESCE(i.inv_amt_this, 0), 0)
                                                                     AS ST_Pct
 FROM dim_values dv
 LEFT JOIN trade_agg t ON dv.spu_model <=> t.spu_model
 LEFT JOIN inv_agg   i ON dv.spu_model <=> i.spu_model
+LEFT JOIN st_agg    s ON dv.spu_model <=> s.spu_model
 ORDER BY dv.spu_model IS NULL, dv.spu_model;
 
 
@@ -216,6 +241,17 @@ inv_agg AS (
     WHERE ax_class = 'Handbags'
       AND dt IN ('2026-07-25', '2025-07-26')
     GROUP BY spu_model, ax_sub_class
+),
+-- ST% 分子（v1.1 全渠道）：不带 shop_name 条件，与库存侧对齐
+st_agg AS (
+    SELECT
+        spu_model,
+        ax_sub_class,
+        SUM(ROUND(product_qty * sales_price, 6))                   AS st_sls_amt_this
+    FROM indep_rl_dw.s02_trade_sku_data_d
+    WHERE ax_class = 'Handbags'
+      AND dt BETWEEN '2026-03-29' AND '2026-07-25'
+    GROUP BY spu_model, ax_sub_class
 )
 SELECT
     'spu_model+ax_sub_class'                                        AS Row_Dimension,
@@ -236,8 +272,8 @@ SELECT
           OR i.eoh_unit_lp = 0 THEN NULL
         ELSE i.eoh_unit_this / i.eoh_unit_lp - 1
     END                                                             AS EOH_Unit_vs_LP,
-    COALESCE(t.sls_amt_this, 0)
-        / NULLIF(COALESCE(t.sls_amt_this, 0) + COALESCE(i.inv_amt_this, 0), 0)
+    COALESCE(s.st_sls_amt_this, 0)
+        / NULLIF(COALESCE(s.st_sls_amt_this, 0) + COALESCE(i.inv_amt_this, 0), 0)
                                                                     AS ST_Pct
 FROM dim_values dv
 LEFT JOIN trade_agg t
@@ -246,6 +282,9 @@ LEFT JOIN trade_agg t
 LEFT JOIN inv_agg   i
     ON dv.spu_model  <=> i.spu_model
    AND dv.ax_sub_class <=> i.ax_sub_class
+LEFT JOIN st_agg    s
+    ON dv.spu_model  <=> s.spu_model
+   AND dv.ax_sub_class <=> s.ax_sub_class
 ORDER BY dv.spu_model IS NULL, dv.spu_model, dv.ax_sub_class IS NULL, dv.ax_sub_class;
 
 
@@ -297,6 +336,20 @@ inv_agg AS (
     WHERE ax_class = 'Handbags'
       AND dt IN ('2026-07-25', '2025-07-26')
     GROUP BY spu_model, ax_sub_class, product_type, ax_class, sku_size
+),
+-- ST% 分子（v1.1 全渠道）：不带 shop_name 条件，与库存侧对齐
+st_agg AS (
+    SELECT
+        spu_model,
+        ax_sub_class,
+        product_type,
+        ax_class,
+        sku_size,
+        SUM(ROUND(product_qty * sales_price, 6))                   AS st_sls_amt_this
+    FROM indep_rl_dw.s02_trade_sku_data_d
+    WHERE ax_class = 'Handbags'
+      AND dt BETWEEN '2026-03-29' AND '2026-07-25'
+    GROUP BY spu_model, ax_sub_class, product_type, ax_class, sku_size
 )
 SELECT
     'detail_5dim'                                                   AS Row_Dimension,
@@ -320,8 +373,8 @@ SELECT
           OR i.eoh_unit_lp = 0 THEN NULL
         ELSE i.eoh_unit_this / i.eoh_unit_lp - 1
     END                                                             AS EOH_Unit_vs_LP,
-    COALESCE(t.sls_amt_this, 0)
-        / NULLIF(COALESCE(t.sls_amt_this, 0) + COALESCE(i.inv_amt_this, 0), 0)
+    COALESCE(s.st_sls_amt_this, 0)
+        / NULLIF(COALESCE(s.st_sls_amt_this, 0) + COALESCE(i.inv_amt_this, 0), 0)
                                                                     AS ST_Pct
 FROM dim_values dv
 LEFT JOIN trade_agg t
@@ -336,6 +389,12 @@ LEFT JOIN inv_agg   i
    AND dv.product_type       <=> i.product_type
    AND dv.ax_class     <=> i.ax_class
    AND dv.sku_size     <=> i.sku_size
+LEFT JOIN st_agg    s
+    ON dv.spu_model    <=> s.spu_model
+   AND dv.ax_sub_class <=> s.ax_sub_class
+   AND dv.product_type       <=> s.product_type
+   AND dv.ax_class     <=> s.ax_class
+   AND dv.sku_size     <=> s.sku_size
 ORDER BY dv.spu_model IS NULL, dv.spu_model,
          dv.ax_sub_class IS NULL, dv.ax_sub_class,
          dv.product_type IS NULL, dv.product_type,

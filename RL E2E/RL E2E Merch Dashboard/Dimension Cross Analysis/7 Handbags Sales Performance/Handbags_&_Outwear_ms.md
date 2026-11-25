@@ -1,6 +1,6 @@
 # Handbags & Outwear Sales Performance 矩阵解决方案
 
-> **版本**: v1.0
+> **版本**: v1.1（ST% 改为全渠道口径：销售侧新增 `__STSLSAmt_This`，整表 `REMOVEFILTERS('Slicer_Platform_Selection')` / `REMOVEFILTERS('Slicer_Store_Name')` 切断全局渠道切片器经 1:N 关系的传导、不带 `__ShopNameCtx`，与无渠道字段的库存侧分母对齐，度量名称不变，详见 §3.2 / §3.5 / §4.1 / 注意事项 6。v1.0 为首版）
 > **模块**: RL E2E Merch Dashboard - Dimension Cross Analysis Tab - Handbags Sales Performance
 > **关联口径**: 口径文档/口径Markdown格式/Dimension Cross Analysis.md - 子模块十：Handbags Sales Performance（§43-§47）
 > **数据底表（销售类）**: s02_trade_sku_data_d
@@ -26,7 +26,7 @@ Handbags Sales Performance 是 Handbags/Outerwear 前置品类筛选下的 Model
 
 | 路由维度 | 来源 | 类型 | 说明 |
 | -------- | ---- | ---- | ---- |
-| 渠道 | Dim_ColMetric_Handbags&Outwear_Sales_ms 的 Label_Value | 断开列维度 | 过滤事实表 [shop_name]；Label_Value = "TTL" 时走 ALLSELECTED 全店铺合计 |
+| 渠道 | Dim_ColMetric_Handbags&Outwear_Sales_ms 的 Label_Value | 断开列维度 | 过滤事实表 [shop_name]；Label_Value = "TTL" 时走 ALLSELECTED 全店铺合计。**例外：ST% 销售侧为全渠道（v1.1）**——整表 `REMOVEFILTERS('Slicer_Platform_Selection')` / `REMOVEFILTERS('Slicer_Store_Name')`，不随渠道列 / 店铺切片器变化，与库存侧口径对齐（见 3.5） |
 | 指标 | Dim_ColMetric_Handbags&Outwear_Sales_ms 的 ColType | 断开列维度 | 8 种：SLS Unit / SLS Amt / SLS Amt% / Amt vs LP / ST% / EOH / EOH vs LP / Amt% vs LP |
 | 行维度 | Slicer_Spu_Model[spu_model] | 维度表字段（一对多关系 × 2） | 行筛选经模型关系自动传导到 trade / inv 双表（Slicer_Spu_Model 与两张事实表均一对多关系）；占比分母移除行维度筛选用 ALLSELECTED 整表（见 3.4） |
 
@@ -45,7 +45,7 @@ Handbags Sales Performance 是 Handbags/Outerwear 前置品类筛选下的 Model
 
 | 口径 | 时间范围 | 适用指标 |
 | ---- | -------- | -------- |
-| This Period（区间类） | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] | SLS Unit、SLS Amt、SLS Amt% 分子分母、Amt vs LP 分子、Amt% vs LP this 侧占比分子分母、ST% 销售侧 |
+| This Period（区间类） | dt ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] | SLS Unit、SLS Amt、SLS Amt% 分子分母、Amt vs LP 分子、Amt% vs LP this 侧占比分子分母、ST% 销售侧（全渠道，v1.1） |
 | Last Period（vs LP 基线，区间类） | dt ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] | Amt vs LP 分母、Amt% vs LP last 侧占比分子分母 |
 | End Period This（期末时点类） | end period 最后一天 = Slicer_Time_Frame_Max_This[TimeFrame_Max]（直接单日过滤） | EOH、EOH vs LP this 侧、ST% 库存侧 |
 | End Period LP（期末时点类） | end period LP 最后一天 = Slicer_Time_Frame_Max_Last[TimeFrame_Max]（直接单日过滤） | EOH vs LP 分母 |
@@ -112,6 +112,8 @@ Cell Font Color / Cell Background Color
 
 实现为表变量 `__ShopNameCtx`（UNION+FILTER 构造，保证表类型稳定——IF 分支返回表表达式会被降级为标量，禁用），作为 CALCULATE 过滤器统一传入所有 trade 侧聚合。ChannelGroup 仅 Store 一组，无需 ChannelGroup 分支判定。
 
+**ST% 例外（v1.1）**：ST% 销售侧分子不使用 `__ShopNameCtx`，改为整表 `REMOVEFILTERS('Slicer_Platform_Selection')` / `REMOVEFILTERS('Slicer_Store_Name')` —— 全渠道口径，与库存侧（inv 表无渠道字段）对齐；两张渠道维度表与 `s02_trade_sku_data_d` 均为一对多关系，切片器筛选会经关系传导，必须移除维度表本身（不可移除事实表，否则连行维度 / 品类经关系传播的筛选一并清掉）。ST% 仅存在于 TTL 列，TTL 下 `__ShopNameCtx` 本身已是全店铺合计，此改动只影响外部渠道切片器生效时的结果。
+
 ### 3.3 指标口径（ColType 路由）
 
 | ColType | 数据底表 | 时间口径 | 公式 | 格式 |
@@ -120,7 +122,7 @@ Cell Font Color / Cell Background Color
 | SLS Amt | trade | This Period 区间 | sum(net_sales_amt)（§44） | currency |
 | SLS Amt% | trade | This Period 区间 | 单元格 SLS Amt / Handbags/Outerwear 筛选范围内全 model 合计（§45） | percent_0dp |
 | Amt vs LP | trade | This / Last 区间 | SLS Amt This / SLS Amt Last - 1（§44 附属） | percent_0dp |
-| ST% | trade + inv | This 区间 / This 快照单日 | SLS Amt /（SLS Amt + 期末库存金额 msrp_inv_amt）（§46） | percent_0dp |
+| ST% | trade + inv | This 区间 / This 快照单日 | SLS Amt /（SLS Amt + 期末库存金额 msrp_inv_amt）；销售侧全渠道（整表 REMOVEFILTERS Slicer_Platform_Selection / Slicer_Store_Name，v1.1）（§46） | percent_0dp |
 | EOH | inv | This 快照单日 | sum(stock_inv_qty)（§47） | integer |
 | EOH vs LP | inv | 双期快照单日 | EOH This / EOH LP - 1（§47 附属） | percent_0dp |
 | Amt% vs LP | trade | This / Last 区间 | SLS Amt% This - SLS Amt% Last（差值，×10000 转 bp 在 Display 层）（§45 附属） | integer_bp |
@@ -139,7 +141,7 @@ EOH / EOH vs LP / ST% 库存侧取数 inv 表，行维度筛选经模型关系�
 
 - **共享维度传导**：Slicer_Spu_Model 与 s02_inventory_stock_sales_detail_d 建立一对多关系——矩阵行（Slicer_Spu_Model[spu_model]）的行筛选沿关系自动传导到 inv 表，明细行限定当前行 model，与 trade 侧传导路径对称（维度表 → 两张事实表各一条 1:N 关系），无需 TREATAS 桥接；Power BI 筛选只沿已建立的关系传递，同名字段（trade[spu_model] / inv[spu_model]）之间无关系不会自动传递，两侧均以 Slicer_Spu_Model 为桥即可达
 - **前置品类关系传导**：品类筛选由视觉对象筛选器（Slicer_Category）经与 trade / inv 双侧一对多关系自动传导——度量值内零品类硬编码，后续前置品类调整（如改为其他 category 值 / 增删值）仅需修改视觉对象筛选器配置，无需触碰任何 DAX；口径文档 'Outwear' 已确认为笔误，实际值 'Outerwear'
-- **渠道不作用**：inv 表无 shop_name / platform 字段，渠道上下文不作用于 inv 侧——EOH / EOH vs LP / ST% 库存侧不受渠道列影响（三者仅存在于 TTL 列，无跨渠道列对比问题）；ST% 分子分母渠道口径不对称为模型物理限制，业务需知悉
+- **渠道不作用**：inv 表无 shop_name / platform 字段，渠道上下文不作用于 inv 侧——EOH / EOH vs LP / ST% 库存侧不受渠道列影响（三者仅存在于 TTL 列，无跨渠道列对比问题）；ST% 销售侧自 v1.1 起改为全渠道（整表 `REMOVEFILTERS('Slicer_Platform_Selection')` / `REMOVEFILTERS('Slicer_Store_Name')`），分子分母两侧均为全渠道，口径已对齐
 - **总计行语义**：总计行无 spu_model 行分组，trade / inv 两侧均不限定 model——总计 = Handbags/Outerwear 品类全量（行值域 Slicer_Spu_Model 仅 3 个 model，品类下其余 model 计入总计但不展示明细行），总计 ≠ 明细行之和；业务若需总计 = 展示行之和，关闭矩阵总计行即可（见注意事项 5）
 - 与 Handbags_Sales_ms（子模块十一）谓词放行模式的差异：该方案行维度来自字段参数动态展开（行字段属于 trade 表，inv 无从经关系接收），必须 ISINSCOPE + VALUES 谓词桥接；本方案行维度有专门维度表且与双表建关系，行筛选由模型自动传递，写法最简
 
@@ -172,6 +174,9 @@ Handbags & Outwear Sales Act Base Value =
 //       双表，无需显式处理（无 TREATAS 桥接）
 // 前置筛选: category 筛选由视觉对象筛选器（Slicer_Category）经与 trade / inv 双侧
 //       一对多关系自动传导，度量值内零品类硬编码（后续品类切换仅改筛选器配置）
+// 渠道口径: 除 ST% 外全部按 __ShopNameCtx 路由（TTL = 全店铺合计）；
+//       ST% 销售侧全渠道（v1.1）——整表 REMOVEFILTERS('Slicer_Platform_Selection') /
+//       ('Slicer_Store_Name')，与库存侧 inv 表天然无渠道字段的口径对齐
 // 汇率换算: 不在此度量值处理，保持原始 CNY，由 Cell Value 层统一换算
 // ========================================
 
@@ -244,15 +249,25 @@ VAR __EOHUnit =
     )
 
 // ═══ ST%（售罄率%金额，仅 TTL 列；跨 trade + inv 双表）═══
-// 分子: This Period SLS Amt（渠道上下文 + 行维度自然传导）
+// 分子: This Period SLS Amt，全渠道（v1.1）——整表 REMOVEFILTERS 两张渠道维度表
+//       （Slicer_Platform_Selection / Slicer_Store_Name），不带 __ShopNameCtx、
+//       不带渠道列判定；行维度仍经 Slicer_Spu_Model 关系自然传导
 // 分母加项: This 期末快照日单日库存金额（行维度 / 品类均经关系传导）
 // 分母加法任一侧 BLANK 按 0 处理（DAX 算术运算 BLANK 当 0）
+VAR __STSLSAmt_This =
+    CALCULATE(
+        SUM('s02_trade_sku_data_d'[net_sales_amt]),
+        REMOVEFILTERS('Slicer_Store_Name'),
+        REMOVEFILTERS('Slicer_Platform_Selection'),
+        's02_trade_sku_data_d'[dt] >= __PeriodMin,
+        's02_trade_sku_data_d'[dt] <= __PeriodMax
+    )
 VAR __InvAmt_End =
     CALCULATE(
         SUM('s02_inventory_stock_sales_detail_d'[msrp_inv_amt]),
         's02_inventory_stock_sales_detail_d'[dt] = __EndPeriodDate_This
     )
-VAR __STPct = DIVIDE(__SLSAmt_This, __SLSAmt_This + __InvAmt_End)
+VAR __STPct = DIVIDE(__STSLSAmt_This, __STSLSAmt_This + __InvAmt_End)
 
 RETURN
     SWITCH(
@@ -725,7 +740,7 @@ Handbags & Outwear Sales Cell Background Color =
 3. **SLS Amt% 分母必须 ALLSELECTED 整表**：Slicer_Spu_Model 含 sort_order 排序字段，spu_model 通过"按列排序（Sort by Column）"绑定 sort_order——矩阵行按 spu_model 分组时查询会同时按 spu_model + sort_order 组合分组，`ALLSELECTED('Slicer_Spu_Model'[spu_model])` 单列写法无法剥离 sort_order 部分的组合筛选（行维度筛选残留 → 分母恒等于分子 → 占比恒 100%）；必须使用 `ALLSELECTED('Slicer_Spu_Model')` 整表写法恢复整表外部筛选状态。不使用 REMOVEFILTERS——其会移除列上全部筛选器（含外部显式筛选），前置筛选直接配置于 trade[category] 列的场景下会误删。
 4. **vs LP 分子重路由必须整表 REMOVEFILTERS**：矩阵列头三层在视觉对象查询（SUMMARIZECOLUMNS）中以 GroupBy 组合筛选形式存在，`REMOVEFILTERS(Dim[ColName])` 单列写法无法剥离 ColName 部分，残留的 Amt% vs LP 类列筛选与新加的基础 ColType 互斥 → Dim 表空集 → 分子始终 BLANK；正确模式 = CALCULATE 外捕获 ChannelGroup / Label_Value 标量 + `REMOVEFILTERS(整表)` + 三条件重建（ChannelGroup + Label_Value + 基础 ColType 唯一定位单行）。ChannelGroup / Label 层汇总单元格无唯一 ColType → BLANK → Display 返回 BLANK()。
 5. **前置品类关系传导（建模前提）与总计行语义**：行维度经 Slicer_Spu_Model → trade / inv、品类经 Slicer_Category → trade / inv 双侧一对多关系自动传导，度量值内零行维度 / 品类硬编码（无 TREATAS、无 IN 清单）——后续品类 / 行维度调整仅需修改视觉对象筛选器与维度表配置；若模型中 Slicer_Category 未与 inv 建关系，需在 inv 侧 3 处聚合（__EOHUnit / __InvAmt_End / __EOHUnit_LP）回退显式条件 `inv[category] IN {...}`。总计行无 spu_model 行分组，trade / inv 两侧均为品类全量——行值域 Slicer_Spu_Model 仅 3 个 model，品类下其余 model 计入总计但不展示明细行（总计 ≠ 明细行之和）；业务若需总计 = 展示行之和，关闭矩阵总计行即可。
-6. **inv 表无渠道字段**：s02_inventory_stock_sales_detail_d 无 shop_name / platform，渠道上下文不作用于 inv 侧——EOH / EOH vs LP / ST% 库存侧不受渠道列影响；三者仅存在于 TTL 列（无跨渠道列对比问题），ST% 分子分母渠道口径不对称为模型物理限制，业务需知悉。
+6. **inv 表无渠道字段与 ST% 全渠道（v1.1）**：s02_inventory_stock_sales_detail_d 无 shop_name / platform，渠道上下文不作用于 inv 侧——EOH / EOH vs LP / ST% 库存侧不受渠道列影响；三者仅存在于 TTL 列（无跨渠道列对比问题）。ST% 销售侧自 v1.1 起同步改为全渠道（`__STSLSAmt_This` 用整表 `REMOVEFILTERS('Slicer_Platform_Selection')` / `REMOVEFILTERS('Slicer_Store_Name')`，不带 `__ShopNameCtx`）——两张渠道维度表与 trade 表一对多关系、切片器筛选经关系传导，必须移除维度表整表（维度表含 sort_order 按列排序字段，列级写法剥离不净；不可移除事实表，否则清掉行维度 / 品类筛选）。分子分母两侧均全渠道，口径已对齐。
 7. **Display 层 BLANK 返回 BLANK()（本模块特有）**：不返回 "-"——矩阵检测到该行全部度量值均为 BLANK() 时自动隐藏该行（含层级行，需所有指标均为 BLANK()），行可见性由矩阵原生机制承担，无需 IsEmpty 视觉级筛选器；代价是单元格级空值与行级隐藏不可区分（业务已确认接受）。
 8. **期末时点口径**：期末日期 = end period 最后一天（This = `SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])`、LP = `SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])`，直接单日过滤——两张日期表均为断开维度，读值不随行维度 / 切片器上下文漂移）；快照表按日存储只取单日，对整段区间求和会重复计数库存；该日快照缺数时指标为空，不回退取范围内最近一天（与口径「end period 最后一天」一致）。
 9. **net_sales_amt 列来源**：模型内为 Power Query 行级计算列（ROUND(product_qty × sales_price, 6)），数据库无此列——测试 SQL 验证时按行级乘积还原，不可直接引用数据库 net_sales_amt（若底表存在同名字段以取数 SQL 为准核对）。
@@ -734,4 +749,4 @@ Handbags & Outwear Sales Cell Background Color =
 12. **汇率换算分层**：Base Value 层始终保留 CNY 原始值（vs LP 派生计算口径一致）；换算集中在 Cell Value（÷ Currency_ExchangeRate，RMB 时汇率 = 1）；Cell Display 只拼接 Currency_Symbol。金额类判定用 Metric_IsCurrencyAmount；Amt vs LP / Amt% vs LP / EOH vs LP 为派生比率，分子分母同币种不换算。
 13. **渠道上下文过滤器构造**：`__ShopNameCtx` 用 UNION+FILTER 构造（IF 分支返回表表达式会被降级为标量，禁用——项目内已两次实证），作为 CALCULATE 表过滤器统一传入所有 trade 侧聚合；TTL = ALLSELECTED（外部筛选上下文下的全店铺合计），非 TTL = Label_Value 精确匹配（与外部店铺切片器取交集，外部仅选 TM 时 JD 列返回空）。
 14. **口径与语法**：口径文档中定义的所有指标必须遵守其数据类型与数据格式（percent_0dp 不含正号、integer_bp ×10000 转 bp、currency 币种符号 + 千分位整数），与解决方案存在争议时一切以口径文档为准；DAX 文本常量使用双引号，单引号仅用于表名，列名使用方括号，例如：`[category] IN {"Handbags", "Outerwear"}`。
-15. **测试 SQL**：test_Handbags_&_Outwear_ms.sql（本目录，MySQL 8.0+，字面量直嵌不支持变量，两段独立执行）——段 1 TTL 7 指标（行 = spu_model）、段 2 六店铺 4 指标（行 = Store × spu_model，Store 列区分）；NULL 语义逐项对齐 DAX（占比分子 NULL 输出 0 / Amt vs LP 的 this NULL 按 0 处理 / ST% 单侧 NULL 按 0 / Amt% vs LP 输出原始差值小数，×10000 转 bp 在 Display 层）；参数区见文件头注释（This / Last Period 区间与双期快照日，修改时全文替换）。
+15. **测试 SQL**：test_Handbags_&_Outwear_ms.sql（本目录，MySQL 8.0+，字面量直嵌不支持变量，两段独立执行）——段 1 TTL 7 指标（行 = spu_model）、段 2 六店铺 4 指标（行 = Store × spu_model，Store 列区分）；NULL 语义逐项对齐 DAX（占比分子 NULL 输出 0 / Amt vs LP 的 this NULL 按 0 处理 / ST% 单侧 NULL 按 0 / Amt% vs LP 输出原始差值小数，×10000 转 bp 在 Display 层）；ST% 销售侧全渠道（v1.1，段 1 无渠道条件，与 DAX 整表 REMOVEFILTERS 口径一致）；参数区见文件头注释（This / Last Period 区间与双期快照日，修改时全文替换）。

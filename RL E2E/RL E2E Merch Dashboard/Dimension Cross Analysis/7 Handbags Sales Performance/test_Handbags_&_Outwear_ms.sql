@@ -27,8 +27,10 @@
 --      若底表存在六值外 shop_name（含空串/NULL），页面会包含该部分，差异需核对
 --   5. 品类筛选对齐视觉对象筛选器（Slicer_Category = Handbags/Outerwear 经双侧
 --      关系传导）：trade / inv 两侧 WHERE 均带 category IN ('Handbags', 'Outerwear')
---   6. EOH / ST% 库存侧不受渠道影响（inv 无渠道字段）；ST% 分子含六值渠道、
---      库存侧不限渠道，分子分母渠道口径不对称为模型物理限制
+--   6. EOH / ST% 库存侧不受渠道影响（inv 无渠道字段）；ST% 销售侧自 v1.1 起亦为
+--      全渠道（DAX：整表 REMOVEFILTERS('Slicer_Platform_Selection') /
+--      ('Slicer_Store_Name')），分子分母两侧口径已对齐；
+--      本 SQL 段 1 无渠道收窄条件，与该口径一致
 --   7. NULL 语义逐项对齐 DAX:
 --      SLS Unit / SLS Amt / EOH 无记录 → NULL（页面 BLANK）
 --      SLS Amt% 分子 NULL → 0（分母非 NULL，对齐 DIVIDE(BLANK,x)=0）；分母 NULL → NULL
@@ -38,7 +40,9 @@
 --      Amt% vs LP(bp): 任一侧占比 NULL → NULL；输出原始差值小数（页面 ×10000 转 bp:
 --      -0.0152 → -152bp）
 --   8. 对数假设无外部渠道切片器筛选（TTL / 店铺列均按全量口径）；若页面存在
---      外部 Slicer_Store_Name 筛选，两侧需同步收窄
+--      外部 Slicer_Store_Name 筛选，两侧需同步收窄——例外（v1.1）：ST% 销售侧
+--      全渠道，即使切片器生效该指标也不收窄，对数时其余指标按切片器收窄、
+--      ST% 仍用本文件段 1 无渠道条件的结果
 -- ============================================================
 
 -- ══════════════════════════════════════════════════════════════

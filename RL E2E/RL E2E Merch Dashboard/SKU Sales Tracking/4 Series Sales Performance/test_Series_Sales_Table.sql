@@ -17,6 +17,10 @@
 -- Platform / Store Name / 其余商品维度: 全选（等价不筛选；如需单项筛选，
 --                        在两段 WHERE 中按需附加条件，trade 侧与 inv 侧
 --                        已建关系的字段才会同时影响两侧）
+--                        例外（v1.1）：YTD / LTD ST%（指标 §24 §25 §27）销售
+--                        侧为全渠道口径，DAX 整表 REMOVEFILTERS 两张渠道
+--                        维度表，不随 Platform / Store 切片器变化；本 SQL
+--                        两段均未附加渠道条件，即为该口径，逻辑不变
 --
 -- 口径还原说明:
 --   1. 两表实际日期字段为 dt（非 data_date），已按数据字典核对
@@ -37,7 +41,9 @@
 --      inv[special_series])，覆盖该 series 全部库存，含 trade 侧无销售
 --      记录的 spu，不受渠道筛选影响——inv 表无 platform / shop_name 字段）
 --   6. EOH / ST% 库存加项取期末单日时点（dt = '2026-07-25'）；ST% 库存字段
---      为 inv_qty（≠ EOH Unit 的 stock_inv_qty），按口径文档分别使用
+--      为 inv_qty（≠ EOH Unit 的 stock_inv_qty），按口径文档分别使用；
+--      ST% 销售侧自 v1.1 起为全渠道（对应 DAX 整表 REMOVEFILTERS 两张渠道
+--      维度表），与库存侧同为渠道无关——SQL 销售侧无渠道条件即为该口径
 --   7. 空值行为对齐 DAX：分子为 NULL 时占比 / AUR / MD / ST% 整体输出
 --      NULL（对应 DAX DIVIDE 分子 BLANK → BLANK，显示 "-"）；ST% 分母的
 --      加法对 NULL 侧按 0 处理（对应 DAX 算术运算 BLANK 当 0：销售侧有值
@@ -68,6 +74,11 @@
 --      切片器选择后表格行轴只保留所选 series，但占比分母仍为全量有效
 --      series（对应 DAX 分母 REMOVEFILTERS(series, spu_id, spu_img_url)，
 --      分母不随切片器收缩）
+-- 13. 渠道口径（v1.1）：只有 YTD / LTD ST%（§24 §25 §27）的销售侧为全渠道，
+--     其余销售类指标（This Period / YTD / LTD 的 SLS Qty、SLS Amt、AUR、MD
+--     等）仍随 Platform / Store 切片器筛选。SQL 未附加渠道条件，等价于
+--     全选场景；验证单项渠道时：ST% 销售侧保持不附加条件，仅对其余指标
+--     按需附加——两侧口径不同，不可整段统一加渠道条件
 -- ======================================================================
 
 -- ======================================================================
