@@ -810,8 +810,7 @@
 - **关联文件**: Dimension Cross Analysis/5 Platform Merchandising Performance/Dim_ColMetric_Platform_Merchandising_Performance.md
 - **备注**: 必须同步操作：PBI 内整段替换 Dim_ColMetric_Platform_Merchandising_Performance 计算表，再依次设置 ColType 按 ColName_Sort 排序、ColName 按 ColType 排序；验证：两个排序均设置成功、矩阵列序不变（SLS Amt% / vs LP / TAR ACH% / MTD TAR Progress / YTD TAR Progress）；若矩阵上有基于 ColName_Sort 的视觉对象筛选器，切换排序列后需复核其是否仍生效。规则与案例已沉淀到 pbi Skill（rules/modeling-standards.md §6、knowledge/slicer-tips.md §7、knowledge/index.md）
 
-<<<<<<< HEAD
-=======
+
 ## [2026-11-25 15:33] DAX 修改 — ST% 改为全渠道口径（Sales & Inventory 表格 v1.7 / Merchandising Core KPI v1.4）
 
 - **模块**: DAX
@@ -842,5 +841,3 @@
   - `Dim_ColMetric_Sales_Performance_Details.md`：Label_Value 字段说明补 LTD ST% 例外；表定义不变，无需在 PBI 内重做
 - **关联文件**: Merchandise Performance Overview/Sales Performance Details by Channel/Sales_Performance_Details_ms.md（§3.6 / §4.1 / 注意事项 18）；同目录 test_Sales_Performance_Details_ms.sql、Dim_ColMetric_Sales_Performance_Details.md
 - **备注**: 必须同步操作：PBI 内整段替换度量 `Sales Performance Details Act Base Value`（度量名称不变）。验证：切换 Platform / Store 切片器，SLS Amt / vs LP / 占比等随切片器变化，LTD ST% 数值不变，且 Platform TTL 与 Store TTL 两列 LTD ST% 同值。前提：渠道筛选只来自这两张维度表、关系单向；若有筛选器直接使用事实表 platform / shop_name 字段，需补事实表列级 REMOVEFILTERS。未改动项：LTD ST% 空值保护（分母缺失返回 BLANK 而非 100%）仍待业务确认（注意事项 11）；§4.1 的 inv 侧代码（`__InvAmt_End` / `__EOHUnit`）实际未写 TREATAS，与文档「TREATAS 传递」的描述不一致，属既有问题，本次未处理
->>>>>>> 430231e (RL E2E Merch Dashboard UAT - 17:)
----
