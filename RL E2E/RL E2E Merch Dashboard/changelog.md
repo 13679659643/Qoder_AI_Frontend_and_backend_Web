@@ -875,3 +875,20 @@
 - **备注**: 必须同步操作：PBI 内整段替换三个度量（名称均不变）——Series Sales YTD ST% (Unit) Value、Series Sales YTD ST% (Amt) Value、Series Sales LTD ST% (Unit) Value。验证：切换全局 Platform / Store Name 切片器，SLS Qty / SLS Amt / AUR / MD 等随之变化，三个 ST% 保持不变；SQL 两段本就无渠道条件，验证结果应与替换后的 PBI 一致，逻辑无需改。未改动项：This Period 及其他 YTD / LTD 销售类指标仍随渠道筛选；§24 / §25 / §27 的库存侧 inv 表无渠道字段，天然全渠道；占比分母 `REMOVEFILTERS(series, spu_id, spu_img_url)` 为事实表列级移除，保持不变
 
 ---
+
+## [2026-11-26 10:20] DAX 修改 — vs LP / vs LY 改为金额同比（Label & Division Table v1.1 → v1.2）
+
+- **模块**: Dimension Cross Analysis - 2 Product Type Sales & Inventory Structure
+- **任务**: 指标口径变更——两张占比列（SLS Amt%、EOH Amt%）保留不动，其后的 vs LP / vs LY 从「占比相减 ×10000 转 bp」改为「金额同比」：销售侧用 SLS Amt、库存侧用 EOH Amt；度量名称全部不变，PBI 视觉对象绑定无需调整
+- **操作**: 修改
+- **变更内容**:
+  - 新增六个内部金额度量（Value，无 Display）：`Label & Division Table SLS Amt TY / LP / LY Value`（§4.18–§4.20，`SUM(a02_..._sales_summary_d[net_sales_amt])`，日期区间分别取 Min_This/Max_This、Min_Last/Max_Last、Min_This[TimeFrame_Min_LY]/Max_This[TimeFrame_Max_LY]）；`Label & Division Table EOH Amt TY / LP / LY Value`（§4.21–§4.23，`SUM(a02_..._inv_summary_d[msrp_inv_amt])`，分别取 Max_This、Max_Last、Max_This[TimeFrame_Max_LY] 单日快照）
+  - 替换四个 vs Value（名称不变）：`Label & Division Table SLS Amt% vs LP Value`（§4.5）、`… vs LY Value`（§4.7）、`Label & Division Table EOH Amt% vs LP Value`（§4.13）、`… vs LY Value`（§4.15）——逻辑统一为 `DIVIDE(__ThisAmt, __BaseAmt) - 1`；边界：同期 0 或空 → `BLANK()`（含双零 / 双空），本期 0 或空且同期有值 → `-1`
+  - 替换四个 Display（名称不变）：§4.6 / §4.8 / §4.14 / §4.16 改为 `FORMAT(__Value, "#,##0%")`，空值 "-"（原 bp 整数格式废止）
+  - 保留不删：§4.9 / §4.10 / §4.11 / §4.12 四个 LP / LY 占比中间度量（`… SLS Amt% LP / LY`、`… EOH Amt% LP / LY`）标注「v1.2 起不再被引用」
+  - 文档同步：版本头 v1.2；§1.2 指标定义 / 格式列、§1.3 适用度量、§1.4 币种、§1.5、§3.1 结构图、§3.3 说明、§5 度量清单（新增 11–16 行）、§6.1、§7 NULL 行为、§8 注意事项 5 / 6 / 7 / 8 重写并新增注意事项 10（PBI 操作与验证顺序）
+  - 测试 SQL 同步（两段 division / brand 一致改）：`pct` CTE 透出六列原始金额；四个 vs 列由 CASE 相减改为 `本期 / 同期 - 1`（基线空或 0 → NULL，本期空或 0 → -1）；追加 `SLS_Amt_TY / LP / LY`、`EOH_Amt_TY / LP / LY` 六个参照列；头部口径说明 5 / 6 / 7 / 8 更新，新增第 10 条（参照列与列序）
+- **关联文件**: Dimension Cross Analysis/2 Product Type Sales & Inventory Structure/Label_&_Division_table.md；同目录 test_Label_&_Division_table.sql
+- **备注**: 必须同步操作（顺序不可颠倒）：① PBI 内先新建六个金额度量（§4.18–§4.23）；② 再整段替换八个度量（四个 vs Value + 四个 vs Display，名称均不变）。验证：切换 This / Last Period 切片器，四列 vs 随对应金额变化；本期无销售而行内有库存的行显示 -100%；本期与基期均无数据的行为 "-"；IsEmpty（§4.17）判定范围未扩展，仍是原 SLS / EOH 指标，空行隐藏行为不变——金额同比仅被计算，不参与行可见性
+
+---

@@ -1,6 +1,6 @@
 # Label & Division Table 表格解决方案
 
-> **版本**: v1.1（商品维度 category → ax_class 字段替换（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §4.1 / §3.2）
+> **版本**: v1.2（vs LP / vs LY 改为金额同比口径：原「占比相减 ×10000 = bp」改为「本期金额 / 同期金额 − 1」，新增 6 个金额度量 SLS Amt / EOH Amt × TY / LP / LY（仅内部引用、不进视觉对象）；4 个 vs 度量名称不变（PBI 已绑定），Display 由 bp 改为百分比整数；原 SLS Amt% / EOH Amt% 及其 Display 不动，原 LP / LY 占比中间度量保留但自 v1.2 起不再被引用。详见 §1.2 / §3.1 / §3.3 / §4.5–§4.8 / §4.13–§4.16 / §4.18–§4.23 / 注意事项 6、10）。v1.1（商品维度 category → ax_class 字段替换（度量名称不变，仅改度量内字段引用与描述）；占比分母 ALLSELECTED 由列级改为维度表【整表】移除——按列排序 auto-existence 隐藏筛选传播，详见 §4.1 / §3.2）
 > **模块**: RL E2E Merch Dashboard - Dimension Cross Analysis Tab - Product Type Sales & Inventory Structure【AX_Class × Division/Label】
 > **关联口径**: 口径文档/口径Markdown格式/Dimension Cross Analysis.md - 子模块五（§17~§18）
 > **数据底表（销售类）**: a02_e2e_product_performance_sales_summary_d
@@ -14,7 +14,7 @@
 
 ### 1.1 模块定位与视觉对象结构
 
-本板块以 AX_Class 为固定粒度，Division / Label 作为视觉对象筛选器固定单值形成分组表，统计各 AX_Class 在所属分组内的销售金额占比与期末库存金额占比及其 vs LP / vs LY 附属指标：
+本板块以 AX_Class 为固定粒度，Division / Label 作为视觉对象筛选器固定单值形成分组表，统计各 AX_Class 在所属分组内的销售金额占比与期末库存金额占比，以及两列金额（销售金额 / 期末库存金额）相对 LP / LY 的金额同比：
 
 | 视觉对象 | 分组筛选器（视觉对象级，单值） | 行 | 值列（6 列） |
 |---|---|---|---|
@@ -30,22 +30,27 @@
 | 序号 | 指标 | 口径章节 | 时间口径 | 计算公式 | 数据类型 / 格式 |
 |---|---|---|---|---|---|
 | 1 | SLS Amt% | §17 | This Period（区间） | 分子：该分组值 × AX_Class 下 sum(net_sales_amt)；分母：该分组值下全量 sum(net_sales_amt)（ALLSELECTED AX_Class，组内分母） | percent_0dp → `#,##0%` |
-| 2 | SLS Amt% vs LP | §17 附属 | This − Last Period（差值） | SLS Amt%（this period）− SLS Amt%（last period），原始差值，×10000 转 bp 在 Display 层 | delta_bp → `#,##0bp` |
-| 3 | SLS Amt% vs LY | §17 附属 | This − Last Year（差值） | SLS Amt%（this year）− SLS Amt%（last year），原始差值，×10000 转 bp 在 Display 层 | delta_bp → `#,##0bp` |
+| 2 | SLS Amt% vs LP | §17 附属 | This vs Last Period（金额同比） | SLS Amt(TY) / SLS Amt(LP) − 1；同期为 0 或空 → BLANK，本期为 0 或空（同期有值）→ −1 | percent_0dp → `#,##0%` |
+| 3 | SLS Amt% vs LY | §17 附属 | This vs Last Year（金额同比） | SLS Amt(TY) / SLS Amt(LY) − 1；边界同 vs LP | percent_0dp → `#,##0%` |
 | 4 | EOH Amt% | §18 | End Period（期末时点） | 分子：该分组值 × AX_Class 下 sum(msrp_inv_amt)（快照日单日）；分母：该分组值下全量 sum(msrp_inv_amt)（ALLSELECTED AX_Class，组内分母） | percent_0dp → `#,##0%` |
-| 5 | EOH Amt% vs LP | §18 附属 | 快照日 this − 快照日 LP（差值） | EOH Amt%（this 快照日）− EOH Amt%（LP 快照日），原始差值，×10000 转 bp 在 Display 层 | delta_bp → `#,##0bp` |
-| 6 | EOH Amt% vs LY | §18 附属 | 快照日 this − 快照日 LY（差值） | EOH Amt%（this 快照日）− EOH Amt%（LY 快照日），原始差值，×10000 转 bp 在 Display 层 | delta_bp → `#,##0bp` |
+| 5 | EOH Amt% vs LP | §18 附属 | 快照日 this vs 快照日 LP（金额同比） | EOH Amt(TY) / EOH Amt(LP) − 1；边界同 vs LP | percent_0dp → `#,##0%` |
+| 6 | EOH Amt% vs LY | §18 附属 | 快照日 this vs 快照日 LY（金额同比） | EOH Amt(TY) / EOH Amt(LY) − 1；边界同 vs LP | percent_0dp → `#,##0%` |
+
+说明（v1.2）：
+
+- 指标名与列标题**沿用旧名**（SLS Amt% vs LP 等），PBI 视觉对象绑定关系不变，仅度量内部逻辑替换；实际口径已经是**金额同比**（两期金额之比减 1），不再是占比差值
+- 第 2/3/5/6 项依赖 §4.18–§4.23 新增的 6 个金额度量（内部引用，不出现在视觉对象）；第 1/4 项与原有 SLS Amt%（§4.1）/ EOH Amt%（§4.9）逻辑完全一致，未改动
 
 ### 1.3 时间口径
 
 | 口径 | 时间范围 | 适用指标 |
 |---|---|---|
-| This Period（区间类） | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] | SLS Amt% 及 vs LP / vs LY 的 this 侧 |
-| Last Period（vs LP 基线，区间类） | data_date ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] | LP SLS Amt%（vs LP 的 last 侧） |
-| Last Year（vs LY 基线，区间类） | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min_LY], Slicer_Time_Frame_Max_This[TimeFrame_Max_LY]] | LY SLS Amt%（vs LY 的 last year 侧） |
-| End Period This（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个有数据的快照日** | EOH Amt% 及 vs LP / vs LY 的 this 侧 |
-| End Period LP（期末时点类） | end period LP 范围 [Slicer_Time_Frame_Max_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] 内**最后一个有数据的快照日** | LP EOH Amt%（vs LP 的 last 侧） |
-| End Period LY（期末时点类） | LY 区间范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min_LY], Slicer_Time_Frame_Max_This[TimeFrame_Max_LY]] 内**最后一个有数据的快照日** | LY EOH Amt%（vs LY 的 last year 侧） |
+| This Period（区间类） | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] | SLS Amt%（§4.1）；SLS Amt TY（vs LP / vs LY 的 this 侧，§4.18） |
+| Last Period（vs LP 基线，区间类） | data_date ∈ [Slicer_Time_Frame_Min_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] | SLS Amt LP（vs LP 基线金额，§4.19）；旧 LP SLS Amt% 中间度量保留但不再被引用 |
+| Last Year（vs LY 基线，区间类） | data_date ∈ [Slicer_Time_Frame_Min_This[TimeFrame_Min_LY], Slicer_Time_Frame_Max_This[TimeFrame_Max_LY]] | SLS Amt LY（vs LY 基线金额，§4.20）；旧 LY SLS Amt% 中间度量保留但不再被引用 |
+| End Period This（期末时点类） | end period 范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min], Slicer_Time_Frame_Max_This[TimeFrame_Max]] 内**最后一个有数据的快照日** | EOH Amt%（§4.9）；EOH Amt TY（vs 的 this 侧，§4.21） |
+| End Period LP（期末时点类） | end period LP 范围 [Slicer_Time_Frame_Max_Last[TimeFrame_Min], Slicer_Time_Frame_Max_Last[TimeFrame_Max]] 内**最后一个有数据的快照日** | EOH Amt LP（vs LP 基线金额，§4.22）；旧 LP EOH Amt% 中间度量保留但不再被引用 |
+| End Period LY（期末时点类） | LY 区间范围 [Slicer_Time_Frame_Max_This[TimeFrame_Min_LY], Slicer_Time_Frame_Max_This[TimeFrame_Max_LY]] 内**最后一个有数据的快照日** | EOH Amt LY（vs LY 基线金额，§4.23）；旧 LY EOH Amt% 中间度量保留但不再被引用 |
 
 说明：
 
@@ -55,7 +60,7 @@
 
 ### 1.4 币种口径
 
-本方案全部指标为占比类与占比差值类（SLS Amt% / EOH Amt% 及 vs LP / vs LY），不涉及金额展示：占比分子分母为同表同币种金额字段（底表金额均存储 CNY），换算与否比值不变，不受币种切片器影响，无需汇率换算与币种符号拼接。
+本方案指标为占比类（SLS Amt% / EOH Amt%）与金额同比类（vs LP / vs LY，v1.2 起为两期金额之比减 1），均不涉及金额绝对值展示：占比与同比的分子分母均为同表同币种的金额字段（底表金额均存储 CNY），换算与否比值不变，不受币种切片器影响，无需汇率换算与币种符号拼接。新增的 6 个金额度量（§4.18–§4.23）只用于内部相除、不直接展示数值，同样无需汇率换算。
 
 ### 1.5 占比分母机制（组内分母）
 
@@ -66,6 +71,7 @@
 -  主指标与全部附属基线（LP / LY 占比）的分母同机制：各自时间范围内的组内全量合计
 - 行字段从 Slicer_AX_Class 维度表拉取，行筛选直接落在维度表上，ALLSELECTED(维度表整表) 正确移除后经一对多关系向双事实表正向传导，分母恢复组内全量
 - **必须整表移除而不能只移除值列**：值列配置「按列排序」后，视觉对象查询经 auto-existence（同表共存）把排序列隐式并入 GroupBy 并合并为表粒度组合筛选；只移除值列时排序列筛选独自存活——排序键与业务值 1:1（Sort 表内唯一），1:1 反推等价于原值筛选，维度表仍被钉在当前行，分母与分子聚合范围重合，占比恒 100%
+- **vs LP / vs LY 不使用组内分母（v1.2）**：金额同比只比较行级金额（本期 / 同期），分子分母同为该 AX_Class 行在该期的金额，与占比分母机制无关；组内分母只服务 SLS Amt% / EOH Amt% 两列
 
 ---
 
@@ -84,20 +90,22 @@
 
 ```
 Value（口径计算，保留原始小数）
-←  分子 / 分母时间范围显式筛选（This Period / Last Period / Last Year / 三个快照日）
+←  占比类（SLS Amt% / EOH Amt%，逻辑不变）：分子 / 分母按各自时间范围显式筛选
 ←  占比分母：ALLSELECTED('Slicer_AX_Class')——移除 AX_Class 行筛选（整表移除，含按列排序隐式带入的排序列筛选），
     保留 Division / Label 视觉对象筛选与外部切片器（组内分母，组内占比之和 = 100%）
-←  LP / LY 中间度量值（LP SLS Amt% / LY SLS Amt% / LP EOH Amt% / LY EOH Amt%）
-    供 vs LP / vs LY 派生引用，分母机制与 This 侧完全一致
+←  金额类（v1.2 新增，仅内部引用）：SLS Amt TY / LP / LY、EOH Amt TY / LP / LY
+    行级聚合（行筛选 + 分组筛选自动传导），无组内分母；期末类取各自快照日单日
 ←  期末快照日先经 REMOVEFILTERS(整表) 确定性取值（This / LP / LY 三个范围各自取值），
     不随行上下文 / 切片器漂移
+←  LP / LY 占比中间度量值（LP SLS Amt% / LY SLS Amt% / LP EOH Amt% / LY EOH Amt%）
+    v1.2 起保留但不再被 vs 引用（vs 改用金额类）
 ↓
-vs LP / vs LY Value（差值，原始小数）
-←  This 期占比 − 基线占比；任一侧 BLANK 时返回 BLANK
+vs LP / vs LY Value（比率，原始小数）
+←  本期金额 / 同期金额 − 1
+←  同期为 0 或空 → BLANK()；本期为 0 或空（同期有值）→ −1
 ↓
 Display（格式化显示）
 ←  percent_0dp: FORMAT(#,##0%)；BLANK 显示 "-"
-←  delta_bp: 值 ×10000 转 bp（FORMAT(#,##0) & "bp"，负数自带负号，零值 0bp）；BLANK 显示 "-"
 ```
 
 ### 3.2 占比分母机制（组内分母）
@@ -111,7 +119,8 @@ Display（格式化显示）
 
 - **vs LP**：基线读 Last Period 日期切片器（Slicer_Time_Frame_Min_Last[TimeFrame_Min] / Slicer_Time_Frame_Max_Last[TimeFrame_Max]），对比期由切片器选择决定；EOH 基线快照日取 Max_Last 表范围最后快照日
 - **vs LY**：基线读 This Period 所选时间行的财年同期映射字段（Slicer_Time_Frame_Min_This[TimeFrame_Min_LY] / Slicer_Time_Frame_Max_This[TimeFrame_Max_LY]），与 Last Period 切片器无关；EOH 基线快照日取 LY 区间范围（Max_This 表 _LY 字段）最后快照日
-- LP / LY 占比作为独立中间度量值输出（分母机制、组内口径与 This 侧一致），vs LP / vs LY Value = This 期占比 − 基线占比（原始差值）；任一侧 BLANK 时返回 BLANK（避免单侧缺失产生失真差值）；×10000 转 bp 在 Display 层实现，保证 Value 层差值可复用
+- **vs 改为金额同比（v1.2）**：新增 SLS Amt / EOH Amt × TY / LP / LY 六个金额度量（行级聚合，LP / LY 读各自基线时间范围 / 快照日，见 §4.18–§4.23），vs LP / vs LY Value = 本期金额 / 同期金额 − 1（原始比率，Display 用 percent_0dp 输出整数百分比）；边界：同期为 0 或空 → BLANK()（含双零 / 双空），本期为 0 或空且同期有值 → −1（−100%）。4 个 vs 度量名称沿用旧名，PBI 视觉对象绑定不变，只需整段替换度量逻辑
+- LP / LY 占比中间度量值（LP / LY × SLS / EOH 共 4 个）保留不删（防止其它潜在引用报错），但自 v1.2 起不再被任何度量引用
 
 ### 3.4 期末时点取值
 
@@ -286,98 +295,109 @@ RETURN
     DIVIDE(__Numerator, __Denominator)
 ```
 
-### 4.5 Label & Division Table SLS Amt% vs LP Value（销售金额占比 vs LP 差值）
+### 4.5 Label & Division Table SLS Amt% vs LP Value（销售金额 vs LP 金额同比）
 
 ```dax
 Label & Division Table SLS Amt% vs LP Value =
 // ========================================
 // 度量值: Label & Division Table SLS Amt% vs LP Value
-// 中文名: 销售金额占比 vs LP（差值）
+// 中文名: 销售金额 vs LP（金额同比）
 // Display Folder: Label & Division Table\Base Metrics
-// 用途: this period - last period 占比差值（原始小数，×10000 转 bp 在 Display 层实现）
-// 依赖: [Label & Division Table SLS Amt% Value], [Label & Division Table LP SLS Amt% Value]
-// 口径: this period - last period（差值，bp 指标）
-// 边界: 任一期为 BLANK 时返回 BLANK，避免单侧缺失产生失真差值
+// 用途: 本期销售金额 / 同期（LP）销售金额 − 1（原始比率，Display 层格式化为整数百分比）；
+//       指标名沿用旧名「SLS Amt% vs LP」，PBI 视觉对象绑定不变
+// 依赖: [Label & Division Table SLS Amt TY Value]（§4.18）、
+//       [Label & Division Table SLS Amt LP Value]（§4.19）
+// 口径: 金额同比（v1.2 起；原「占比相减 ×10000 转 bp」已废止）
+// 边界: 同期为 0 或空 → BLANK()（含双零 / 双空，显示 "-"）；
+//       本期为 0 或空且同期有值 → -1（显示 -100%）
 // ========================================
-    VAR __ThisPct = [Label & Division Table SLS Amt% Value]
-    VAR __LastPct = [Label & Division Table LP SLS Amt% Value]
+    VAR __ThisAmt = [Label & Division Table SLS Amt TY Value]
+    VAR __BaseAmt = [Label & Division Table SLS Amt LP Value]
 
     RETURN
         IF(
-            ISBLANK(__ThisPct) || ISBLANK(__LastPct),
+            ISBLANK(__BaseAmt) || __BaseAmt = 0,
             BLANK(),
-            __ThisPct - __LastPct
-        ) * 10000
+            IF(
+                ISBLANK(__ThisAmt) || __ThisAmt = 0,
+                -1,
+                DIVIDE(__ThisAmt, __BaseAmt) - 1
+            )
+        )
 ```
 
-### 4.6 Label & Division Table SLS Amt% vs LP Display（销售金额占比 vs LP 显示）
+### 4.6 Label & Division Table SLS Amt% vs LP Display（销售金额 vs LP 显示）
 
 ```dax
 Label & Division Table SLS Amt% vs LP Display =
 // ========================================
 // 度量值: Label & Division Table SLS Amt% vs LP Display
-// 中文名: 销售金额占比 vs LP 显示
+// 中文名: 销售金额 vs LP 显示
 // Display Folder: Label & Division Table\Formatting
-// 用途: delta_bp 格式化：值 ×10000 转 bp，负数自带负号，零值 0bp；BLANK 显示 "-"
+// 用途: percent_0dp 格式化（百分比整数，负数自带负号）；BLANK 显示 "-"
 // 依赖: [Label & Division Table SLS Amt% vs LP Value]
-// 数据格式: #,##0bp;-#,##0bp;0bp
-// 说明: ×10000 转换在 Display 层实现，Value 层保留原始差值可复用
+// 数据格式: #,##0%（如 12%、-8%）
+// 说明: v1.2 起 vs 为金额同比比率，不再 ×10000 转 bp
 // ========================================
     VAR __Value = [Label & Division Table SLS Amt% vs LP Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-        // IF(ROUND(__Value , 0) > 0, "+", "") & FORMAT(__Value , "#,##0bp;-#,##0bp;0bp"),       // +1200bp
-            FORMAT(__Value, "#,##0") & "bp"   // 负数自带负号，零值 0bp
+            FORMAT(__Value, "#,##0%")
         )
 ```
 
-### 4.7 Label & Division Table SLS Amt% vs LY Value（销售金额占比 vs LY 差值）
+### 4.7 Label & Division Table SLS Amt% vs LY Value（销售金额 vs LY 金额同比）
 
 ```dax
 Label & Division Table SLS Amt% vs LY Value =
 // ========================================
 // 度量值: Label & Division Table SLS Amt% vs LY Value
-// 中文名: 销售金额占比 vs LY（差值）
+// 中文名: 销售金额 vs LY（金额同比）
 // Display Folder: Label & Division Table\Base Metrics
-// 用途: this year - last year 占比差值（原始小数，×10000 转 bp 在 Display 层实现）
-// 依赖: [Label & Division Table SLS Amt% Value], [Label & Division Table LY SLS Amt% Value]
-// 口径: this year - last year（差值，bp 指标）；this year 时间范围同 This Period
-//       （Min_This / Max_This 的 TimeFrame_Min / TimeFrame_Max），last year 为
-//       _LY 字段财年同期映射，与 Last Period 切片器无关
-// 边界: 任一侧为 BLANK 时返回 BLANK，避免单侧缺失产生失真差值
+// 用途: 本期销售金额 / 去年同期销售金额 − 1（原始比率，Display 层格式化为整数百分比）；
+//       指标名沿用旧名「SLS Amt% vs LY」，PBI 视觉对象绑定不变
+// 依赖: [Label & Division Table SLS Amt TY Value]（§4.18）、
+//       [Label & Division Table SLS Amt LY Value]（§4.20）
+// 口径: 金额同比（v1.2 起；原「占比相减 ×10000 转 bp」已废止）；
+//       TY 与 This Period 同区间，LY 为 _LY 字段财年同期映射，与 Last Period 切片器无关
+// 边界: 同期为 0 或空 → BLANK()（含双零 / 双空，显示 "-"）；
+//       本期为 0 或空且同期有值 → -1（显示 -100%）
 // ========================================
-    VAR __ThisPct = [Label & Division Table SLS Amt% Value]
-    VAR __LastYearPct = [Label & Division Table LY SLS Amt% Value]
+    VAR __ThisAmt = [Label & Division Table SLS Amt TY Value]
+    VAR __LastYearAmt = [Label & Division Table SLS Amt LY Value]
 
     RETURN
         IF(
-            ISBLANK(__ThisPct) || ISBLANK(__LastYearPct),
+            ISBLANK(__LastYearAmt) || __LastYearAmt = 0,
             BLANK(),
-            __ThisPct - __LastYearPct
-        ) * 10000
+            IF(
+                ISBLANK(__ThisAmt) || __ThisAmt = 0,
+                -1,
+                DIVIDE(__ThisAmt, __LastYearAmt) - 1
+            )
+        )
 ```
 
-### 4.8 Label & Division Table SLS Amt% vs LY Display（销售金额占比 vs LY 显示）
+### 4.8 Label & Division Table SLS Amt% vs LY Display（销售金额 vs LY 显示）
 
 ```dax
 Label & Division Table SLS Amt% vs LY Display =
 // ========================================
 // 度量值: Label & Division Table SLS Amt% vs LY Display
-// 中文名: 销售金额占比 vs LY 显示
+// 中文名: 销售金额 vs LY 显示
 // Display Folder: Label & Division Table\Formatting
-// 用途: delta_bp 格式化：值 ×10000 转 bp，负数自带负号，零值 0bp；BLANK 显示 "-"
+// 用途: percent_0dp 格式化（百分比整数，负数自带负号）；BLANK 显示 "-"
 // 依赖: [Label & Division Table SLS Amt% vs LY Value]
-// 数据格式: #,##0bp;-#,##0bp;0bp
+// 数据格式: #,##0%（如 12%、-8%）
 // ========================================
     VAR __Value = [Label & Division Table SLS Amt% vs LY Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-        // IF(ROUND(__Value , 0) > 0, "+", "") & FORMAT(__Value , "#,##0bp;-#,##0bp;0bp"),       // +1200bp
-            FORMAT(__Value , "#,##0") & "bp"   // 负数自带负号，零值 0bp
+            FORMAT(__Value, "#,##0%")
         )
 ```
 
@@ -542,98 +562,112 @@ RETURN
     DIVIDE(__Numerator, __Denominator)
 ```
 
-### 4.13 Label & Division Table EOH Amt% vs LP Value（期末库存金额占比 vs LP 差值）
+### 4.13 Label & Division Table EOH Amt% vs LP Value（期末库存金额 vs LP 金额同比）
 
 ```dax
 Label & Division Table EOH Amt% vs LP Value =
 // ========================================
 // 度量值: Label & Division Table EOH Amt% vs LP Value
-// 中文名: 期末库存金额占比 vs LP（差值）
+// 中文名: 期末库存金额 vs LP（金额同比）
 // Display Folder: Label & Division Table\Base Metrics
-// 用途: this period - last period 占比差值（原始小数，×10000 转 bp 在 Display 层实现）；
-//       双期各自取 end period / end period LP 范围最后快照日的单日时点值
-// 依赖: [Label & Division Table EOH Amt% Value], [Label & Division Table LP EOH Amt% Value]
-// 口径: this period - last period（差值，bp 指标）
-// 边界: 任一期为 BLANK 时返回 BLANK，避免单侧缺失产生失真差值
+// 用途: This 快照日期末库存金额 / LP 快照日期末库存金额 − 1（原始比率，
+//       Display 层格式化为整数百分比）；指标名沿用旧名「EOH Amt% vs LP」，
+//       PBI 视觉对象绑定不变
+// 依赖: [Label & Division Table EOH Amt TY Value]（§4.21）、
+//       [Label & Division Table EOH Amt LP Value]（§4.22）
+// 口径: 金额同比（v1.2 起；原「占比相减 ×10000 转 bp」已废止）；
+//       双期各自取 Max_This / Max_Last 表 TimeFrame_Max 的单日快照
+// 边界: 同期为 0 或空 → BLANK()（含双零 / 双空，显示 "-"）；
+//       本期为 0 或空且同期有值 → -1（显示 -100%）
 // ========================================
-    VAR __ThisPct = [Label & Division Table EOH Amt% Value]
-    VAR __LastPct = [Label & Division Table LP EOH Amt% Value]
+    VAR __ThisAmt = [Label & Division Table EOH Amt TY Value]
+    VAR __BaseAmt = [Label & Division Table EOH Amt LP Value]
 
     RETURN
         IF(
-            ISBLANK(__ThisPct) || ISBLANK(__LastPct),
+            ISBLANK(__BaseAmt) || __BaseAmt = 0,
             BLANK(),
-            __ThisPct - __LastPct
-        ) * 10000
+            IF(
+                ISBLANK(__ThisAmt) || __ThisAmt = 0,
+                -1,
+                DIVIDE(__ThisAmt, __BaseAmt) - 1
+            )
+        )
 ```
 
-### 4.14 Label & Division Table EOH Amt% vs LP Display（期末库存金额占比 vs LP 显示）
+### 4.14 Label & Division Table EOH Amt% vs LP Display（期末库存金额 vs LP 显示）
 
 ```dax
 Label & Division Table EOH Amt% vs LP Display =
 // ========================================
 // 度量值: Label & Division Table EOH Amt% vs LP Display
-// 中文名: 期末库存金额占比 vs LP 显示
+// 中文名: 期末库存金额 vs LP 显示
 // Display Folder: Label & Division Table\Formatting
-// 用途: delta_bp 格式化：值 ×10000 转 bp，负数自带负号，零值 0bp；BLANK 显示 "-"
+// 用途: percent_0dp 格式化（百分比整数，负数自带负号）；BLANK 显示 "-"
 // 依赖: [Label & Division Table EOH Amt% vs LP Value]
-// 数据格式: #,##0bp;-#,##0bp;0bp
+// 数据格式: #,##0%（如 12%、-8%）
 // ========================================
     VAR __Value = [Label & Division Table EOH Amt% vs LP Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-        // IF(ROUND(__Value , 0) > 0, "+", "") & FORMAT(__Value , "#,##0bp;-#,##0bp;0bp"),       // +1200bp
-            FORMAT(__Value , "#,##0") & "bp"   // 负数自带负号，零值 0bp
+            FORMAT(__Value, "#,##0%")
         )
 ```
 
-### 4.15 Label & Division Table EOH Amt% vs LY Value（期末库存金额占比 vs LY 差值）
+### 4.15 Label & Division Table EOH Amt% vs LY Value（期末库存金额 vs LY 金额同比）
 
 ```dax
 Label & Division Table EOH Amt% vs LY Value =
 // ========================================
 // 度量值: Label & Division Table EOH Amt% vs LY Value
-// 中文名: 期末库存金额占比 vs LY（差值）
+// 中文名: 期末库存金额 vs LY（金额同比）
 // Display Folder: Label & Division Table\Base Metrics
-// 用途: this year - last year 占比差值（原始小数，×10000 转 bp 在 Display 层实现）；
-//       双期各自取 end period / LY 区间范围最后快照日的单日时点值
-// 依赖: [Label & Division Table EOH Amt% Value], [Label & Division Table LY EOH Amt% Value]
-// 口径: this year - last year（差值，bp 指标）；LY 侧快照日为 _LY 字段财年同期
-//       映射区间内最后一个有数据的快照日，与 Last Period 切片器无关
-// 边界: 任一侧为 BLANK 时返回 BLANK，避免单侧缺失产生失真差值
+// 用途: This 快照日期末库存金额 / 去年同期末库存金额 − 1（原始比率，
+//       Display 层格式化为整数百分比）；指标名沿用旧名「EOH Amt% vs LY」，
+//       PBI 视觉对象绑定不变
+// 依赖: [Label & Division Table EOH Amt TY Value]（§4.21）、
+//       [Label & Division Table EOH Amt LY Value]（§4.23）
+// 口径: 金额同比（v1.2 起；原「占比相减 ×10000 转 bp」已废止）；
+//       LY 快照日为 _LY 字段财年同期映射区间单日（Max_This[TimeFrame_Max_LY]），
+//       与 Last Period 切片器无关
+// 边界: 同期为 0 或空 → BLANK()（含双零 / 双空，显示 "-"）；
+//       本期为 0 或空且同期有值 → -1（显示 -100%）
 // ========================================
-    VAR __ThisPct = [Label & Division Table EOH Amt% Value]
-    VAR __LastYearPct = [Label & Division Table LY EOH Amt% Value]
+    VAR __ThisAmt = [Label & Division Table EOH Amt TY Value]
+    VAR __LastYearAmt = [Label & Division Table EOH Amt LY Value]
 
     RETURN
         IF(
-            ISBLANK(__ThisPct) || ISBLANK(__LastYearPct),
+            ISBLANK(__LastYearAmt) || __LastYearAmt = 0,
             BLANK(),
-            __ThisPct - __LastYearPct
-        ) * 10000
+            IF(
+                ISBLANK(__ThisAmt) || __ThisAmt = 0,
+                -1,
+                DIVIDE(__ThisAmt, __LastYearAmt) - 1
+            )
+        )
 ```
 
-### 4.16 Label & Division Table EOH Amt% vs LY Display（期末库存金额占比 vs LY 显示）
+### 4.16 Label & Division Table EOH Amt% vs LY Display（期末库存金额 vs LY 显示）
 
 ```dax
 Label & Division Table EOH Amt% vs LY Display =
 // ========================================
 // 度量值: Label & Division Table EOH Amt% vs LY Display
-// 中文名: 期末库存金额占比 vs LY 显示
+// 中文名: 期末库存金额 vs LY 显示
 // Display Folder: Label & Division Table\Formatting
-// 用途: delta_bp 格式化：值 ×10000 转 bp，负数自带负号，零值 0bp；BLANK 显示 "-"
+// 用途: percent_0dp 格式化（百分比整数，负数自带负号）；BLANK 显示 "-"
 // 依赖: [Label & Division Table EOH Amt% vs LY Value]
-// 数据格式: #,##0bp;-#,##0bp;0bp
+// 数据格式: #,##0%（如 12%、-8%）
 // ========================================
     VAR __Value = [Label & Division Table EOH Amt% vs LY Value]
     RETURN
         IF(
             ISBLANK(__Value),
             "-",
-        // IF(ROUND(__Value , 0) > 0, "+", "") & FORMAT(__Value , "#,##0bp;-#,##0bp;0bp"),       // +1200bp
-            FORMAT(__Value , "#,##0") & "bp"   // 负数自带负号，零值 0bp
+            FORMAT(__Value, "#,##0%")
         )
 ```
 
@@ -649,17 +683,180 @@ Label & Division Dimensions IsEmpty =
 // ========================================
     IF(
         ISBLANK([Label & Division Table SLS Amt% Value]) &&
-        ISBLANK([Label & Division Table LP SLS Amt% Value]) &&
-        ISBLANK([Label & Division Table LY SLS Amt% Value]) &&
+        ISBLANK([Label & Division Table SLS Amt LP Value]) &&
+        ISBLANK([Label & Division Table SLS Amt LY Value]) &&
         ISBLANK([Label & Division Table SLS Amt% vs LP Value]) &&
         ISBLANK([Label & Division Table SLS Amt% vs LY Value]) &&
         ISBLANK([Label & Division Table EOH Amt% Value]) &&
-        ISBLANK([Label & Division Table LP EOH Amt% Value]) &&
-        ISBLANK([Label & Division Table LY EOH Amt% Value]) &&
+        ISBLANK([Label & Division Table EOH Amt LP Value]) &&
+        ISBLANK([Label & Division Table EOH Amt LY Value]) &&
         ISBLANK([Label & Division Table EOH Amt% vs LP Value]) &&
         ISBLANK([Label & Division Table EOH Amt% vs LY Value]),
         0,
         1
+    )
+```
+
+### 4.18 Label & Division Table SLS Amt TY Value（本期销售金额，v1.2 新增，内部引用）
+
+```dax
+Label & Division Table SLS Amt TY Value =
+// ========================================
+// 度量值: Label & Division Table SLS Amt TY Value
+// 中文名: 本期销售金额（vs 的 this 侧）
+// Display Folder: Label & Division Table\Base Metrics
+// 用途: 仅供 [SLS Amt% vs LP Value] / [SLS Amt% vs LY Value] 引用的金额分子
+//       （v1.2 新增），不直接进视觉对象、不做 Display
+// 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min] / Slicer_Time_Frame_Max_This[TimeFrame_Max]
+// 口径: This Period 区间 sum(net_sales_amt)；行级聚合（AX_Class 行筛选 + Division /
+//       Label 分组筛选自动传导），无组内分母；渠道切片器经关系正常生效
+// 数据底表: a02_e2e_product_performance_sales_summary_d
+// ========================================
+
+// ── This Period 时间区间 ──
+VAR __PeriodMin = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min])
+VAR __PeriodMax = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+
+RETURN
+    CALCULATE(
+        SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax
+    )
+```
+
+### 4.19 Label & Division Table SLS Amt LP Value（LP 销售金额，v1.2 新增，内部引用）
+
+```dax
+Label & Division Table SLS Amt LP Value =
+// ========================================
+// 度量值: Label & Division Table SLS Amt LP Value
+// 中文名: LP 销售金额（vs LP 基线）
+// Display Folder: Label & Division Table\Base Metrics
+// 用途: 仅供 [SLS Amt% vs LP Value] 引用的基线金额（v1.2 新增），
+//       不直接进视觉对象、不做 Display
+// 依赖: Slicer_Time_Frame_Min_Last[TimeFrame_Min] / Slicer_Time_Frame_Max_Last[TimeFrame_Max]
+// 口径: Last Period 区间 sum(net_sales_amt)（对比期由 LP 日期切片器选择决定）；
+//       行级聚合，无组内分母
+// 数据底表: a02_e2e_product_performance_sales_summary_d
+// ========================================
+
+// ── Last Period 时间区间（vs LP 基线）──
+VAR __PeriodMin_LP = SELECTEDVALUE(Slicer_Time_Frame_Min_Last[TimeFrame_Min])
+VAR __PeriodMax_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
+
+RETURN
+    CALCULATE(
+        SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LP,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LP
+    )
+```
+
+### 4.20 Label & Division Table SLS Amt LY Value（LY 销售金额，v1.2 新增，内部引用）
+
+```dax
+Label & Division Table SLS Amt LY Value =
+// ========================================
+// 度量值: Label & Division Table SLS Amt LY Value
+// 中文名: LY 销售金额（vs LY 基线）
+// Display Folder: Label & Division Table\Base Metrics
+// 用途: 仅供 [SLS Amt% vs LY Value] 引用的基线金额（v1.2 新增），
+//       不直接进视觉对象、不做 Display
+// 依赖: Slicer_Time_Frame_Min_This[TimeFrame_Min_LY] / Slicer_Time_Frame_Max_This[TimeFrame_Max_LY]
+// 口径: Last Year 区间 sum(net_sales_amt)（_LY 字段财年同期映射，与 Last Period
+//       切片器无关）；行级聚合，无组内分母
+// 数据底表: a02_e2e_product_performance_sales_summary_d
+// ========================================
+
+// ── Last Year 时间区间（vs LY 基线，_LY 字段财年同期映射）──
+VAR __PeriodMin_LY = SELECTEDVALUE(Slicer_Time_Frame_Min_This[TimeFrame_Min_LY])
+VAR __PeriodMax_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_LY])
+
+RETURN
+    CALCULATE(
+        SUM('a02_e2e_product_performance_sales_summary_d'[net_sales_amt]),
+        'a02_e2e_product_performance_sales_summary_d'[data_date] >= __PeriodMin_LY,
+        'a02_e2e_product_performance_sales_summary_d'[data_date] <= __PeriodMax_LY
+    )
+```
+
+### 4.21 Label & Division Table EOH Amt TY Value（本期期末库存金额，v1.2 新增，内部引用）
+
+```dax
+Label & Division Table EOH Amt TY Value =
+// ========================================
+// 度量值: Label & Division Table EOH Amt TY Value
+// 中文名: 本期期末库存金额（vs 的 this 侧）
+// Display Folder: Label & Division Table\Base Metrics
+// 用途: 仅供 [EOH Amt% vs LP Value] / [EOH Amt% vs LY Value] 引用的金额分子
+//       （v1.2 新增），不直接进视觉对象、不做 Display
+// 依赖: Slicer_Time_Frame_Max_This[TimeFrame_Max]
+// 口径: This 期末快照日（Max_This 表 TimeFrame_Max，直接单日过滤）sum(msrp_inv_amt)；
+//       行级聚合，无组内分母；期末时点只取单日，对区间求和会重复计数库存
+// 数据底表: a02_e2e_product_performance_inv_summary_d
+// 说明: inv 表无 platform / shop_name 字段，不受渠道筛选影响
+// ========================================
+
+// ── 期末日期：end period 最后一天 = Max_This 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max])
+
+RETURN
+    CALCULATE(
+        SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
+        'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate
+    )
+```
+
+### 4.22 Label & Division Table EOH Amt LP Value（LP 期末库存金额，v1.2 新增，内部引用）
+
+```dax
+Label & Division Table EOH Amt LP Value =
+// ========================================
+// 度量值: Label & Division Table EOH Amt LP Value
+// 中文名: LP 期末库存金额（vs LP 基线）
+// Display Folder: Label & Division Table\Base Metrics
+// 用途: 仅供 [EOH Amt% vs LP Value] 引用的基线金额（v1.2 新增），
+//       不直接进视觉对象、不做 Display
+// 依赖: Slicer_Time_Frame_Max_Last[TimeFrame_Max]
+// 口径: LP 期末快照日（Max_Last 表 TimeFrame_Max，直接单日过滤）sum(msrp_inv_amt)；
+//       行级聚合，无组内分母
+// 数据底表: a02_e2e_product_performance_inv_summary_d
+// ========================================
+
+// ── 期末日期（LP）：end period LP 最后一天 = Max_Last 表 TimeFrame_Max（直接单日过滤）──
+VAR __EndPeriodDate_LP = SELECTEDVALUE(Slicer_Time_Frame_Max_Last[TimeFrame_Max])
+
+RETURN
+    CALCULATE(
+        SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
+        'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate_LP
+    )
+```
+
+### 4.23 Label & Division Table EOH Amt LY Value（LY 期末库存金额，v1.2 新增，内部引用）
+
+```dax
+Label & Division Table EOH Amt LY Value =
+// ========================================
+// 度量值: Label & Division Table EOH Amt LY Value
+// 中文名: LY 期末库存金额（vs LY 基线）
+// Display Folder: Label & Division Table\Base Metrics
+// 用途: 仅供 [EOH Amt% vs LY Value] 引用的基线金额（v1.2 新增），
+//       不直接进视觉对象、不做 Display
+// 依赖: Slicer_Time_Frame_Max_This[TimeFrame_Max_LY]
+// 口径: LY 期末快照日（Max_This 表 TimeFrame_Max_LY，_LY 字段财年同期映射，
+//       直接单日过滤）sum(msrp_inv_amt)；与 Last Period 切片器无关
+// 数据底表: a02_e2e_product_performance_inv_summary_d
+// ========================================
+
+// ── 期末日期（LY）：end period LY 最后一天 = Max_This 表 TimeFrame_Max_LY（直接单日过滤）──
+VAR __EndPeriodDate_LY = SELECTEDVALUE(Slicer_Time_Frame_Max_This[TimeFrame_Max_LY])
+
+RETURN
+    CALCULATE(
+        SUM('a02_e2e_product_performance_inv_summary_d'[msrp_inv_amt]),
+        'a02_e2e_product_performance_inv_summary_d'[data_date] = __EndPeriodDate_LY
     )
 ```
 ---
@@ -669,18 +866,25 @@ Label & Division Dimensions IsEmpty =
 | # | 度量值 | 指标类型 | 用于视觉对象 |
 |---|---|---|---|
 | 1 | Label & Division Table SLS Amt% Value / Display | percent_0dp | Division / Label 分组表 |
-| 2 | Label & Division Table LP SLS Amt% Value | percent_0dp（中间值） | 仅被 vs LP 引用 |
-| 3 | Label & Division Table LY SLS Amt% Value | percent_0dp（中间值） | 仅被 vs LY 引用 |
-| 4 | Label & Division Table SLS Amt% vs LP Value / Display | delta_bp | Division / Label 分组表 |
-| 5 | Label & Division Table SLS Amt% vs LY Value / Display | delta_bp | Division / Label 分组表 |
+| 2 | Label & Division Table LP SLS Amt% Value | percent_0dp（中间值） | v1.2 起不再被引用（保留不删） |
+| 3 | Label & Division Table LY SLS Amt% Value | percent_0dp（中间值） | v1.2 起不再被引用（保留不删） |
+| 4 | Label & Division Table SLS Amt% vs LP Value / Display | percent_0dp（金额同比） | Division / Label 分组表 |
+| 5 | Label & Division Table SLS Amt% vs LY Value / Display | percent_0dp（金额同比） | Division / Label 分组表 |
 | 6 | Label & Division Table EOH Amt% Value / Display | percent_0dp | Division / Label 分组表 |
-| 7 | Label & Division Table LP EOH Amt% Value | percent_0dp（中间值） | 仅被 vs LP 引用 |
-| 8 | Label & Division Table LY EOH Amt% Value | percent_0dp（中间值） | 仅被 vs LY 引用 |
-| 9 | Label & Division Table EOH Amt% vs LP Value / Display | delta_bp | Division / Label 分组表 |
-| 10 | Label & Division Table EOH Amt% vs LY Value / Display | delta_bp | Division / Label 分组表 |
+| 7 | Label & Division Table LP EOH Amt% Value | percent_0dp（中间值） | v1.2 起不再被引用（保留不删） |
+| 8 | Label & Division Table LY EOH Amt% Value | percent_0dp（中间值） | v1.2 起不再被引用（保留不删） |
+| 9 | Label & Division Table EOH Amt% vs LP Value / Display | percent_0dp（金额同比） | Division / Label 分组表 |
+| 10 | Label & Division Table EOH Amt% vs LY Value / Display | percent_0dp（金额同比） | Division / Label 分组表 |
+| 11 | Label & Division Table SLS Amt TY Value（§4.18） | 金额（中间值） | 仅被 vs LP / vs LY 引用 |
+| 12 | Label & Division Table SLS Amt LP Value（§4.19） | 金额（中间值） | 仅被 vs LP 引用 |
+| 13 | Label & Division Table SLS Amt LY Value（§4.20） | 金额（中间值） | 仅被 vs LY 引用 |
+| 14 | Label & Division Table EOH Amt TY Value（§4.21） | 金额（中间值） | 仅被 vs LP / vs LY 引用 |
+| 15 | Label & Division Table EOH Amt LP Value（§4.22） | 金额（中间值） | 仅被 vs LP 引用 |
+| 16 | Label & Division Table EOH Amt LY Value（§4.23） | 金额（中间值） | 仅被 vs LY 引用 |
 
 - 全部度量值存放于 `_Measures` 隐藏表；Display Folder：`Label & Division Table\Base Metrics`（Value 层）与 `Label & Division Table\Formatting`（Display 层）
-- LP / LY 中间度量值共 4 个（LP / LY × SLS / EOH），不直接进视觉对象
+- v1.2 新增 6 个金额度量（#11–#16），仅内部引用、不做 Display、不进视觉对象；新增度量无同名旧度量，需在 PBI 内**新建**
+- #2 / #3 / #7 / #8 四个占比中间度量保留不删，仅不再被引用（vs 已改用金额度量）
 
 ---
 
@@ -697,6 +901,8 @@ Label & Division Dimensions IsEmpty =
 | 列标题 | 按口径指标名（SLS Amt% / SLS Amt% vs LP / SLS Amt% vs LY / EOH Amt% / EOH Amt% vs LP / EOH Amt% vs LY） |
 | 行可见性 | 六个指标全为 BLANK 的 AX_Class 行由表格自动隐藏 |
 | 总计 | 单级行无行小计需求；若开启总计行，占比类总计 = 100%（组内分母同范围） |
+
+- 第 2/3/5/6 列（vs LP / vs LY）自 v1.2 起为**金额同比**（整数百分比），列标题与绑定的度量名称均不变——PBI 侧无需调整视觉对象配置，只整段替换度量逻辑
 
 ### 6.2 Label 分组表（×N）
 
@@ -725,11 +931,11 @@ Label & Division Dimensions IsEmpty =
 | 指标 | 测试 SQL 还原 |
 |---|---|
 | SLS Amt% | 分组键 + ax_class 粒度聚合 net_sales_amt；分母 = SUM() OVER (PARTITION BY 分组键)（组内分母） |
-| SLS Amt% vs LP / vs LY | 同上，时间条件分别替换为 Last Period / Last Year 区间，差值 = This 占比 − 基线占比 |
+| SLS Amt% vs LP / vs LY | v1.2：SLS Amt(TY) / SLS Amt(基线) − 1；基线为 Last Period / Last Year 区间的行级金额（SQL 输出原始比率，×100 即百分比） |
 | EOH Amt% | inv 表三个快照日单日聚合；分母 = SUM() OVER (PARTITION BY 分组键) |
-| EOH Amt% vs LP / vs LY | LP 快照日 / LY 快照日各取各自区间最后一天，差值同上 |
+| EOH Amt% vs LP / vs LY | v1.2：EOH Amt(TY) / EOH Amt(基线) − 1；基线为 LP / LY 快照日的单日库存金额 |
 
-- NULL 语义对齐：分子 NULL → 占比 NULL（对应 DAX BLANK，显示 "-"）；差值任一侧 NULL → NULL
+- NULL 语义对齐：占比分子 NULL → 占比 NULL（显示 "-"）；vs 基线金额 NULL 或 0 → NULL；vs 本期金额 NULL 或 0 且基线非 0 → −1（−100%）
 - 时间参数与替换方法见测试文件头部参数区
 
 ---
@@ -740,8 +946,9 @@ Label & Division Dimensions IsEmpty =
 2. **行字段必须从 Slicer_AX_Class 维度表拉取**：行筛选直接落在维度表字段上，ALLSELECTED(维度表整表) 才能正确移除；若误用事实表字段作行字段，占比恒 100%
 3. **vs LP 与 vs LY 双基线独立**：vs LP 读 Last Period 日期切片器（Min_Last / Max_Last 表，对比期自由选择）；vs LY 读 This Period 所选时间行的 _LY 字段（TimeFrame_Min_LY / TimeFrame_Max_LY，财年日历去年同字段对称映射），与 Last Period 切片器无关。二者时间范围可以不同，属预期行为
 4. **EOH 三个快照日各自独立取值**：This（Max_This 表范围）、LP（Max_Last 表范围）、LY（Max_This 表 _LY 字段范围）内最后一个有数据的快照日；任一范围整段缺数时对应基线 BLANK，差值显示 "-"；期末时点只取单日，对整段区间求和会重复计数库存
-5. **inv 表无渠道字段**：EOH Amt% 及其 vs LP / vs LY 的分子分母均不受渠道切片器影响；SLS Amt% 及其附属的分子分母受渠道筛选影响（sales 侧）——同一行两类指标的渠道口径不对称为模型物理限制，业务需知悉
-6. **vs LP / vs LY 空值规则**：任一侧占比为 BLANK 时差值返回 BLANK（显示 "-"），避免单侧缺失产生失真差值；×10000 转 bp 在 Display 层实现，Value 层差值保持原始小数可复用
-7. **币种**：本板块全部指标为占比与占比差值类，分子分母同表同币种（底表 CNY），不受币种切片器影响，无需汇率换算
-8. **总计行为**：若表格开启总计行，占比类总计 = 100%（分子分母同范围），占比差值总计 = 0bp 附近的全量重算值（分子分母同步上卷后相减），均为汇总语义下的正确行为
+5. **inv 表无渠道字段**：EOH Amt% / EOH Amt TY / LP / LY 及其 vs 均不受渠道切片器影响；SLS Amt% / SLS Amt TY / LP / LY 及 vs 的金额分子受渠道筛选影响（sales 侧）——同一行两类指标的渠道口径不对称为模型物理限制，业务需知悉
+6. **vs LP / vs LY 为金额同比（v1.2）**：4 个 vs 度量名称不变（PBI 已绑定），逻辑改为 SLS Amt / EOH Amt 的本期金额 / 同期金额 − 1；边界：同期为 0 或空 → BLANK()（含双零 / 双空，显示 "-"），本期为 0 或空且同期有值 → −1（显示 -100%）；Display 用 percent_0dp（`#,##0%`），不再 ×10000 转 bp。旧「占比相减」口径已废止；LP / LY 占比中间度量保留不删但不再被引用
+7. **币种**：本板块指标为占比类与金额同比类，分子分母均同表同币种（底表 CNY），不受币种切片器影响，无需汇率换算；新增 6 个金额度量仅内部相除、不直接展示数值
+8. **总计行为**：若表格开启总计行，占比类总计 = 100%（分子分母同范围）；金额同比总计 = 分组内全部 AX_Class 金额上卷后重算的比率（不是各行比率求和），均为汇总语义下的正确行为
 9. **口径与语法**：口径文档中定义的所有指标必须遵守其数据类型与数据格式，与解决方案存在争议时一切以口径文档为准；DAX 文本常量使用双引号，单引号仅用于表名，列名使用方括号，例如：`[md_type] = "FP"`
+10. **新增金额度量需在 PBI 内新建（v1.2）**：6 个 `… SLS Amt / EOH Amt × TY / LP / LY Value` 为全新度量名，需在 `_Measures` 表内新建（Display Folder 同 Base Metrics，不做 Display）；随后整段替换 4 个 vs Value + 4 个 vs Display 共 8 个度量（名称均不变）。验证：切换时间 / LP 切片器，vs 列随两期金额变化；某 AX_Class 本期无销售但有 LP 金额的行应显示 -100%；双期均无金额的行显示 "-"（行可见性由 IsEmpty 保持原逻辑，未纳入金额度量）

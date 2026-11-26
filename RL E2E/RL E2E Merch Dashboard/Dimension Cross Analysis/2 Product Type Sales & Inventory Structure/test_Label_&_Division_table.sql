@@ -13,7 +13,8 @@
 -- Last Period:     dt ∈ ['2025-03-30', '2025-09-27']（区间汇总）
 -- This Year:       dt ∈ ['2026-03-29', '2026-07-25']（区间汇总，与 This Period
 --                  同读 Min_This / Max_This 切片器，本参数下二者相同——
---                  vs LY 的 this 侧即 SLS_Amt_Pct 的 this 侧，SQL 不重复聚合）
+--                  vs LY 的 this 侧金额即 SLS_Amt_TY 列（v1.2 参照列，与
+--                  vs LP 的 this 侧同源，不重复聚合）
 -- Last Year:       dt ∈ ['2025-03-30', '2025-07-26']（区间汇总，_LY 字段财年
 --                  同期映射，与 Last Period 切片器无关）
 -- Inventory This 快照日: dt = '2026-07-25'（This Period 区间最后一天，单日快照）
@@ -40,18 +41,24 @@
 --   5. 行组合 = trade ∪ inv（UNION ALL 再聚合还原 FULL OUTER 语义）：
 --      PBI 表格行由度量值非空驱动，六个指标全为 BLANK 的 AX_Class 行自动
 --      隐藏——对数时忽略 SQL 中六个指标全为 NULL 的行；某 AX_Class 仅单一
---      期有数据时，无数据期的占比 / 差值列为 NULL（对齐 DAX BLANK "-"）
+--      期有数据时：占比列的无数据期为 NULL（对齐 DAX BLANK "-"），
+--      vs 列在「本期无、基线有」时输出 -1（对齐 DAX 金额同比边界，-100%）
 --   6. 期末时点只取快照日单日（不可区间求和）；快照当日缺数时 PBI 度量值
 --      回退到对应范围内最近一个快照日，SQL 对比时如发现快照日无数据需
 --      相应调整日期
---   7. 空值行为对齐 DAX：分子 NULL 时占比输出 NULL（对应 DAX DIVIDE 分子
---      BLANK → BLANK，显示 "-"）；差值任一侧 NULL 时输出 NULL（对应 DAX
---      ISBLANK 拦截）；窗口 SUM 忽略 NULL 行（对应 DAX SUM 聚合忽略 BLANK，
---      组内分母 = 非空值之和）
---   8. vs LP / vs LY 输出原始差值（×10000 转 bp 在 PBI Display 层实现，
---      如 -0.0152 → PBI 显示 -152bp）
+--   7. 空值行为对齐 DAX：占比分子 NULL 时占比输出 NULL（对应 DAX DIVIDE
+--      分子 BLANK → BLANK，显示 "-"）；vs 列：基线金额 NULL 或 0 → NULL，
+--      本期金额 NULL 或 0 且基线非 0 → -1（-100%），否则 本期/基线 - 1；
+--      窗口 SUM 忽略 NULL 行（对应 DAX SUM 聚合忽略 BLANK）
+--   8. vs LP / vs LY 自 v1.2 起为**金额同比比率**（本期金额 / 基线金额 - 1，
+--      SQL 输出原始小数，×100 即百分比；PBI Display 层用 #,##0% 显示，
+--      不再 ×10000 转 bp）
 --   9. inv 表无渠道字段：EOH 系列分子分母均不受 Platform / Store 筛选影响；
 --      SLS 系列受渠道筛选影响（本参数全选 = 不筛选）
+--  10. v1.2 新增参照列：SLS_Amt_TY / LP / LY、EOH_Amt_TY / LP / LY（两期
+--      原始金额，仅供核对金额同比分子分母，不参与占比）；六个主列顺序与
+--      PBI 视觉对象列序一致（SLS Amt% → vs LP → vs LY → EOH Amt% → vs LP
+--      → vs LY）
 -- ======================================================================
 
 
@@ -123,6 +130,12 @@ pct AS (
     SELECT
         division,
         ax_class,
+        sls_amt_this,                                                              -- v1.2 金额同比参照列
+        sls_amt_lp,
+        sls_amt_ly,
+        eoh_amt_this,
+        eoh_amt_lp,
+        eoh_amt_ly,
         sls_amt_this / NULLIF(SUM(sls_amt_this) OVER (PARTITION BY division), 0)  AS sls_pct_this,
         sls_amt_lp   / NULLIF(SUM(sls_amt_lp)   OVER (PARTITION BY division), 0)  AS sls_pct_lp,
         sls_amt_ly   / NULLIF(SUM(sls_amt_ly)   OVER (PARTITION BY division), 0)  AS sls_pct_ly,
@@ -136,15 +149,25 @@ SELECT
     division                                                      AS Division,           -- 分组键（对数时筛选视觉对象筛选器固定的值）
     ax_class                                                      AS AX_Class,
     sls_pct_this                                                  AS SLS_Amt_Pct,        -- SLS Amt%（0.2634 → PBI 显示 26%）
-    CASE WHEN sls_pct_this IS NULL OR sls_pct_lp IS NULL
-         THEN NULL ELSE sls_pct_this - sls_pct_lp END             AS SLS_Amt_Pct_vs_LP,  -- vs LP（原始差值，-0.0152 → PBI 显示 -152bp）
-    CASE WHEN sls_pct_this IS NULL OR sls_pct_ly IS NULL
-         THEN NULL ELSE sls_pct_this - sls_pct_ly END             AS SLS_Amt_Pct_vs_LY,  -- vs LY（原始差值）
+    CASE WHEN sls_amt_lp IS NULL OR sls_amt_lp = 0 THEN NULL
+         WHEN sls_amt_this IS NULL OR sls_amt_this = 0 THEN -1
+         ELSE sls_amt_this / sls_amt_lp - 1 END                   AS SLS_Amt_Pct_vs_LP,  -- v1.2 金额同比（0.12 → PBI 显示 12%）
+    CASE WHEN sls_amt_ly IS NULL OR sls_amt_ly = 0 THEN NULL
+         WHEN sls_amt_this IS NULL OR sls_amt_this = 0 THEN -1
+         ELSE sls_amt_this / sls_amt_ly - 1 END                   AS SLS_Amt_Pct_vs_LY,  -- v1.2 金额同比
     eoh_pct_this                                                  AS EOH_Amt_Pct,        -- EOH Amt%（This 快照日时点）
-    CASE WHEN eoh_pct_this IS NULL OR eoh_pct_lp IS NULL
-         THEN NULL ELSE eoh_pct_this - eoh_pct_lp END             AS EOH_Amt_Pct_vs_LP,  -- vs LP（LP 快照日 '2025-09-27'）
-    CASE WHEN eoh_pct_this IS NULL OR eoh_pct_ly IS NULL
-         THEN NULL ELSE eoh_pct_this - eoh_pct_ly END             AS EOH_Amt_Pct_vs_LY   -- vs LY（LY 快照日 '2025-07-26'）
+    CASE WHEN eoh_amt_lp IS NULL OR eoh_amt_lp = 0 THEN NULL
+         WHEN eoh_amt_this IS NULL OR eoh_amt_this = 0 THEN -1
+         ELSE eoh_amt_this / eoh_amt_lp - 1 END                   AS EOH_Amt_Pct_vs_LP,  -- v1.2 金额同比（LP 快照日 '2025-09-27'）
+    CASE WHEN eoh_amt_ly IS NULL OR eoh_amt_ly = 0 THEN NULL
+         WHEN eoh_amt_this IS NULL OR eoh_amt_this = 0 THEN -1
+         ELSE eoh_amt_this / eoh_amt_ly - 1 END                   AS EOH_Amt_Pct_vs_LY,  -- v1.2 金额同比（LY 快照日 '2025-07-26'）
+    sls_amt_this                                                  AS SLS_Amt_TY,         -- v1.2 参照：两期原始金额（核对用）
+    sls_amt_lp                                                    AS SLS_Amt_LP,
+    sls_amt_ly                                                    AS SLS_Amt_LY,
+    eoh_amt_this                                                  AS EOH_Amt_TY,
+    eoh_amt_lp                                                    AS EOH_Amt_LP,
+    eoh_amt_ly                                                    AS EOH_Amt_LY
 FROM pct
 ORDER BY
     Division ASC,
@@ -219,6 +242,12 @@ pct AS (
     SELECT
         brand,
         ax_class,
+        sls_amt_this,                                                              -- v1.2 金额同比参照列
+        sls_amt_lp,
+        sls_amt_ly,
+        eoh_amt_this,
+        eoh_amt_lp,
+        eoh_amt_ly,
         sls_amt_this / NULLIF(SUM(sls_amt_this) OVER (PARTITION BY brand), 0)  AS sls_pct_this,
         sls_amt_lp   / NULLIF(SUM(sls_amt_lp)   OVER (PARTITION BY brand), 0)  AS sls_pct_lp,
         sls_amt_ly   / NULLIF(SUM(sls_amt_ly)   OVER (PARTITION BY brand), 0)  AS sls_pct_ly,
@@ -232,15 +261,25 @@ SELECT
     brand                                                         AS Label,              -- 分组键（brand 字段 = Label 维度，对数时筛选视觉对象筛选器固定的值）
     ax_class                                                      AS AX_Class,
     sls_pct_this                                                  AS SLS_Amt_Pct,        -- SLS Amt%（0.2634 → PBI 显示 26%）
-    CASE WHEN sls_pct_this IS NULL OR sls_pct_lp IS NULL
-         THEN NULL ELSE sls_pct_this - sls_pct_lp END             AS SLS_Amt_Pct_vs_LP,  -- vs LP（原始差值，-0.0152 → PBI 显示 -152bp）
-    CASE WHEN sls_pct_this IS NULL OR sls_pct_ly IS NULL
-         THEN NULL ELSE sls_pct_this - sls_pct_ly END             AS SLS_Amt_Pct_vs_LY,  -- vs LY（原始差值）
+    CASE WHEN sls_amt_lp IS NULL OR sls_amt_lp = 0 THEN NULL
+         WHEN sls_amt_this IS NULL OR sls_amt_this = 0 THEN -1
+         ELSE sls_amt_this / sls_amt_lp - 1 END                   AS SLS_Amt_Pct_vs_LP,  -- v1.2 金额同比（0.12 → PBI 显示 12%）
+    CASE WHEN sls_amt_ly IS NULL OR sls_amt_ly = 0 THEN NULL
+         WHEN sls_amt_this IS NULL OR sls_amt_this = 0 THEN -1
+         ELSE sls_amt_this / sls_amt_ly - 1 END                   AS SLS_Amt_Pct_vs_LY,  -- v1.2 金额同比
     eoh_pct_this                                                  AS EOH_Amt_Pct,        -- EOH Amt%（This 快照日时点）
-    CASE WHEN eoh_pct_this IS NULL OR eoh_pct_lp IS NULL
-         THEN NULL ELSE eoh_pct_this - eoh_pct_lp END             AS EOH_Amt_Pct_vs_LP,  -- vs LP（LP 快照日 '2025-09-27'）
-    CASE WHEN eoh_pct_this IS NULL OR eoh_pct_ly IS NULL
-         THEN NULL ELSE eoh_pct_this - eoh_pct_ly END             AS EOH_Amt_Pct_vs_LY   -- vs LY（LY 快照日 '2025-07-26'）
+    CASE WHEN eoh_amt_lp IS NULL OR eoh_amt_lp = 0 THEN NULL
+         WHEN eoh_amt_this IS NULL OR eoh_amt_this = 0 THEN -1
+         ELSE eoh_amt_this / eoh_amt_lp - 1 END                   AS EOH_Amt_Pct_vs_LP,  -- v1.2 金额同比（LP 快照日 '2025-09-27'）
+    CASE WHEN eoh_amt_ly IS NULL OR eoh_amt_ly = 0 THEN NULL
+         WHEN eoh_amt_this IS NULL OR eoh_amt_this = 0 THEN -1
+         ELSE eoh_amt_this / eoh_amt_ly - 1 END                   AS EOH_Amt_Pct_vs_LY,  -- v1.2 金额同比（LY 快照日 '2025-07-26'）
+    sls_amt_this                                                  AS SLS_Amt_TY,         -- v1.2 参照：两期原始金额（核对用）
+    sls_amt_lp                                                    AS SLS_Amt_LP,
+    sls_amt_ly                                                    AS SLS_Amt_LY,
+    eoh_amt_this                                                  AS EOH_Amt_TY,
+    eoh_amt_lp                                                    AS EOH_Amt_LP,
+    eoh_amt_ly                                                    AS EOH_Amt_LY
 FROM pct
 ORDER BY
     Label ASC,
